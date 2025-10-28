@@ -1,0 +1,21 @@
+# Root ignores
+node_modules/
+.npm/
+.pnpm-debug.log*
+npm-debug.log*
+*.log
+
+# Build outputs
+backend/dist/
+frontend/dist/
+
+# Environment files
+.env
+.env.*
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo

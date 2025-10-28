@@ -1,0 +1,250 @@
+import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { FiClock, FiCheck, FiLock } from "react-icons/fi";
+import { BiCheckDouble } from "react-icons/bi";
+import Lightbox from "../../components/ui/Lightbox";
+import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
+import type { Message } from "./types";
+
+type MediaLightboxItem = {
+  id: string;
+  type: "IMAGE" | "VIDEO" | "DOCUMENT";
+  url: string;
+  caption?: string | null;
+};
+
+type MessageBubbleProps = {
+  m: Message;
+  isAgent: boolean;
+  mediaItems?: MediaLightboxItem[];
+  mediaIndex?: number | null;
+  showRemoteSenderInfo?: boolean;
+};
+
+export function MessageBubble({
+  m,
+  isAgent,
+  mediaItems,
+  mediaIndex,
+  showRemoteSenderInfo = false,
+}: MessageBubbleProps) {
+  const status = (m.view_status || "").toLowerCase();
+  const time = new Date(m.created_at).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const wrap = isAgent ? "w-full flex justify-end" : "w-full flex justify-start";
+  const bubbleBase =
+    "relative inline-block w-auto max-w-[85%] sm:max-w-[75%] md:max-w-[65%] px-3 py-2 rounded-2xl shadow-md leading-snug whitespace-pre-wrap break-words text-[13px] transition-colors duration-200 backdrop-blur-[2px]";
+  const isPrivate = !!m.is_private || m.type === "PRIVATE";
+  const agentBubble =
+    "rounded-br-none bg-[color:color-mix(in srgb,var(--color-primary) 45%,var(--color-background))] text-[var(--color-heading)]";
+  const customerBubble =
+    "rounded-bl-none bg-[color:color-mix(in srgb,var(--color-surface) 35%,var(--color-background))] text-[var(--color-text)]";
+  const privateBubble =
+    "bg-[color:color-mix(in srgb,var(--color-highlight) 40%,var(--color-background))] text-[var(--color-heading)]";
+  const bubbleSide = isPrivate
+    ? privateBubble
+    : isAgent
+      ? agentBubble
+      : customerBubble;
+  const messageType = (m.type || "TEXT").toUpperCase();
+  const mediaUrl = m.media_url ?? null;
+  const textBody = m.body ?? m.content ?? "";
+  const remoteDisplayName = useMemo(() => {
+    return (
+      m.remote_sender_name ||
+      m.remote_sender_phone ||
+      m.remote_sender_id ||
+      null
+    );
+  }, [m.remote_sender_name, m.remote_sender_phone, m.remote_sender_id]);
+  const resolvedRemoteName = remoteDisplayName || "Participante";
+  const remoteAvatarUrl = m.remote_sender_avatar_url ?? null;
+  const showRemoteSender =
+    showRemoteSenderInfo &&
+    !isAgent &&
+    Boolean(remoteDisplayName && (m.remote_participant_id || m.remote_sender_id));
+  const remoteInitials = useMemo(() => {
+    const base = remoteDisplayName || "?";
+    return base.slice(0, 2).toUpperCase();
+  }, [remoteDisplayName]);
+
+  const fallbackLightboxItems = useMemo<MediaLightboxItem[]>(() => {
+    if (!mediaUrl || !["IMAGE", "VIDEO", "DOCUMENT"].includes(messageType)) {
+      return [];
+    }
+    return [
+      {
+        id: m.id,
+        type: messageType as "IMAGE" | "VIDEO" | "DOCUMENT",
+        url: mediaUrl,
+        caption: textBody || null,
+      },
+    ];
+  }, [mediaUrl, messageType, m.id, textBody]);
+
+  const resolvedMediaItems = useMemo(() => {
+    if (mediaItems && mediaItems.length > 0) return mediaItems;
+    return fallbackLightboxItems;
+  }, [mediaItems, fallbackLightboxItems]);
+
+  const resolvedMediaIndex = useMemo(() => {
+    if (mediaItems && typeof mediaIndex === "number" && mediaIndex >= 0) {
+      return mediaIndex;
+    }
+    if (!resolvedMediaItems.length) return 0;
+    const found = resolvedMediaItems.findIndex((item) => item.id === m.id);
+    return found >= 0 ? found : 0;
+  }, [mediaIndex, mediaItems, resolvedMediaItems, m.id]);
+
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(resolvedMediaIndex);
+
+  useEffect(() => {
+    setLightboxIndex(resolvedMediaIndex);
+  }, [resolvedMediaIndex, resolvedMediaItems]);
+
+  const openLightbox = () => {
+    if (!resolvedMediaItems.length) return;
+    setLightboxIndex(resolvedMediaIndex);
+    setLightboxOpen(true);
+  };
+
+  const closeLightbox = () => {
+    setLightboxOpen(false);
+  };
+
+  let bubbleContent: ReactNode;
+  if (mediaUrl && messageType === "IMAGE") {
+    bubbleContent = (
+      <button
+        type="button"
+        onClick={openLightbox}
+        className="block w-full cursor-zoom-in text-left focus:outline-none"
+      >
+        <div className="overflow-hidden rounded-2xl bg-black/20 p-2 shadow-inner">
+          <img
+            src={mediaUrl}
+            alt={textBody || "Imagem"}
+            className="max-h-72 w-full rounded-xl object-contain"
+          />
+        </div>
+        {textBody ? (
+          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+        ) : null}
+      </button>
+    );
+  } else if (mediaUrl && messageType === "VIDEO") {
+    bubbleContent = (
+      <button
+        type="button"
+        onClick={openLightbox}
+        className="block w-full cursor-zoom-in text-left focus:outline-none"
+      >
+        <div className="relative overflow-hidden rounded-2xl bg-black/80 p-2 shadow-inner">
+          <video
+            src={mediaUrl}
+            className="max-h-72 w-full rounded-xl object-contain"
+            muted
+            playsInline
+          />
+          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white text-xl">
+            ▶
+          </span>
+        </div>
+        {textBody ? (
+          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+        ) : null}
+      </button>
+    );
+  } else if (mediaUrl && messageType === "AUDIO") {
+    bubbleContent = (
+      <AudioPlayerWhatsApp src={mediaUrl} caption={textBody || null} />
+    );
+  } else if (mediaUrl && (messageType === "DOCUMENT" || messageType === "FILE")) {
+    bubbleContent = (
+      <button
+        type="button"
+        onClick={openLightbox}
+        className="block w-full cursor-zoom-in text-left focus:outline-none"
+      >
+        <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-background))] px-4 py-3 shadow-inner">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+            <span className="text-lg">📎</span>
+            <span>Documento</span>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Tocar para visualizar em tela cheia ou baixar.
+          </p>
+        </div>
+        {textBody ? (
+          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+        ) : null}
+      </button>
+    );
+  } else {
+    bubbleContent = textBody || (messageType ? `[${messageType}]` : "");
+  }
+
+  return (
+    <>
+      <div className={wrap}>
+        <div className={`${bubbleBase} ${bubbleSide}`}>
+          {showRemoteSender && (
+            <div className="mb-1 flex items-center gap-2">
+              {remoteAvatarUrl ? (
+                <img
+                  src={remoteAvatarUrl}
+                  alt={resolvedRemoteName}
+                  className="h-6 w-6 rounded-full object-cover"
+                  onError={(event) => {
+                    (event.currentTarget as HTMLImageElement).src = "";
+                  }}
+                />
+              ) : (
+                <div className="h-6 w-6 rounded-full bg-[color:var(--color-bg)]/60 flex items-center justify-center text-[10px] font-semibold text-[var(--color-text-muted)]">
+                  {remoteInitials}
+                </div>
+              )}
+              <span className="text-xs font-semibold text-[var(--color-heading)] truncate">
+                {resolvedRemoteName}
+              </span>
+            </div>
+          )}
+          {isPrivate && (
+            <div className="mb-1 flex items-center gap-1 text-[11px] text-[var(--color-highlight)]">
+              <FiLock className="w-3.5 h-3.5" />
+              <span className="opacity-90">Privado</span>
+              {m.sender_name && (
+                <>
+                  <span>•</span>
+                  <span className="max-w-[12rem] truncate font-medium text-[var(--color-highlight)]">{m.sender_name}</span>
+                </>
+              )}
+            </div>
+          )}
+          <div className="text-[var(--color-text)]">{bubbleContent}</div>
+          <div className="mt-1 flex items-center justify-end gap-1">
+            <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
+            {isAgent && (
+              <span className="flex items-center text-xs">
+                {status === "pending" && <FiClock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />}
+                {status === "sent" && <FiCheck className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />}
+                {status === "read" && <BiCheckDouble className="h-4 w-4 text-[var(--color-primary)]" />}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {resolvedMediaItems.length > 0 && (
+        <Lightbox
+          isOpen={lightboxOpen}
+          onClose={closeLightbox}
+          items={resolvedMediaItems}
+          index={lightboxIndex}
+        />
+      )}
+    </>
+  );
+}

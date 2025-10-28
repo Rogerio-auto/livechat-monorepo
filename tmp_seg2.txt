@@ -1,0 +1,1413 @@
+    // Atualizar atribuiÁ„o no contato (customers/customers/leads)
+    const custId = (chat as any).customer_id as string;
+    let linkedLeadId: string | null = null;
+
+    // Tenta atualizar customers por id
+    try {
+      const { data: cRow, error: errC } = await supabaseAdmin
+        .from("customers")
+        .update({ assigned_agent: newAssigneeId || null })
+        .eq("id", custId)
+        .select("id")
+        .maybeSingle();
+      if (errC) throw errC;
+      if (cRow) {
+        // se houver leads que apontam para este customer, sincroniza
+        try {
+          const { data: leadsRows } = await supabaseAdmin
+            .from("leads")
+            .select("id")
+            .eq("customer_id", custId);
+          for (const r of leadsRows || []) {
+            const leadId = (r as any).id as string;
+            await supabaseAdmin.from("leads").update({ assigned_to_id: newAssigneeId || null }).eq("id", leadId);
+            linkedLeadId = leadId;
+          }
+        } catch {}
+      }
+    } catch {}
+
+    // Tenta atualizar customers por id (e capturar lead_id)
+    if (!linkedLeadId) {
+      try {
+        const { data: cosRow } = await supabaseAdmin
+          .from("customers")
+          .update({ assigned_agent: newAssigneeId || null })
+          .eq("id", custId)
+          .select("id, lead_id")
+          .maybeSingle();
+        if (cosRow?.lead_id) linkedLeadId = (cosRow as any).lead_id as string;
+      } catch {}
+    }
+
+    // Se o customer_id for diretamente um lead, atualiza o lead
+    try {
+      const { data: leadRow } = await supabaseAdmin
+        .from("leads")
+        .select("id")
+        .eq("id", custId)
+        .maybeSingle();
+      if (leadRow?.id) linkedLeadId = (leadRow as any).id as string;
+    } catch {}
+
+    // Sincronizar lead e cards vinculados
+    if (linkedLeadId) {
+      try {
+        await supabaseAdmin
+          .from("leads")
+          .update({ assigned_to_id: newAssigneeId || null })
+          .eq("id", linkedLeadId);
+      } catch {}
+      // TambÈm refletir no customers vinculado por lead_id (quando existir)
+      try {
+        await supabaseAdmin
+          .from("customers")
+          .update({ assigned_agent: newAssigneeId || null })
+          .eq("lead_id", linkedLeadId);
+      } catch {}
+      try {
+        // Atualizar cards deste lead e emitir sockets para o funil
+        const { data: updatedCards } = await supabaseAdmin
+          .from("kanban_cards")
+          .update({ owner_user_id: newAssigneeId || null })
+          .eq("lead_id", linkedLeadId)
+          .select("id, title, value_numeric, kanban_column_id, owner_user_id, source, notes, email, contact, lead_id");
+        for (const r of updatedCards || []) {
+          const payload = {
+            id: (r as any).id,
+            title: (r as any).title,
+            value: Number((r as any).value_numeric || 0),
+            stage: (r as any).kanban_column_id,
+            owner: (r as any).owner_user_id || null,
+            source: (r as any).source || null,
+            notes: (r as any).notes || null,
+            email: (r as any).email || null,
+            contact: (r as any).contact || null,
+            leadId: (r as any).lead_id || null,
+          };
+          try { io.emit("kanban:card:updated", payload); } catch {}
+        }
+      } catch {}
+    }
+
+    // Nome do usu·rio atribuÌdo (para o livechat)
+    let assignedName: string | null = null;
+    if (newAssigneeId) {
+      const { data: u } = await supabaseAdmin
+        .from("users")
+        .select("id, name")
+        .eq("id", newAssigneeId)
+        .maybeSingle();
+      assignedName = (u as any)?.name || null;
+    }
+
+    // Garantir atualizaÁ„o no chat.assignee_agent com id de inbox_users
+    try {
+      let targetLinkId: string | null = null;
+      if (newAssigneeId) {
+        const { data: l } = await supabaseAdmin
+          .from('inbox_users')
+          .select('id')
+          .eq('inbox_id', (chat as any).inbox_id)
+          .eq('user_id', newAssigneeId)
+          .maybeSingle();
+        targetLinkId = (l as any)?.id || null;
+      }
+      await supabaseAdmin.from("chats").update({ assignee_agent: targetLinkId }).eq("id", id);
+    } catch {}
+
+    // Notificar UI do livechat
+    io.emit("chat:updated", {
+      chatId: id,
+      assigned_agent_id: undefined,
+      assigned_agent_name: assignedName,
+    });
+    let respLinkId: string | null = null;
+    try {
+      const { data: chatNow } = await supabaseAdmin.from('chats').select('assignee_agent').eq('id', id).maybeSingle();
+      respLinkId = (chatNow as any)?.assignee_agent || null;
+    } catch {}
+    return res.json({ ok: true, assigned_agent_id: respLinkId, assigned_agent_name: assignedName });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Falha ao definir respons·vel" });
+  }
+});
+// ===== Start =====
+server.listen(PORT, () => {  console.log(`Backend rodando em http://localhost:${PORT}`);});
+
+
+
+
+// (removido supabase gen√©rico; usar supabaseAdmin em todas as rotas protegidas)
+
+// Variante A: sua tabela "users" usa a MESMA PK id = auth.users.id
+app.get("/kanban/my-board", requireAuth, async (req: any, res) => {
+  const userId = req.user.id;
+
+  // Busca a empresa do usu√°rio autenticado na tabela public.users
+  const { data: userRow, error: errUser } = await supabaseAdmin
+    .from("users")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (errUser) return res.status(500).json({ error: errUser.message });
+  if (!userRow?.company_id) return res.status(404).json({ error: "Usu√°rio sem company_id" });
+
+  const { data: board, error: errBoard } = await supabaseAdmin
+    .from("kanban_boards")
+    .select("id, name, is_default")
+    .eq("company_id", userRow.company_id)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (errBoard) return res.status(500).json({ error: errBoard.message });
+  if (!board) return res.status(404).json({ error: "Nenhum board para a empresa" });
+
+  res.json(board); // { id, name, is_default }
+});
+
+// GET colunas do board
+app.get("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
+  const { boardId } = req.params;
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_columns")
+    .select("id, name, color, position")
+    .eq("kanban_board_id", boardId)
+    .order("position", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const mapped = (data || []).map((c) => ({
+    id: c.id,
+    title: c.name,
+    color: c.color || "#6B7280",
+    position: c.position,
+  }));
+  res.json(mapped);
+});
+
+// PUT atualizar coluna (nome, cor, posi√ß√£o)
+app.put("/kanban/columns/:id", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { name, color, position } = (req.body || {}) as {
+    name?: string;
+    color?: string;
+    position?: number;
+  };
+
+  const update: any = {};
+  if (name !== undefined) update.name = name;
+  if (color !== undefined) update.color = color;
+  if (position !== undefined) update.position = position;
+
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ error: "Nenhum campo para atualizar" });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_columns")
+    .update(update)
+    .eq("id", id)
+    .select("id, name, color, position")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  return res.json({
+    id: data.id,
+    title: data.name,
+    color: data.color || "#6B7280",
+    position: data.position,
+  });
+});
+
+// GET cards do board
+app.get("/kanban/boards/:boardId/cards", requireAuth, async (req, res) => {
+  const { boardId } = req.params;
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_cards")
+    .select(`
+      id, title, description, value_numeric, currency,
+      owner_user_id, source, notes, kanban_column_id,
+      email, contact, position, lead_id
+    `)
+    .eq("kanban_board_id", boardId)
+    .order("kanban_column_id", { ascending: true })
+    .order("position", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const mapped = (data || []).map((r) => ({
+    id: r.id,
+    title: r.title,
+    value: Number(r.value_numeric || 0),
+    stage: r.kanban_column_id,
+    owner: r.owner_user_id || null,
+    source: r.source || null,
+    notes: r.notes || null,
+    email: r.email || null,
+    contact: r.contact || null,
+    leadId: (r as any).lead_id || null,
+    position: r.position,
+  }));
+  res.json(mapped);
+});
+
+
+// POST criar card
+app.post("/kanban/cards", async (req, res) => {
+  const { boardId, columnId, title, value = 0, source = null, owner = null, email = null, contact = null, leadId = null } = req.body;
+
+  if (!boardId || !columnId || !title) {
+    return res.status(400).json({ error: "boardId, columnId e title s√£o obrigat√≥rios" });
+  }
+
+  // calcula pr√≥xima posi√ß√£o da coluna
+  const { data: last, error: errLast } = await supabaseAdmin
+    .from("kanban_cards")
+    .select("position")
+    .eq("kanban_column_id", columnId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errLast) return res.status(500).json({ error: errLast.message });
+
+  const nextPos = (last?.position || 0) + 1;
+
+  // ValidaÁ„o b·sica do owner (se informado) existir na tabela users
+  if (owner) {
+    const { data: uexists } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("id", owner)
+      .maybeSingle();
+    if (!uexists) return res.status(400).json({ error: "Usu·rio (owner) inv·lido" });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_cards")
+    .insert([{ 
+      kanban_board_id: boardId,
+      kanban_column_id: columnId,
+      title,
+      value_numeric: value,
+      source,
+      owner_user_id: owner,
+      email,
+      contact,
+      position: nextPos,
+      ...(leadId ? { lead_id: leadId } : {})
+    }])
+    .select("*")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // If linked to a lead, sync lead's kanban fields
+  try {
+    const linkedLeadId = (data as any).lead_id as string | null;
+    if (linkedLeadId) {
+      await supabaseAdmin
+        .from("leads")
+        .update({
+          kanban_board_id: (data as any).kanban_board_id,
+          kanban_column_id: (data as any).kanban_column_id,
+          assigned_to_id: (data as any).owner_user_id || null,
+        })
+        .eq("id", linkedLeadId);
+      // Best-effort: if there is a customers/customers row with same id, sync assigned_agent as well
+      try {
+        // Try customers first
+        await supabaseAdmin
+          .from("customers")
+          .update({ assigned_agent: (data as any).owner_user_id || null })
+          .eq("id", linkedLeadId);
+        // Also try legacy table name customers (ignore errors if it doesn't exist)
+        try {
+          await supabaseAdmin
+            .from("customers")
+            .update({ assigned_agent: (data as any).owner_user_id || null })
+            .eq("lead_id", linkedLeadId);
+        } catch {}
+        // Emit update for any chats tied to this customer/lead
+        try {
+          const assignedId = (data as any).owner_user_id || null;
+          let assignedName: string | null = null;
+          if (assignedId) {
+            const { data: u } = await supabaseAdmin
+              .from("users")
+              .select("id, name")
+              .eq("id", assignedId)
+              .maybeSingle();
+            assignedName = (u as any)?.name || null;
+          }
+          // Find customers linked to this lead
+          let costumerIds: string[] = [];
+          try {
+            const { data: cRows } = await supabaseAdmin
+              .from("customers")
+              .select("id")
+              .eq("lead_id", linkedLeadId);
+            costumerIds = (cRows || []).map((r: any) => r.id).filter(Boolean);
+          } catch {}
+          // Collect chats and inboxes for authorization check
+          const chatIds: string[] = [];
+          const inboxIds: string[] = [];
+          try {
+            // Legacy: customer_id == lead id
+            const { data: chatsLegacy } = await supabaseAdmin
+              .from("chats")
+              .select("id,inbox_id")
+              .eq("customer_id", linkedLeadId);
+            for (const row of chatsLegacy || []) {
+              chatIds.push((row as any).id);
+              if ((row as any).inbox_id) inboxIds.push((row as any).inbox_id);
+            }
+          } catch {}
+          try {
+            if (costumerIds.length > 0) {
+              const { data: chatsByCostumer } = await supabaseAdmin
+                .from("chats")
+                .select("id,inbox_id")
+                .in("customer_id", costumerIds);
+              for (const row of chatsByCostumer || []) {
+                chatIds.push((row as any).id);
+                if ((row as any).inbox_id) inboxIds.push((row as any).inbox_id);
+              }
+            }
+          } catch {}
+          const uniqChatIds = Array.from(new Set(chatIds));
+          const uniqInboxIds = Array.from(new Set(inboxIds));
+
+          // Determine if assigned user is allowed in at least one inbox for this customer
+          let allowed = false;
+          if (assignedId && uniqInboxIds.length > 0) {
+            try {
+              const { data: links } = await supabaseAdmin
+                .from("inbox_users")
+                .select("id")
+                .eq("user_id", assignedId)
+                .in("inbox_id", uniqInboxIds);
+              allowed = !!(links && (links as any[]).length > 0);
+            } catch {}
+          }
+
+          const effectiveAssignedId = assignedId && allowed ? assignedId : null;
+          const effectiveAssignedName = assignedId && allowed ? assignedName : null;
+
+          // Ensure contact tables reflect the effective assignment
+          try {
+            await supabaseAdmin
+              .from("customers")
+              .update({ assigned_agent: effectiveAssignedId })
+              .eq("id", linkedLeadId);
+          } catch {}
+          try {
+            await supabaseAdmin
+              .from("customers")
+              .update({ assigned_agent: effectiveAssignedId })
+              .eq("lead_id", linkedLeadId);
+          } catch {}
+
+          for (const cid of uniqChatIds) {
+            io.emit("chat:updated", {
+              chatId: cid,
+              assigned_agent_id: effectiveAssignedId,
+              assigned_agent_name: effectiveAssignedName,
+            });
+          }
+        } catch {}
+      } catch {}
+    }
+  } catch (e) {
+    // log only; do not fail card creation if lead update fails
+    console.error("Failed to sync lead after card create:", e);
+  }
+
+  const mapped = {
+    id: data.id,
+    title: data.title,
+    value: Number(data.value_numeric || 0),
+    stage: data.kanban_column_id,
+    owner: data.owner_user_id || null,
+    source: data.source || null,
+    notes: data.notes || null,
+    email: data.email || null,
+    contact: data.contact || null,
+    leadId: (data as any).lead_id || null,
+  };
+  // Notify listeners (e.g., funnel UIs) about the new/updated card
+  try {
+    io.emit("kanban:card:updated", mapped);
+  } catch {}
+  res.status(201).json(mapped);
+});
+
+// PUT atualizar card (titulo, valor, stage, etc.)
+app.put("/kanban/cards/:id", async (req, res) => {
+  const { id } = req.params;
+  const patch = req.body as Partial<{
+    title: string; value: number; stage: string; owner: string; source: string;
+    notes: string; email: string; contact: string; leadId: string | null;
+  }>;
+
+  const updatePayload: any = {};
+  if (patch.title !== undefined) updatePayload.title = patch.title;
+  if (patch.value !== undefined) updatePayload.value_numeric = patch.value;
+  if (patch.stage !== undefined) updatePayload.kanban_column_id = patch.stage;
+  if (patch.owner !== undefined) {
+    if (patch.owner) {
+      const { data: uexists } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("id", patch.owner)
+        .maybeSingle();
+      if (!uexists) return res.status(400).json({ error: "Usu·rio (owner) inv·lido" });
+    }
+    updatePayload.owner_user_id = patch.owner;
+  }
+  if (patch.source !== undefined) updatePayload.source = patch.source;
+  if (patch.notes !== undefined) updatePayload.notes = patch.notes;
+  if (patch.email !== undefined) updatePayload.email = patch.email;
+  if (patch.contact !== undefined) updatePayload.contact = patch.contact;
+  if (patch.leadId !== undefined) updatePayload.lead_id = patch.leadId;
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_cards")
+    .update(updatePayload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // If linked to a lead, sync lead's kanban fields according to updated card
+  try {
+    const linkedLeadId = (data as any).lead_id as string | null;
+    if (linkedLeadId) {
+      await supabaseAdmin
+        .from("leads")
+        .update({
+          kanban_board_id: (data as any).kanban_board_id,
+          kanban_column_id: (data as any).kanban_column_id,
+          assigned_to_id: (data as any).owner_user_id || null,
+        })
+        .eq("id", linkedLeadId);
+      // Best-effort: sync customers/customers.assigned_agent if customer is linked to this lead
+      try {
+        // Emit update for any chats tied to this customer/lead and set contact assignment if allowed in inbox
+        try {
+          const assignedId = (data as any).owner_user_id || null;
+          let assignedName: string | null = null;
+          if (assignedId) {
+            const { data: u } = await supabaseAdmin
+              .from("users")
+              .select("id, name")
+              .eq("id", assignedId)
+              .maybeSingle();
+            assignedName = (u as any)?.name || null;
+          }
+          // Find customers linked to this lead
+          let costumerIds: string[] = [];
+          try {
+            const { data: cRows } = await supabaseAdmin
+              .from("customers")
+              .select("id")
+              .eq("lead_id", linkedLeadId);
+            costumerIds = (cRows || []).map((r: any) => r.id).filter(Boolean);
+          } catch {}
+          // Collect chats and inboxes
+          const chatIds: string[] = [];
+          const inboxIds: string[] = [];
+          try {
+            const { data: chatsLegacy } = await supabaseAdmin
+              .from("chats")
+              .select("id,inbox_id")
+              .eq("customer_id", linkedLeadId);
+            for (const row of chatsLegacy || []) {
+              chatIds.push((row as any).id);
+              if ((row as any).inbox_id) inboxIds.push((row as any).inbox_id);
+            }
+          } catch {}
+          try {
+            if (costumerIds.length > 0) {
+              const { data: chatsByCostumer } = await supabaseAdmin
+                .from("chats")
+                .select("id,inbox_id")
+                .in("customer_id", costumerIds);
+              for (const row of chatsByCostumer || []) {
+                chatIds.push((row as any).id);
+                if ((row as any).inbox_id) inboxIds.push((row as any).inbox_id);
+              }
+            }
+          } catch {}
+          const uniqChatIds = Array.from(new Set(chatIds));
+          const uniqInboxIds = Array.from(new Set(inboxIds));
+
+          // Check authorization of assigned user for inboxes
+          let allowed = false;
+          if (assignedId && uniqInboxIds.length > 0) {
+            try {
+              const { data: links } = await supabaseAdmin
+                .from("inbox_users")
+                .select("id")
+                .eq("user_id", assignedId)
+                .in("inbox_id", uniqInboxIds);
+              allowed = !!(links && (links as any[]).length > 0);
+            } catch {}
+          }
+
+          const effectiveAssignedId = assignedId && allowed ? assignedId : null;
+          const effectiveAssignedName = assignedId && allowed ? assignedName : null;
+
+          // Ensure contact tables reflect the effective assignment
+          try {
+            await supabaseAdmin
+              .from("customers")
+              .update({ assigned_agent: effectiveAssignedId })
+              .eq("id", linkedLeadId);
+          } catch {}
+          try {
+            await supabaseAdmin
+              .from("customers")
+              .update({ assigned_agent: effectiveAssignedId })
+              .eq("lead_id", linkedLeadId);
+          } catch {}
+
+          for (const cid of uniqChatIds) {
+            io.emit("chat:updated", {
+              chatId: cid,
+              assigned_agent_id: effectiveAssignedId,
+              assigned_agent_name: effectiveAssignedName,
+            });
+          }
+        } catch {}
+      } catch {}
+    }
+  } catch (e) {
+    console.error("Failed to sync lead after card update:", e);
+  }
+
+  const mapped = {
+    id: data.id,
+    title: data.title,
+    value: Number(data.value_numeric || 0),
+    stage: data.kanban_column_id,
+    owner: data.owner_user_id || null,
+    source: data.source || null,
+    notes: data.notes || null,
+    email: data.email || null,
+    contact: data.contact || null,
+    leadId: (data as any).lead_id || null,
+  };
+  // Notify listeners (e.g., funnel UIs) about the card update
+  try {
+    io.emit("kanban:card:updated", mapped);
+  } catch {}
+  res.json(mapped);
+});
+
+// Util: backfill sync from kanban_cards -> leads for current company
+app.post("/kanban/sync-leads", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { data: userRow, error: errUser } = await supabaseAdmin
+      .from("users")
+      .select("company_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (errUser) return res.status(500).json({ error: errUser.message });
+    if (!userRow?.company_id) return res.status(404).json({ error: "Usu√°rio sem company_id" });
+
+    // fetch cards for boards of this company
+    const { data: boards, error: errBoards } = await supabaseAdmin
+      .from("kanban_boards")
+      .select("id")
+      .eq("company_id", userRow.company_id);
+    if (errBoards) return res.status(500).json({ error: errBoards.message });
+    const boardIds = (boards || []).map((b: any) => b.id);
+    if (boardIds.length === 0) return res.json({ updated: 0 });
+
+    const { data: cards, error: errCards } = await supabaseAdmin
+      .from("kanban_cards")
+      .select("id, kanban_board_id, kanban_column_id, owner_user_id, lead_id")
+      .in("kanban_board_id", boardIds);
+    if (errCards) return res.status(500).json({ error: errCards.message });
+
+    const toSync = (cards || []).filter((c: any) => !!c.lead_id);
+    let updated = 0;
+    for (const c of toSync) {
+      const { error: errUp } = await supabaseAdmin
+        .from("leads")
+        .update({
+          kanban_board_id: c.kanban_board_id,
+          kanban_column_id: c.kanban_column_id,
+          assigned_to_id: c.owner_user_id || null,
+        })
+        .eq("id", c.lead_id as string);
+      if (!errUp) updated++;
+    }
+
+    return res.json({ updated });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Sync error" });
+  }
+});
+
+// GET users with role AGENT or SUPERVISOR in same company
+app.get("/users/agents-supervisors", requireAuth, async (req: any, res) => {
+  const userId = req.user.id;
+
+  const { data: userRow, error: errUser } = await supabaseAdmin
+    .from("users")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (errUser) return res.status(500).json({ error: errUser.message });
+  if (!userRow?.company_id) return res.status(404).json({ error: "Usu√°rio sem company_id" });
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("id, user_id, name, role")
+    .eq("company_id", userRow.company_id)
+    .in("role", ["AGENT", "SUPERVISOR"]) 
+    .order("name", { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Importante: retornar id = users.id (PK local) pois kanban_cards.owner_user_id referencia esta PK
+  return res.json(
+    (data || []).map((u) => ({ id: (u as any).id, name: (u as any).name || (u as any).id, role: (u as any).role }))
+  );
+});
+
+// POST criar coluna (nome + cor)
+app.post("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
+  const { boardId } = req.params as { boardId: string };
+  const { name, color } = (req.body || {}) as { name?: string; color?: string };
+
+  if (!name) return res.status(400).json({ error: "Campo 'name' √© obrigat√≥rio" });
+
+  // pr√≥xima posi√ß√£o dentro do board
+  const { data: last, error: errLast } = await supabaseAdmin
+    .from("kanban_columns")
+    .select("position")
+    .eq("kanban_board_id", boardId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errLast) return res.status(500).json({ error: errLast.message });
+
+  const nextPos = (last?.position || 0) + 1;
+
+  const { data, error } = await supabaseAdmin
+    .from("kanban_columns")
+    .insert([
+      {
+        kanban_board_id: boardId,
+        name,
+        color: color || "#6B7280",
+        position: nextPos,
+      },
+    ])
+    .select("id, name, color, position")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const mapped = {
+    id: data.id,
+    title: data.name,
+    color: data.color || "#6B7280",
+    position: data.position,
+  };
+  return res.status(201).json(mapped);
+});
+
+
+
+const io = new SocketIOServer(server, {
+  cors: { origin: FRONTEND_ORIGINS, credentials: true },
+});
+
+async function socketAuthUserId(socket: any): Promise<string | null> {
+  try {
+    const headers = (socket.request?.headers || {}) as any;
+    let token: string | undefined;
+    const auth = (headers["authorization"] as string | undefined) || (headers["Authorization"] as string | undefined);
+    if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
+    if (!token) {
+      const rawCookie = (headers["cookie"] as string | undefined) || "";
+      const parts = rawCookie.split(/;\s*/).map((p) => p.split("="));
+      for (const [k, v] of parts) {
+        if (k === JWT_COOKIE_NAME && v) { token = decodeURIComponent(v); break; }
+      }
+    }
+    if (!token) return null;
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data?.user?.id) return null;
+    return data.user.id as string;
+  } catch {
+    return null;
+  }
+}
+
+io.on("connection", (socket) => {
+  socket.on("join", ({ chatId }: { chatId: string }) => {
+    if (chatId) socket.join(`chat:${chatId}`);
+  });
+  socket.on("leave", ({ chatId }: { chatId: string }) => {
+    if (chatId) socket.leave(`chat:${chatId}`);
+  });
+  socket.on(
+    "message:send",
+    async ({ chatId, text, senderType = "AGENT" }: { chatId: string; text: string; senderType?: string }) => {
+      try {
+        if (!chatId || !text) return;
+        const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
+        const nowIso = new Date().toISOString();
+        const { data: msg, error } = await supabaseAdmin
+          .from("chat_messages")
+          .insert([
+            {
+              chat_id: chatId,
+              content: String(text),
+              type: "TEXT",
+              is_from_customer: isFromCustomer,
+              sender_id: null,
+              created_at: nowIso,
+              view_status: "Sent",
+            },
+          ])
+          .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+          .single();
+        if (!error && msg) {
+          await supabaseAdmin
+            .from("chats")
+            .update({ last_message: String(text), last_message_at: new Date().toISOString() })
+            .eq("id", chatId);
+          const mapped = {
+            id: msg.id,
+            chat_id: msg.chat_id,
+            body: msg.content,
+            sender_type: msg.is_from_customer ? "CUSTOMER" : "AGENT",
+            sender_id: msg.sender_id || null,
+            created_at: msg.created_at,
+            view_status: msg.view_status || null,
+            type: msg.type || "TEXT",
+            is_private: false,
+          };
+            io.to(`chat:${chatId}`).emit("message:new", mapped);
+            io.emit("chat:updated", {
+              chatId,
+              last_message: String(text),
+              last_message_at: new Date().toISOString(),
+              last_message_from: mapped.sender_type,
+            });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  );
+
+  // Fetch authenticated user's inboxes via Socket.IO (ack-based)
+  socket.on("livechat:inboxes:my", async (ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+
+      let { data: links, error: errLinks } = await supabaseAdmin
+        .from("inbox_users")
+        .select("inbox_id")
+        .eq("user_id", authUserId);
+      if (errLinks) return ack?.({ ok: false, error: errLinks.message });
+
+      if (!links || links.length === 0) {
+        try {
+          const { data: urow } = await supabaseAdmin
+            .from("users")
+            .select("id")
+            .eq("user_id", authUserId)
+            .maybeSingle();
+          if (urow?.id) {
+            const resp2 = await supabaseAdmin
+              .from("inbox_users")
+              .select("inbox_id")
+              .eq("user_id", urow.id);
+            if (!resp2.error) links = resp2.data as any[];
+          }
+        } catch {}
+      }
+
+      const ids = Array.from(new Set((links || []).map((r: any) => r.inbox_id))).filter(Boolean);
+      if (ids.length === 0) return ack?.({ ok: true, data: [] });
+
+      const { data, error } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, name, phone_number, is_active")
+        .in("id", ids)
+        .eq("is_active", true)
+        .order("name", { ascending: true });
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true, data: data || [] });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || "inboxes fetch error" });
+    }
+  });
+
+  // List chats
+  socket.on("livechat:chats:list", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+
+      const inboxId = (params?.inboxId as string) || undefined;
+      const status = (params?.status as string) || undefined;
+      const q = (params?.q as string) || undefined;
+      const limit = params?.limit ? Number(params.limit) : 20;
+      const offset = params?.offset ? Number(params.offset) : 0;
+
+      let query = supabaseAdmin
+        .from("chats")
+        .select("id, external_id, status, last_message, last_message_at, inbox_id, customer_id, assignee_agent", { count: "exact" })
+        .order("last_message_at", { ascending: false, nullsFirst: false });
+      if (inboxId) query = query.eq("inbox_id", inboxId);
+      if (status && String(status).toUpperCase() !== "ALL") query = query.eq("status", status);
+      if (q) query = query.ilike("last_message", `%${q}%`);
+
+      const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
+      if (error) return ack?.({ ok: false, error: error.message });
+      const items = data || [];
+
+      // Enrich from chats.assignee_agent (stores inbox_users.id)
+      try {
+        const linkIds = Array.from(new Set((items as any[]).map((c) => (c as any).assignee_agent).filter(Boolean)));
+        let userIdByLink: Record<string, string> = {};
+        if (linkIds.length > 0) {
+          const { data: links } = await supabaseAdmin.from('inbox_users').select('id, user_id').in('id', linkIds);
+          for (const r of (links as any[]) || []) userIdByLink[(r as any).id] = (r as any).user_id;
+          const userIds = Array.from(new Set(Object.values(userIdByLink).filter(Boolean)));
+          let usersById: Record<string, string> = {};
+          if (userIds.length > 0) {
+            const { data: u } = await supabaseAdmin.from('users').select('id, name').in('id', userIds);
+            usersById = Object.fromEntries(((u as any[]) || []).map((x) => [x.id, x.name || x.id]));
+          }
+          for (const it of (items as any[])) {
+            const linkId = (it as any).assignee_agent || null;
+            const uid = linkId ? userIdByLink[linkId] : null;
+            (it as any).assigned_agent_id = linkId;
+            (it as any).assigned_agent_name = uid ? usersById[uid] || null : null;
+          }
+        }
+      } catch {}
+
+      // Enrich customer display
+      try {
+        const cids = Array.from(new Set((items as any[]).map((c) => (c as any).customer_id).filter(Boolean)));
+        if (cids.length > 0) {
+          const displayById: Record<string, { name: string | null; phone: string | null }> = {};
+          async function loadDisplay(table: string, cols: string[]) {
+            const sel = ["id", ...cols].join(",");
+            const { data: rows } = await supabaseAdmin.from(table).select(sel).in("id", cids);
+            for (const r of ((rows as any[]) || [])) {
+              const name = (r as any).name || (r as any).title || null;
+              const phone = (r as any).phone || (r as any).cellphone || (r as any).celular || (r as any).telefone || (r as any).contact || null;
+              displayById[(r as any).id] = { name, phone };
+            }
+          }
+          await loadDisplay("customers", ["name", "phone", "cellphone", "contact"]).catch(() => {});
+          await loadDisplay("customers", ["name", "celular", "telefone", "contact"]).catch(() => {});
+          await loadDisplay("leads", ["name", "phone", "cellphone"]).catch(() => {});
+          for (const it of (items as any[])) {
+            const d = displayById[(it as any).customer_id];
+            (it as any).customer_name = d?.name || null;
+            (it as any).customer_phone = d?.phone || null;
+          }
+        }
+      } catch {}
+
+      // last sender of last message enrichment (best-effort)
+      try {
+        const ids = (items as any[]).map((c) => (c as any).id);
+        if (ids.length > 0) {
+          const { data: msgs } = await supabaseAdmin
+            .from("chat_messages")
+            .select("chat_id, is_from_customer, sender_type, created_at")
+            .in("chat_id", ids)
+            .order("created_at", { ascending: false });
+          const lastByChat: Record<string, string> = {};
+          for (const r of ((msgs as any[]) || [])) {
+            const cid = (r as any).chat_id as string;
+            if (lastByChat[cid]) continue;
+            const from = (r as any).is_from_customer ? "CUSTOMER" : ((r as any).sender_type || "AGENT");
+            lastByChat[cid] = from;
+          }
+          for (const it of (items as any[])) {
+            const cid = (it as any).id as string;
+            if (lastByChat[cid]) (it as any).last_message_from = lastByChat[cid];
+          }
+        }
+      } catch {}
+
+      return ack?.({ ok: true, items, total: count ?? (items?.length || 0) });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || "chats list error" });
+    }
+  });
+
+  // List messages (combined public + private)
+  socket.on("livechat:chats:messages", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+      const chatId = params?.chatId as string;
+      if (!chatId) return ack?.({ ok: false, error: "chatId required" });
+      const limit = params?.limit ? Number(params.limit) : 50;
+      const before = (params?.before as string) || undefined;
+
+      let query = supabaseAdmin
+        .from("chat_messages")
+        .select("id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status")
+        .eq("chat_id", chatId)
+        .order("created_at", { ascending: true })
+        .limit(limit);
+      if (before) query = query.lt("created_at", before);
+
+      const { data, error } = await query;
+      if (error && (error as any).code === "42P01") return ack?.({ ok: true, data: [] });
+      if (error) return ack?.({ ok: false, error: error.message });
+      const mappedChat = (data || []).map((r: any) => ({
+        id: r.id,
+        chat_id: r.chat_id,
+        body: r.content,
+        sender_type: r.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_id: r.sender_id || null,
+        created_at: r.created_at,
+        view_status: r.view_status || null,
+        type: r.type || "TEXT",
+        is_private: false,
+      }));
+
+      let mappedPrivate: any[] = [];
+      try {
+        const { data: privChat } = await supabaseAdmin
+          .from("private_chats")
+          .select("id")
+          .eq("chat_id", chatId)
+          .maybeSingle();
+        if (privChat?.id) {
+          const { data: privMsgs } = await supabaseAdmin
+            .from("private_messages")
+            .select("id, content, private_chat_id, sender_id, created_at")
+            .eq("private_chat_id", privChat.id)
+            .order("created_at", { ascending: true });
+          const senderIds = Array.from(new Set((privMsgs || []).map((r: any) => r.sender_id).filter(Boolean)));
+          let nameMap: Record<string, string> = {};
+          if (senderIds.length > 0) {
+            const { data: usersList } = await supabaseAdmin
+              .from('users')
+              .select('id, name')
+              .in('id', senderIds);
+            for (const u of usersList || []) nameMap[(u as any).id] = (u as any).name || (u as any).id;
+          }
+          mappedPrivate = (privMsgs || []).map((r: any) => ({
+            id: r.id,
+            chat_id: chatId,
+            body: r.content,
+            sender_type: "AGENT",
+            sender_id: r.sender_id || null,
+            created_at: r.created_at,
+            view_status: null,
+            type: "PRIVATE",
+            is_private: true,
+            sender_name: r.sender_id ? (nameMap[r.sender_id] || null) : null,
+          }));
+        }
+      } catch {}
+
+      const combined = [...mappedChat, ...mappedPrivate].sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+      return ack?.({ ok: true, data: combined });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || "messages error" });
+    }
+  });
+
+  // Send file message (base64 payload)
+  socket.on("message:file", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+      const id = params?.chatId as string;
+      const filename = params?.filename as string;
+      const mime = (params?.mime as string) || "application/octet-stream";
+      const data = params?.data as string;
+      if (!id || !filename || !data) return ack?.({ ok: false, error: "chatId, filename and data required" });
+      const buffer = Buffer.from(String(data).replace(/^data:[^;]+;base64,/, ''), 'base64');
+      const ext = filename.includes('.') ? filename.split('.').pop() : 'bin';
+      const path = `${id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      try { await (supabaseAdmin as any).storage.createBucket('chat-uploads', { public: true }); } catch {}
+      const { data: up, error: upErr } = await supabaseAdmin.storage.from('chat-uploads').upload(path, buffer, { contentType: mime, upsert: false });
+      if (upErr) return ack?.({ ok: false, error: upErr.message });
+      const pub = supabaseAdmin.storage.from('chat-uploads').getPublicUrl(up!.path);
+      const url = (pub as any)?.data?.publicUrl || null;
+      const nowIso = new Date().toISOString();
+      const kind = mime.startsWith('image/') ? 'IMAGE' : mime.startsWith('audio/') ? 'AUDIO' : 'FILE';
+      const { data: inserted, error } = await supabaseAdmin
+        .from("chat_messages")
+        .insert([
+          {
+            chat_id: id,
+            content: String(url || filename),
+            type: kind,
+            is_from_customer: false,
+            sender_id: authUserId,
+            created_at: nowIso,
+            view_status: "Sent",
+          },
+        ])
+        .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+        .single();
+      if (error) return ack?.({ ok: false, error: error.message });
+      await supabaseAdmin.from("chats").update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso }).eq("id", id);
+      const mapped = {
+        id: inserted.id,
+        chat_id: inserted.chat_id,
+        body: inserted.content,
+        sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_id: inserted.sender_id || null,
+        created_at: inserted.created_at,
+        view_status: inserted.view_status || null,
+        type: inserted.type || kind,
+        is_private: false,
+      };
+      io.to(`chat:${id}`).emit("message:new", mapped);
+      io.emit("chat:updated", { chatId: id, last_message: `[Arquivo] ${filename}`, last_message_at: nowIso, last_message_from: mapped.sender_type });
+      return ack?.({ ok: true, data: mapped });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || 'upload error' });
+    }
+  });
+
+  // Send private message
+  socket.on("message:private:send", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+      const id = params?.chatId as string;
+      const text = (params?.text as string) || "";
+      if (!id || !text) return ack?.({ ok: false, error: 'chatId and text required' });
+
+      // resolve local users.id
+      let localUserId: string | null = null;
+      try {
+        const { data: urow } = await supabaseAdmin
+          .from('users')
+          .select('id')
+          .eq('user_id', authUserId)
+          .maybeSingle();
+        localUserId = (urow as any)?.id || null;
+      } catch {}
+      // ensure private_chat
+      let privateChatId: string | null = null;
+      const { data: existing } = await supabaseAdmin
+        .from('private_chats')
+        .select('id')
+        .eq('chat_id', id)
+        .maybeSingle();
+      if (existing?.id) privateChatId = existing.id;
+      else {
+        const { data: created, error: errCreate } = await supabaseAdmin
+          .from('private_chats')
+          .insert([{ chat_id: id, is_active: true }])
+          .select('id')
+          .single();
+        if (errCreate) return ack?.({ ok: false, error: errCreate.message });
+        privateChatId = (created as any)?.id || null;
+      }
+      if (!privateChatId) return ack?.({ ok: false, error: 'failed create private_chat' });
+
+      const nowIso = new Date().toISOString();
+      const { data: inserted, error } = await supabaseAdmin
+        .from('private_messages')
+        .insert([{ content: String(text), private_chat_id: privateChatId, sender_id: localUserId || authUserId, created_at: nowIso }])
+        .select('id, content, sender_id, created_at')
+        .single();
+      if (error) return ack?.({ ok: false, error: error.message });
+
+      let senderName: string | null = null;
+      if (localUserId) {
+        try {
+          const { data: u } = await supabaseAdmin.from('users').select('name').eq('id', localUserId).maybeSingle();
+          senderName = (u as any)?.name || null;
+        } catch {}
+      }
+      const mapped = {
+        id: inserted.id,
+        chat_id: id,
+        body: inserted.content,
+        sender_type: 'AGENT',
+        sender_id: inserted.sender_id || null,
+        created_at: inserted.created_at,
+        view_status: null,
+        type: 'PRIVATE',
+        is_private: true,
+        sender_name: senderName,
+      };
+      io.to(`chat:${id}`).emit('message:new', mapped);
+      return ack?.({ ok: true, data: mapped });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || 'private send error' });
+    }
+  });
+
+  // Chat tags get/set
+  socket.on("livechat:chats:tags:get", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+      const id = params?.chatId as string;
+      if (!id) return ack?.({ ok: false, error: 'chatId required' });
+      const { data, error } = await supabaseAdmin.from('chat_tags').select('tag_id').eq('chat_id', id);
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true, data: ((data as any[]) || []).map((r: any) => r.tag_id) });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || 'tags list error' });
+    }
+  });
+  socket.on("livechat:chats:tags:set", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+      const id = params?.chatId as string; const tagIds: string[] = Array.isArray(params?.tags) ? params.tags : [];
+      if (!id) return ack?.({ ok: false, error: 'chatId required' });
+      const { error: errDel } = await supabaseAdmin.from('chat_tags').delete().eq('chat_id', id);
+      if (errDel) return ack?.({ ok: false, error: errDel.message });
+      if (tagIds.length > 0) {
+        // Load company board
+        const { data: urow } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
+        const companyId = (urow as any)?.company_id;
+        let boardId: string | null = null;
+        if (companyId) {
+          const { data: board } = await supabaseAdmin
+            .from('kanban_boards')
+            .select('id, is_default, created_at')
+            .eq('company_id', companyId)
+            .order('is_default', { ascending: false })
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          boardId = (board as any)?.id || null;
+        }
+        const { data: tagRows } = await supabaseAdmin.from('tags').select('id, name, color').in('id', tagIds);
+        const rowsToInsert: any[] = [];
+        for (const t of (tagRows as any[]) || []) {
+          let columnId: string | null = null;
+          if (boardId) {
+            const { data: col } = await supabaseAdmin.from('kanban_columns').select('id').eq('kanban_board_id', boardId).eq('name', (t as any).name).maybeSingle();
+            columnId = (col as any)?.id || null;
+            if (!columnId) {
+              const { data: last } = await supabaseAdmin.from('kanban_columns').select('position').eq('kanban_board_id', boardId).order('position', { ascending: false }).limit(1).maybeSingle();
+              const nextPos = ((last as any)?.position || 0) + 1;
+              const { data: created } = await supabaseAdmin.from('kanban_columns').insert([{ name: (t as any).name, color: (t as any).color || null, position: nextPos, kanban_board_id: boardId }]).select('id').single();
+              columnId = (created as any)?.id || null;
+            }
+          }
+          if (!columnId) return ack?.({ ok: false, error: 'Nenhuma coluna/board disponÌvel para vincular a tag' });
+          rowsToInsert.push({ chat_id: id, tag_id: (t as any).id, kanban_colum_id: columnId });
+        }
+        const { error } = await supabaseAdmin.from('chat_tags').insert(rowsToInsert);
+        if (error) return ack?.({ ok: false, error: error.message });
+      }
+      try { io.to(`chat:${id}`).emit('chat:tags', { chatId: id, tags: tagIds }); } catch {}
+      return ack?.({ ok: true, count: tagIds.length });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || 'tags set error' });
+    }
+  });
+
+  // Assignee set
+  socket.on("livechat:chats:assignee:set", async (params: any, ack?: (resp: any) => void) => {
+    const id = params?.chatId as string;
+    const linkIdParam = (params?.linkId as string | null) ?? null;
+    const userIdParam = (params?.userId as string | null) ?? null;
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const { data: chat, error: errChat } = await supabaseAdmin
+        .from("chats").select("id, inbox_id").eq("id", id).maybeSingle();
+      if (errChat) return ack?.({ ok: false, error: errChat.message });
+      if (!chat) return ack?.({ ok: false, error: 'Chat not found' });
+
+      let actingUserLocalId: string | null = null;
+      try {
+        const { data: urow } = await supabaseAdmin
+          .from("users").select("id").eq("user_id", authUserId).maybeSingle();
+        actingUserLocalId = (urow as any)?.id || null;
+      } catch {}
+      if (actingUserLocalId) {
+        const { data: linkAct } = await supabaseAdmin
+          .from("inbox_users").select("can_write, can_manage")
+          .eq("inbox_id", (chat as any).inbox_id)
+          .eq("user_id", actingUserLocalId)
+          .maybeSingle();
+        if (!linkAct || (!linkAct.can_write && !linkAct.can_manage)) {
+          return ack?.({ ok: false, error: 'Sem permissao para atribuir nesta inbox' });
+        }
+      }
+      // Resolve link id
+      let targetLinkId: string | null = linkIdParam;
+      if (!targetLinkId && userIdParam) {
+        const { data: l } = await supabaseAdmin
+          .from('inbox_users')
+          .select('id')
+          .eq('inbox_id', (chat as any).inbox_id)
+          .eq('user_id', userIdParam)
+          .maybeSingle();
+        targetLinkId = (l as any)?.id || null;
+      }
+      if (!targetLinkId) return ack?.({ ok: false, error: 'linkId ou userId inv·lido para esta inbox' });
+
+      // Validate link belongs to this inbox and fetch user
+      const { data: linkRow } = await supabaseAdmin
+        .from('inbox_users')
+        .select('id, user_id, inbox_id')
+        .eq('id', targetLinkId)
+        .maybeSingle();
+      if (!linkRow || (linkRow as any).inbox_id !== (chat as any).inbox_id) {
+        return ack?.({ ok: false, error: 'Link n„o pertence ‡ inbox' });
+      }
+
+      await supabaseAdmin.from('chats').update({ assignee_agent: targetLinkId }).eq('id', id);
+
+      let assignedName: string | null = null;
+      try {
+        const uid = (linkRow as any).user_id;
+        const { data: u } = await supabaseAdmin.from('users').select('id, name').eq('id', uid).maybeSingle();
+        assignedName = (u as any)?.name || null;
+      } catch {}
+      io.emit('chat:updated', { chatId: id, assigned_agent_id: targetLinkId, assigned_agent_name: assignedName });
+      return ack?.({ ok: true, assigned_agent_id: targetLinkId, assigned_agent_name: assignedName });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || 'Falha ao definir responsavel' });
+    }
+  });
+
+  // Participants list/add/remove
+  socket.on("livechat:chats:participants:list", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const id = params?.chatId as string; if (!id) return ack?.({ ok: false, error: 'chatId required' });
+      const { data: rows, error } = await supabaseAdmin
+        .from('chat_participants')
+        .select('user_id, joined_at, left_at, is_active')
+        .eq('chat_id', id);
+      if (error) return ack?.({ ok: false, error: error.message });
+      const uids = Array.from(new Set((rows || []).map((r: any) => r.user_id).filter(Boolean)));
+      let usersMap: Record<string, { name: string | null; role: string | null; user_id: string | null }> = {};
+      if (uids.length > 0) {
+        const { data: users } = await supabaseAdmin.from('users').select('id, user_id, name, role').in('id', uids);
+        for (const u of (users || [])) usersMap[(u as any).id] = { name: (u as any).name || (u as any).id, role: (u as any).role || null, user_id: (u as any).user_id || null };
+      }
+      const list = (rows || []).map((r: any) => ({ id: r.user_id, name: usersMap[r.user_id]?.name || r.user_id, role: usersMap[r.user_id]?.role || null, is_current: usersMap[r.user_id]?.user_id === authUserId }));
+      return ack?.({ ok: true, data: list });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'participants error' }); }
+  });
+  socket.on("livechat:chats:participants:add", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const id = params?.chatId as string; const userId = params?.userId as string;
+      if (!id || !userId) return ack?.({ ok: false, error: 'chatId and userId required' });
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabaseAdmin
+        .from('chat_participants')
+        .upsert([{ chat_id: id, user_id: userId, is_active: true, left_at: null, joined_at: nowIso }], { onConflict: 'chat_id,user_id' })
+        .select('*')
+        .single();
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true, data });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'participants add error' }); }
+  });
+  socket.on("livechat:chats:participants:remove", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const id = params?.chatId as string; const userId = params?.userId as string;
+      if (!id || !userId) return ack?.({ ok: false, error: 'chatId and userId required' });
+      const { error } = await supabaseAdmin.from('chat_participants').update({ is_active: false, left_at: new Date().toISOString() }).eq('chat_id', id).eq('user_id', userId);
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'participants remove error' }); }
+  });
+
+  // Agents listing
+  socket.on("livechat:inboxes:agents", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const inboxId = params?.inboxId as string; if (!inboxId) return ack?.({ ok: false, error: 'inboxId required' });
+      const { data: links, error: errLinks } = await supabaseAdmin.from('inbox_users').select('id, user_id').eq('inbox_id', inboxId);
+      if (errLinks) return ack?.({ ok: false, error: errLinks.message });
+      const raw = (links || []) as any[];
+      const rawIds = Array.from(new Set(raw.map((r: any) => r.user_id).filter(Boolean)));
+      if (rawIds.length === 0) return ack?.({ ok: true, data: [] });
+      const { data: users } = await supabaseAdmin.from('users').select('id, user_id, name, role').in('id', rawIds).order('name', { ascending: true });
+      const byUser: Record<string, any> = Object.fromEntries(((users as any[]) || []).map((u: any) => [u.id, u]));
+      const result = raw
+        .map((link: any) => {
+          const u = byUser[link.user_id];
+          if (!u) return null;
+          return { id: link.id, user_id: u.id, name: u.name || u.id, role: u.role };
+        })
+        .filter(Boolean);
+      return ack?.({ ok: true, data: result });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'inbox agents error' }); }
+  });
+  socket.on("users:agents-supervisors", async (_params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const { data: userRow, error: errUser } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
+      if (errUser) return ack?.({ ok: false, error: errUser.message });
+      if (!userRow?.company_id) return ack?.({ ok: false, error: 'Usu·rio sem company_id' });
+      const { data, error } = await supabaseAdmin
+        .from('users')
+        .select('id, user_id, name, role')
+        .eq('company_id', (userRow as any).company_id)
+        .in('role', ['AGENT','SUPERVISOR'])
+        .order('name', { ascending: true });
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true, data: (data || []).map((u: any) => ({ id: u.id, name: u.name || u.id, role: u.role })) });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'agents list error' }); }
+  });
+
+  // Company tags list
+  socket.on("livechat:tags:list", async (_params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: 'Not authenticated' });
+      const { data: urow, error: errU } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
+      if (errU) return ack?.({ ok: false, error: errU.message });
+      if (!urow?.company_id) return ack?.({ ok: false, error: 'Usu·rio sem company_id' });
+      const { data, error } = await supabaseAdmin
+        .from('tags')
+        .select('id, name, color, created_at, updated_at')
+        .eq('company_id', (urow as any).company_id)
+        .order('name', { ascending: true });
+      if (error) return ack?.({ ok: false, error: error.message });
+      return ack?.({ ok: true, data: data || [] });
+    } catch (e: any) { return ack?.({ ok: false, error: e?.message || 'tags list error' }); }
+  });
+});

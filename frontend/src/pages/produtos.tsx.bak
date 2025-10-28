@@ -1,0 +1,449 @@
+import { useEffect, useMemo, useState } from "react";
+import Sidebar from "../componets/Sidbars/sidebar";
+import * as XLSX from "xlsx";
+import { FaEdit, FaTrash } from "react-icons/fa";
+
+type Product = {
+  id?: string;
+  external_id: string;
+  name: string;
+  unit?: string | null;
+  cost_price?: number | null;
+  sale_price?: number | null;
+  brand?: string | null;
+  grouping?: string | null;
+  power?: string | null;
+  size?: string | null;
+  supplier?: string | null;
+  status?: string | null;
+  specs?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
+
+const normalize = (s: string) =>
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+// mapeia cabeçalhos esperados -> chaves do payload
+const HEADER_MAP: Record<string, keyof Product> = {
+  // planilha
+  "id": "external_id",
+  "descricao": "name",
+  "descrição": "name",
+  "unidade": "unit",
+  "preco de custo": "cost_price",
+  "preço de custo": "cost_price",
+  "preco de venda": "sale_price",
+  "preço de venda": "sale_price",
+  "marca": "brand",
+  "agrupamento": "grouping",
+  "potencia": "power",
+  "potência": "power",
+  "tamanho": "size",
+  "fornecedor": "supplier",
+  "situacao": "status",
+  "situação": "status",
+  "especificacoes": "specs",
+  "especificações": "specs",
+};
+
+function parseMoney(value: any): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "number") return value;
+  const s = String(value).replace(/\./g, "").replace(/,/, ".").replace(/[^0-9.-]/g, "");
+  const n = Number(s);
+  return isNaN(n) ? null : n;
+}
+
+export function ProdutosPage() {
+  const [loading, setLoading] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [importCount, setImportCount] = useState<number | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [form, setForm] = useState<Partial<Product>>({});
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+    const res = await fetch(url, {
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+      ...init,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error || `HTTP ${res.status}`);
+    }
+    return res.json();
+  };
+
+  const loadProducts = async () => {
+    setLoading(true);
+    try {
+      const data = await fetchJson<Product[]>(`${API}/products`);
+      setProducts(data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const handleFile = async (file: File) => {
+    setFileName(file.name);
+    setImportCount(null);
+    setLoading(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: "array" });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+      const mapped: Product[] = rows.map((row) => {
+        const out: any = {};
+        for (const [rawKey, value] of Object.entries(row)) {
+          const key = normalize(rawKey);
+          const mappedKey = HEADER_MAP[key];
+          if (!mappedKey) continue;
+          out[mappedKey] = value;
+        }
+        // ajustes obrigatórios e numéricos
+        out.external_id = String(out.external_id ?? "").trim();
+        out.name = String(out.name ?? "").trim();
+        out.unit = out.unit ? String(out.unit) : null;
+        out.cost_price = parseMoney(out.cost_price);
+        out.sale_price = parseMoney(out.sale_price);
+        out.brand = out.brand ? String(out.brand) : null;
+        out.grouping = out.grouping ? String(out.grouping) : null;
+        out.power = out.power ? String(out.power) : null;
+        out.size = out.size ? String(out.size) : null;
+        out.supplier = out.supplier ? String(out.supplier) : null;
+        out.status = out.status ? String(out.status) : null;
+        out.specs = out.specs ? String(out.specs) : null;
+        return out as Product;
+      }).filter((p) => p.external_id && p.name);
+
+      if (mapped.length === 0) {
+        alert("Nenhuma linha válida encontrada na planilha.");
+        setLoading(false);
+        return;
+      }
+
+      const res = await fetchJson<{ upserted: number }>(`${API}/products/bulk-upsert`, {
+        method: "POST",
+        body: JSON.stringify(mapped),
+      });
+      setImportCount(res.upserted);
+      await loadProducts();
+    } catch (e: any) {
+      console.error(e);
+      alert(`Erro ao importar: ${e?.message || e}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const columns = useMemo(
+    () => [
+      { key: "name", label: "Nome do Produto" },
+      { key: "specs", label: "Descrição" },
+      { key: "sale_price", label: "Preço de Venda" },
+      { key: "cost_price", label: "Preço de Custo" },
+    ],
+    []
+  );
+
+  const filtered = useMemo(() => {
+    const qn = normalize(query || "");
+    const sn = statusFilter === "all" ? null : normalize(statusFilter);
+    return products.filter((p) => {
+      const nameOk = !qn || normalize(p.name || "").includes(qn);
+      const statusNorm = normalize(p.status || "");
+      const statusOk = !sn || statusNorm === sn;
+      return nameOk && statusOk;
+    });
+  }, [products, query, statusFilter]);
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const endIdx = Math.min(total, startIdx + pageSize);
+  const paginated = filtered.slice(startIdx, endIdx);
+
+  return (
+    <>
+      <Sidebar />
+
+      <div className="ml-16 min-h-screen bg-[#EDEDED] p-8">
+        <div className="bg-white rounded-2xl mt-8 shadow-lg p-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold text-[#204A34]">Produtos</h2>
+                <p className="text-gray-500 text-sm">Gerencie seu catálogo e importe planilhas XLSX</p>
+              </div>
+              <label className="inline-flex items-center gap-3 bg-[#204A34] text-white px-4 py-2 rounded-xl hover:bg-[#42CD55] transition cursor-pointer">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleFile(f);
+                    e.currentTarget.value = ""; // reset
+                  }}
+                />
+                Importar XLSX
+              </label>
+            </div>
+
+            {fileName && (
+              <div className="text-sm text-gray-600">
+                Arquivo: <span className="font-medium">{fileName}</span>
+                {importCount !== null && (
+                  <span className="ml-2">— Itens processados: {importCount}</span>
+                )}
+              </div>
+            )}
+
+            {/* Filtros */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="flex-1 w-full">
+                <input
+                  type="text"
+                  placeholder="Pesquisar por nome..."
+                  className="w-full border rounded-xl px-3 py-2"
+                  value={query}
+                  onChange={(e) => { setQuery(e.target.value); setPage(1); }}
+                />
+              </div>
+              <div>
+                <select
+                  className="border rounded-xl px-3 py-2"
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                >
+                  <option value="all">Todos os status</option>
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-auto border rounded-xl">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-gray-600 border-b bg-gray-50">
+                    {columns.map((c) => (
+                      <th key={c.key} className="p-2 whitespace-nowrap">{c.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((p) => (
+                    <tr key={p.id || p.external_id} className="border-b hover:bg-gray-50">
+                      <td className="p-2 max-w-[360px]">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="block truncate" title={p.name}>{p.name}</span>
+                          <div className="flex items-center gap-3 opacity-60 hover:opacity-100">
+                            <button
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Editar"
+                              onClick={() => { setEditing(p); setForm({ ...p }); setShowForm(true); }}
+                            >
+                              <FaEdit />
+                            </button>
+                            <button
+                              className="text-red-600 hover:text-red-800"
+                              title="Excluir"
+                              onClick={async () => {
+                                if (!p.id) return alert("Produto sem id");
+                                if (!confirm("Excluir este produto?")) return;
+                                try {
+                                  await fetchJson(`${API}/products/${p.id}`, { method: "DELETE" });
+                                  setProducts((prev) => prev.filter((x) => x.id !== p.id));
+                                } catch (e: any) {
+                                  alert(e?.message || "Erro ao excluir");
+                                }
+                              }}
+                            >
+                              <FaTrash />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-2 max-w-[480px]">
+                        <span className="block truncate" title={p.specs || "-"}>{p.specs || "-"}</span>
+                      </td>
+                      <td className="p-2">{p.sale_price != null ? p.sale_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "-"}</td>
+                      <td className="p-2">{p.cost_price != null ? p.cost_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "-"}</td>
+                    </tr>
+                  ))}
+                  {filtered.length === 0 && !loading && (
+                    <tr>
+                      <td className="p-4 text-gray-500" colSpan={columns.length}>
+                        Nenhum produto encontrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Paginação */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
+              <div className="text-sm text-gray-600">
+                Mostrando {total === 0 ? 0 : startIdx + 1}–{endIdx} de {total}
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  className="border rounded-lg px-2 py-1 text-sm"
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                >
+                  {[10, 25, 50].map((n) => (
+                    <option key={n} value={n}>{n}/página</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-sm text-gray-700">{currentPage} / {totalPages}</span>
+                  <button
+                    className="px-3 py-1 border rounded-lg disabled:opacity-50"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {loading && (
+              <div className="text-sm text-gray-600">Carregando...</div>
+            )}
+          </div>
+        </div>
+
+        {showForm && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 relative">
+              <button
+                className="absolute top-3 right-4 text-gray-500 hover:text-black"
+                onClick={() => setShowForm(false)}
+                aria-label="Fechar"
+              >
+                ✕
+              </button>
+              <h3 className="text-lg font-semibold text-[#204A34] mb-4">Editar Produto</h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">ID (planilha)</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.external_id || ""} onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Unidade</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.unit || ""} onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-gray-600 mb-1">Descrição</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.name || ""} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Preço de Custo</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.cost_price ?? ""} onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Preço de Venda</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.sale_price ?? ""} onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))} />
+                </div>
+
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Marca</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.brand || ""} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Agrupamento</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.grouping || ""} onChange={(e) => setForm((f) => ({ ...f, grouping: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Potência</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.power || ""} onChange={(e) => setForm((f) => ({ ...f, power: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Tamanho</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.size || ""} onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Fornecedor</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.supplier || ""} onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">Situação</label>
+                  <input className="w-full border rounded-lg px-3 py-2" value={form.status || ""} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm text-gray-600 mb-1">Especificações</label>
+                  <textarea className="w-full border rounded-lg px-3 py-2 min-h-[80px]" value={form.specs || ""} onChange={(e) => setForm((f) => ({ ...f, specs: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end gap-3">
+                <button className="px-4 py-2 rounded-lg border" onClick={() => setShowForm(false)}>Cancelar</button>
+                <button
+                  className="px-4 py-2 rounded-lg bg-[#204A34] text-white hover:bg-[#42CD55]"
+                  onClick={async () => {
+                    if (!editing?.id) return alert("Produto sem id");
+                    try {
+                      const payload: any = { ...form };
+                      // normaliza preços para número (pt-BR)
+                      if (payload.cost_price !== undefined) payload.cost_price = parseMoney(payload.cost_price);
+                      if (payload.sale_price !== undefined) payload.sale_price = parseMoney(payload.sale_price);
+                      const updated = await fetchJson<Product>(`${API}/products/${editing.id}` , {
+                        method: "PUT",
+                        body: JSON.stringify(payload),
+                      });
+                      setProducts((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+                      setShowForm(false);
+                      setEditing(null);
+                    } catch (e: any) {
+                      alert(e?.message || "Erro ao salvar");
+                    }
+                  }}
+                >
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export default ProdutosPage;
+

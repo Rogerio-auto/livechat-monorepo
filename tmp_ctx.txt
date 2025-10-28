@@ -1,0 +1,23 @@
+        .from("users")
+        .select("id, name")
+        .eq("id", newAssigneeId)
+        .maybeSingle();
+      assignedName = (u as any)?.name || null;
+    }
+
+    // Garantir atualização no chat.assignee_agent
+    try {
+      await supabaseAdmin.from("chats").update({ assignee_agent: newAssigneeId || null }).eq("id", id);
+    } catch {}
+
+    // Notificar UI do livechat
+    io.emit("chat:updated", {
+      chatId: id,
+      assigned_agent_id: newAssigneeId || null,
+      assigned_agent_name: assignedName,
+    });
+
+    return res.json({ ok: true, assigned_agent_id: newAssigneeId || null, assigned_agent_name: assignedName });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Falha ao definir responsável" });
+  }

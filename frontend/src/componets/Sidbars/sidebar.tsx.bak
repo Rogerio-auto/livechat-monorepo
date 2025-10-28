@@ -1,0 +1,100 @@
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { FaTachometerAlt, FaUsers, FaCalendarAlt, FaProjectDiagram, FaFileInvoice, FaSignOutAlt, FaBoxOpen } from "react-icons/fa";
+import Logo from "../../assets/icon.png";
+
+type Profile = {
+  id: string;
+  email: string;
+  name: string;
+  role?: string | null;
+  avatarUrl?: string | null;
+  companyId?: string | null;
+  companyName?: string | null;
+};
+
+export default function Sidebar() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
+
+  const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+    const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await fetchJson<Profile>(`${API}/me/profile`);
+        setProfile(me);
+      } catch {}
+    })();
+  }, []);
+
+  const logout = async () => {
+    try {
+      await fetch(`${API}/logout`, { method: "POST", credentials: "include" });
+    } finally {
+      navigate("/login");
+    }
+  };
+
+  return (
+    <aside className="fixed top-0 left-0 h-screen z-50 group w-16 hover:w-72 transition-all duration-300 ease-in-out overflow-hidden bg-[#204A34]">
+      <div className="relative flex flex-col h-full">
+        <div className="px-3 pt-4 pb-3 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <img src={Logo} alt="logo" className="h-8 w-auto object-contain" />
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="text-white font-semibold leading-tight">{profile?.companyName || "Sua Empresa"}</div>
+              
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <img
+              src={profile?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile?.name || 'User')}&background=204A34&color=fff`}
+              className="h-9 w-9 rounded-full ring-2 ring-white/20 object-cover"
+            />
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="text-white text-sm font-medium leading-tight">{profile?.name || "Usuário"}</div>
+              <div className="text-white/60 text-xs truncate max-w-[10rem]">{profile?.email || ""}</div>
+            </div>
+          </div>
+        </div>
+
+        <nav className="mt-4 flex flex-col gap-1 p-2 flex-1">
+          <SidebarItem to="/dashboard" icon={<FaTachometerAlt />} label="Dashboard" active={location.pathname.startsWith("/dashboard")} />
+          <SidebarItem to="/clientes" icon={<FaUsers />} label="Clientes" active={location.pathname.startsWith("/clientes")} />
+          <SidebarItem to="/produtos" icon={<FaBoxOpen />} label="Produtos" active={location.pathname.startsWith("/produtos")} />
+          <SidebarItem to="/calendario" icon={<FaCalendarAlt />} label="Calendário" active={location.pathname.startsWith("/calendario")} />
+          <SidebarItem to="/funil" icon={<FaProjectDiagram />} label="Funil de Vendas" active={location.pathname.startsWith("/funil")} />
+          <SidebarItem to="/orcamentos" icon={<FaFileInvoice />} label="Orçamentos" active={location.pathname.startsWith("/orcamentos")} />
+        </nav>
+
+        <div className="p-3 border-t border-white/10">
+          <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-white hover:bg-white/10 transition">
+            <FaSignOutAlt />
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">Sair</span>
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+type ItemProps = { icon: React.ReactNode; label: string; to: string; active?: boolean };
+function SidebarItem({ icon, label, to, active }: ItemProps) {
+  return (
+    <Link
+      to={to}
+      className={`w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${active ? "bg-white/15 text-white" : "text-white hover:bg-white/10"}`}
+    >
+      <span className="text-lg">{icon}</span>
+      <span className="opacity-0 group-hover:opacity-100 transform group-hover:translate-x-0 -translate-x-2 transition-all duration-300 whitespace-nowrap">{label}</span>
+    </Link>
+  );
+}
+

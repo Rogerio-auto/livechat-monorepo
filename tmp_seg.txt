@@ -1,0 +1,2000 @@
+import "dotenv/config";
+import express from "express";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import { createClient } from "@supabase/supabase-js";
+import { z } from "zod";
+
+
+
+const app = express();
+const server = http.createServer(app);
+
+// ===== Config =====
+const PORT = Number(process.env.PORT_BACKEND || 5000);
+const FRONTEND_ORIGINS = Array.from(
+  new Set(
+    [
+      ...(process.env.FRONTEND_ORIGIN || "").split(",").map((s) => s.trim()).filter(Boolean),
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ]
+  )
+);
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || "sb_access_token";
+const JWT_COOKIE_SECURE = String(process.env.JWT_COOKIE_SECURE) === "true";
+
+// ===== Middlewares =====
+app.use(
+  cors({
+    origin: FRONTEND_ORIGINS,
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+
+// (opcional) assets estÃ¡ticos se precisar
+// app.use(express.static("assets"));
+
+// ===== Supabase clients =====
+// Para login/fluxos pÃºblicos
+const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Para CRUD no servidor (NUNCA exponha essa chave no front)
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// ===== Auth middleware =====
+async function requireAuth(req: any, res: any, next: any) {
+  // pega token do cookie httpOnly ou do header Authorization
+  const bearer = (req.headers.authorization ?? "") as string;
+  let token = bearer.startsWith("Bearer ") ? bearer.slice(7) : undefined;
+  if (!token) token = req.cookies[JWT_COOKIE_NAME];
+
+  if (!token) return res.status(401).json({ error: "Not authenticated" });
+
+  // valida token com Supabase
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data?.user) return res.status(401).json({ error: "Invalid token" });
+
+  req.user = data.user;
+  next();
+}
+
+// ===== Rotas de Auth =====
+app.post("/signup", async (req, res) => {
+  const { email, password } = req.body ?? {};
+  if (!email || !password) return res.status(400).json({ error: "Email e senha sÃ£o obrigatÃ³rios" });
+
+  const { data, error } = await supabaseAnon.auth.signUp({ email, password });
+  if (error) return res.status(400).json({ error: error.message });
+  return res.status(201).json({ ok: true, user: data.user });
+});
+
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body ?? {};
+  if (!email || !password) return res.status(400).json({ error: "Email e senha sÃ£o obrigatÃ³rios" });
+
+  const { data, error } = await supabaseAnon.auth.signInWithPassword({ email, password });
+  if (error || !data?.session) return res.status(401).json({ error: "Credenciais invÃ¡lidas" });
+
+  const accessToken = data.session.access_token;
+
+  // seta cookie httpOnly para requests subsequentes
+  res.cookie(JWT_COOKIE_NAME, accessToken, {
+    httpOnly: true,
+    secure: JWT_COOKIE_SECURE,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
+  });
+
+  return res.json({ ok: true, user: data.user });
+});
+
+app.post("/logout", (_req, res) => {
+  res.clearCookie(JWT_COOKIE_NAME, { path: "/" });
+  return res.json({ ok: true });
+});
+
+app.get("/auth/me", requireAuth, (req: any, res) => {
+  return res.json({ user: req.user });
+});
+
+// ===== Calendário (calendars/events) =====
+const VIEW_USER_AGENDA = process.env.VIEW_USER_AGENDA || "user_agenda";
+const VIEW_EVENTS_WITH_PARTICIPANTS = process.env.VIEW_EVENTS_WITH_PARTICIPANTS || "events_with_participants";
+const TABLE_CALENDARS = process.env.TABLE_CALENDARS || "calendars";
+const TABLE_EVENTS = process.env.TABLE_EVENTS || "events";
+const TABLE_EVENT_PARTICIPANTS = process.env.TABLE_EVENT_PARTICIPANTS || "event_participants";
+
+// GET calendars do usuário (owner)
+app.get("/calendar/calendars", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const { data, error } = await supabaseAdmin
+      .from(TABLE_CALENDARS)
+      .select("*")
+      .eq("owner_id", userId)
+      .order("is_default", { ascending: false })
+      .order("name", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data || []);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Calendars list error" });
+  }
+});
+
+// GET eventos pela janela de datas (interseção)
+// Query params: start, end (ISO strings)
+app.get("/calendar/events", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const start = String(req.query.start || "").trim();
+    const end = String(req.query.end || "").trim();
+    if (!start || !end) return res.status(400).json({ error: "start e end obrigatórios (ISO)" });
+
+    // Busca eventos onde (start_time < end) e (end_time > start)
+    const { data, error } = await supabaseAdmin
+      .from(VIEW_USER_AGENDA)
+      .select("*")
+      .eq("user_id", userId)
+      .lt("start_time", end)
+      .gt("end_time", start)
+      .order("start_time", { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Mapeia para formato FullCalendar opcionalmente, mas devolvemos a linha completa também
+    const items = (data || []).map((e: any) => ({
+      id: e.id,
+      title: e.title,
+      start: e.start_time,
+      end: e.end_time,
+      backgroundColor: e.calendar_color || undefined,
+      extendedProps: {
+        description: e.description,
+        event_type: e.event_type,
+        status: e.status,
+        location: e.location,
+        calendar_name: e.calendar_name,
+        calendar_color: e.calendar_color,
+        user_id: e.user_id,
+        is_organizer: e.is_organizer,
+        customer_name: e.customer_name,
+        lead_name: e.lead_name,
+      },
+      raw: e,
+    }));
+
+    return res.json({ items });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Events list error" });
+  }
+});
+
+// Valida disponibilidade simples chamando função RPC is_user_available_simple
+async function checkAvailability(userId: string, startISO: string, endISO: string) {
+  const { data, error } = await (supabaseAdmin as any)
+    .rpc("is_user_available_simple", {
+      p_user_id: userId,
+      p_start_time: startISO,
+      p_end_time: endISO,
+    });
+  if (error) throw new Error(error.message);
+  return Boolean(data);
+}
+
+// POST criar evento + participantes
+app.post("/calendar/events", requireAuth, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const schema = z.object({
+      title: z.string().min(1),
+      description: z.string().optional().nullable(),
+      location: z.string().optional().nullable(),
+      event_type: z.enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "OTHER"]).optional(),
+      status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+      start_time: z.string().min(1), // ISO
+      end_time: z.string().min(1),   // ISO
+      calendar_id: z.string().uuid(),
+      participant_ids: z.array(z.string().uuid()).optional().default([]),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+    const payload = parsed.data;
+
+    if (new Date(payload.end_time) <= new Date(payload.start_time)) {
+      return res.status(400).json({ error: "end_time deve ser maior que start_time" });
+    }
+
+    // checa disponibilidade do criador e participantes
+    const participantsAll = Array.from(new Set([userId, ...payload.participant_ids]));
+    const availabilityResults: Record<string, boolean> = {};
+    for (const uid of participantsAll) {
+      availabilityResults[uid] = await checkAvailability(uid, payload.start_time, payload.end_time);
+    }
+    const busy = Object.entries(availabilityResults).filter(([, ok]) => !ok).map(([uid]) => uid);
+    if (busy.length > 0) {
+      return res.status(409).json({
+        error: "Usuários indisponíveis para o intervalo",
+        busy_user_ids: busy,
+      });
+    }
+
+    // cria evento
+    const eventInsert: any = {
+      title: payload.title,
+      description: payload.description ?? null,
+      location: payload.location ?? null,
+      event_type: payload.event_type ?? "OTHER",
+      status: payload.status ?? "SCHEDULED",
+      start_time: payload.start_time,
+      end_time: payload.end_time,
+      is_all_day: false,
+      calendar_id: payload.calendar_id,
+      created_by_id: userId,
+    };
+    const { data: ev, error: evErr } = await supabaseAdmin
+      .from(TABLE_EVENTS)
+      .insert(eventInsert)
+      .select("*")
+      .single();
+    if (evErr) return res.status(500).json({ error: evErr.message });
+
+    // participantes: criador como organizer + demais
+    const rows = [
+      { event_id: ev.id, user_id: userId, is_organizer: true },
+      ...payload.participant_ids
+        .filter((uid) => uid !== userId)
+        .map((uid) => ({ event_id: ev.id, user_id: uid, is_organizer: false })),
+    ];
+    if (rows.length > 0) {
+      const { error: pErr } = await supabaseAdmin.from(TABLE_EVENT_PARTICIPANTS).insert(rows);
+      if (pErr) return res.status(500).json({ error: pErr.message });
+    }
+
+    return res.status(201).json(ev);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Create event error" });
+  }
+});
+
+// PUT atualizar evento
+app.put("/calendar/events/:id", requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const schema = z.object({
+      title: z.string().optional(),
+      description: z.string().optional().nullable(),
+      location: z.string().optional().nullable(),
+      event_type: z.enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "OTHER"]).optional(),
+      status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+      start_time: z.string().optional(),
+      end_time: z.string().optional(),
+      is_all_day: z.boolean().optional(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+    const patch = parsed.data as any;
+    if (patch.start_time && patch.end_time) {
+      if (new Date(patch.end_time) <= new Date(patch.start_time)) {
+        return res.status(400).json({ error: "end_time deve ser maior que start_time" });
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from(TABLE_EVENTS)
+      .update({ ...patch, updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Update event error" });
+  }
+});
+
+// DELETE evento
+app.delete("/calendar/events/:id", requireAuth, async (req: any, res) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { error } = await supabaseAdmin.from(TABLE_EVENTS).delete().eq("id", id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.status(204).send();
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Delete event error" });
+  }
+});
+
+// GET disponibilidade simples
+app.get("/calendar/availability", requireAuth, async (req: any, res) => {
+  try {
+    const userId = (req.query.user_id as string) || req.user.id;
+    const start = String(req.query.start || "").trim();
+    const end = String(req.query.end || "").trim();
+    if (!userId || !start || !end) return res.status(400).json({ error: "user_id, start, end obrigatórios" });
+    const available = await checkAvailability(userId, start, end);
+    return res.json({ user_id: userId, available });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Availability error" });
+  }
+});
+
+// ===== Produtos =====
+const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || "products";
+
+// GET listar produtos (suporta paginaÃ§Ã£o e filtros)
+app.get("/products", requireAuth, async (req, res) => {
+  try {
+    const q = (req.query.q as string | undefined)?.trim();
+    const status = (req.query.status as string | undefined)?.trim();
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const offset = req.query.offset ? Number(req.query.offset) : undefined;
+
+    let query = supabaseAdmin
+      .from(PRODUCTS_TABLE)
+      .select("*", { count: "exact" })
+      .order("updated_at", { ascending: false });
+
+    if (q) {
+      // filtro por nome (ilike)
+      query = query.ilike("name", `%${q}%`);
+    }
+    if (status && status.toLowerCase() !== "all") {
+      query = query.eq("status", status);
+    }
+
+    if (typeof limit === "number" && typeof offset === "number") {
+      // Supabase usa range inclusivo
+      query = query.range(offset, offset + Math.max(0, limit - 1));
+    }
+
+    const { data, error, count } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ items: data || [], total: count ?? (data?.length || 0) });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Products list error" });
+  }
+});
+
+// PUT atualizar produto por id
+app.put("/products/:id", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+
+  const schema = z.object({
+    external_id: z.string().optional(),
+    name: z.string().optional(),
+    unit: z.string().nullable().optional(),
+    cost_price: z.union([z.number(), z.string()]).nullable().optional(),
+    sale_price: z.union([z.number(), z.string()]).nullable().optional(),
+    brand: z.string().nullable().optional(),
+    grouping: z.string().nullable().optional(),
+    power: z.string().nullable().optional(),
+    size: z.string().nullable().optional(),
+    supplier: z.string().nullable().optional(),
+    status: z.string().nullable().optional(),
+    specs: z.string().nullable().optional(),
+  }).passthrough();
+
+  const parseMoney = (v: any): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number") return v;
+    if (typeof v !== "string") return null;
+    const s = v.replace(/\./g, "").replace(/,/, ".").replace(/[^0-9.-]/g, "");
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  };
+
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+
+  const payload: any = { ...parsed.data };
+  if (payload.cost_price !== undefined) payload.cost_price = parseMoney(payload.cost_price);
+  if (payload.sale_price !== undefined) payload.sale_price = parseMoney(payload.sale_price);
+  payload.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabaseAdmin
+    .from(PRODUCTS_TABLE)
+    .update(payload)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json(data);
+});
+
+// DELETE produto por id
+app.delete("/products/:id", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { error } = await supabaseAdmin.from(PRODUCTS_TABLE).delete().eq("id", id);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(204).send();
+});
+
+// POST upsert em massa de produtos
+app.post("/products/bulk-upsert", requireAuth, async (req, res) => {
+  const items = (req.body || []) as any[];
+  if (!Array.isArray(items)) return res.status(400).json({ error: "Body deve ser array" });
+
+  const schema = z.object({
+    external_id: z.string().min(1),
+    name: z.string().min(1),
+    unit: z.string().optional().nullable(),
+    cost_price: z.union([z.number(), z.string()]).optional().nullable(),
+    sale_price: z.union([z.number(), z.string()]).optional().nullable(),
+    brand: z.string().optional().nullable(),
+    grouping: z.string().optional().nullable(),
+    power: z.string().optional().nullable(),
+    size: z.string().optional().nullable(),
+    supplier: z.string().optional().nullable(),
+    status: z.string().optional().nullable(),
+    specs: z.string().optional().nullable(),
+  });
+
+  const parseMoney = (v: any): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    if (typeof v === "number") return v;
+    if (typeof v !== "string") return null;
+    const s = v.replace(/\./g, "").replace(/,/, ".").replace(/[^0-9.-]/g, "");
+    const n = Number(s);
+    return isNaN(n) ? null : n;
+  };
+
+  const toUpsert = [] as any[];
+  for (const raw of items) {
+    const parsed = schema.safeParse(raw);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Item invÃ¡lido", details: parsed.error.format() });
+    }
+    const r = parsed.data as any;
+    toUpsert.push({
+      external_id: String(r.external_id),
+      name: r.name,
+      unit: r.unit ?? null,
+      cost_price: parseMoney(r.cost_price),
+      sale_price: parseMoney(r.sale_price),
+      brand: r.brand ?? null,
+      grouping: r.grouping ?? null,
+      power: r.power ?? null,
+      size: r.size ?? null,
+      supplier: r.supplier ?? null,
+      status: r.status ?? null,
+      specs: r.specs ?? null,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from(PRODUCTS_TABLE)
+    .upsert(toUpsert, { onConflict: "external_id" })
+    .select("*");
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json({ upserted: data?.length || 0 });
+});
+
+// Perfil do usuÃ¡rio autenticado + dados bÃ¡sicos da empresa
+app.get("/me/profile", requireAuth, async (req: any, res) => {
+  const userId = req.user.id;
+  // Tenta obter linha em public.users
+  const { data: urow, error: uerr } = await supabaseAdmin
+    .from("users")
+    .select("user_id, name, role, avatar, company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (uerr) return res.status(500).json({ error: uerr.message });
+
+  let companyName: string | null = null;
+  // Opcional: tenta buscar nome da empresa, ignora se a tabela nÃ£o existir
+  try {
+    if (urow?.company_id) {
+      const { data: comp, error: cerr } = await supabaseAdmin
+        .from("companies")
+        .select("id, name")
+        .eq("id", urow.company_id)
+        .maybeSingle();
+      if (!cerr) companyName = (comp as any)?.name ?? null;
+    }
+  } catch (_) {
+    // ignora
+  }
+
+  return res.json({
+    id: req.user.id,
+    email: req.user.email,
+    name: urow?.name || req.user.email,
+    role: urow?.role || null,
+    avatarUrl: urow?.avatar || null,
+    companyId: urow?.company_id || null,
+    companyName,
+  });
+});
+
+// ===== Rotas de Leads (exemplo CRUD) =====
+// Ajuste nomes de colunas conforme sua tabela "Lead"
+
+type LeadForm = {
+  tipoPessoa?: string; cpf?: string; nome?: string; rg?: string; orgao?: string;
+  dataNascimento?: string; mae?: string; pai?: string; sexo?: string; naturalidade?: string;
+  estadoCivil?: string; conjuge?: string; cep?: string; rua?: string; numero?: string;
+  complemento?: string; bairro?: string; uf?: string; cidade?: string; celular?: string;
+  celularAlternativo?: string; telefone?: string; telefoneAlternativo?: string; email?: string;
+  site?: string; observacoes?: string; status?: string;
+};
+
+export function mapLead(form: LeadForm) {
+  return {
+    personType: form.tipoPessoa ?? null,
+    phone: form.telefone,
+    cpf: form.cpf ?? null,
+    name: form.nome,
+    rg: form.rg ?? null,
+    rgOrgao: form.orgao ?? null,
+    birthDate: form.dataNascimento ? new Date(form.dataNascimento).toISOString() : null,
+    mother: form.mae ?? null,
+    father: form.pai ?? null,
+    gender: form.sexo ?? null,
+    birthPlace: form.naturalidade ?? null,
+    maritalStatus: form.estadoCivil ?? null,
+    spouse: form.conjuge ?? null,
+    cep: form.cep ?? null,
+    street: form.rua ?? null,
+    number: form.numero ?? null,
+    complement: form.complemento ?? null,
+    neighborhood: form.bairro ?? null,
+    state: form.uf ?? null,
+    city: form.cidade ?? null,
+    cellphone: form.celular ?? null,
+    altCellphone: form.celularAlternativo ?? null,
+    telephone: form.telefone ?? null,
+    altTelephone: form.telefoneAlternativo ?? null,
+    email: form.email ?? null,
+    site: form.site ?? null,
+    notes: form.observacoes ?? null,
+    statusClient: form.status ?? "Ativo",
+  };
+}
+
+// LISTAR
+app.get("/leads", requireAuth, async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("leads")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const mapped = (data ?? []).map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    cpf: r.cpf,
+    email: r.email,
+    status: r.status_client ?? r.status,
+
+    tipoPessoa: r.person_type,
+    rg: r.rg,
+    orgao: r.rg_orgao,
+    dataNascimento: r.birth_date,
+    mae: r.mother,
+    pai: r.father,
+    sexo: r.gender,
+    naturalidade: r.birth_place,
+    estadoCivil: r.marital_status,
+    conjuge: r.spouse,
+
+    cep: r.cep,
+    rua: r.street,
+    numero: r.number,
+    complemento: r.complement,
+    bairro: r.neighborhood,
+    uf: r.state,
+    cidade: r.city,
+
+    celular: r.cellphone,
+    celularAlternativo: r.alt_cellphone,
+    telefone: r.telephone,
+    telefoneAlternativo: r.alt_telephone,
+
+    site: r.site,
+    observacoes: r.notes,
+
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+
+  return res.json(mapped);
+
+
+});
+
+// CRIAR
+app.post("/leads", requireAuth, async (req, res) => {
+  const payload = mapLead(req.body);
+  if (!payload.name) return res.status(400).json({ error: "Campo 'nome' Ã© obrigatÃ³rio" });
+
+  const leadSchema = z.object({
+    nome: z.string().min(1),
+    cpf: z.string().regex(/^\d{11}$/, "CPF invÃ¡lido").optional(),
+    cep: z.string().regex(/^\d{8}$/, "CEP invÃ¡lido").optional(),
+    uf: z.string().max(2).optional(),
+    email: z.string().email().optional(),
+    telefone: z.string().max(11).optional(),
+    celular: z.string().max(11).optional(),
+    numero: z.string().max(10).optional(),
+    dataNascimento: z.string().optional(), // vocÃª pode validar ISO aqui tambÃ©m
+  }).passthrough();
+
+  const { data, error } = await supabaseAdmin
+    .from("leads")
+    .insert([payload])
+    .select("*")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(201).json(data);
+});
+
+// ATUALIZAR
+app.put("/leads/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const payload = mapLead(req.body);
+  const { data, error } = await supabaseAdmin
+    .from("leads")
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+
+  const leadSchema = z.object({
+    nome: z.string().min(1),
+    cpf: z.string().regex(/^\d{11}$/, "CPF invÃ¡lido").optional(),
+    cep: z.string().regex(/^\d{8}$/, "CEP invÃ¡lido").optional(),
+    uf: z.string().max(2).optional(),
+    email: z.string().email().optional(),
+    telefone: z.string().max(11).optional(),
+    celular: z.string().max(11).optional(),
+    numero: z.string().max(10).optional(),
+    dataNascimento: z.string().optional(), // vocÃª pode validar ISO aqui tambÃ©m
+  }).passthrough();
+
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json(data);
+});
+
+// APAGAR
+app.delete("/leads/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabaseAdmin.from("leads").delete().eq("id", id);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(204).send();
+});
+
+// ===== Live Chat =====
+// Inboxes do usuário autenticado
+app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+
+    // Primeiro tenta direto com auth.user.id (caso inbox_users.user_id armazene o auth id)
+    let { data: links, error: errLinks } = await supabaseAdmin
+      .from("inbox_users")
+      .select("inbox_id")
+      .eq("user_id", authUserId);
+    if (errLinks) return res.status(500).json({ error: errLinks.message });
+
+    // Fallback: alguns esquemas armazenam o id local de public.users (PK) em inbox_users.user_id
+    if (!links || links.length === 0) {
+      try {
+        const { data: urow } = await supabaseAdmin
+          .from("users")
+          .select("id")
+          .eq("user_id", authUserId)
+          .maybeSingle();
+        if (urow?.id) {
+          const resp2 = await supabaseAdmin
+            .from("inbox_users")
+            .select("inbox_id")
+            .eq("user_id", urow.id);
+          if (!resp2.error) links = resp2.data as any[];
+        }
+      } catch {}
+    }
+
+    const ids = Array.from(new Set((links || []).map((r: any) => r.inbox_id))).filter(Boolean);
+    if (ids.length === 0) return res.json([]);
+
+    const { data, error } = await supabaseAdmin
+      .from("inboxes")
+      .select("id, name, phone_number, is_active")
+      .in("id", ids)
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data || []);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "inboxes fetch error" });
+  }
+});
+// Listar chats por inbox, status e busca
+app.get("/livechat/chats", requireAuth, async (req, res) => {
+  const inboxId = (req.query.inboxId as string) || undefined;
+  const status = (req.query.status as string) || undefined;
+  const q = (req.query.q as string) || undefined;
+  const limit = req.query.limit ? Number(req.query.limit) : 20;
+  const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+  let query = supabaseAdmin
+    .from("chats")
+    .select("id, external_id, status, last_message, last_message_at, inbox_id, customer_id, assignee_agent", { count: "exact" })
+    .order("last_message_at", { ascending: false, nullsFirst: false });
+
+  if (inboxId) query = query.eq("inbox_id", inboxId);
+  if (status && status.toUpperCase() !== "ALL") query = query.eq("status", status);
+
+  if (q) {
+    // tenta buscar por last_message; se quiser expandir para customer name, use views/joins
+    query = query.ilike("last_message", `%${q}%`);
+  }
+
+  const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
+  if (error) return res.status(500).json({ error: error.message });
+
+  const items = data || [];
+  // Enrich with assigned agent from chats.assignee_agent (stores inbox_users.id)
+  try {
+    const linkIds = Array.from(new Set((items as any[]).map((c) => (c as any).assignee_agent).filter(Boolean)));
+    let userIdByLink: Record<string, string> = {};
+    if (linkIds.length > 0) {
+      const { data: links } = await supabaseAdmin.from('inbox_users').select('id, user_id').in('id', linkIds);
+      for (const r of (links as any[]) || []) userIdByLink[(r as any).id] = (r as any).user_id;
+      const userIds = Array.from(new Set(Object.values(userIdByLink).filter(Boolean)));
+      let usersById: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: u } = await supabaseAdmin.from('users').select('id, name').in('id', userIds);
+        usersById = Object.fromEntries(((u as any[]) || []).map((x) => [x.id, x.name || x.id]));
+      }
+      for (const it of (items as any[])) {
+        const linkId = (it as any).assignee_agent || null;
+        const uid = linkId ? userIdByLink[linkId] : null;
+        (it as any).assigned_agent_id = linkId; // expose link id
+        (it as any).assigned_agent_name = uid ? usersById[uid] || null : null;
+      }
+    }
+  } catch {}
+
+  // Enrich with customer display (name/phone)
+  try {
+    const cids = Array.from(new Set((items as any[]).map((c) => c.customer_id).filter(Boolean)));
+    if (cids.length > 0) {
+      const displayById: Record<string, { name: string | null; phone: string | null }> = {};
+      async function loadDisplay(table: string, cols: string[]) {
+        const sel = ["id", ...cols].join(",");
+        const { data: rows } = await supabaseAdmin.from(table).select(sel).in("id", cids);
+        for (const r of ((rows as any[]) || [])) {
+          const name = (r as any).name || (r as any).title || null;
+          const phone = (r as any).phone || (r as any).cellphone || (r as any).celular || (r as any).telefone || (r as any).contact || null;
+          displayById[(r as any).id] = { name, phone };
+        }
+      }
+      await loadDisplay("customers", ["name", "phone", "cellphone", "contact"]).catch(() => {});
+      await loadDisplay("customers", ["name", "celular", "telefone", "contact"]).catch(() => {});
+      await loadDisplay("leads", ["name", "phone", "cellphone"]).catch(() => {});
+      for (const it of (items as any[])) {
+        const d = displayById[(it as any).customer_id];
+        (it as any).customer_name = d?.name || null;
+        (it as any).customer_phone = d?.phone || null;
+      }
+    }
+  } catch {}
+
+  // Enrich with last sender of last message
+  try {
+    const ids = (items as any[]).map((c) => (c as any).id);
+    if (ids.length > 0) {
+      const { data: msgs } = await supabaseAdmin
+        .from("chat_messages")
+        .select("chat_id, is_from_customer, sender_type, created_at")
+        .in("chat_id", ids)
+        .order("created_at", { ascending: false });
+      const lastByChat: Record<string, string> = {};
+      for (const r of ((msgs as any[]) || [])) {
+        const cid = (r as any).chat_id as string;
+        if (lastByChat[cid]) continue;
+        const from = (r as any).sender_type || ((r as any).is_from_customer ? "CUSTOMER" : "AGENT");
+        lastByChat[cid] = from;
+      }
+      for (const it of (items as any[])) {
+        const cid = (it as any).id as string;
+        if (lastByChat[cid]) (it as any).last_message_from = lastByChat[cid];
+      }
+    }
+  } catch {}
+
+  return res.json({ items, total: count ?? 0 });
+});
+
+// Criar chat
+app.post("/livechat/chats", requireAuth, async (req, res) => {
+  const { inboxId, customerId, externalId, initialMessage } = req.body || {};
+  if (!inboxId || !customerId) return res.status(400).json({ error: "inboxId e customerId sao obrigatorios" });
+
+  const payload: any = {
+    inbox_id: inboxId,
+    customer_id: customerId,
+    external_id: externalId || null,
+    status: "OPEN",
+  };
+
+  // upsert pela unique (inbox_id, customer_id)
+  const { data: chat, error: errUpsert } = await supabaseAdmin
+    .from("chats")
+    .upsert(payload, { onConflict: "inbox_id,customer_id" })
+    .select("*")
+    .single();
+  if (errUpsert) return res.status(500).json({ error: errUpsert.message });
+
+  if (initialMessage) {
+    const { error: errMsg } = await supabaseAdmin.from("chat_messages").insert([
+      {
+        chat_id: chat.id,
+        body: String(initialMessage),
+        sender_type: "AGENT",
+      },
+    ]);
+    if (errMsg) return res.status(500).json({ error: errMsg.message });
+    await supabaseAdmin
+      .from("chats")
+      .update({ last_message: String(initialMessage), last_message_at: new Date().toISOString() })
+      .eq("id", chat.id);
+  }
+
+  return res.status(201).json(chat);
+});
+
+// Detalhar chat (simples)
+app.get("/livechat/chats/:id", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { data, error } = await supabaseAdmin.from("chats").select("*").eq("id", id).maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Chat nao encontrado" });
+  return res.json(data);
+});
+
+// Atualizar status do chat
+app.put("/livechat/chats/:id/status", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { status } = req.body || {};
+  if (!status) return res.status(400).json({ error: "status obrigatorio" });
+  const { data, error } = await supabaseAdmin.from("chats").update({ status }).eq("id", id).select("*").single();
+  if (error) return res.status(500).json({ error: error.message });
+  return res.json(data);
+});
+
+// Listar mensagens do chat
+app.get("/livechat/chats/:id/messages", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  const before = (req.query.before as string) || undefined;
+  try {
+    let query = supabaseAdmin
+      .from("chat_messages")
+      .select("id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status")
+      .eq("chat_id", id)
+      .order("created_at", { ascending: true })
+      .limit(limit);
+    if (before) query = query.lt("created_at", before);
+
+    const { data, error } = await query;
+    if (error && (error as any).code === "42P01") {
+      // Tabela não existe ainda
+      return res.json([]);
+    }
+    if (error) {
+      console.error("/livechat/chats/:id/messages error", { id, error });
+      return res.status(500).json({ error: error.message });
+    }
+    const mappedChat = (data || []).map((r: any) => ({
+      id: r.id,
+      chat_id: r.chat_id,
+      body: r.content,
+      sender_type: r.is_from_customer ? "CUSTOMER" : "AGENT",
+      sender_id: r.sender_id || null,
+      created_at: r.created_at,
+      view_status: r.view_status || null,
+      type: r.type || "TEXT",
+      is_private: false,
+    }));
+
+    // Também incluir mensagens privadas, se existirem, para este chat
+    let mappedPrivate: any[] = [];
+    try {
+      const { data: privChat } = await supabaseAdmin
+        .from("private_chats")
+        .select("id")
+        .eq("chat_id", id)
+        .maybeSingle();
+      if (privChat?.id) {
+        const { data: privMsgs } = await supabaseAdmin
+          .from("private_messages")
+          .select("id, content, private_chat_id, sender_id, created_at")
+          .eq("private_chat_id", privChat.id)
+          .order("created_at", { ascending: true });
+        // carregar nomes de remetentes
+        const senderIds = Array.from(new Set((privMsgs || []).map((r: any) => r.sender_id).filter(Boolean)));
+        let nameMap: Record<string, string> = {};
+        if (senderIds.length > 0) {
+          const { data: usersList } = await supabaseAdmin
+            .from('users')
+            .select('id, name')
+            .in('id', senderIds);
+          for (const u of usersList || []) nameMap[(u as any).id] = (u as any).name || (u as any).id;
+        }
+        mappedPrivate = (privMsgs || []).map((r: any) => ({
+          id: r.id,
+          chat_id: id,
+          body: r.content,
+          sender_type: "AGENT",
+          sender_id: r.sender_id || null,
+          created_at: r.created_at,
+          view_status: null,
+          type: "PRIVATE",
+          is_private: true,
+          sender_name: r.sender_id ? (nameMap[r.sender_id] || null) : null,
+        }));
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    // Merge e ordenar por created_at
+    const combined = [...mappedChat, ...mappedPrivate].sort((a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    return res.json(combined);
+  } catch (e: any) {
+    console.error("/livechat/chats/:id/messages catch", { id, err: e });
+    return res.status(500).json({ error: e?.message || "messages error" });
+  }
+});
+
+// ===== Tags (labels) management =====
+// List tags of current user's company
+app.get("/livechat/tags", requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+    const { data: urow, error: errU } = await supabaseAdmin
+      .from("users")
+      .select("company_id")
+      .eq("user_id", authUserId)
+      .maybeSingle();
+    if (errU) return res.status(500).json({ error: errU.message });
+    if (!urow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
+    const { data, error } = await supabaseAdmin
+      .from("tags")
+      .select("id, name, color, created_at, updated_at")
+      .eq("company_id", urow.company_id)
+      .order("name", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(data || []);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "tags list error" });
+  }
+});
+
+// ===== Livechat Contacts (customers) =====
+// List contacts of current user's company (fallback to customers if customers not available)
+app.get('/livechat/contacts', requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+    const { data: urow, error: errU } = await supabaseAdmin
+      .from('users')
+      .select('company_id')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    if (errU) return res.status(500).json({ error: errU.message });
+    if (!urow?.company_id) return res.status(404).json({ error: 'Usuário sem company_id' });
+
+    const q = (req.query.q as string | undefined)?.trim();
+    const city = (req.query.city as string | undefined)?.trim();
+    const uf = (req.query.uf as string | undefined)?.trim();
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+    async function listFrom(table: string, fields: string[]) {
+      let query = supabaseAdmin.from(table).select(fields.join(','), { count: 'exact' }).eq('company_id', (urow as any).company_id).order('updated_at', { ascending: false });
+      if (q) query = query.ilike('name', `%${q}%`);
+      // best-effort filters across common columns
+      if (city) {
+        const cityCol = table === 'customers' ? 'city' : 'cidade';
+        try { query = query.ilike(cityCol, `%${city}%`); } catch {}
+      }
+      if (uf) {
+        const ufCol = 'uf';
+        try { query = query.ilike(ufCol, `%${uf}%`); } catch {}
+      }
+      const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
+      if (error) throw error;
+      const items = (data || []).map((r: any) => ({
+        id: r.id,
+        name: r.name || r.title || r.id,
+        phone: r.phone || r.cellphone || r.celular || r.telefone || null,
+        email: r.email || null,
+        instagram: r.instagram || null,
+        facebook: r.facebook || null,
+        twitter: r.twitter || null,
+        telegram: r.telegram || null,
+        website: r.website || r.site || null,
+        notes: r.notes || r.observacoes || null,
+        updated_at: r.updated_at || null,
+      }));
+      return { items, total: count ?? 0 };
+    }
+
+    try {
+      return res.json(await listFrom('customers', ['id', 'name', 'phone', 'cellphone', 'email', 'instagram', 'facebook', 'twitter', 'telegram', 'website', 'site', 'notes', 'observacoes', 'updated_at', 'company_id', 'city', 'cidade', 'uf']));
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'contacts list error' });
+    }
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'contacts list error' });
+  }
+});
+
+// Get a single contact
+app.get('/livechat/contacts/:id', requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  try {
+    const { data, error } = await supabaseAdmin.from('customers').select('*').eq('id', id).maybeSingle();
+    if (!error && data) {
+      let assigned_agent: string | null = null;
+      let assigned_agent_name: string | null = null;
+      let lead_id: string | null = null;
+      try {
+        // tenta ler assigned_agent (se coluna existir)
+        assigned_agent = (data as any).assigned_agent ?? null;
+        if (assigned_agent === undefined) {
+          const { data: row2 } = await supabaseAdmin.from('customers').select('assigned_agent').eq('id', id).maybeSingle();
+          assigned_agent = (row2 as any)?.assigned_agent ?? null;
+        }
+        if (assigned_agent) {
+          const { data: u } = await supabaseAdmin.from('users').select('id, name').eq('id', assigned_agent).maybeSingle();
+          assigned_agent_name = (u as any)?.name || null;
+        }
+        // tentar descobrir lead vinculado
+        lead_id = (data as any).lead_id || null;
+        if (!lead_id) {
+          const { data: l } = await supabaseAdmin.from('leads').select('id').eq('customer_id', id).maybeSingle();
+          lead_id = (l as any)?.id || null;
+        }
+      } catch {}
+      return res.json({
+        id: (data as any).id,
+        name: (data as any).name || (data as any).title || (data as any).id,
+        phone: (data as any).phone || (data as any).cellphone || (data as any).celular || (data as any).telefone || null,
+        email: (data as any).email || null,
+        instagram: (data as any).instagram || null,
+        facebook: (data as any).facebook || null,
+        twitter: (data as any).twitter || null,
+        telegram: (data as any).telegram || null,
+        website: (data as any).website || (data as any).site || null,
+        notes: (data as any).notes || (data as any).observacoes || null,
+        assigned_agent: assigned_agent || null,
+        assigned_agent_name,
+        lead_id,
+      });
+    }
+  } catch {}
+  try {
+    const { data, error } = await supabaseAdmin.from('customers').select('*').eq('id', id).maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Contato não encontrado' });
+    let assigned_agent: string | null = null;
+    let assigned_agent_name: string | null = null;
+    try {
+      // tenta ler assigned_agent (se coluna existir)
+      assigned_agent = (data as any).assigned_agent ?? null;
+      if (assigned_agent === undefined) {
+        const { data: row2 } = await supabaseAdmin.from('customers').select('assigned_agent').eq('id', id).maybeSingle();
+        assigned_agent = (row2 as any)?.assigned_agent ?? null;
+      }
+      if (assigned_agent) {
+        const { data: u } = await supabaseAdmin.from('users').select('id, name').eq('id', assigned_agent).maybeSingle();
+        assigned_agent_name = (u as any)?.name || null;
+      }
+    } catch {}
+    return res.json({
+      id: (data as any).id,
+      name: (data as any).name || (data as any).title || (data as any).id,
+      phone: (data as any).phone || (data as any).cellphone || (data as any).celular || (data as any).telefone || null,
+      email: (data as any).email || null,
+      instagram: (data as any).instagram || null,
+      facebook: (data as any).facebook || null,
+      twitter: (data as any).twitter || null,
+      telegram: (data as any).telegram || null,
+      website: (data as any).website || (data as any).site || null,
+      notes: (data as any).notes || (data as any).observacoes || null,
+      assigned_agent: assigned_agent || null,
+      assigned_agent_name,
+    });
+  } catch (e: any) {
+    // Fallback final: leads, caso o id seja de lead
+    try {
+      const { data } = await supabaseAdmin.from('leads').select('*').eq('id', id).maybeSingle();
+      if (!data) return res.status(500).json({ error: e?.message || 'contact get error' });
+      return res.json({
+        id: (data as any).id,
+        name: (data as any).name || (data as any).title || (data as any).id,
+        phone: (data as any).phone || (data as any).cellphone || null,
+        email: (data as any).email || null,
+        instagram: (data as any).instagram || null,
+        facebook: (data as any).facebook || null,
+        twitter: (data as any).twitter || null,
+        telegram: (data as any).telegram || null,
+        website: (data as any).website || (data as any).site || null,
+        notes: (data as any).notes || (data as any).observacoes || null,
+        assigned_agent: (data as any).assigned_to_id || null,
+        assigned_agent_name: null,
+      });
+    } catch {
+      return res.status(500).json({ error: e?.message || 'contact get error' });
+    }
+  }
+});
+
+// Create contact
+app.post('/livechat/contacts', requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+    const { data: urow, error: errU } = await supabaseAdmin
+      .from('users')
+      .select('company_id')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    if (errU) return res.status(500).json({ error: errU.message });
+    if (!urow?.company_id) return res.status(404).json({ error: 'Usuário sem company_id' });
+
+    const body = req.body || {};
+    const payload = {
+      company_id: (urow as any).company_id,
+      name: body.name ?? null,
+      phone: body.phone ?? null,
+      email: body.email ?? null,
+      instagram: body.instagram ?? null,
+      facebook: body.facebook ?? null,
+      twitter: body.twitter ?? null,
+      telegram: body.telegram ?? null,
+      website: body.website ?? null,
+      notes: body.notes ?? null,
+    } as any;
+    try {
+      const { data, error } = await supabaseAdmin.from('customers').insert([payload]).select('id').single();
+      if (error) throw error;
+      return res.status(201).json({ id: (data as any).id });
+    } catch (e) {
+      // fallback legacy table with column mapping
+      const legacy = {
+        company_id: (urow as any).company_id,
+        name: body.name ?? null,
+        celular: body.phone ?? null,
+        telefone: null,
+        email: body.email ?? null,
+        instagram: body.instagram ?? null,
+        facebook: body.facebook ?? null,
+        twitter: body.twitter ?? null,
+        telegram: body.telegram ?? null,
+        site: body.website ?? null,
+        observacoes: body.notes ?? null,
+      } as any;
+      try {
+        const { data, error } = await supabaseAdmin.from('customers').insert([legacy]).select('id').single();
+        if (error) throw error;
+        return res.status(201).json({ id: (data as any).id });
+      } catch (err: any) {
+        return res.status(500).json({ error: err?.message || 'contact create error' });
+      }
+    }
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'contact create error' });
+  }
+});
+
+// Update contact
+app.put('/livechat/contacts/:id', requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  const body = req.body || {};
+  const payload = {
+    name: body.name ?? undefined,
+    phone: body.phone ?? undefined,
+    email: body.email ?? undefined,
+    instagram: body.instagram ?? undefined,
+    facebook: body.facebook ?? undefined,
+    twitter: body.twitter ?? undefined,
+    telegram: body.telegram ?? undefined,
+    website: body.website ?? undefined,
+    notes: body.notes ?? undefined,
+  } as any;
+  try {
+    const { data, error } = await supabaseAdmin.from('customers').update(payload).eq('id', id).select('id').maybeSingle();
+    if (!error) return res.json({ id: (data as any)?.id ?? id });
+  } catch {}
+  try {
+    const legacy = {
+      name: body.name ?? undefined,
+      celular: body.phone ?? undefined,
+      email: body.email ?? undefined,
+      instagram: body.instagram ?? undefined,
+      facebook: body.facebook ?? undefined,
+      twitter: body.twitter ?? undefined,
+      telegram: body.telegram ?? undefined,
+      site: body.website ?? undefined,
+      observacoes: body.notes ?? undefined,
+    } as any;
+    const { data, error } = await supabaseAdmin.from('customers').update(legacy).eq('id', id).select('id').maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ id: (data as any)?.id ?? id });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'contact update error' });
+  }
+});
+
+// Create tag; optionally also create a kanban column in the company's default board
+app.post("/livechat/tags", requireAuth, async (req: any, res) => {
+  const authUserId = req.user.id as string;
+  const schema = z.object({
+    name: z.string().min(1),
+    color: z.string().min(1).optional(),
+    createColumn: z.boolean().optional(),
+  });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+  const { name, color, createColumn = false } = parsed.data;
+
+  // Load current user company and role
+  const { data: urow, error: errU } = await supabaseAdmin
+    .from("users")
+    .select("company_id, role")
+    .eq("user_id", authUserId)
+    .maybeSingle();
+  if (errU) return res.status(500).json({ error: errU.message });
+  if (!urow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
+  const role = (urow as any).role as string | null;
+  const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
+  if (!allowed) return res.status(403).json({ error: "Sem permissão para criar labels" });
+
+  // Create tag
+  const { data: tag, error: errTag } = await supabaseAdmin
+    .from("tags")
+    .insert([{ name, color: color || null, company_id: (urow as any).company_id }])
+    .select("id, name, color")
+    .single();
+  if (errTag) return res.status(400).json({ error: errTag.message });
+
+  let createdColumn: any = null;
+  if (createColumn) {
+    // Find default board for company
+    const { data: board } = await supabaseAdmin
+      .from("kanban_boards")
+      .select("id, is_default, created_at")
+      .eq("company_id", (urow as any).company_id)
+      .order("is_default", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (board?.id) {
+      // Determine next position
+      const { data: last } = await supabaseAdmin
+        .from("kanban_columns")
+        .select("position")
+        .eq("kanban_board_id", (board as any).id)
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const nextPos = ((last as any)?.position || 0) + 1;
+      const { data: col } = await supabaseAdmin
+        .from("kanban_columns")
+        .insert([{ name, color: color || null, position: nextPos, kanban_board_id: (board as any).id }])
+        .select("id, name, color, position")
+        .single();
+      createdColumn = col || null;
+    }
+  }
+
+  return res.status(201).json({ tag, column: createdColumn });
+});
+
+// Enviar mensagem
+app.post("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  const { text, senderType = "AGENT" } = req.body || {};
+  if (!text) return res.status(400).json({ error: "text obrigatorio" });
+
+  const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
+  const nowIso = new Date().toISOString();
+  const { data: inserted, error } = await supabaseAdmin
+    .from("chat_messages")
+    .insert([
+      {
+        chat_id: id,
+        content: String(text),
+        type: "TEXT",
+        is_from_customer: isFromCustomer,
+        sender_id: req.user?.id || null,
+        created_at: nowIso,
+        view_status: "Sent",
+      },
+    ])
+    .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  await supabaseAdmin
+    .from("chats")
+    .update({ last_message: String(text), last_message_at: nowIso })
+    .eq("id", id);
+
+  const mapped = {
+    id: inserted.id,
+    chat_id: inserted.chat_id,
+    body: inserted.content,
+    sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+    sender_id: inserted.sender_id || null,
+    created_at: inserted.created_at,
+    view_status: inserted.view_status || null,
+    type: inserted.type || "TEXT",
+    is_private: false,
+  };
+
+  // Emitir também via socket para clientes conectados
+  io.to(`chat:${id}`).emit("message:new", mapped);
+  io.emit("chat:updated", {
+    chatId: id,
+    last_message: String(text),
+    last_message_at: nowIso,
+    last_message_from: mapped.sender_type,
+  });
+
+  return res.status(201).json(mapped);
+});
+
+// Enviar anexo/áudio/arquivo (payload base64 JSON)
+app.post("/livechat/chats/:id/messages/file", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  const { filename, mime, data } = (req.body || {}) as { filename?: string; mime?: string; data?: string };
+  if (!filename || !data) return res.status(400).json({ error: "filename e data obrigatorios" });
+  const contentType = mime || "application/octet-stream";
+  try {
+    const buffer = Buffer.from(String(data).replace(/^data:[^;]+;base64,/, ''), 'base64');
+    const ext = filename.includes('.') ? filename.split('.').pop() : 'bin';
+    const path = `${id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    // Garante bucket
+    try { await (supabaseAdmin as any).storage.createBucket('chat-uploads', { public: true }); } catch {}
+    const { data: up, error: upErr } = await supabaseAdmin.storage.from('chat-uploads').upload(path, buffer, { contentType, upsert: false });
+    if (upErr) return res.status(500).json({ error: upErr.message });
+    const pub = supabaseAdmin.storage.from('chat-uploads').getPublicUrl(up!.path);
+    const url = (pub as any)?.data?.publicUrl || null;
+    const nowIso = new Date().toISOString();
+    const kind = contentType.startsWith('image/') ? 'IMAGE' : contentType.startsWith('audio/') ? 'AUDIO' : 'FILE';
+
+    const { data: inserted, error } = await supabaseAdmin
+      .from("chat_messages")
+      .insert([
+        {
+          chat_id: id,
+          content: String(url || filename),
+          type: kind,
+          is_from_customer: false,
+          sender_id: req.user?.id || null,
+          created_at: nowIso,
+          view_status: "Sent",
+        },
+      ])
+      .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    await supabaseAdmin.from("chats").update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso }).eq("id", id);
+
+    const mapped = {
+      id: inserted.id,
+      chat_id: inserted.chat_id,
+      body: inserted.content,
+      sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+      sender_id: inserted.sender_id || null,
+      created_at: inserted.created_at,
+      view_status: inserted.view_status || null,
+      type: inserted.type || kind,
+      is_private: false,
+    };
+
+    io.to(`chat:${id}`).emit("message:new", mapped);
+    io.emit("chat:updated", { chatId: id, last_message: `[Arquivo] ${filename}`, last_message_at: nowIso, last_message_from: mapped.sender_type });
+    return res.status(201).json(mapped);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'upload error' });
+  }
+});
+
+// Listar mensagens privadas separadamente (usado pelo modal)
+app.get("/livechat/chats/:id/private/messages", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  try {
+    const { data: privChat, error: errPc } = await supabaseAdmin
+      .from("private_chats")
+      .select("id")
+      .eq("chat_id", id)
+      .maybeSingle();
+    if (errPc) return res.status(500).json({ error: errPc.message });
+    if (!privChat?.id) return res.json([]);
+    const { data, error } = await supabaseAdmin
+      .from("private_messages")
+      .select("id, content, sender_id, created_at")
+      .eq("private_chat_id", privChat.id)
+      .order("created_at", { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    // carregar nomes
+    const senderIds = Array.from(new Set((data || []).map((r: any) => r.sender_id).filter(Boolean)));
+    let nameMap: Record<string, string> = {};
+    if (senderIds.length > 0) {
+      const { data: usersList } = await supabaseAdmin
+        .from('users')
+        .select('id, name')
+        .in('id', senderIds);
+      for (const u of usersList || []) nameMap[(u as any).id] = (u as any).name || (u as any).id;
+    }
+    return res.json((data || []).map((r: any) => ({
+      id: r.id,
+      chat_id: id,
+      body: r.content,
+      sender_type: "AGENT",
+      sender_id: r.sender_id || null,
+      created_at: r.created_at,
+      view_status: null,
+      type: "PRIVATE",
+      is_private: true,
+      sender_name: r.sender_id ? (nameMap[r.sender_id] || null) : null,
+    })));
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'private list error' });
+  }
+});
+
+// Enviar mensagem privada (cria private_chat se necessário)
+app.post("/livechat/chats/:id/private/messages", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  const { text } = (req.body || {}) as { text?: string };
+  if (!text) return res.status(400).json({ error: 'text obrigatorio' });
+  try {
+    // resolver users.id local a partir do auth user_id
+    let localUserId: string | null = null;
+    try {
+      const { data: urow } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('user_id', req.user.id)
+        .maybeSingle();
+      localUserId = (urow as any)?.id || null;
+    } catch {}
+
+    // garantir private_chat
+    let privateChatId: string | null = null;
+    const { data: existing } = await supabaseAdmin
+      .from('private_chats')
+      .select('id')
+      .eq('chat_id', id)
+      .maybeSingle();
+    if (existing?.id) privateChatId = existing.id;
+    else {
+      const { data: created, error: errCreate } = await supabaseAdmin
+        .from('private_chats')
+        .insert([{ chat_id: id, is_active: true }])
+        .select('id')
+        .single();
+      if (errCreate) return res.status(500).json({ error: errCreate.message });
+      privateChatId = (created as any)?.id || null;
+    }
+    if (!privateChatId) return res.status(500).json({ error: 'Falha ao criar private_chat' });
+
+    const nowIso = new Date().toISOString();
+  const { data: inserted, error } = await supabaseAdmin
+    .from('private_messages')
+    .insert([{ content: String(text), private_chat_id: privateChatId, sender_id: localUserId || req.user.id, created_at: nowIso }])
+    .select('id, content, sender_id, created_at')
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  // emitir no mesmo canal do chat para aparecer no feed
+    let senderName: string | null = null;
+    if (localUserId) {
+      try {
+        const { data: u } = await supabaseAdmin.from('users').select('name').eq('id', localUserId).maybeSingle();
+        senderName = (u as any)?.name || null;
+      } catch {}
+    }
+  const mapped = {
+    id: inserted.id,
+    chat_id: id,
+    body: inserted.content,
+    sender_type: 'AGENT',
+    sender_id: inserted.sender_id || null,
+    created_at: inserted.created_at,
+    view_status: null,
+    type: 'PRIVATE',
+    is_private: true,
+    sender_name: senderName,
+  };
+    io.to(`chat:${id}`).emit('message:new', mapped);
+    return res.status(201).json(mapped);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'private send error' });
+  }
+});
+
+// Gerenciar tags do chat (set completa)
+app.put("/livechat/chats/:id/tags", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { tags } = req.body || {};
+  const tagIds: string[] = Array.isArray(tags) ? tags : [];
+
+  // remove todas as tags atuais do chat
+  const { error: errDel } = await supabaseAdmin.from("chat_tags").delete().eq("chat_id", id);
+  if (errDel) return res.status(500).json({ error: errDel.message });
+  if (tagIds.length === 0) {
+    try { io.to(`chat:${id}`).emit('chat:tags', { chatId: id, tags: [] }); } catch {}
+    return res.json({ ok: true, count: 0 });
+  }
+
+  try {
+    // Carregar empresa do usuário para localizar o board padrão
+    const authUserId = (req as any).user.id as string;
+    const { data: urow } = await supabaseAdmin
+      .from('users')
+      .select('company_id')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    const companyId = (urow as any)?.company_id;
+
+    // Localizar board padrão da empresa
+    let boardId: string | null = null;
+    if (companyId) {
+      const { data: board } = await supabaseAdmin
+        .from('kanban_boards')
+        .select('id, is_default, created_at')
+        .eq('company_id', companyId)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      boardId = (board as any)?.id || null;
+    }
+
+    // Carregar nomes das tags e encontrar/criar colunas de mesmo nome no board
+    const { data: tagRows } = await supabaseAdmin.from('tags').select('id, name, color').in('id', tagIds);
+    const rowsToInsert: { chat_id: string; tag_id: string; kanban_colum_id: string }[] = [];
+    for (const t of (tagRows as any[]) || []) {
+      let columnId: string | null = null;
+      if (boardId) {
+        // procurar coluna com mesmo nome
+        const { data: col } = await supabaseAdmin
+          .from('kanban_columns')
+          .select('id')
+          .eq('kanban_board_id', boardId)
+          .eq('name', (t as any).name)
+          .maybeSingle();
+        columnId = (col as any)?.id || null;
+        if (!columnId) {
+          // criar na próxima posição
+          const { data: last } = await supabaseAdmin
+            .from('kanban_columns')
+            .select('position')
+            .eq('kanban_board_id', boardId)
+            .order('position', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const nextPos = ((last as any)?.position || 0) + 1;
+          const { data: created } = await supabaseAdmin
+            .from('kanban_columns')
+            .insert([{ name: (t as any).name, color: (t as any).color || null, position: nextPos, kanban_board_id: boardId }])
+            .select('id')
+            .single();
+          columnId = (created as any)?.id || null;
+        }
+      }
+      if (!columnId) {
+        return res.status(400).json({ error: 'Nenhuma coluna/board disponível para vincular a tag' });
+      }
+      rowsToInsert.push({ chat_id: id, tag_id: (t as any).id, kanban_colum_id: columnId });
+    }
+
+    const { data, error } = await supabaseAdmin.from('chat_tags').insert(rowsToInsert).select('tag_id');
+    if (error) return res.status(500).json({ error: error.message });
+    const savedTagIds = ((data as any[]) || []).map((r) => (r as any).tag_id);
+    try { io.to(`chat:${id}`).emit('chat:tags', { chatId: id, tags: savedTagIds }); } catch {}
+    return res.json({ ok: true, count: savedTagIds.length });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'tags set error' });
+  }
+});
+
+// Listar tags do chat
+app.get("/livechat/chats/:id/tags", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('chat_tags')
+      .select('tag_id')
+      .eq('chat_id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json(((data as any[]) || []).map((r) => (r as any).tag_id));
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'tags list error' });
+  }
+});
+
+// ===== CRM Contacts (Leads) =====
+// List leads as contacts with social fields
+app.get('/livechat/crm/contacts', requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+    const { data: urow } = await supabaseAdmin
+      .from('users')
+      .select('company_id')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    const companyId = (urow as any)?.company_id || null;
+
+    const q = (req.query.q as string | undefined)?.trim();
+    const city = (req.query.city as string | undefined)?.trim();
+    const uf = (req.query.uf as string | undefined)?.trim();
+    const limit = req.query.limit ? Number(req.query.limit) : 20;
+    const offset = req.query.offset ? Number(req.query.offset) : 0;
+
+    let query = supabaseAdmin
+      .from('leads')
+      .select('*', { count: 'exact' })
+      .order('updated_at', { ascending: false });
+    try { if (companyId) query = query.eq('company_id', companyId); } catch {}
+    if (q) query = query.ilike('name', `%${q}%`);
+    if (city) query = query.ilike('city', `%${city}%`);
+    if (uf) query = query.ilike('state', `%${uf}%`);
+
+    const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
+    if (error) return res.status(500).json({ error: error.message });
+    const items = (data || []).map((r: any) => ({
+      id: r.id,
+      name: r.name || r.id,
+      phone: r.phone ?? null,
+      email: r.email ?? null,
+      instagram: r.instagram ?? null,
+      facebook: r.facebook ?? null,
+      twitter: r.twitter ?? null,
+      telegram: r.telegram ?? null,
+      website: (r as any).website ?? (r as any).site ?? null,
+      notes: (r as any).notes ?? (r as any).observacao ?? null,
+      updated_at: r.updated_at ?? null,
+      city: (r as any).city ?? (r as any).installation_city ?? null,
+      state: (r as any).state ?? null,
+    }));
+    return res.json({ items, total: count ?? 0 });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'crm contacts list error' });
+  }
+});
+
+// Get one lead contact
+app.get('/livechat/crm/contacts/:id', requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .select('id, name, phone, email, instagram, facebook, twitter, telegram, website, site, notes, observacoes')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Contato não encontrado' });
+  return res.json({
+    id: (data as any).id,
+    name: (data as any).name || (data as any).id,
+    phone: (data as any).phone || null,
+    email: (data as any).email || null,
+    instagram: (data as any).instagram || null,
+    facebook: (data as any).facebook || null,
+    twitter: (data as any).twitter || null,
+    telegram: (data as any).telegram || null,
+    website: (data as any).website || (data as any).site || null,
+    notes: (data as any).notes || (data as any).observacoes || null,
+  });
+});
+
+// Create lead contact
+app.post('/livechat/crm/contacts', requireAuth, async (req: any, res) => {
+  try {
+    const authUserId = req.user.id as string;
+    const { data: urow, error: errU } = await supabaseAdmin
+      .from('users')
+      .select('company_id')
+      .eq('user_id', authUserId)
+      .maybeSingle();
+    if (errU) return res.status(500).json({ error: errU.message });
+    if (!urow?.company_id) return res.status(404).json({ error: 'Usuário sem company_id' });
+    const b = req.body || {};
+    const payload: any = {
+      company_id: (urow as any).company_id,
+      name: b.name ?? null,
+      phone: b.phone ?? null,
+      email: b.email ?? null,
+      instagram: b.instagram ?? null,
+      facebook: b.facebook ?? null,
+      twitter: b.twitter ?? null,
+      telegram: b.telegram ?? null,
+      website: b.website ?? null,
+      notes: b.notes ?? null,
+    };
+    const { data, error } = await supabaseAdmin.from('leads').insert([payload]).select('id, name, phone, email, updated_at').single();
+    if (error) return res.status(500).json({ error: error.message });
+    try { io.emit('crm:contact:created', { id: (data as any).id, name: (data as any).name, phone: (data as any).phone, email: (data as any).email, updated_at: (data as any).updated_at }); } catch {}
+    return res.status(201).json({ id: (data as any).id });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'crm contact create error' });
+  }
+});
+
+// Update lead contact
+app.put('/livechat/crm/contacts/:id', requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const b = req.body || {};
+  const payload: any = {};
+  for (const k of ['name','phone','email','instagram','facebook','twitter','telegram','website','notes']) {
+    if (b[k] !== undefined) payload[k] = b[k];
+  }
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .update(payload)
+    .eq('id', id)
+    .select('id, name, phone, email, updated_at')
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  try { io.emit('crm:contact:updated', { id: (data as any)?.id ?? id, name: (data as any)?.name, phone: (data as any)?.phone, email: (data as any)?.email, updated_at: (data as any)?.updated_at }); } catch {}
+  return res.json({ id: (data as any)?.id ?? id });
+});
+
+// Start or open chat from a lead contact: ensure customers/customers row, then upsert chat
+app.post('/livechat/crm/contacts/:id/start-chat', requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  const { inboxId } = (req.body || {}) as { inboxId?: string };
+  if (!inboxId) return res.status(400).json({ error: 'inboxId obrigatorio' });
+  try {
+    // Check acting user is linked to inbox
+    let actingUserLocalId: string | null = null;
+    try {
+      const { data: urow } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('user_id', req.user.id)
+        .maybeSingle();
+      actingUserLocalId = (urow as any)?.id || null;
+    } catch {}
+    if (actingUserLocalId) {
+      const { data: link } = await supabaseAdmin
+        .from('inbox_users')
+        .select('id')
+        .eq('inbox_id', inboxId)
+        .eq('user_id', actingUserLocalId)
+        .maybeSingle();
+      if (!link) return res.status(403).json({ error: 'Sem permissão na inbox' });
+    }
+
+    // Load lead
+    const { data: lead } = await supabaseAdmin
+      .from('leads')
+      .select('id, name, phone, email')
+      .eq('id', id)
+      .maybeSingle();
+    if (!lead) return res.status(404).json({ error: 'Lead não encontrado' });
+
+    // Find or ensure customer id
+    let customerId: string | null = null;
+    // 1) customers with same id
+    try {
+      const { data: cust } = await supabaseAdmin.from('customers').select('id').eq('id', id).maybeSingle();
+      if (cust?.id) customerId = (cust as any).id as string;
+    } catch {}
+    // 2) customers linked by lead_id
+    if (!customerId) {
+      try {
+        const { data: cos } = await supabaseAdmin.from('customers').select('id').eq('lead_id', id).maybeSingle();
+        if (cos?.id) customerId = (cos as any).id as string;
+      } catch {}
+    }
+    // 3) create customers row with id = lead.id
+    if (!customerId) {
+      try {
+        const payload: any = { id, name: (lead as any).name || id, phone: (lead as any).phone || null, email: (lead as any).email || null };
+        const { data: created } = await supabaseAdmin.from('customers').insert([payload]).select('id').single();
+        customerId = (created as any).id as string;
+      } catch (e) {
+        return res.status(500).json({ error: 'Falha ao criar customer para o lead' });
+      }
+    }
+
+    // Upsert chat
+    const { data: chat, error: errUpsert } = await supabaseAdmin
+      .from('chats')
+      .upsert({ inbox_id: inboxId, customer_id: customerId, status: 'OPEN' }, { onConflict: 'inbox_id,customer_id' })
+      .select('id')
+      .single();
+    if (errUpsert) return res.status(500).json({ error: errUpsert.message });
+    return res.json({ id: (chat as any).id });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'start chat error' });
+  }
+});
+
+// Participantes (adicionar/remover)
+app.post("/livechat/chats/:id/participants", requireAuth, async (req, res) => {
+  const { id } = req.params as { id: string };
+  const { userId } = req.body || {};
+  if (!userId) return res.status(400).json({ error: "userId obrigatorio" });
+  // upsert pelo unique (chat_id, user_id): ativa novamente se já existir
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabaseAdmin
+    .from("chat_participants")
+    .upsert(
+      [{ chat_id: id, user_id: userId, is_active: true, left_at: null, joined_at: nowIso }],
+      { onConflict: "chat_id,user_id" }
+    )
+    .select("*")
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(201).json(data);
+});
+
+app.delete("/livechat/chats/:id/participants/:userId", requireAuth, async (req, res) => {
+  const { id, userId } = req.params as { id: string; userId: string };
+  const { error } = await supabaseAdmin
+    .from("chat_participants")
+    .update({ is_active: false, left_at: new Date().toISOString() })
+    .eq("chat_id", id)
+    .eq("user_id", userId);
+  if (error) return res.status(500).json({ error: error.message });
+  return res.status(204).send();
+});
+
+// Listar participantes do chat com nome e papel
+app.get("/livechat/chats/:id/participants", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  try {
+    const { data: rows, error } = await supabaseAdmin
+      .from('chat_participants')
+      .select('user_id, joined_at, left_at, is_active')
+      .eq('chat_id', id);
+    if (error) return res.status(500).json({ error: error.message });
+    const uids = Array.from(new Set((rows || []).map((r: any) => r.user_id).filter(Boolean)));
+    let usersMap: Record<string, { name: string | null; role: string | null; user_id: string | null }> = {};
+    if (uids.length > 0) {
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('id, user_id, name, role')
+        .in('id', uids);
+      for (const u of (users || [])) {
+        usersMap[(u as any).id] = { name: (u as any).name || (u as any).id, role: (u as any).role || null, user_id: (u as any).user_id || null };
+      }
+    }
+    const list = (rows || []).map((r: any) => ({
+      id: r.user_id,
+      name: usersMap[r.user_id]?.name || r.user_id,
+      role: usersMap[r.user_id]?.role || null,
+      is_current: usersMap[r.user_id]?.user_id === req.user.id,
+    }));
+    return res.json(list);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'participants error' });
+  }
+});
+
+// Usuários (agentes/supervisores) vinculados a uma inbox específica
+app.get("/livechat/inboxes/:inboxId/agents", requireAuth, async (req: any, res) => {
+  const { inboxId } = req.params as { inboxId: string };
+  try {
+    const { data: links, error: errLinks } = await supabaseAdmin
+      .from('inbox_users')
+      .select('id, user_id')
+      .eq('inbox_id', inboxId);
+    if (errLinks) return res.status(500).json({ error: errLinks.message });
+    const raw = (links || []) as any[];
+    const rawIds = Array.from(new Set(raw.map((r: any) => r.user_id).filter(Boolean)));
+    if (rawIds.length === 0) return res.json([]);
+
+    // Tenta interpretar como users.id
+    let users: any[] = [];
+    const { data: byLocal } = await supabaseAdmin
+      .from('users')
+      .select('id, user_id, name, role')
+      .in('id', rawIds)
+      .order('name', { ascending: true });
+    users = byLocal || [];
+    if (!users || users.length === 0) {
+      // Fallback: interpretar como auth user_id
+      const { data: byAuth } = await supabaseAdmin
+        .from('users')
+        .select('id, user_id, name, role')
+        .in('user_id', rawIds)
+        .order('name', { ascending: true });
+      users = byAuth || [];
+    }
+    const byUser: Record<string, any> = Object.fromEntries((users || []).map((u: any) => [u.id, u]));
+    const result = raw
+      .map((link: any) => {
+        const u = byUser[link.user_id];
+        if (!u) return null;
+        return { id: link.id, user_id: u.id, name: u.name || u.id, role: u.role };
+      })
+      .filter(Boolean);
+    return res.json(result);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'inbox agents error' });
+  }
+});
+
+// Definir responsável (assignee) do contato do chat, validando com inbox_users
+app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
+  const { id } = req.params as { id: string };
+  // Aceita UUID ou qualquer string não vazia como id local (flexível a diferentes esquemas)
+  const schema = z.object({ userId: z.string().min(1).nullable() });
+  const parsed = schema.safeParse(req.body || {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+  const newAssigneeId = parsed.data.userId; // users.id (public)
+
+  try {
+    // Carregar chat (inbox e customer)
+    const { data: chat, error: errChat } = await supabaseAdmin
+      .from("chats")
+      .select("id, inbox_id, customer_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (errChat) return res.status(500).json({ error: errChat.message });
+    if (!chat) return res.status(404).json({ error: "Chat não encontrado" });
+
+    // Resolver id local do usuário autenticado
+    let actingUserLocalId: string | null = null;
+    try {
+      const { data: urow } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", req.user.id)
+        .maybeSingle();
+      actingUserLocalId = (urow as any)?.id || null;
+    } catch {}
+
+    // Validar permissão do usuário que está efetuando a troca (precisa pertencer à inbox e poder escrever)
+    if (actingUserLocalId) {
+      const { data: linkAct } = await supabaseAdmin
+        .from("inbox_users")
+        .select("can_write, can_manage")
+        .eq("inbox_id", (chat as any).inbox_id)
+        .eq("user_id", actingUserLocalId)
+        .maybeSingle();
+      if (!linkAct || (!linkAct.can_write && !linkAct.can_manage)) {
+        return res.status(403).json({ error: "Sem permissão para atribuir nesta inbox" });
+      }
+    }
+
+    // Se definir um novo responsável, ele precisa estar vinculado a esta inbox
+    if (newAssigneeId) {
+      const { data: link } = await supabaseAdmin
+        .from("inbox_users")
+        .select("id")
+        .eq("inbox_id", (chat as any).inbox_id)
+        .eq("user_id", newAssigneeId)
+        .maybeSingle();
+      if (!link) return res.status(400).json({ error: "Usuário não está autorizado nesta inbox" });
+    }
+

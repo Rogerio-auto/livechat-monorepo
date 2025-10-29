@@ -84,13 +84,48 @@
 1. Crie os arquivos de ambiente:
    - `backend/.env`
    - `frontend/.env.production`
-2. Ajuste `docker-compose.prod.yml` com seus domínios/registry.
-3. Build + deploy:
+2. Ajuste `docker-compose.prod.yml` com sua registry (ou use as imagens locais padrão).
+3. Faça build e suba os serviços:
    ```bash
    docker compose -f docker-compose.prod.yml build
    docker compose -f docker-compose.prod.yml up -d
    ```
 4. Volumes persistem Redis e RabbitMQ (`redis-data`, `rabbitmq-data`).
+
+### Expondo via Nginx (sem Traefik)
+O compose publica:
+- API em `localhost:5000`
+- Frontend (Nginx dentro do container) em `localhost:4173`
+
+No host aponte os domínios para esses ports. Exemplo `/etc/nginx/sites-available/app.7sion.com.conf`:
+```nginx
+server {
+    listen 80;
+    server_name app.7sion.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:4173;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name api-back.7sion.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+Habilite os blocos, teste com `nginx -t` e faça reload (`systemctl reload nginx`). Para HTTPS, envolva cada bloco com `listen 443 ssl` + certificados (Let’s Encrypt etc.). O Nginx existente da WAHA pode compartilhar a pasta `sites-enabled` usando blocos separados.
 
 ## Checagens de saúde
 - API: `curl http://localhost:5000/health`

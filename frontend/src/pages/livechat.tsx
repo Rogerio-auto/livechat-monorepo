@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type UIEvent } from "react";
 import { io, Socket } from "socket.io-client";
+import { getAccessToken } from "../utils/api";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../componets/Sidbars/sidebar";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
@@ -168,10 +169,15 @@ export default function LiveChatPage() {
   const [stagesList, setStagesList] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
   const [chatsByStage, setChatsByStage] = useState<Record<string, Chat[]>>({});
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+    const token = getAccessToken();
+    const headers = new Headers(init?.headers || {});
+    if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+    if (token && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+
     const res = await fetch(url, {
+      ...init,
+      headers,
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-      ...(init || {}),
     });
     if (!res.ok) {
       const payload = await res.json().catch(() => ({}));

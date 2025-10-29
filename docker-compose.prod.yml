@@ -1,8 +1,6 @@
 version: "3.8"
 
 networks:
-  proxy:
-    external: true
   internal:
     driver: bridge
 
@@ -52,20 +50,15 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    networks: [internal, proxy]
+    networks:
+      - internal
     ports:
-      - "${PORT_BACKEND:-5000}:5000"
+      - "5000:5000"
     deploy:
       resources:
         limits:
           cpus: "0.75"
           memory: 768M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.api.rule=Host(`${DOMAIN_API}`)
-      - traefik.http.routers.api.entrypoints=websecure
-      - traefik.http.routers.api.tls.certresolver=letsencrypt
-      - traefik.http.services.api.loadbalancer.server.port=5000
 
   worker-inbound:
     image: ${REGISTRY:-local}/app-backend:${TAG:-latest}
@@ -108,17 +101,5 @@ services:
       - ./frontend/.env.production
     depends_on:
       - backend
-    networks: [proxy]
     ports:
-      - "${PORT_FRONTEND:-4173}:80"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.50"
-          memory: 256M
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.app.rule=Host(`${DOMAIN_APP}`)
-      - traefik.http.routers.app.entrypoints=websecure
-      - traefik.http.routers.app.tls.certresolver=letsencrypt
-      - traefik.http.services.app.loadbalancer.server.port=80
+      - "4173:80"

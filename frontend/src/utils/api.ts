@@ -10,7 +10,7 @@ export const API =
  * - { currentSession: { access_token } }
  * - { data: { session: { access_token } } }  (fallback extra)
  */
-function getAccessToken(): string | undefined {
+export function getAccessToken(): string | undefined {
   // ache a chave certa: sb-<project-ref>-auth-token
   let key: string | undefined;
   for (let i = 0; i < localStorage.length; i++) {

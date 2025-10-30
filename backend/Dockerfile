@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev=false
 COPY tsconfig.json ./
+COPY tsup.config.ts ./
 COPY src ./src
 RUN npm run build
 

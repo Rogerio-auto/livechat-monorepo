@@ -34,6 +34,21 @@ import { rDelMatch, rSet, k } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 
+const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
+
+function rememberAvatar(
+  companyId: string | null | undefined,
+  remoteId: string | null | undefined,
+  url: string | null | undefined,
+): void {
+  if (!companyId) return;
+  if (typeof remoteId !== "string" || !remoteId.trim()) return;
+  if (typeof url !== "string" || !url.trim()) return;
+  rSet(k.avatar(companyId, remoteId.trim()), url.trim(), TTL_AVATAR).catch((error) => {
+    console.warn("[worker] avatar cache set failed", { companyId, remoteId, error });
+  });
+}
+
 type MetaInboundPayload = {
   inboxId: string;
   companyId: string;
@@ -420,6 +435,12 @@ function extractWahaChatId(payload: any): string | null {
   return null;
 }
 
+function isWahaStatusBroadcast(jid: string | null | undefined): boolean {
+  if (!jid) return false;
+  const normalized = jid.toLowerCase();
+  return normalized === "status@broadcast" || normalized.endsWith(":status@broadcast");
+}
+
 function extractWahaContactName(payload: any): string | null {
   return (
     payload?.pushName ||
@@ -778,6 +799,7 @@ async function handleInboundChange(job: InboundJobPayload) {
           companyId,
           phone: remotePhone || normalizeMsisdn(participantWaId || ""),
           name: metaContext.participantName ?? pushname ?? remotePhone ?? participantWaId ?? null,
+          rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
         });
         chatId = ensured.chatId;
       }
@@ -1179,6 +1201,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     console.warn("[WAHA][worker] message without chat id", { payload });
     return;
   }
+  if (isWahaStatusBroadcast(chatJid) || isWahaStatusBroadcast(payload?.from) || isWahaStatusBroadcast(payload?.to)) {
+    console.debug("[WAHA][worker] skipping status broadcast message", {
+      inboxId: job.inboxId,
+      chatJid,
+      messageId,
+    });
+    return;
+  }
 
   const name = extractWahaContactName(payload);
   const basePhone =
@@ -1194,6 +1224,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   if (isGroupChat) {
     groupMeta = extractWahaGroupMetadata(payload);
+    rememberAvatar(job.companyId, chatJid, groupMeta?.avatarUrl ?? null);
     const ensured = await ensureGroupChat({
       inboxId: job.inboxId,
       companyId: job.companyId,
@@ -1208,6 +1239,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       companyId: job.companyId,
       phone: phoneForLead,
       name: name ?? phoneForLead,
+      rawPhone: chatJid,
     });
     chatId = ensured.chatId;
   }
@@ -1255,11 +1287,13 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           null,
         isAdmin: null,
       };
+      rememberAvatar(job.companyId, directRemoteId, remoteMeta.avatarUrl ?? null);
     }
   }
 
   let remoteParticipantId: string | null = null;
   if (isGroupChat && remoteMeta?.remoteId && isFromCustomer) {
+    rememberAvatar(job.companyId, remoteMeta.remoteId, remoteMeta.avatarUrl ?? null);
     const participant = await upsertChatRemoteParticipant({
       chatId,
       remoteId: remoteMeta.remoteId,
@@ -1567,6 +1601,18 @@ async function handleWahaParticipantEvent(job: WahaInboundPayload, payload: any)
 async function handleWahaAck(job: WahaInboundPayload, payload: any) {
   const messageId = String(payload?.id || payload?.messageId || "");
   if (!messageId) return;
+  const chatCandidate =
+    normalizeWahaJid(payload?.chatId) ||
+    normalizeWahaJid(payload?.from) ||
+    normalizeWahaJid(payload?.to) ||
+    null;
+  if (isWahaStatusBroadcast(chatCandidate)) {
+    console.debug("[WAHA][worker] skipping status broadcast ack", {
+      inboxId: job.inboxId,
+      messageId,
+    });
+    return;
+  }
   const status = mapWahaAckToViewStatus(payload?.ack);
   if (!status) return;
   const statusUpdate = await updateMessageStatusByExternalId({
@@ -2173,7 +2219,7 @@ async function syncWahaGroupMetadata(): Promise<void> {
   if (wahaGroupSyncRunning) return;
   wahaGroupSyncRunning = true;
   try {
-    const groupsRaw = await (db as any).manyOrNone(
+    const groupsRaw = await db.any(
       `select ch.id as chat_id,
               ch.inbox_id,
               ch.remote_id,
@@ -2220,6 +2266,8 @@ async function syncWahaGroupMetadata(): Promise<void> {
           details?.avatar ??
           null;
 
+        rememberAvatar(group.company_id, remoteId, groupAvatar ?? null);
+
         await ensureGroupChat({
           inboxId: group.inbox_id,
           companyId: group.company_id,
@@ -2239,6 +2287,11 @@ async function syncWahaGroupMetadata(): Promise<void> {
             entry?.id || entry?.jid || entry?.user || entry,
           );
           if (!participantRemote) continue;
+          rememberAvatar(
+            group.company_id,
+            participantRemote,
+            entry?.profilePicUrl || entry?.imgUrl || entry?.profile_pic || entry?.avatar || null,
+          );
           await upsertChatRemoteParticipant({
             chatId: group.chat_id,
             remoteId: participantRemote,

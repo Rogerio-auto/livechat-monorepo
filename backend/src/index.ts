@@ -12,10 +12,15 @@ import { EX_APP, publish, consume, Q_SOCKET_LIVECHAT } from "./queue/rabbit.ts";
 import { metaWebhookGet, metaWebhookPost } from "./routes/metawebhook.ts";
 import { registerSendMessageRoutes } from "./routes/sendMessage.ts";
 import { listWebhookEvents } from "./routes/adminwebhooks.ts";
-import { getBoardIdForCompany } from "./services/meta/store.ts";
+import {
+  getBoardIdForCompany,
+  ensureLeadCustomerChat,
+  ensureGroupChat,
+  insertInboundMessage,
+} from "./services/meta/store.ts";
 import { setIO, getIO } from "./lib/io.ts";
 import { registerLivechatChatRoutes } from "./routes/livechat.chats.ts";
-import { getRedis, rGet, rSet } from "./lib/redis.ts";
+import { getRedis, rGet, rSet, redis, k } from "./lib/redis.ts";
 import { registerLivechatContactsRoutes } from "./routes/livechat.contacts.ts";
 import { registerKanbanRoutes } from "./routes/kanban.ts";
 import { registerSettingsUsersRoutes } from "./routes/settings.users.ts";
@@ -32,6 +37,8 @@ import { registerCampaignUploadsRoutes } from "./routes/livechat.campaigns.uploa
 import { registerCampaignWorker } from "./worker.campaigns.ts";
 import { registerWAHARoutes } from "./routes/waha.ts";
 import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
+import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
+import { normalizeMsisdn } from "./util.ts";
 
 process.on("uncaughtException", (err) => {
   console.error("[FATAL] uncaughtException:", err);
@@ -59,6 +66,18 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // === Arquivos locais ===
 const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
+
+const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
+
+async function getCachedAvatar(companyId: string | null | undefined, remoteId: string | null | undefined): Promise<string | null> {
+  if (!companyId) return null;
+  if (!remoteId) return null;
+  try {
+    return await rGet<string>(k.avatar(companyId, remoteId));
+  } catch {
+    return null;
+  }
+}
 
 // Servir direto: GET http://host:5000/media/<storage_key>
 app.use(
@@ -180,6 +199,7 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || "sb_access_token";
 const JWT_COOKIE_SECURE = String(process.env.JWT_COOKIE_SECURE) === "true";
+const AVATAR_CACHE_TTL = Number(process.env.CACHE_TTL_AVATAR ?? 24 * 60 * 60);
 
 // ===== Middlewares =====
 app.use(
@@ -200,6 +220,292 @@ app.use(cookieParser());
 const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // Para CRUD no servidor (NUNCA exponha essa chave no front)
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+type WahaInboxRecord = {
+  id: string;
+  company_id: string;
+  instance_id: string | null;
+};
+
+function mapWahaMessageType(message: any): string {
+  const rawType = (message?.type || message?.messageType || message?.mediaType || "")
+    .toString()
+    .trim()
+    .toUpperCase();
+  if (rawType === "CHAT" || rawType === "TEXT" || rawType === "MESSAGE") return "TEXT";
+  if (["IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "STICKER", "VOICE"].includes(rawType)) return rawType;
+
+  const mimetype = (message?.media?.mimetype || message?.mimetype || "").toString().toLowerCase();
+  if (mimetype.includes("image")) return "IMAGE";
+  if (mimetype.includes("video")) return "VIDEO";
+  if (mimetype.includes("audio")) return "AUDIO";
+  if (mimetype.includes("pdf") || mimetype.includes("application")) return "DOCUMENT";
+  if (message?.hasMedia) return "DOCUMENT";
+  return "TEXT";
+}
+
+function extractRemoteIdFromChat(chat: any): string | null {
+  const candidates = [
+    chat?.id,
+    chat?.chatId,
+    chat?.jid,
+    chat?.remoteJid,
+    chat?.phone,
+    chat?.number,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function deriveChatName(chat: any): string | null {
+  const candidates = [
+    chat?.name,
+    chat?.pushName,
+    chat?.formattedName,
+    chat?.displayName,
+    chat?.subject,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+function deriveChatAvatar(chat: any): string | null {
+  const candidates = [chat?.pictureUrl, chat?.avatar, chat?.photoURL, chat?.picture];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
+async function fetchWahaMessages(session: string, remoteId: string) {
+  const encodedSession = encodeURIComponent(session);
+  const encodedChat = encodeURIComponent(remoteId);
+  try {
+    const messages = await wahaFetch<any[]>(
+      `/api/${encodedSession}/chats/${encodedChat}/messages?limit=50&downloadMedia=false`,
+    );
+    return Array.isArray(messages) ? messages : [];
+  } catch (error) {
+    console.warn("[WAHA][sync] failed to fetch chat messages", { session, remoteId, error });
+    return [];
+  }
+}
+
+async function syncWahaChatsForInboxes(inboxes: WahaInboxRecord[]): Promise<void> {
+  for (const inbox of inboxes) {
+    const avatarTasks: Promise<unknown>[] = [];
+    const session = typeof inbox.instance_id === "string" ? inbox.instance_id.trim() : "";
+    if (!session) continue;
+
+    let chatList: any[] = [];
+    try {
+      const result = await wahaFetch<any[]>(
+        `/api/${encodeURIComponent(session)}/chats?limit=200&sortBy=conversationTimestamp&sortOrder=desc`,
+      );
+      chatList = Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.warn("[WAHA][sync] failed to fetch chats", { inboxId: inbox.id, session, error });
+      continue;
+    }
+
+    for (const chat of chatList) {
+      const remoteId = extractRemoteIdFromChat(chat);
+      if (!remoteId) continue;
+      const remoteLower = remoteId.toLowerCase();
+      if (remoteLower === "status@broadcast" || remoteLower.endsWith(":status@broadcast")) {
+        continue;
+      }
+
+      const isGroup = remoteId.toLowerCase().endsWith("@g.us");
+      const chatName = deriveChatName(chat);
+      const rawAvatar = deriveChatAvatar(chat);
+      let resolvedAvatar: string | null = rawAvatar ?? null;
+
+      const cachedAvatar = await getCachedAvatar(inbox.company_id, remoteId);
+      if (cachedAvatar) {
+        resolvedAvatar = resolvedAvatar || cachedAvatar;
+      }
+
+      if (!resolvedAvatar) {
+        try {
+          if (isGroup) {
+            const picResp = await fetchWahaChatPicture(session, remoteId);
+            if (picResp?.url) {
+              resolvedAvatar = picResp.url;
+              console.debug("[WAHA][sync] fetched group picture", { inboxId: inbox.id, remoteId });
+            }
+          } else {
+            const picResp = await fetchWahaContactPicture(session, remoteId, { refresh: false });
+            if (picResp?.url) {
+              resolvedAvatar = picResp.url;
+              console.debug("[WAHA][sync] fetched contact picture", { inboxId: inbox.id, remoteId });
+            }
+          }
+        } catch (error) {
+          console.warn("[WAHA][sync] avatar fetch failed", {
+            inboxId: inbox.id,
+            remoteId,
+            error,
+          });
+        }
+      }
+
+      if (resolvedAvatar) {
+        avatarTasks.push(
+          rSet(k.avatar(inbox.company_id, remoteId), resolvedAvatar, TTL_AVATAR).catch((error) => {
+            console.warn("[WAHA][sync] avatar cache set failed", {
+              inboxId: inbox.id,
+              remoteId,
+              error,
+            });
+          }),
+        );
+      }
+
+      let ensuredChatId: string | null = null;
+
+      try {
+        if (isGroup) {
+          const ensured = await ensureGroupChat({
+            inboxId: inbox.id,
+            companyId: inbox.company_id,
+            remoteId,
+            groupName: chatName,
+            groupAvatarUrl: resolvedAvatar ?? undefined,
+          });
+          ensuredChatId = ensured.chatId;
+        } else {
+          const numeric = remoteId.replace(/@.*/, "");
+          const normalizedPhone = normalizeMsisdn(numeric) || numeric;
+          const ensured = await ensureLeadCustomerChat({
+            inboxId: inbox.id,
+            companyId: inbox.company_id,
+            phone: normalizedPhone,
+            name: chatName,
+            rawPhone: remoteId,
+          });
+          ensuredChatId = ensured.chatId;
+        }
+      } catch (error) {
+        console.warn("[WAHA][sync] ensure chat failed", { inboxId: inbox.id, remoteId, error });
+        continue;
+      }
+
+      if (!ensuredChatId) continue;
+
+      const messages = await fetchWahaMessages(session, remoteId);
+      if (!messages.length) continue;
+
+      for (const msg of messages) {
+        const externalId = typeof msg?.id === "string" && msg.id.trim() ? msg.id.trim() : null;
+        if (!externalId) continue;
+        if (msg?.fromMe) continue; // sincroniza apenas mensagens recebidas
+
+        const remoteParticipantId =
+          (typeof msg?.participant === "string" && msg.participant.trim()) ||
+          (typeof msg?.author === "string" && msg.author.trim()) ||
+          null;
+        const remoteSenderId =
+          (typeof msg?.from === "string" && msg.from.trim()) ||
+          remoteParticipantId ||
+          null;
+        const senderPhoneRaw = remoteSenderId ? remoteSenderId.replace(/@.*/, "") : null;
+        const remoteSenderPhone =
+          senderPhoneRaw && senderPhoneRaw.trim()
+            ? normalizeMsisdn(senderPhoneRaw) || senderPhoneRaw
+            : null;
+
+        const messageType = mapWahaMessageType(msg);
+        const body =
+          typeof msg?.body === "string" && msg.body.trim()
+            ? msg.body
+            : msg?.hasMedia
+              ? `[${messageType}]`
+              : "";
+
+        const timestamp = Number(msg?.timestamp);
+        const createdAtIso =
+          Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp * 1000).toISOString() : null;
+
+        try {
+          await insertInboundMessage({
+            chatId: ensuredChatId,
+            externalId,
+            content: body,
+            type: messageType,
+            remoteParticipantId,
+            remoteSenderId,
+            remoteSenderName:
+              (typeof msg?.senderName === "string" && msg.senderName.trim()) ||
+              (typeof msg?.pushName === "string" && msg.pushName.trim()) ||
+              null,
+            remoteSenderPhone,
+            remoteSenderAvatarUrl:
+              (typeof msg?.senderProfilePic === "string" && msg.senderProfilePic.trim()) || null,
+            remoteSenderIsAdmin: null,
+            repliedMessageId: null,
+            createdAt: createdAtIso,
+          });
+        } catch (error) {
+          console.warn("[WAHA][sync] insert message failed", {
+            chatId: ensuredChatId,
+            externalId,
+            error,
+          });
+        }
+      }
+    }
+
+    if (avatarTasks.length) {
+      await Promise.allSettled(avatarTasks);
+    }
+  }
+}
+
+async function syncWahaAfterLogin(authUserId: string): Promise<void> {
+  try {
+    const { data: userRow, error: userErr } = await supabaseAdmin
+      .from("users")
+      .select("company_id")
+      .eq("user_id", authUserId)
+      .maybeSingle();
+    if (userErr) {
+      console.warn("[WAHA][sync] failed to resolve company for user", { authUserId, error: userErr });
+      return;
+    }
+    const companyId = userRow?.company_id;
+    if (!companyId) return;
+
+    const { data: inboxRows, error: inboxErr } = await supabaseAdmin
+      .from("inboxes")
+      .select("id, company_id, instance_id")
+      .eq("company_id", companyId)
+      .eq("provider", WAHA_PROVIDER);
+    if (inboxErr) {
+      console.warn("[WAHA][sync] failed to load inboxes for company", { companyId, error: inboxErr });
+      return;
+    }
+    const validInboxes = (inboxRows || []).filter(
+      (inbox): inbox is WahaInboxRecord =>
+        typeof inbox.instance_id === "string" && inbox.instance_id.trim().length > 0,
+    );
+    if (!validInboxes.length) return;
+
+    await syncWahaChatsForInboxes(validInboxes);
+  } catch (error) {
+    console.warn("[WAHA][sync] unexpected failure during login sync", { authUserId, error });
+  }
+}
 
 // ===== Auth middleware =====
 async function requireAuth(req: any, res: any, next: any) {
@@ -252,6 +558,12 @@ app.post("/login", async (req, res) => {
     path: "/",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
   });
+
+  if (data.user?.id) {
+    void syncWahaAfterLogin(data.user.id).catch((error) =>
+      console.error("[WAHA][sync] login trigger failed", error),
+    );
+  }
 
   return res.json({ ok: true, user: data.user });
 });

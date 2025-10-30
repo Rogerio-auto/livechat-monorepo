@@ -2,7 +2,7 @@
 import db from "../../pg.ts";
 import { normalizeMsisdn } from "../../util.ts";
 import { supabaseAdmin } from "../../lib/supabase.js";
-import { rDel, rDelMatch, rGet, rSet, k } from "../../lib/redis.ts";
+import { clearMessageCache, rDel, rDelMatch, rGet, rSet, k } from "../../lib/redis.ts";
 import { decryptSecret } from "../../lib/crypto.ts";
 import { WAHA_PROVIDER } from "../waha/client.ts";
 
@@ -16,6 +16,16 @@ const TTL_INBOX_LOOKUP = Number(process.env.META_CACHE_TTL_INBOX ?? 120);
 const TTL_BOARD_LOOKUP = Number(process.env.META_CACHE_TTL_BOARD ?? 300);
 const TTL_CREDS_LOOKUP = Number(process.env.META_CACHE_TTL_CREDS ?? 300);
 const TTL_CHAT_PHONE_LOOKUP = Number(process.env.META_CACHE_TTL_CHAT_PHONE ?? 300);
+
+function isMeaningfulName(value?: string | null): boolean {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed === "-") return false;
+  if (/\d/.test(trimmed)) return false;
+  if (/^contato\s*\d*$/i.test(trimmed)) return false;
+  return true;
+}
 
 type NullableCache<T> = { hit: boolean; value: T | null };
 
@@ -39,7 +49,7 @@ const chatPhoneCacheKey = (chatId: string) => `meta:chat:phone:${chatId}`;
 
 export async function invalidateChatCaches(chatId: string, companyId?: string | null) {
   await rDel(k.chat(chatId));
-  await rDelMatch(k.msgsPrefix(chatId));
+  await clearMessageCache(chatId);
 
   let company = companyId ?? null;
   if (!company) {
@@ -86,6 +96,7 @@ export async function ensureGroupChat(args: {
       companyId: args.companyId,
       phone: fallbackPhone,
       name: args.groupName ?? trimmedRemote,
+      rawPhone: trimmedRemote,
     });
     return { chatId, created: false };
   }
@@ -106,8 +117,8 @@ export async function ensureGroupChat(args: {
       if (!existing) {
         const inserted = await tx.one<GroupChatRow>(
           `insert into public.chats
-             (inbox_id, company_id, remote_id, kind, status, group_name, group_avatar_url, last_message_at)
-           values ($1, $2, $3, 'GROUP', 'OPEN', $4, $5, now())
+             (inbox_id, company_id, remote_id, kind, chat_type, status, group_name, group_avatar_url, last_message_at)
+           values ($1, $2, $3, 'GROUP', 'GROUP', 'OPEN', $4, $5, now())
             returning id, group_name, group_avatar_url`,
           [args.inboxId, args.companyId, trimmedRemote, args.groupName ?? null, args.groupAvatarUrl ?? null],
         );
@@ -116,17 +127,16 @@ export async function ensureGroupChat(args: {
 
       const nextName = args.groupName?.trim() || null;
       const nextAvatar = args.groupAvatarUrl?.trim() || null;
-      if (
-        (nextName && nextName !== (existing.group_name || "").trim()) ||
-        (nextAvatar && nextAvatar !== (existing.group_avatar_url || "").trim())
-      ) {
+      const shouldUpdateName = nextName && !(existing.group_name && existing.group_name.trim());
+      const shouldUpdateAvatar = nextAvatar && !(existing.group_avatar_url && existing.group_avatar_url.trim());
+      if (shouldUpdateName || shouldUpdateAvatar) {
         await tx.none(
           `update public.chats
               set group_name = coalesce($2, group_name),
                   group_avatar_url = coalesce($3, group_avatar_url),
                   updated_at = now()
             where id = $1`,
-          [existing.id, nextName, nextAvatar],
+          [existing.id, shouldUpdateName ? nextName : null, shouldUpdateAvatar ? nextAvatar : null],
         );
       }
 
@@ -143,6 +153,7 @@ export async function ensureGroupChat(args: {
         companyId: args.companyId,
         phone: fallbackPhone,
         name: args.groupName ?? trimmedRemote,
+        rawPhone: trimmedRemote,
       });
       return { chatId, created: false };
     }
@@ -520,6 +531,7 @@ export async function createLeadCustomerChatAndMessageTx(args: {
     companyId: args.companyId,
     phone: args.phone,
     name: args.name ?? null,
+    rawPhone: args.phone,
   });
 
   // 2) Insere mensagem (idempotente por (chat_id, external_id))
@@ -629,13 +641,13 @@ export async function upsertLeadByPhone(args: {
        returning id, name, customer_id`,
       [args.companyId, msisdn, args.name?.trim() || msisdn, boardId],
     );
-  } else if (args.name?.trim() && !lead.name?.trim()) {
+  } else if (isMeaningfulName(args.name) && !isMeaningfulName(lead.name)) {
     lead = await db.one<{ id: string; name: string; customer_id: string | null }>(
       `update public.leads
           set name = $1
         where id = $2
         returning id, name, customer_id`,
-      [args.name.trim(), lead.id],
+      [args.name!.trim(), lead.id],
     );
   }
 
@@ -648,6 +660,8 @@ export async function upsertCustomerByPhone(args: {
   name?: string | null;
 }) {
   const msisdn = normalizeMsisdn(args.phone);
+  const incomingName = args.name?.trim();
+  const incomingMeaningful = isMeaningfulName(incomingName);
 
   let customer = await db.oneOrNone<{ id: string; name: string }>(
     `select id, name
@@ -658,19 +672,23 @@ export async function upsertCustomerByPhone(args: {
   );
 
   if (!customer) {
+    const nameToStore = incomingMeaningful ? incomingName! : msisdn;
     customer = await db.one<{ id: string; name: string }>(
       `insert into public.customers (company_id, phone, name)
        values ($1, $2, $3)
        returning id, name`,
-      [args.companyId, msisdn, args.name?.trim() || msisdn],
+      [args.companyId, msisdn, nameToStore],
     );
-  } else if (args.name?.trim() && args.name.trim() !== customer.name) {
+  } else if (
+    incomingMeaningful &&
+    (!isMeaningfulName(customer.name) || incomingName !== customer.name)
+  ) {
     customer = await db.one<{ id: string; name: string }>(
       `update public.customers
           set name = $1
         where id = $2
         returning id, name`,
-      [args.name.trim(), customer.id],
+      [incomingName!, customer.id],
     );
   }
 
@@ -701,13 +719,28 @@ export async function updateCustomerAvatar(customerId: string, avatarUrl: string
   }
 }
 
+function extractExternalId(raw?: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = String(raw).trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/@.*/, "");
+}
+
 export async function ensureLeadCustomerChat(args: {
   inboxId: string;
   companyId: string;
   phone: string;
   name?: string | null;
+  rawPhone?: string | null;
 }) {
   const msisdn = normalizeMsisdn(args.phone);
+  const externalIdCandidate = extractExternalId(args.rawPhone ?? null) ?? extractExternalId(args.phone);
+  const rawName = typeof args.name === "string" ? args.name.trim() : "";
+  const fallbackName =
+    (isMeaningfulName(rawName) ? rawName : null) ||
+    msisdn ||
+    extractExternalId(args.phone) ||
+    "-";
 
   return db.withTransaction(async (tx) => {
     let lead = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null }>(
@@ -727,7 +760,7 @@ export async function ensureLeadCustomerChat(args: {
           `insert into public.leads (company_id, phone, name, kanban_board_id)
            values ($1, $2, $3, $4)
            returning id, name, customer_id`,
-          [args.companyId, msisdn, args.name?.trim() || msisdn, boardId],
+          [args.companyId, msisdn, fallbackName, boardId],
         );
         console.log("[META][store] lead created", { leadId: lead.id, companyId: args.companyId, msisdn });
       } catch (error: any) {
@@ -744,13 +777,13 @@ export async function ensureLeadCustomerChat(args: {
           throw error;
         }
       }
-    } else if (args.name?.trim() && args.name.trim() !== (lead.name || "").trim()) {
+    } else if (!isMeaningfulName(lead.name)) {
       lead = await tx.one<{ id: string; name: string; customer_id: string | null }>(
         `update public.leads
             set name = $1
           where id = $2
           returning id, name, customer_id`,
-        [args.name.trim(), lead.id],
+        [fallbackName, lead.id],
       );
     }
 
@@ -769,7 +802,7 @@ export async function ensureLeadCustomerChat(args: {
           `insert into public.customers (company_id, phone, name)
            values ($1, $2, $3)
            returning id, name`,
-          [args.companyId, msisdn, args.name?.trim() || msisdn],
+          [args.companyId, msisdn, fallbackName],
         );
         console.log("[META][store] customer created", { customerId: customer.id, companyId: args.companyId, msisdn });
       } catch (error: any) {
@@ -786,13 +819,13 @@ export async function ensureLeadCustomerChat(args: {
           throw error;
         }
       }
-    } else if (args.name?.trim() && args.name.trim() !== (customer.name || "").trim()) {
+    } else if (!isMeaningfulName(customer.name)) {
       customer = await tx.one<{ id: string; name: string }>(
         `update public.customers
             set name = $1
           where id = $2
           returning id, name`,
-        [args.name.trim(), customer.id],
+        [fallbackName, customer.id],
       );
     }
 
@@ -806,8 +839,8 @@ export async function ensureLeadCustomerChat(args: {
       console.log("[META][store] lead linked to customer", { leadId: lead!.id, customerId: customer.id });
     }
 
-    let chat = await tx.oneOrNone<{ id: string }>(
-      `select id
+    let chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null }>(
+      `select id, external_id, chat_type
          from public.chats
         where inbox_id = $1
           and customer_id = $2
@@ -817,17 +850,17 @@ export async function ensureLeadCustomerChat(args: {
 
     if (!chat) {
       try {
-        chat = await tx.one<{ id: string }>(
-          `insert into public.chats (inbox_id, customer_id, status, last_message_at)
-           values ($1, $2, 'OPEN', now())
-           returning id`,
-          [args.inboxId, customer.id],
+        chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
+            `insert into public.chats (inbox_id, customer_id, status, last_message_at, external_id, chat_type)
+           values ($1, $2, 'OPEN', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
+           returning id, external_id, chat_type`,
+          [args.inboxId, customer.id, externalIdCandidate ?? null, "CONTACT"],
         );
         console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
       } catch (error: any) {
         if (String(error?.code) === "23505") {
-          chat = await tx.one<{ id: string }>(
-            `select id
+          chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
+            `select id, external_id, chat_type
                from public.chats
               where inbox_id = $1
                 and customer_id = $2
@@ -840,11 +873,45 @@ export async function ensureLeadCustomerChat(args: {
         }
       }
     } else {
-      console.log("[META][store] chat reused", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
+      let updated = false;
+      if (externalIdCandidate && (!chat.external_id || String(chat.external_id).trim() === "")) {
+        await tx.none(
+          `update public.chats
+              set external_id = $2,
+                  updated_at = now()
+            where id = $1`,
+          [chat.id, externalIdCandidate],
+        );
+        chat.external_id = externalIdCandidate;
+        updated = true;
+        console.log("[META][store] chat external_id backfilled", { chatId: chat.id, externalId: externalIdCandidate });
+      }
+      const chatTypeUpper = chat.chat_type ? String(chat.chat_type).toUpperCase() : null;
+      if (!chatTypeUpper) {
+        await tx.none(
+          `update public.chats
+              set chat_type = 'CONTACT',
+                  updated_at = now()
+            where id = $1
+              and chat_type is distinct from 'CONTACT'`,
+          [chat.id],
+        );
+        chat.chat_type = "CONTACT";
+        updated = true;
+      }
+      if (!updated) {
+        console.log("[META][store] chat reused", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
+      }
     }
 
-    console.log("[META][store] ensureLeadCustomerChat result", { leadId: lead!.id, customerId: customer.id, chatId: chat!.id });
-    return { leadId: lead!.id, customerId: customer.id, chatId: chat!.id };
+    console.log("[META][store] ensureLeadCustomerChat result", {
+      leadId: lead!.id,
+      customerId: customer.id,
+      chatId: chat!.id,
+      externalId: chat.external_id ?? null,
+      chatType: chat.chat_type ?? null,
+    });
+    return { leadId: lead!.id, customerId: customer.id, chatId: chat!.id, externalId: chat.external_id ?? null };
   });
 }
 

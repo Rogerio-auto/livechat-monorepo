@@ -1,15 +1,125 @@
+import { createHash } from "node:crypto";
+import { performance } from "node:perf_hooks";
 import express from "express";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 import { EX_APP, publish } from "../queue/rabbit.ts"; // <??" padroniza ??oqueue???
-import { rGet, rSet, rDel, rDelMatch, k } from "../lib/redis.ts";
+import { redis, rGet, rSet, rDel, rDelMatch, k, clearMessageCache } from "../lib/redis.ts";
 import { WAHA_PROVIDER } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 
-const TTL_LIST = Number(process.env.CACHE_TTL_LIST || 5);   // segundos
+const TTL_LIST = Number(process.env.CACHE_TTL_LIST || 30);
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
-const TTL_MSGS = Number(process.env.CACHE_TTL_MSGS || 5);
+const TTL_MSGS = Number(process.env.CACHE_TTL_MSGS || 10);
+const TRACE_EXPLAIN = process.env.LIVECHAT_TRACE_EXPLAIN === "1";
+
+type CacheEnvelope<T> = {
+  data: T;
+  meta: {
+    etag: string;
+    lastModified: string;
+    cachedAt: string;
+  };
+};
+
+type QueryTraceEntry = {
+  label: string;
+  table: string;
+  durationMs: number;
+  rows?: number;
+  count?: number | null;
+  error?: string;
+  plan?: unknown;
+};
+
+function buildCacheEnvelope<T>(data: T, lastModifiedIso?: string | null): CacheEnvelope<T> {
+  const serialized = JSON.stringify(data);
+  const etag = createHash("sha1").update(serialized).digest("base64url");
+  const lastModified = lastModifiedIso || new Date().toISOString();
+  return {
+    data,
+    meta: {
+      etag,
+      lastModified,
+      cachedAt: new Date().toISOString(),
+    },
+  };
+}
+
+function ensureEnvelope<T>(raw: CacheEnvelope<T> | T, lastModifiedHint?: string | null): CacheEnvelope<T> {
+  if (raw && typeof raw === "object" && "meta" in (raw as any) && "data" in (raw as any)) {
+    const env = raw as CacheEnvelope<T>;
+    if (!env.meta?.etag) {
+      const rebuilt = buildCacheEnvelope(env.data, env.meta?.lastModified || lastModifiedHint);
+      return rebuilt;
+    }
+    return env;
+  }
+  return buildCacheEnvelope(raw as T, lastModifiedHint);
+}
+
+function applyConditionalHeaders(res: express.Response, envelope: CacheEnvelope<any>) {
+  res.setHeader("ETag", envelope.meta.etag);
+  res.setHeader("Last-Modified", new Date(envelope.meta.lastModified).toUTCString());
+}
+
+function isFreshRequest(req: express.Request, envelope: CacheEnvelope<any>): boolean {
+  const ifNoneMatch = req.headers["if-none-match"];
+  if (typeof ifNoneMatch === "string" && ifNoneMatch.length > 0) {
+    if (ifNoneMatch.split(",").map((part) => part.trim()).includes(envelope.meta.etag)) {
+      return true;
+    }
+  } else if (Array.isArray(ifNoneMatch) && ifNoneMatch.includes(envelope.meta.etag)) {
+    return true;
+  }
+
+  const ifModifiedSince = req.headers["if-modified-since"];
+  if (typeof ifModifiedSince === "string") {
+    const sinceTs = Date.parse(ifModifiedSince);
+    const lastTs = Date.parse(envelope.meta.lastModified);
+    if (!Number.isNaN(sinceTs) && !Number.isNaN(lastTs) && lastTs <= sinceTs) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function traceSupabase<T>(
+  label: string,
+  table: string,
+  log: QueryTraceEntry[],
+  execute: () => Promise<{ data: T; error: any; count?: number | null }>,
+  explain?: () => Promise<any>,
+) {
+  let plan: unknown = undefined;
+  if (TRACE_EXPLAIN && explain) {
+    try {
+      const planResp = await explain();
+      plan = (planResp as any)?.data ?? planResp ?? null;
+    } catch (err) {
+      plan = { error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
+  const started = performance.now();
+  const result = await execute();
+  const durationMs = performance.now() - started;
+
+  log.push({
+    label,
+    table,
+    durationMs,
+    rows: Array.isArray(result.data) ? (result.data as any[]).length : undefined,
+    count: result.count ?? null,
+    error: result.error ? result.error.message ?? String(result.error) : undefined,
+    plan,
+  });
+
+  return result;
+}
+
 const ALLOWED_CHAT_STATUSES = new Set([
   "OPEN",
   "PENDING",
@@ -18,6 +128,7 @@ const ALLOWED_CHAT_STATUSES = new Set([
   "AI",
   "RESOLVED",
 ]);
+const ALLOWED_CHAT_KINDS = new Set(["GROUP", "DIRECT"]);
 
 function normalizeSupabaseError(error: any, fallbackMessage = "Unexpected error") {
   let message = error?.message ?? fallbackMessage;
@@ -81,332 +192,495 @@ function toUuidArray(arr: any[]): string[] {
 
 export function registerLivechatChatRoutes(app: express.Application) {
   // Listar chats (com cache)
-app.get("/livechat/chats", requireAuth, async (req: any, res) => {
-  const inboxId = (req.query.inboxId as string) || undefined;
-  const rawStatus = (req.query.status as string) || undefined;
-  const q = (req.query.q as string) || undefined;
-  const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 20;
-  const offset = req.query.offset ? Math.max(0, Number(req.query.offset)) : 0;
-
-  try {
-    // 1) Normaliza/valida status
-    const normalizedStatus = rawStatus ? rawStatus.trim().toUpperCase() : undefined;
-    if (
-      normalizedStatus &&
-      normalizedStatus !== "ALL" &&
-      !ALLOWED_CHAT_STATUSES.has(normalizedStatus)
-    ) {
-      return res.status(400).json({ error: "Status invalido" });
-    }
-    const statusFilter =
-      normalizedStatus && normalizedStatus !== "ALL" ? normalizedStatus : undefined;
-
-    // 2) Descobre company_id do usuário
-    const { data: actorRows, error: actorErr } = await supabaseAdmin
-      .from("users")
-      .select("company_id")
-      .eq("user_id", req.user.id) // se sua coluna for "id", troque aqui para .eq("id", req.user.id)
-      .limit(1);
-
-    if (actorErr) return res.status(500).json({ error: actorErr.message });
-
-    const companyId = ((actorRows as any[])?.[0]?.company_id ?? null) as string | null;
-    if (!companyId) return res.status(404).json({ error: "Usuario sem company_id" });
-    if (companyId && !req.user?.company_id) (req.user as any).company_id = companyId;
-
-    if (inboxId && !UUID_RE.test(inboxId)) {
-      return res.status(400).json({ error: "Inbox invalida" });
-    }
-
-    const cacheKey = k.list(companyId, inboxId, statusFilter, q, offset, limit);
-    const cached = await rGet<{ items: any[]; total: number }>(cacheKey);
-    if (cached) {
-      res.setHeader("X-Cache", "HIT");
-      return res.json(cached);
-    }
-
-    console.log("[livechat] list query", {
-      companyId,
-      inboxId,
-      statusFilter,
-      q,
-      offset,
-      limit,
-    });
-
-    let query = supabaseAdmin
-      .from("chats")
-      .select(
-        `
-          id,
-          kind,
-          remote_id,
-          group_name,
-          group_avatar_url,
-          external_id,
-          status,
-          last_message,
-          last_message_at,
-          inbox_id,
-          customer_id,
-          created_at,
-          updated_at,
-          assignee_agent,
-          inbox:inboxes!inner(id, company_id)
-        `,
-        { count: "exact" },
-      )
-      .eq("inbox.company_id", companyId)
-      .order("last_message_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: true });
-
-    if (inboxId) {
-      const { data: inboxCheck, error: inboxErr } = await supabaseAdmin
-        .from("inboxes")
-        .select("id")
-        .eq("id", inboxId)
-        .eq("company_id", companyId)
-        .maybeSingle();
-      if (inboxErr) return res.status(500).json({ error: inboxErr.message });
-      if (!inboxCheck) return res.status(404).json({ error: "Inbox nao encontrada" });
-      query = query.eq("inbox_id", inboxId);
-    }
-
-    if (statusFilter) query = query.eq("status", statusFilter);
-
-    if (q && q.trim()) {
-      const term = q.trim();
-      query = query.or(`last_message.ilike.%${term}%,external_id.ilike.%${term}%`);
-    }
-
-    const { data, error, count } = await query.range(
-      offset,
-      offset + Math.max(0, limit - 1),
-    );
-
-    if (error) {
-      try {
-        console.error("[livechat] list range raw error", error);
-        console.error(
-          "[livechat] list range raw error JSON",
-          JSON.stringify(error, null, 2),
-        );
-      } catch {
-        console.error("[livechat] list range raw error (string)", String(error));
+  app.get("/livechat/chats", requireAuth, async (req: any, res) => {
+    const reqLabel = `livechat.chats#${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    console.time(reqLabel);
+    const handlerStart = performance.now();
+    const queryLog: QueryTraceEntry[] = [];
+    let timerClosed = false;
+    const endTimer = (meta?: Record<string, unknown>) => {
+      if (!timerClosed) {
+        console.timeEnd(reqLabel);
+        timerClosed = true;
       }
-      const parsedError = normalizeSupabaseError(error);
-      console.error("[livechat] list range error", parsedError);
-      return res.status(500).json(parsedError);
-    }
+      if (meta) {
+        const totalMs = performance.now() - handlerStart;
+        console.log("[livechat/chats]", { durationMs: Number(totalMs.toFixed(2)), ...meta });
+      }
+    };
 
-    const rawItems = (data || []) as any[];
-    const items = rawItems.map((row: any) => {
-      if (row?.inbox) delete row.inbox;
-      return row;
-    });
-
-    // 8) Enriquecimento: agente atribuído
     try {
-      const linkIds = toUuidArray(items.map((c: any) => c.assignee_agent));
-      if (linkIds.length > 0) {
-        const { data: links } = await supabaseAdmin
-          .from("inbox_users")
-          .select("id, user_id")
-          .in("id", linkIds);
+      const inboxId = (req.query.inboxId as string) || undefined;
+      const rawStatus = (req.query.status as string) || undefined;
+      const rawKind = (req.query.kind as string) || undefined;
+      const q = (req.query.q as string) || undefined;
+      const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 20;
+      const offset = req.query.offset ? Math.max(0, Number(req.query.offset)) : 0;
 
-        const userIdByLink: Record<string, string> = {};
-        for (const r of (links as any[]) || []) {
-          const lid = (r as any).id;
-          const uid = (r as any).user_id;
-          if (UUID_RE.test(lid) && UUID_RE.test(uid)) {
-            userIdByLink[lid] = uid;
-          }
+      const normalizedStatus = rawStatus ? rawStatus.trim().toUpperCase() : undefined;
+      if (
+        normalizedStatus &&
+        normalizedStatus !== "ALL" &&
+        !ALLOWED_CHAT_STATUSES.has(normalizedStatus)
+      ) {
+        endTimer({ error: "invalid_status" });
+        return res.status(400).json({ error: "Status invalido" });
+      }
+      let kindFilter: "GROUP" | "DIRECT" | undefined;
+      if (rawKind) {
+        const normalizedKind = rawKind.trim().toUpperCase();
+        if (!ALLOWED_CHAT_KINDS.has(normalizedKind)) {
+          endTimer({ error: "invalid_kind" });
+          return res.status(400).json({ error: "Kind invalido" });
         }
+        kindFilter = normalizedKind as "GROUP" | "DIRECT";
+      }
+      if (inboxId && !UUID_RE.test(inboxId)) {
+        endTimer({ error: "invalid_inbox" });
+        return res.status(400).json({ error: "Inbox invalida" });
+      }
 
-        const userIds = toUuidArray(Object.values(userIdByLink));
-        let usersById: Record<string, { name: string | null; avatar: string | null }> = {};
-        if (userIds.length > 0) {
-          const { data: usersRows } = await supabaseAdmin
+      const statusFilter =
+        normalizedStatus && normalizedStatus !== "ALL" ? normalizedStatus : undefined;
+      const statusSegment = statusFilter ?? "ALL";
+      const kindSegment = kindFilter ?? "ALL";
+
+      const actorResp = await traceSupabase(
+        "users.company",
+        "users",
+        queryLog,
+        async () =>
+          await supabaseAdmin
             .from("users")
-            .select("id, name, avatar")
-            .in("id", userIds);
-          usersById = Object.fromEntries(
-            ((usersRows as any[]) || []).map((row: any) => [
-              row.id,
-              { name: row?.name || row?.id, avatar: row?.avatar || null },
-            ]),
+            .select("company_id")
+            .eq("user_id", req.user.id)
+            .maybeSingle(),
+      );
+      if (actorResp.error) {
+        endTimer({ error: actorResp.error.message, queries: queryLog });
+        return res.status(500).json({ error: actorResp.error.message });
+      }
+
+      const companyId = (actorResp.data as any)?.company_id ?? null;
+      if (!companyId) {
+        endTimer({ error: "no_company", queries: queryLog });
+        return res.status(404).json({ error: "Usuario sem company_id" });
+      }
+      if (companyId && !req.user?.company_id) (req.user as any).company_id = companyId;
+
+      const cacheKey = k.list(
+        companyId,
+        inboxId || null,
+        statusSegment,
+        kindSegment,
+        q || null,
+        offset,
+        limit,
+      );
+      const cachedRaw = await rGet<
+        CacheEnvelope<{ items: any[]; total: number }> | { items: any[]; total: number }
+      >(cacheKey);
+      if (cachedRaw) {
+        const cachedEnvelope = ensureEnvelope(cachedRaw);
+        applyConditionalHeaders(res, cachedEnvelope);
+        res.setHeader("X-Cache", "HIT");
+        if (isFreshRequest(req, cachedEnvelope)) {
+          res.status(304).end();
+          endTimer({ cache: "HIT-304", key: cacheKey, queries: queryLog });
+          return;
+        }
+        res.json(cachedEnvelope.data);
+        endTimer({
+          cache: "HIT",
+          key: cacheKey,
+          items: cachedEnvelope.data?.items?.length ?? 0,
+          total: cachedEnvelope.data?.total ?? 0,
+          kind: kindSegment,
+          queries: queryLog,
+        });
+        return;
+      }
+
+      res.setHeader("X-Cache", "MISS");
+      console.log("[livechat/chats] cache MISS", { key: cacheKey, kind: kindSegment });
+
+      if (inboxId) {
+        const inboxResp = await traceSupabase(
+          "inboxes.check",
+          "inboxes",
+          queryLog,
+          async () =>
+            await supabaseAdmin
+              .from("inboxes")
+              .select("id")
+              .eq("id", inboxId)
+              .eq("company_id", companyId)
+              .maybeSingle(),
+        );
+        if (inboxResp.error) {
+          endTimer({ error: inboxResp.error.message, queries: queryLog });
+          return res.status(500).json({ error: inboxResp.error.message });
+        }
+        if (!inboxResp.data) {
+          endTimer({ error: "inbox_not_found", queries: queryLog });
+          return res.status(404).json({ error: "Inbox nao encontrada" });
+        }
+      }
+
+      const listResp = await traceSupabase(
+        "chats.list",
+        "chats",
+        queryLog,
+        async () => {
+          let query = supabaseAdmin
+            .from("chats")
+            .select(
+              `
+                id,
+                kind,
+                remote_id,
+                group_name,
+                group_avatar_url,
+                external_id,
+                status,
+                last_message,
+                last_message_at,
+                inbox_id,
+                customer_id,
+                chat_type,
+                created_at,
+                updated_at,
+                assignee_agent,
+                inbox:inboxes!inner(id, company_id)
+              `,
+              { count: "exact" },
+            )
+            .eq("inbox.company_id", companyId)
+            .order("last_message_at", { ascending: false, nullsFirst: false })
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: true });
+          if (inboxId) query = query.eq("inbox_id", inboxId);
+          if (statusFilter) query = query.eq("status", statusFilter);
+          if (kindFilter === "GROUP") {
+            query = query.or(
+              [
+                "kind.eq.GROUP",
+                "remote_id.ilike.%@g.us",
+                "chat_type.eq.GROUP",
+              ].join(","),
+            );
+          } else if (kindFilter === "DIRECT") {
+            query = query.or("kind.eq.DIRECT,kind.is.null");
+            query = query.or("remote_id.is.null,remote_id.not.ilike.%@g.us");
+            query = query.or(
+              [
+                "chat_type.eq.CONTACT",
+                "chat_type.is.null",
+              ].join(","),
+            );
+          }
+          if (q && q.trim()) {
+            const term = q.trim();
+            query = query.or(`last_message.ilike.%${term}%,external_id.ilike.%${term}%`);
+          }
+          return await query.range(offset, offset + Math.max(0, limit - 1));
+        },
+      );
+
+      if (listResp.error) {
+        const parsedError = normalizeSupabaseError(listResp.error);
+        endTimer({ error: parsedError.error, queries: queryLog });
+        return res.status(500).json(parsedError);
+      }
+
+      const rawItems = ((listResp.data || []) as any[]).map((row: any) => {
+        if (row?.inbox) delete row.inbox;
+        return row;
+      });
+      const items = rawItems;
+      const remoteIdSet = new Set<string>();
+      for (const chat of items as any[]) {
+        if (!chat) continue;
+        const remoteCandidate =
+          (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
+          (typeof chat.external_id === "string" && chat.external_id.trim()) ||
+          null;
+        if (remoteCandidate) {
+          remoteIdSet.add(remoteCandidate);
+        }
+      }
+
+      const chatIds = toUuidArray(items.map((c: any) => c.id));
+      const linkIds = toUuidArray(items.map((c: any) => c.assignee_agent));
+      const customerIds = toUuidArray(items.map((c: any) => c.customer_id));
+
+      const [linksResp, customersResp, leadsResp, lastMessagesResp] = await Promise.all([
+        linkIds.length
+          ? traceSupabase(
+              "inbox_users.by_id",
+              "inbox_users",
+              queryLog,
+              async () =>
+                await supabaseAdmin
+                  .from("inbox_users")
+                  .select("id, user_id")
+                  .in("id", linkIds),
+            )
+          : Promise.resolve({ data: [], error: null, count: null } as const),
+        customerIds.length
+          ? traceSupabase(
+              "customers.display",
+              "customers",
+              queryLog,
+              async () =>
+                await supabaseAdmin
+                  .from("customers")
+                  .select("id, name, phone, msisdn")
+                  .in("id", customerIds),
+            )
+          : Promise.resolve({ data: [], error: null, count: null } as const),
+        customerIds.length
+          ? traceSupabase(
+              "leads.display",
+              "leads",
+              queryLog,
+              async () =>
+                await supabaseAdmin
+                  .from("leads")
+                  .select("id, name, phone")
+                  .in("id", customerIds),
+            )
+          : Promise.resolve({ data: [], error: null, count: null } as const),
+        chatIds.length
+          ? traceSupabase(
+              "chat_messages.last",
+              "chat_messages",
+              queryLog,
+              async () =>
+                await supabaseAdmin
+                  .from("chat_messages")
+                  .select("chat_id, is_from_customer, created_at, media_url, type, content")
+                  .in("chat_id", chatIds)
+                  .order("created_at", { ascending: false }),
+            )
+          : Promise.resolve({ data: [], error: null, count: null } as const),
+      ]);
+
+      let avatarByRemote: Record<string, string | null> = {};
+      if (remoteIdSet.size > 0 && companyId) {
+        const remoteList = Array.from(remoteIdSet);
+        const avatarKeys = remoteList.map((remote) => k.avatar(companyId, remote));
+        try {
+          const rawValues = await redis.mget(...avatarKeys);
+          avatarByRemote = Object.fromEntries(
+            remoteList.map((remote, index) => {
+              const raw = rawValues[index];
+              if (!raw) return [remote, null];
+              try {
+                return [remote, JSON.parse(raw)];
+              } catch {
+                return [remote, raw];
+              }
+            }),
+          );
+        } catch (error) {
+          console.warn("[livechat/chats] avatar cache lookup failed", {
+            companyId,
+            count: remoteList.length,
+            error,
+          });
+        }
+      }
+
+      let usersResp: { data: any[] | null; error: any } = { data: [], error: null };
+      if (linkIds.length && Array.isArray((linksResp as any).data)) {
+        const userIds = toUuidArray(((linksResp as any).data || []).map((row: any) => row.user_id));
+        if (userIds.length) {
+          usersResp = await traceSupabase(
+            "users.by_id",
+            "users",
+            queryLog,
+            async () =>
+              await supabaseAdmin
+                .from("users")
+                .select("id, name, avatar")
+                .in("id", userIds),
           );
         }
+      }
 
-        for (const chat of items as any[]) {
-          const linkId = chat.assignee_agent || null;
-          const userId = linkId ? userIdByLink[linkId] : null;
-          chat.assigned_agent_id = linkId;
-          chat.assigned_agent_user_id = userId || null;
-          chat.assigned_agent_name = userId ? usersById[userId]?.name || null : null;
-          chat.assigned_agent_avatar_url = userId ? usersById[userId]?.avatar || null : null;
+      if ((linksResp as any).error) {
+        console.warn("[livechat/chats] enrich agents skipped", (linksResp as any).error);
+      }
+      if (usersResp.error) {
+        console.warn("[livechat/chats] enrich users skipped", usersResp.error);
+      }
+
+      const userIdByLink: Record<string, string> = {};
+      for (const row of (((linksResp as any).data || []) as any[])) {
+        const lid = row?.id;
+        const uid = row?.user_id;
+        if (UUID_RE.test(String(lid)) && UUID_RE.test(String(uid))) {
+          userIdByLink[String(lid)] = String(uid);
         }
       }
-    } catch (err) {
-      console.warn("[livechat] enrich agents skipped:", String(err));
-    }
 
-    // 9) Enriquecimento: display do cliente
-    try {
-      const customerIds = toUuidArray(items.map((c: any) => c.customer_id));
-      if (customerIds.length > 0) {
-        const displayById: Record<
-          string,
-          { name: string | null; phone: string | null; avatar: string | null }
-        > = {};
+      const usersById: Record<string, { name: string | null; avatar: string | null }> = {};
+      for (const row of (usersResp.data || []) as any[]) {
+        usersById[String(row.id)] = {
+          name: row?.name || row?.id || null,
+          avatar: row?.avatar || null,
+        };
+      }
 
-        async function loadDisplay(table: string, cols: string[]) {
-          const selectCols = ["id", ...cols].join(",");
-          let rows: any[] = [];
-          const { data: attempt, error: attemptErr } = await supabaseAdmin
-            .from(table)
-            .select(selectCols)
-            .in("id", customerIds);
-          if (attemptErr) {
-            const { data: fallback, error: fallbackErr } = await supabaseAdmin
-              .from(table)
-              .select("*")
-              .in("id", customerIds);
-            if (!fallbackErr) rows = (fallback as any[]) || [];
-          } else {
-            rows = (attempt as any[]) || [];
+      for (const chat of items as any[]) {
+        const linkId = chat.assignee_agent || null;
+        const userId = linkId ? userIdByLink[linkId] : null;
+        chat.assigned_agent_id = linkId;
+        chat.assigned_agent_user_id = userId || null;
+        chat.assigned_agent_name = userId ? usersById[userId]?.name || null : null;
+        chat.assigned_agent_avatar_url = userId ? usersById[userId]?.avatar || null : null;
+      }
+
+      const customerDisplay: Record<string, { name: string | null; phone: string | null }> = {};
+      for (const row of (((customersResp as any).data || []) as any[])) {
+        const id = String(row.id);
+        customerDisplay[id] = {
+          name: row?.name || null,
+          phone: row?.phone || row?.msisdn || null,
+        };
+      }
+      for (const row of (((leadsResp as any).data || []) as any[])) {
+        const id = String(row.id);
+        if (!customerDisplay[id]) {
+          customerDisplay[id] = {
+            name: row?.name || null,
+            phone: row?.phone || null,
+          };
+        } else {
+          if (!customerDisplay[id].name) {
+            customerDisplay[id].name = row?.name || customerDisplay[id].name;
           }
-          for (const row of rows) {
-            const name = row?.name || row?.title || null;
-            const phone =
-              row?.phone ||
-              row?.cellphone ||
-              row?.celular ||
-              row?.telefone ||
-              row?.contact ||
-              null;
-            const avatar =
-              row?.avatar_url ||
-              row?.avatar ||
-              row?.profile_pic_url ||
-              row?.photo ||
-              null;
-            displayById[row.id] = { name, phone, avatar };
-          }
-        }
-
-        await loadDisplay("customers", [
-          "name",
-          "phone",
-          "cellphone",
-          "contact",
-          "avatar_url",
-          "avatar",
-        ]).catch(() => {});
-        await loadDisplay("customers", [
-          "name",
-          "celular",
-          "telefone",
-          "contact",
-          "avatar_url",
-          "avatar",
-        ]).catch(() => {});
-        await loadDisplay("leads", ["name", "phone", "cellphone"]).catch(() => {});
-
-        for (const chat of items as any[]) {
-          const display = displayById[chat.customer_id];
-          chat.customer_name = display?.name || null;
-          chat.customer_phone = display?.phone || null;
-          chat.customer_avatar_url = display?.avatar || null;
-        }
-      }
-    } catch (err) {
-      console.warn("[livechat] enrich customers skipped:", String(err));
-    }
-
-    // 10) Último remetente
-    try {
-      const chatIds = toUuidArray(items.map((c: any) => c.id));
-      if (chatIds.length > 0) {
-        const { data: messages } = await supabaseAdmin
-          .from("chat_messages")
-          .select("chat_id, is_from_customer, sender_type, created_at")
-          .in("chat_id", chatIds)
-          .order("created_at", { ascending: false });
-
-        const lastByChat: Record<string, string> = {};
-        for (const row of (messages as any[]) || []) {
-          const cid = row.chat_id as string;
-          if (lastByChat[cid]) continue;
-          const from = (row as any).sender_type || ((row as any).is_from_customer ? "CUSTOMER" : "AGENT");
-          lastByChat[cid] = from;
-        }
-        for (const chat of items as any[]) {
-          const cid = chat.id as string;
-          if (lastByChat[cid]) chat.last_message_from = lastByChat[cid];
-        }
-      }
-    } catch (err) {
-      console.warn("[livechat] enrich last_message_from skipped:", String(err));
-    }
-
-    // 11) Enriquecimento: preview da última mídia (media_url e tipo)
-    try {
-      const chatIds = toUuidArray(items.map((c: any) => c.id));
-      if (chatIds.length > 0) {
-        const { data: lastMsgs } = await supabaseAdmin
-          .from("chat_messages")
-          .select("chat_id, content, media_url, type, created_at")
-          .in("chat_id", chatIds)
-          .order("created_at", { ascending: false });
-
-        const lastFullByChat: Record<string, any> = {};
-        for (const row of (lastMsgs as any[]) || []) {
-          const cid = row.chat_id as string;
-          if (lastFullByChat[cid]) continue; // já temos o mais recente
-          lastFullByChat[cid] = row;
-        }
-
-        for (const chat of items as any[]) {
-          const cid = chat.id as string;
-          const r = lastFullByChat[cid];
-          chat.last_message_type = r?.type ?? null;
-          chat.last_message_media_url = r?.media_url ?? null;
-
-          // opcional: se o último conteúdo for vazio mas tiver mídia, gere um fallback para busca
-          if (!chat.last_message && r?.media_url) {
-            chat.last_message = `[${(r?.type || "MEDIA").toString().toUpperCase()}]`;
+          if (!customerDisplay[id].phone) {
+            customerDisplay[id].phone = row?.phone || customerDisplay[id].phone;
           }
         }
       }
-    } catch (err) {
-      console.warn("[livechat] enrich last media skipped:", String(err));
+
+      for (const chat of items as any[]) {
+        const display = customerDisplay[String(chat.customer_id)] || null;
+        chat.customer_name = display?.name || null;
+        chat.customer_phone = display?.phone || null;
+
+        const remoteKey =
+          (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
+          (typeof chat.external_id === "string" && chat.external_id.trim()) ||
+          null;
+        const cachedAvatar = remoteKey ? avatarByRemote[remoteKey] ?? null : null;
+        const isGroupChatKind =
+          typeof chat.kind === "string" && chat.kind.toUpperCase() === "GROUP";
+
+        if (isGroupChatKind) {
+          if (!chat.group_avatar_url && cachedAvatar) {
+            chat.group_avatar_url = cachedAvatar;
+          }
+          chat.customer_avatar_url = chat.group_avatar_url ?? cachedAvatar ?? null;
+        } else {
+          chat.customer_avatar_url = cachedAvatar ?? null;
+        }
+
+        if (!chat.display_name) {
+          if (chat.customer_name) {
+            chat.display_name = chat.customer_name;
+          } else if (isGroupChatKind && chat.group_name) {
+            chat.display_name = chat.group_name;
+          } else if (remoteKey) {
+            chat.display_name = remoteKey.replace(/@.*/, "");
+          }
+        }
+      }
+
+      const lastByChat: Record<string, any> = {};
+      for (const row of (((lastMessagesResp as any).data || []) as any[])) {
+        const cid = String(row.chat_id);
+        if (lastByChat[cid]) continue;
+        lastByChat[cid] = row;
+      }
+
+      for (const chat of items as any[]) {
+        const cid = String(chat.id);
+        const lastMsg = lastByChat[cid];
+        if (lastMsg) {
+          const senderType = lastMsg.is_from_customer ? "CUSTOMER" : "AGENT";
+          chat.last_message_from = senderType;
+          chat.last_message_type = lastMsg.type ?? null;
+          chat.last_message_media_url = lastMsg.media_url ?? null;
+          if (!chat.last_message && lastMsg.media_url) {
+            chat.last_message = `[${String(lastMsg.type || "MEDIA").toUpperCase()}]`;
+          }
+        }
+        const chatTypeUpper = typeof chat.chat_type === "string" ? chat.chat_type.toUpperCase() : null;
+        if (chatTypeUpper === "GROUP" || chatTypeUpper === "GRUPO") {
+          chat.kind = "GROUP";
+          chat.chat_type = "GROUP";
+        } else if (!chatTypeUpper && chat.kind !== "GROUP") {
+          chat.kind = "DIRECT";
+          chat.chat_type = "CONTACT";
+        } else if (!chatTypeUpper) {
+          chat.chat_type = "CONTACT";
+        }
+        if (!chat.display_name) {
+          chat.display_name = chat.group_name || chat.customer_name || chat.remote_id || chat.external_id || chat.id;
+        }
+      }
+
+      const payload = { items, total: listResp.count ?? items.length };
+      const lastModifiedIso =
+        items.length > 0
+          ? items[0].last_message_at ||
+            items[0].updated_at ||
+            items[0].created_at ||
+            new Date().toISOString()
+          : new Date().toISOString();
+      const envelope = buildCacheEnvelope(payload, lastModifiedIso);
+      await rSet(cacheKey, envelope, TTL_LIST);
+      try {
+        await Promise.all(
+          items
+            .filter((chat: any) => chat?.id && UUID_RE.test(String(chat.id)))
+            .map((chat: any) => rSet(k.chat(chat.id), chat, TTL_CHAT)),
+        );
+      } catch (cacheErr) {
+        console.warn("[livechat/chats] chat cache populate failed:", cacheErr);
+      }
+      applyConditionalHeaders(res, envelope);
+      res.json(payload);
+      console.log("[livechat/chats] response", {
+        cache: "MISS",
+        companyId,
+        inboxId,
+        kind: kindSegment,
+        status: statusSegment,
+        items: payload.items.length,
+        total: payload.total,
+      });
+      endTimer({
+        cache: "MISS",
+        key: cacheKey,
+        items: payload.items.length,
+        total: payload.total,
+        kind: kindSegment,
+        queries: queryLog,
+      });
+      return;
+    } catch (e: any) {
+      const parsedError = normalizeSupabaseError(e, "chat list error");
+      endTimer({ error: parsedError.error, queries: queryLog });
+      return res.status(500).json(parsedError);
+    } finally {
+      endTimer();
     }
-
-    // 12) Cacheia e responde
-    const payload = { items, total: count ?? 0 };
-    await rSet(cacheKey, payload, TTL_LIST);
-    try {
-      await Promise.all(
-        items
-          .filter((chat: any) => chat?.id && UUID_RE.test(String(chat.id)))
-          .map((chat: any) => rSet(k.chat(chat.id), chat, TTL_CHAT)),
-      );
-    } catch (cacheErr) {
-      console.warn("[livechat] chat cache populate failed:", cacheErr);
-    }
-    res.setHeader("X-Cache", "MISS");
-    return res.json(payload);
-  } catch (e: any) {
-    const parsedError = normalizeSupabaseError(e, "chat list error");
-    console.error("[livechat] list error", parsedError);
-    return res.status(500).json(parsedError);
-  }
-});
-
-
-
+  });
   app.post("/livechat/messages", requireAuth, async (req: any, res) => {
     const { chatId, text, senderType = "AGENT" } = req.body || {};
     if (!chatId || !text) {
@@ -518,7 +792,7 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
         .eq("id", chatId);
 
       await rDel(k.chat(chatId));
-      await rDelMatch(k.msgsPrefix(chatId));
+      await clearMessageCache(chatId, (key) => key.includes(":nil:"));
       await rDelMatch(k.listPrefixCompany(req.user?.company_id));
 
       const io = getIO();
@@ -603,7 +877,7 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
     if (errUpsert) return res.status(500).json({ error: errUpsert.message });
 
     await rDel(k.chat(chat.id));
-    await rDelMatch(k.msgsPrefix(chat.id));
+    await clearMessageCache(chat.id);
     await rDelMatch(k.listPrefixCompany(req.user?.company_id));
 
     if (initialMessage) {
@@ -627,7 +901,7 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
         .eq("id", chat.id);
 
       await rDel(k.chat(chat.id));
-      await rDelMatch(k.msgsPrefix(chat.id));
+      await clearMessageCache(chat.id);
 
       await publish(EX_APP, "outbound.request", {
         jobType: "message.send",
@@ -689,86 +963,182 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
   // Listar mensagens (publicas + privadas) com cache
   app.get("/livechat/chats/:id/messages", requireAuth, async (req, res) => {
     const { id } = req.params as { id: string };
-    const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 20;
-    const before = (req.query.before as string) || undefined;
+    const limitParam = Number(req.query.limit);
+    const limit = Number.isFinite(limitParam)
+      ? Math.max(1, Math.min(100, Math.trunc(limitParam)))
+      : 20;
+    const beforeRaw = (req.query.before as string) || undefined;
+    const before = beforeRaw && beforeRaw.trim() ? beforeRaw : undefined;
 
-    const cacheKey = k.msgsKey(id, before, limit);
-    const cached = await rGet<any[]>(cacheKey);
-    if (cached) {
-      const nextBeforeCached = cached.length > 0 ? cached[0].created_at : "";
-      res.setHeader("X-Next-Before", cached.length < limit ? "" : nextBeforeCached);
-      return res.json(cached);
-    }
+    const reqLabel = `livechat.messages#${id}#${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    console.time(reqLabel);
+    const handlerStart = performance.now();
+    const queryLog: QueryTraceEntry[] = [];
+    let timerClosed = false;
+    const endTimer = (meta?: Record<string, unknown>) => {
+      if (!timerClosed) {
+        console.timeEnd(reqLabel);
+        timerClosed = true;
+      }
+      if (meta) {
+        const totalMs = performance.now() - handlerStart;
+        console.log("[livechat/messages]", { chatId: id, durationMs: Number(totalMs.toFixed(2)), ...meta });
+      }
+    };
 
     try {
-      let pubQuery = supabaseAdmin
-        .from("chat_messages")
-        .select(
-          "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
-        )
-        .eq("chat_id", id)
-        .order("created_at", { ascending: false })
-        .limit(limit);
-
-      if (before) pubQuery = pubQuery.lt("created_at", before);
-
-      const { data: pubRows, error: pubErr } = await pubQuery;
-      if (pubErr && (pubErr as any).code === "42P01") {
-        res.setHeader("X-Next-Before", "");
-        return res.json([]);
+      const cacheKey = k.msgsKey(id, before, limit);
+      const cacheSetKey = k.msgsSet(id);
+      const cachedRaw = await rGet<
+        CacheEnvelope<{ items: any[]; nextBefore: string; hasMore: boolean }> |
+        { items: any[]; nextBefore?: string; hasMore?: boolean } |
+        any[]
+      >(cacheKey);
+      if (cachedRaw) {
+        const cachedEnvelope = ensureEnvelope(cachedRaw);
+        const cachedData = Array.isArray(cachedEnvelope.data)
+          ? {
+              items: cachedEnvelope.data,
+              nextBefore:
+                cachedEnvelope.data.length > 0
+                  ? cachedEnvelope.data[0]?.created_at ?? ""
+                  : "",
+              hasMore: cachedEnvelope.data.length > 0,
+            }
+          : cachedEnvelope.data || { items: [], nextBefore: "", hasMore: false };
+        const responseItems = Array.isArray(cachedData)
+          ? cachedData
+          : cachedData.items ?? [];
+        const nextBeforeCached = Array.isArray(cachedData)
+          ? (responseItems.length > 0 ? responseItems[0]?.created_at ?? "" : "")
+          : cachedData.nextBefore ?? "";
+        const hasMoreCached = Array.isArray(cachedData)
+          ? responseItems.length > 0
+          : Boolean(cachedData.hasMore);
+        applyConditionalHeaders(res, cachedEnvelope);
+        res.setHeader("X-Cache", "HIT");
+        res.setHeader("X-Next-Before", hasMoreCached ? nextBeforeCached : "");
+        if (isFreshRequest(req, cachedEnvelope)) {
+          res.status(304).end();
+          endTimer({ cache: "HIT-304", key: cacheKey, queries: queryLog });
+          return;
+        }
+        res.json(responseItems);
+        endTimer({
+          cache: "HIT",
+          key: cacheKey,
+          count: responseItems.length,
+          queries: queryLog,
+        });
+        return;
       }
-      if (pubErr) return res.status(500).json({ error: pubErr.message });
 
-      const mappedPub = (pubRows || []).map((row: any) => ({
-        id: row.id,
-        chat_id: row.chat_id,
-        body: row.content,
-        sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
-        sender_id: row.sender_id || null,
-        created_at: row.created_at,
-        view_status: row.view_status || null,
-        type: row.type || "TEXT",
-        is_private: false,
-        media_url: row.media_url ?? null,
-        remote_participant_id: row.remote_participant_id ?? null,
-        remote_sender_id: row.remote_sender_id ?? null,
-        remote_sender_name: row.remote_sender_name ?? null,
-        remote_sender_phone: row.remote_sender_phone ?? null,
-        remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
-        remote_sender_is_admin: row.remote_sender_is_admin ?? null,
-        replied_message_id: row.replied_message_id ?? null,
-      }));
+      res.setHeader("X-Cache", "MISS");
+
+      const [pubResp, privChatResp] = await Promise.all([
+        traceSupabase(
+          "chat_messages.page",
+          "chat_messages",
+          queryLog,
+          async () => {
+            let query = supabaseAdmin
+              .from("chat_messages")
+              .select(
+                "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+              )
+              .eq("chat_id", id)
+              .order("created_at", { ascending: false })
+              .limit(limit);
+            if (before) query = query.lt("created_at", before);
+            return await query;
+          },
+        ),
+        traceSupabase(
+          "private_chats.single",
+          "private_chats",
+          queryLog,
+          async () =>
+            await supabaseAdmin
+              .from("private_chats")
+              .select("id")
+              .eq("chat_id", id)
+              .maybeSingle(),
+        ),
+      ]);
+
+      if (pubResp.error) {
+        endTimer({ error: pubResp.error.message ?? "messages query error", queries: queryLog });
+        return res.status(500).json({ error: pubResp.error.message ?? "messages query error" });
+      }
+
+      const pubRowsDesc = (pubResp.data || []) as any[];
+      const mappedPubAsc = [...pubRowsDesc]
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map((row: any) => ({
+          id: row.id,
+          chat_id: row.chat_id,
+          body: row.content,
+          sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+          sender_id: row.sender_id || null,
+          created_at: row.created_at,
+          view_status: row.view_status || null,
+          type: row.type || "TEXT",
+          is_private: false,
+          media_url: row.media_url ?? null,
+          remote_participant_id: row.remote_participant_id ?? null,
+          remote_sender_id: row.remote_sender_id ?? null,
+          remote_sender_name: row.remote_sender_name ?? null,
+          remote_sender_phone: row.remote_sender_phone ?? null,
+          remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
+          remote_sender_is_admin: row.remote_sender_is_admin ?? null,
+          replied_message_id: row.replied_message_id ?? null,
+        }));
 
       let mappedPrivate: any[] = [];
-      try {
-        const { data: privChat } = await supabaseAdmin
-          .from("private_chats")
-          .select("id")
-          .eq("chat_id", id)
-          .maybeSingle();
-
-        if (privChat?.id) {
-          const { data: privMsgs } = await supabaseAdmin
-            .from("private_messages")
-            .select("id, content, private_chat_id, sender_id, created_at, media_url")
-            .eq("private_chat_id", privChat.id)
-            .order("created_at", { ascending: true });
-
-          const senderIds = Array.from(
-            new Set((privMsgs || []).map((row: any) => row.sender_id).filter(Boolean)),
-          );
-          const names: Record<string, string> = {};
+      if (privChatResp.error) {
+        console.warn("[livechat/messages] private chat lookup skipped", privChatResp.error);
+      } else if (privChatResp.data?.id) {
+        const privateChatId = privChatResp.data.id as string;
+        const privateMsgsResp = await traceSupabase(
+          "private_messages.list",
+          "private_messages",
+          queryLog,
+          async () =>
+            await supabaseAdmin
+              .from("private_messages")
+              .select("id, content, private_chat_id, sender_id, created_at, media_url")
+              .eq("private_chat_id", privateChatId)
+              .order("created_at", { ascending: true }),
+        );
+        if (privateMsgsResp.error) {
+          console.warn("[livechat/messages] private messages skipped", privateMsgsResp.error);
+        } else {
+          const privRows = (privateMsgsResp.data || []) as any[];
+          const senderIds = toUuidArray(privRows.map((row) => row.sender_id));
+          let senderNames: Record<string, string> = {};
           if (senderIds.length > 0) {
-            const { data: usersList } = await supabaseAdmin
-              .from("users")
-              .select("id, name")
-              .in("id", senderIds);
-            for (const user of usersList || []) {
-              names[(user as any).id] = (user as any).name || (user as any).id;
+            const privUsersResp = await traceSupabase(
+              "users.private_names",
+              "users",
+              queryLog,
+              async () =>
+                await supabaseAdmin
+                  .from("users")
+                  .select("id, name")
+                  .in("id", senderIds),
+            );
+            if (!privUsersResp.error) {
+              senderNames = Object.fromEntries(
+                ((privUsersResp.data || []) as any[]).map((row: any) => [
+                  String(row.id),
+                  row?.name || row?.id || null,
+                ]),
+              );
+            } else {
+              console.warn("[livechat/messages] private sender names skipped", privUsersResp.error);
             }
           }
-
-          mappedPrivate = (privMsgs || []).map((row: any) => ({
+          mappedPrivate = privRows.map((row: any) => ({
             id: row.id,
             chat_id: id,
             body: row.content,
@@ -778,30 +1148,56 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
             view_status: null,
             type: "PRIVATE",
             is_private: true,
-            sender_name: row.sender_id ? names[row.sender_id] || null : null,
+            sender_name: row.sender_id ? senderNames[row.sender_id] || null : null,
             media_url: row.media_url ?? null,
           }));
         }
-      } catch { }
+      }
 
-      const pubAsc = [...mappedPub].sort(
+      const combined = [...mappedPubAsc, ...mappedPrivate].sort(
         (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-      const combined = [...pubAsc, ...mappedPrivate].sort(
-        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-      );
+      const hasMore = pubRowsDesc.length === limit;
+      const nextBefore = hasMore && mappedPubAsc.length > 0 ? mappedPubAsc[0].created_at : "";
 
-      await rSet(cacheKey, combined, TTL_MSGS);
+      res.setHeader("X-Next-Before", hasMore ? nextBefore : "");
 
-      const nextBefore = pubAsc.length > 0 ? pubAsc[0].created_at : "";
-      res.setHeader("X-Next-Before", pubAsc.length < limit ? "" : nextBefore);
-
-      return res.json(combined);
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "messages error" });
+      const payload = {
+        items: combined,
+        nextBefore,
+        hasMore,
+      };
+      const lastModifiedIso =
+        combined.length > 0
+          ? combined[combined.length - 1].created_at
+          : new Date().toISOString();
+      const envelope = buildCacheEnvelope(payload, lastModifiedIso);
+      await rSet(cacheKey, envelope, TTL_MSGS);
+      try {
+        const pipeline = redis.pipeline();
+        pipeline.sadd(cacheSetKey, cacheKey);
+        pipeline.expire(cacheSetKey, TTL_MSGS * 2);
+        await pipeline.exec();
+      } catch (err) {
+        console.warn("[livechat/messages] cache index update failed:", err instanceof Error ? err.message : err);
+      }
+      applyConditionalHeaders(res, envelope);
+      res.json(payload.items);
+      endTimer({
+        cache: "MISS",
+        key: cacheKey,
+        count: payload.items.length,
+        queries: queryLog,
+      });
+      return;
+    } catch (err: any) {
+      const parsedError = normalizeSupabaseError(err, "messages error");
+      endTimer({ error: parsedError.error, queries: queryLog });
+      return res.status(500).json(parsedError);
+    } finally {
+      endTimer();
     }
   });
-  // Enviar mensagem (AGENTE/CLIENTE) — invalida mensagens/listas/chat
   app.post("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
     try {
       const { id: chatId } = req.params as { id: string };
@@ -841,7 +1237,7 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
 
       // invalida caches relacionados
       await rDel(k.chat(chatId));
-      await rDelMatch(k.msgsPrefix(chatId));
+      await clearMessageCache(chatId, (key) => key.includes(":nil:"));
       await rDelMatch(k.listPrefixCompany(req.user?.company_id));
 
       const io = getIO();
@@ -947,7 +1343,7 @@ app.get("/livechat/chats", requireAuth, async (req: any, res) => {
 
       // invalida caches
       await rDel(k.chat(id));
-      await rDelMatch(k.msgsPrefix(id));
+      await clearMessageCache(id);
       await rDelMatch(k.listPrefixCompany(req.user?.company_id));
 
       const mapped = {

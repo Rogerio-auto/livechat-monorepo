@@ -18,6 +18,7 @@ const WAHA_WEBHOOK_TOKEN = process.env.WAHA_WEBHOOK_TOKEN || "";   // Authorizat
 const TTL_LIST = Number(process.env.WAHA_CACHE_TTL_LIST || process.env.CACHE_TTL_LIST || 5);
 const TTL_CHAT = Number(process.env.WAHA_CACHE_TTL_CHAT || process.env.CACHE_TTL_CHAT || 30);
 const TTL_MSGS = Number(process.env.WAHA_CACHE_TTL_MSGS || process.env.CACHE_TTL_MSGS || 5);
+const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
@@ -34,6 +35,40 @@ type InboxLookupRow = {
   provider: string | null;
   instance_id: string | null;
 };
+
+async function getCachedAvatar(
+  companyId: string | null | undefined,
+  candidates: Array<string | null | undefined>,
+): Promise<string | null> {
+  if (!companyId) return null;
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+    try {
+      const cached = await rGet<string>(k.avatar(companyId, trimmed));
+      if (cached) return cached;
+    } catch (error) {
+      console.warn("[WAHA] avatar cache read failed", { companyId, remoteId: trimmed, error });
+    }
+  }
+  return null;
+}
+
+async function cacheAvatar(
+  companyId: string | null | undefined,
+  remoteId: string | null | undefined,
+  url: string | null | undefined,
+): Promise<void> {
+  if (!companyId) return;
+  if (typeof remoteId !== "string" || !remoteId.trim()) return;
+  if (typeof url !== "string" || !url.trim()) return;
+  try {
+    await rSet(k.avatar(companyId, remoteId.trim()), url.trim(), TTL_AVATAR);
+  } catch (error) {
+    console.warn("[WAHA] avatar cache save failed", { companyId, remoteId, error });
+  }
+}
 
 async function loadWahaInboxBySession(session: string): Promise<InboxLookupRow | null> {
   if (!session.trim()) return null;
@@ -305,7 +340,7 @@ async function resolveChatContext(session: string, chatIdentifier: string): Prom
     if (chat.customer_id) {
       const { data: customer } = await supabaseAdmin
         .from("customers")
-        .select("id, name, phone, avatar_url")
+        .select("id, name, phone")
         .eq("id", chat.customer_id)
         .maybeSingle();
       customerRow = (customer as any) || null;
@@ -313,7 +348,7 @@ async function resolveChatContext(session: string, chatIdentifier: string): Prom
   } else {
     const { data: customer } = await supabaseAdmin
       .from("customers")
-      .select("id, name, phone, avatar_url")
+      .select("id, name, phone")
       .eq("company_id", inbox.company_id)
       .eq("phone", parsed.digits)
       .maybeSingle();
@@ -328,6 +363,15 @@ async function resolveChatContext(session: string, chatIdentifier: string): Prom
       .maybeSingle();
     if (!chat) return null;
     chatRow = chat as any;
+  }
+
+  const cachedAvatar = await getCachedAvatar(inbox.company_id, [
+    parsed.jid,
+    `${parsed.digits}@c.us`,
+    parsed.digits,
+  ]);
+  if (customerRow) {
+    customerRow = { ...customerRow, avatar_url: cachedAvatar };
   }
 
   const customerPhoneDigits = customerRow?.phone ? normalizeMsisdn(customerRow.phone) : null;
@@ -844,7 +888,15 @@ export function registerWAHARoutes(app: Express) {
 
     const normalizedStatus = status ? status.trim().toUpperCase() : undefined;
     const searchNeedle = q?.trim().toLowerCase() || undefined;
-    const cacheKey = k.list(inbox.company_id, inbox.id, normalizedStatus, searchNeedle, offset, limit);
+    const cacheKey = k.list(
+      inbox.company_id,
+      inbox.id,
+      normalizedStatus,
+      undefined,
+      searchNeedle,
+      offset,
+      limit,
+    );
 
     const cached = await rGet<{ items: ChatCacheItem[]; total: number }>(cacheKey);
     let payload: { items: ChatCacheItem[]; total: number };
@@ -856,7 +908,7 @@ export function registerWAHARoutes(app: Express) {
       let chatQuery = supabaseAdmin
         .from("chats")
         .select(
-          "id, created_at, status, last_message, last_message_at, last_message_from, last_message_type, last_message_media_url, inbox_id, customer_id, unread_count, assignee_agent",
+          "id, created_at, status, last_message, last_message_at, last_message_from, last_message_type, last_message_media_url, inbox_id, customer_id, unread_count, assignee_agent, remote_id, kind, group_name, group_avatar_url",
           { count: "exact" },
         )
         .eq("inbox_id", inbox.id)
@@ -876,11 +928,11 @@ export function registerWAHARoutes(app: Express) {
       const rows = (chatRows || []) as any[];
       const customerIds = Array.from(new Set(rows.map((row) => row.customer_id).filter(Boolean)));
 
-      const customersById: Record<string, { name: string | null; phone: string | null; avatar_url: string | null }> = {};
+      const customersById: Record<string, { name: string | null; phone: string | null }> = {};
       if (customerIds.length > 0) {
         const { data: customerRows, error: customerErr } = await supabaseAdmin
           .from("customers")
-          .select("id, name, phone, avatar_url")
+          .select("id, name, phone")
           .in("id", customerIds);
         if (customerErr) {
           console.warn("[WAHA] customers lookup failed:", customerErr.message);
@@ -889,10 +941,33 @@ export function registerWAHARoutes(app: Express) {
             customersById[row.id] = {
               name: row.name ?? null,
               phone: row.phone ?? null,
-              avatar_url: row.avatar_url ?? null,
             };
           }
         }
+      }
+
+      let avatarByRemote: Record<string, string | null> = {};
+      const remoteCandidates = Array.from(
+        new Set(
+          rows
+            .map((row) => (typeof row.remote_id === "string" ? row.remote_id.trim() : ""))
+            .filter((value) => Boolean(value)),
+        ),
+      );
+      if (remoteCandidates.length > 0 && inbox.company_id) {
+        const avatarResults = await Promise.all(
+          remoteCandidates.map(async (remote) => {
+            try {
+              const cached = await rGet<string>(k.avatar(inbox.company_id, remote));
+              if (!cached) return [remote, null] as const;
+              return [remote, cached] as const;
+            } catch (error) {
+              console.warn("[WAHA] avatar cache lookup failed", { companyId: inbox.company_id, remote, error });
+              return [remote, null] as const;
+            }
+          }),
+        );
+        avatarByRemote = Object.fromEntries(avatarResults);
       }
 
       const chatIds = rows.map((row) => row.id).filter((id: any) => typeof id === "string");
@@ -917,6 +992,14 @@ export function registerWAHARoutes(app: Express) {
         const customer = row.customer_id ? customersById[row.customer_id] : undefined;
         const last = lastMessageByChat.get(row.id) || null;
         const inferredFrom = last ? (last.is_from_customer ? "CUSTOMER" : "AGENT") : (row.last_message_from ?? null);
+        const remoteId = typeof row.remote_id === "string" ? row.remote_id.trim() : null;
+        const cachedAvatar = remoteId ? avatarByRemote[remoteId] ?? null : null;
+        const isGroup = typeof row.kind === "string" && row.kind.toUpperCase() === "GROUP";
+        const displayName = isGroup ? row.group_name ?? customer?.name ?? null : customer?.name ?? null;
+        const displayPhone = isGroup ? null : customer?.phone ?? null;
+        const customerAvatar = isGroup
+          ? row.group_avatar_url ?? cachedAvatar ?? null
+          : cachedAvatar ?? null;
 
         return {
           id: row.id,
@@ -931,9 +1014,9 @@ export function registerWAHARoutes(app: Express) {
           last_message_view_status: last?.view_status ?? null,
           inbox_id: row.inbox_id ?? inbox.id,
           customer_id: row.customer_id ?? "",
-          customer_name: customer?.name ?? null,
-          customer_phone: customer?.phone ?? null,
-          customer_avatar_url: customer?.avatar_url ?? null,
+          customer_name: displayName,
+          customer_phone: displayPhone,
+          customer_avatar_url: customerAvatar,
           unread_count: row.unread_count ?? null,
           assigned_agent_id: row.assignee_agent ?? null,
           assigned_agent_name: null,
@@ -1016,7 +1099,7 @@ export function registerWAHARoutes(app: Express) {
       const { data: chatRow, error: chatErr } = await supabaseAdmin
         .from("chats")
         .select(
-          "id, created_at, status, last_message, last_message_at, last_message_from, last_message_type, last_message_media_url, inbox_id, customer_id, unread_count, assignee_agent",
+          "id, created_at, status, last_message, last_message_at, last_message_from, last_message_type, last_message_media_url, inbox_id, customer_id, unread_count, assignee_agent, remote_id, kind, group_name, group_avatar_url",
         )
         .eq("id", context.chat.id)
         .maybeSingle();
@@ -1024,7 +1107,7 @@ export function registerWAHARoutes(app: Express) {
 
       const { data: customerRow } = await supabaseAdmin
         .from("customers")
-        .select("id, name, phone, avatar_url")
+        .select("id, name, phone")
         .eq("id", chatRow.customer_id)
         .maybeSingle();
 
@@ -1036,6 +1119,21 @@ export function registerWAHARoutes(app: Express) {
         .limit(1);
 
       lastMessageRow = lastRows?.[0] ?? null;
+
+      const avatarCandidates = [
+        typeof chatRow.remote_id === "string" ? chatRow.remote_id : null,
+        context.remoteChatId,
+        context.customerPhoneDigits ? `${context.customerPhoneDigits}@c.us` : null,
+      ];
+      const cachedAvatar = await getCachedAvatar(context.inbox.company_id, avatarCandidates);
+      const isGroup = typeof chatRow.kind === "string" && chatRow.kind.toUpperCase() === "GROUP";
+      const resolvedAvatar = isGroup
+        ? chatRow.group_avatar_url ?? cachedAvatar ?? context.customer?.avatar_url ?? null
+        : cachedAvatar ?? context.customer?.avatar_url ?? null;
+      const resolvedName = isGroup
+        ? chatRow.group_name ?? context.customer?.name ?? customerRow?.name ?? null
+        : customerRow?.name ?? context.customer?.name ?? null;
+      const resolvedPhone = isGroup ? null : customerRow?.phone ?? context.customer?.phone ?? null;
 
       chatPayload = {
         id: chatRow.id,
@@ -1052,9 +1150,9 @@ export function registerWAHARoutes(app: Express) {
         last_message_view_status: lastMessageRow?.view_status ?? null,
         inbox_id: chatRow.inbox_id ?? context.inbox.id,
         customer_id: chatRow.customer_id ?? "",
-        customer_name: customerRow?.name ?? context.customer?.name ?? null,
-        customer_phone: customerRow?.phone ?? context.customer?.phone ?? null,
-        customer_avatar_url: customerRow?.avatar_url ?? context.customer?.avatar_url ?? null,
+        customer_name: resolvedName,
+        customer_phone: resolvedPhone,
+        customer_avatar_url: resolvedAvatar,
         unread_count: chatRow.unread_count ?? null,
         assigned_agent_id: chatRow.assignee_agent ?? null,
         assigned_agent_name: null,

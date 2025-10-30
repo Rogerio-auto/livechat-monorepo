@@ -169,3 +169,27 @@ export async function fetchWahaChatDetails(
   const encodedChat = encodeURIComponent(remoteChatId);
   return wahaFetch(`/api/${encodedSession}/chats/${encodedChat}`, { headers });
 }
+
+export async function fetchWahaChatPicture(
+  sessionName: string,
+  remoteChatId: string,
+  opts?: { refresh?: boolean },
+): Promise<{ url: string | null }> {
+  const encodedSession = encodeURIComponent(sessionName);
+  const encodedChat = encodeURIComponent(remoteChatId);
+  const refresh = opts?.refresh ? "?refresh=true" : "";
+  return wahaFetch<{ url: string | null }>(`/api/${encodedSession}/chats/${encodedChat}/picture${refresh}`);
+}
+
+export async function fetchWahaContactPicture(
+  sessionName: string,
+  contactId: string,
+  opts?: { refresh?: boolean },
+): Promise<{ url: string | null }> {
+  const params = new URLSearchParams({
+    contactId,
+    session: sessionName,
+  });
+  if (opts?.refresh) params.set("refresh", "true");
+  return wahaFetch<{ url: string | null }>(`/api/contacts/profile-picture?${params.toString()}`);
+}

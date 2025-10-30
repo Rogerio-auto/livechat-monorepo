@@ -9,10 +9,81 @@ volumes:
   rabbitmq-data:
 
 services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - internal
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  worker-inbound:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["node", "dist/worker.js", "inbound"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - internal
+
+  worker-outbound:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["node", "dist/worker.js", "outbound"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - internal
+
+  worker-campaigns:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["node", "dist/worker.campaigns.js"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - internal
+
+  frontend:
+    build:
+      context: ./frontend
+    env_file:
+      - ./frontend/.env.production
+    depends_on:
+      - api
+    ports:
+      - "3002:80"
+    networks:
+      - internal
+    restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    networks: [internal]
+    networks:
+      - internal
     volumes:
       - redis-data:/data
     healthcheck:
@@ -28,7 +99,8 @@ services:
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-app}
     ports:
       - "15672:15672"
-    networks: [internal]
+    networks:
+      - internal
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
@@ -36,70 +108,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
-  backend:
-    build:
-      context: ./backend
-    image: ${REGISTRY:-local}/app-backend:${TAG:-latest}
-    env_file:
-      - ./backend/.env
-    environment:
-      NODE_ENV: production
-    depends_on:
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - internal
-    ports:
-      - "5000:5000"
-    deploy:
-      resources:
-        limits:
-          cpus: "0.75"
-          memory: 768M
-
-  worker-inbound:
-    image: ${REGISTRY:-local}/app-backend:${TAG:-latest}
-    env_file:
-      - ./backend/.env
-    command: ["node", "dist/worker.js", "inbound"]
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-    networks: [internal]
-
-  worker-outbound:
-    image: ${REGISTRY:-local}/app-backend:${TAG:-latest}
-    env_file:
-      - ./backend/.env
-    command: ["node", "dist/worker.js", "outbound"]
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-    networks: [internal]
-
-  worker-campaigns:
-    image: ${REGISTRY:-local}/app-backend:${TAG:-latest}
-    env_file:
-      - ./backend/.env
-    command: ["node", "dist/worker.campaigns.js"]
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-    networks: [internal]
-
-  frontend:
-    build:
-      context: ./frontend
-    image: ${REGISTRY:-local}/app-frontend:${TAG:-latest}
-    env_file:
-      - ./frontend/.env.production
-    depends_on:
-      - backend
-    ports:
-      - "4173:80"

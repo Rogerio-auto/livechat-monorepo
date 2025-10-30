@@ -64,20 +64,34 @@ function initialsFrom(name: string | null | undefined): string {
   return combo ? combo.toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 
+function sanitizeRemoteId(value?: string | null) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/@.*/, "").replace(/[^\w+.-]/g, "");
+}
+
 function getCustomerName(c?: Chat | null) {
   if (!c) return null;
   const kind = (c.kind || "").toString().toUpperCase();
   const remoteId = (c.remote_id || "") as string;
   if (kind === "GROUP" || (remoteId && remoteId.endsWith("@g.us"))) {
     return (
+      (typeof c.display_name === "string" && c.display_name.trim()) ? c.display_name.trim() :
       c.group_name ??
       c.customer_name ??
-      (c as any)?.name ??
-      remoteId ??
+      sanitizeRemoteId(c.display_remote_id ?? c.remote_id ?? c.external_id) ??
+      sanitizeRemoteId(remoteId) ??
       null
     );
   }
-  return c.customer_name ?? (c as any)?.name ?? null;
+  return (
+    (typeof c.display_name === "string" && c.display_name.trim()) ? c.display_name.trim() :
+    c.customer_name ??
+    (c as any)?.name ??
+    sanitizeRemoteId(c.display_remote_id ?? c.remote_id ?? c.external_id) ??
+    null
+  );
 }
 
 function getCustomerPhone(c?: Chat | null) {
@@ -87,13 +101,29 @@ function getCustomerPhone(c?: Chat | null) {
   if (kind === "GROUP" || (remoteId && remoteId.endsWith("@g.us"))) {
     return null;
   }
-  return (
+  const phone =
+    c.display_phone ??
     c.customer_phone ??
     (c as any)?.phone ??
     (c as any)?.cellphone ??
     (c as any)?.celular ??
-    null
-  );
+    null;
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D+/g, "");
+  if (!digits) return String(phone);
+  if (digits.length === 13) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.length === 12) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  return digits;
 }
 
 function getChatLeadId(c?: Chat | null) {
@@ -109,8 +139,13 @@ function buildFallbackCardTitle(c?: Chat | null) {
   const name = getCustomerName(c);
   if (name) return name;
   const phone = getCustomerPhone(c);
-  if (phone) return `Contato ${phone}`;
-  return `Contato ${c?.customer_id?.slice(0, 8) ?? "sem-id"}`;
+  if (phone) return phone;
+  const remote =
+    sanitizeRemoteId(c?.display_remote_id ?? c?.remote_id ?? c?.external_id) ??
+    c?.customer_id ??
+    c?.id ??
+    null;
+  return remote ?? "Chat";
 }
 
 const Spinner = () => (

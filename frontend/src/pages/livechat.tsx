@@ -20,11 +20,49 @@ const API =
 
 const MEDIA_PREVIEW_LABELS: Record<string, string> = {
   IMAGE: "??? Imagem",
-  VIDEO: "?? V�deo",
-  AUDIO: "?? �udio",
+  VIDEO: "?? V?deo",
+  AUDIO: "?? ?udio",
   DOCUMENT: "?? Documento",
   FILE: "?? Documento",
 };
+
+const WHATSAPP_GROUP_SUFFIX = "@g.us";
+const REMOTE_SANITIZE_REGEX = /[^\w+.-]/g;
+
+function sanitizeRemoteIdentifier(value?: string | null) {
+  if (!value) return null;
+  const trimmed = String(value).trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/@.*/, "").replace(REMOTE_SANITIZE_REGEX, "");
+}
+
+function isWhatsappGroupRemote(remote?: string | null) {
+  if (!remote) return false;
+  return String(remote).toLowerCase().endsWith(WHATSAPP_GROUP_SUFFIX);
+}
+
+function formatPhoneDisplay(raw?: string | null) {
+  if (!raw) return null;
+  const digits = String(raw).replace(/\D+/g, "");
+  if (!digits) return null;
+  if (digits.startsWith('55') && digits.length === 13) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+  }
+  if (digits.startsWith('55') && digits.length === 12) {
+    return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+  }
+  if (digits.length === 11) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  }
+  if (raw.trim().startsWith('+')) {
+    return raw.trim();
+  }
+  return digits || raw.trim();
+}
+
 export default function LiveChatPage() {
   const navigate = useNavigate();
   const [chatsState, setChatsState] = useState<Chat[]>([]);
@@ -37,6 +75,9 @@ export default function LiveChatPage() {
     });
   }, []);
   const chats = chatsState;
+  useEffect(() => {
+    console.debug("[livechat] chats state updated", { count: chatsState.length, first: chatsState[0]?.id });
+  }, [chatsState]);
   const [chatsTotal, setChatsTotal] = useState(0);
   const [hasMoreChats, setHasMoreChats] = useState(true);
   const [isChatsLoading, setIsChatsLoading] = useState(false);
@@ -46,6 +87,7 @@ export default function LiveChatPage() {
   const MESSAGES_PAGE_SIZE = 20;
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("OPEN");
+  const [chatScope, setChatScope] = useState<"conversations" | "groups">("conversations");
   const [section, setSection] = useState<LivechatSection>("all");
   const [inboxes, setInboxes] = useState<Inbox[]>([]);
   const [inboxId, setInboxId] = useState<string>("");
@@ -73,9 +115,16 @@ export default function LiveChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const currentChatIdRef = useRef<string | null>(null);
-  const messagesCacheRef = useRef<Record<string, Message[]>>({});
+  const chatsTotalRef = useRef(0);
+  const hasMoreChatsRef = useRef(true);
+  const messagesCache = useMemo(() => new Map<string, Message[]>(), []);
   const messagesRequestRef = useRef<symbol | null>(null);
   const [messageStatuses, setMessageStatuses] = useState<Record<string, string | null>>({});
+  const chatsAbortRef = useRef<AbortController | null>(null);
+  const chatsCacheMetaRef = useRef<Record<string, { etag: string | null; lastModified: string | null }>>({});
+  const chatsStoreRef = useRef<Record<string, { items: Chat[]; total: number; offset: number; hasMore: boolean }>>({});
+  const currentChatsKeyRef = useRef<string | null>(null);
+  const chatsReqIdRef = useRef(0);
 
   const activeInbox = useMemo(() => {
     if (!inboxId) {
@@ -86,13 +135,15 @@ export default function LiveChatPage() {
 
   const isGroupChat = useCallback((chat: Chat): boolean => {
     if (!chat) return false;
+    const chatType = (chat as any)?.chat_type
+      ? String((chat as any).chat_type).toUpperCase()
+      : null;
+    if (chatType === "GROUP" || chatType === "GRUPO") return true;
+    if (typeof chat.is_group === "boolean") return chat.is_group;
     const kind = (chat.kind || "").toString().toUpperCase();
     if (kind === "GROUP") return true;
-    const maybeFlag = (chat as any)?.is_group;
-    if (typeof maybeFlag === "boolean") return maybeFlag;
-    const remoteId = (chat.remote_id || chat.external_id || "").toString().toLowerCase();
-    if (remoteId && remoteId.endsWith("@g.us")) return true;
-    return false;
+    const remoteCandidate = chat.display_remote_id || chat.remote_id || chat.external_id || null;
+    return isWhatsappGroupRemote(remoteCandidate);
   }, []);
 
   const mediaItems = useMemo(() => {
@@ -123,36 +174,148 @@ export default function LiveChatPage() {
     return indexMap;
   }, [mediaItems]);
 
+  const normalizeChat = useCallback((raw: any): Chat => {
+    if (!raw) return raw as Chat;
+    const base: any = { ...raw };
+
+    base.last_message = base.last_message ?? null;
+    base.last_message_at = base.last_message_at ?? base.created_at ?? null;
+    base.last_message_from = base.last_message_from ?? null;
+    base.last_message_type = base.last_message_type ?? null;
+    base.last_message_media_url = base.last_message_media_url ?? null;
+
+    const remoteCandidate = base.remote_id ?? base.external_id ?? null;
+    base.remote_id = typeof remoteCandidate === "string" ? remoteCandidate : base.remote_id ?? null;
+
+    const chatType = typeof base.chat_type === "string" ? base.chat_type.toUpperCase() : null;
+    base.chat_type = chatType;
+
+    base.group_name = base.group_name ?? null;
+    base.group_avatar_url = base.group_avatar_url ?? null;
+    base.customer_avatar_url = base.customer_avatar_url ?? null;
+    base.customer_name = base.customer_name ?? (base as any)?.name ?? null;
+    base.customer_phone = base.customer_phone ?? (base as any)?.phone ?? (base as any)?.cellphone ?? (base as any)?.celular ?? null;
+
+    const cleanedRemote = sanitizeRemoteIdentifier(base.display_remote_id ?? base.remote_id ?? base.external_id ?? null);
+    base.display_remote_id = cleanedRemote;
+
+    const explicitGroup =
+      typeof base.is_group === "boolean"
+        ? base.is_group
+        : false;
+    const chatTypeSuggestsGroup = chatType === "GROUP" || chatType === "GRUPO";
+    const kindSuggestsGroup = typeof base.kind === "string" && base.kind.toUpperCase() === "GROUP";
+    const remoteSuggestsGroup = isWhatsappGroupRemote(base.remote_id ?? base.external_id ?? null);
+    const inferredGroup = Boolean(explicitGroup || kindSuggestsGroup || remoteSuggestsGroup);
+    const finalIsGroup = inferredGroup || chatTypeSuggestsGroup;
+    base.is_group = finalIsGroup;
+    base.kind = finalIsGroup
+      ? "GROUP"
+      : (typeof base.kind === "string" && base.kind.trim()) ? base.kind : "DIRECT";
+    if (finalIsGroup && !chatTypeSuggestsGroup) {
+      base.chat_type = "GROUP";
+    }
+    if (!finalIsGroup && chatTypeSuggestsGroup) {
+      base.kind = "GROUP";
+    }
+
+    const formattedPhone = finalIsGroup ? null : formatPhoneDisplay(base.display_phone ?? base.customer_phone ?? cleanedRemote);
+    base.display_phone = formattedPhone;
+    if (!base.customer_phone && formattedPhone) {
+      base.customer_phone = formattedPhone;
+    }
+
+    const nameCandidates = [
+      base.display_name?.trim(),
+      finalIsGroup ? base.group_name : null,
+      base.customer_name,
+      formattedPhone,
+      cleanedRemote,
+      base.customer_id,
+      base.id,
+    ].filter((value) => typeof value === "string" && value.trim() !== "") as string[];
+
+    const resolvedName = nameCandidates.length > 0 ? nameCandidates[0] : null;
+    base.display_name = resolvedName;
+    if (!resolvedName && base.customer_name) {
+      base.display_name = base.customer_name;
+    }
+    if (finalIsGroup && !base.group_name && base.display_name) {
+      base.group_name = base.display_name;
+    }
+
+    const maybeGroupSize = base.group_size ?? (raw as any)?.group_size ?? (raw as any)?.participants_count ?? null;
+    base.group_size = typeof maybeGroupSize === "number" && Number.isFinite(maybeGroupSize) ? maybeGroupSize : null;
+
+    return base as Chat;
+  }, []);
+
+  const normalizeChats = useCallback((list: any[]): Chat[] => list.map((item) => normalizeChat(item)), [normalizeChat]);
+
+  const updateChatSnapshots = useCallback((updatedChat: Chat) => {
+    const entries = Object.entries(chatsStoreRef.current);
+    if (entries.length === 0) return;
+    entries.forEach(([key, snapshot]) => {
+      const idx = snapshot.items.findIndex((item) => item.id === updatedChat.id);
+      if (idx === -1) return;
+      const nextItems = [...snapshot.items];
+      nextItems[idx] = updatedChat;
+      nextItems.sort(
+        (a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime(),
+      );
+      chatsStoreRef.current[key] = {
+        ...snapshot,
+        items: nextItems,
+      };
+    });
+  }, []);
+
+  const filteredChats = useMemo(() => {
+    return chats.filter((chat) => (chatScope === "groups" ? isGroupChat(chat) : !isGroupChat(chat)));
+  }, [chats, chatScope, isGroupChat]);
+
   const chatListItems = useMemo<ChatListItem[]>(() => {
-    return chats.map((chat) => {
+    return filteredChats.map((chat) => {
       const normalizedType = (chat.last_message_type || "").toUpperCase();
       const mediaLabel = chat.last_message_media_url
         ? MEDIA_PREVIEW_LABELS[normalizedType] ?? MEDIA_PREVIEW_LABELS.DOCUMENT
         : null;
-      const group = isGroupChat(chat);
-      const baseName = group
-        ? chat.group_name || chat.customer_name || chat.remote_id || chat.id
-        : chat.customer_name || chat.customer_phone || chat.customer_id || chat.id;
+      const isGroup = isGroupChat(chat);
       const lastMessageText = mediaLabel
         ? mediaLabel
         : chat.last_message
-          ? `${chat.last_message_from === "AGENT" ? "Vocé: " : ""}${chat.last_message}`
+          ? `${chat.last_message_from === "AGENT" ? "Voc�: " : ""}${chat.last_message}`
           : null;
-
-      const photoUrl = group
+      const displayName = (chat.display_name && chat.display_name.trim())
+        ? chat.display_name.trim()
+        : isGroup
+          ? chat.group_name || sanitizeRemoteIdentifier(chat.display_remote_id || chat.remote_id || chat.external_id) || chat.id
+          : chat.customer_name || chat.display_phone || sanitizeRemoteIdentifier(chat.display_remote_id || chat.remote_id || chat.external_id) || chat.id;
+      const photoUrl = isGroup
         ? chat.group_avatar_url || (chat as any)?.photo_url || null
         : (chat as any)?.photo_url ?? (chat as any)?.customer_photo_url ?? null;
+
       return {
         ...(chat as ChatListItem),
         id: chat.id,
-        name: baseName,
+        name: displayName,
         last_message: lastMessageText,
         last_message_at: chat.last_message_at ?? chat.created_at ?? null,
         photo_url: photoUrl,
-        isGroup: group,
+        isGroup,
+        group_size: chat.group_size ?? null,
       };
     });
-  }, [chats, isGroupChat]);
+  }, [filteredChats, isGroupChat]);
+
+  useEffect(() => {
+    chatsTotalRef.current = chatsTotal;
+  }, [chatsTotal]);
+
+  useEffect(() => {
+    hasMoreChatsRef.current = hasMoreChats;
+  }, [hasMoreChats]);
+
 
   // Contacts state
 
@@ -162,6 +325,22 @@ export default function LiveChatPage() {
 
 
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
+  useEffect(() => {
+    if (!currentChat) {
+      const first = filteredChats[0] ?? null;
+      if (first) {
+        setCurrentChat(first);
+        setSelectedChat(first);
+      }
+      return;
+    }
+    const currentMatches = chatScope === "groups" ? isGroupChat(currentChat) : !isGroupChat(currentChat);
+    if (!currentMatches) {
+      const fallback = filteredChats[0] ?? null;
+      setCurrentChat(fallback);
+      setSelectedChat(fallback);
+    }
+  }, [chatScope, filteredChats, currentChat, isGroupChat]);
 
 
   // lista de etapas (colunas do Kanban)
@@ -242,9 +421,6 @@ export default function LiveChatPage() {
   }, []);
 
 
-  // controla concorrncia de carregamentos de chats
-  const chatsReqIdRef = useRef(0);
-  const chatsAbortRef = useRef<AbortController | null>(null);
 
   // debounce simples
   function useDebounced<T>(value: T, delay = 300) {
@@ -523,7 +699,7 @@ export default function LiveChatPage() {
   }, [currentChat?.id]);
 
   // helper: empurra o chat pro topo com base no update
-function bumpChatToTop(update: {
+const bumpChatToTop = useCallback((update: {
   chatId: string;
   last_message?: string | null;
   last_message_at?: string | null;
@@ -536,110 +712,66 @@ function bumpChatToTop(update: {
   group_avatar_url?: string | null;
   remote_id?: string | null;
   kind?: string | null;
-  status?: string; 
-}) {
+  status?: string;
+}) => {
   setChats((prev) => {
     const arr = [...prev];
     const idx = arr.findIndex((c) => c.id === update.chatId);
     if (idx === -1) return prev;
 
-    const curr = arr[idx];
-    const patched = {
-      ...curr,
-      last_message: update.last_message ?? curr.last_message,
-      last_message_at: update.last_message_at ?? curr.last_message_at,
-      last_message_from: update.last_message_from ?? curr.last_message_from,
-      last_message_type:
-        Object.prototype.hasOwnProperty.call(update, "last_message_type")
-          ? update.last_message_type ?? curr.last_message_type ?? null
-          : curr.last_message_type ?? null,
-      last_message_media_url:
-        Object.prototype.hasOwnProperty.call(update, "last_message_media_url")
-          ? update.last_message_media_url ?? curr.last_message_media_url ?? null
-          : curr.last_message_media_url ?? null,
-      customer_name:
-        Object.prototype.hasOwnProperty.call(update, "customer_name")
-          ? update.customer_name ?? curr.customer_name ?? null
-          : curr.customer_name ?? null,
-      customer_phone:
-        Object.prototype.hasOwnProperty.call(update, "customer_phone")
-          ? update.customer_phone ?? curr.customer_phone ?? null
-          : curr.customer_phone ?? null,
-      group_name:
-        Object.prototype.hasOwnProperty.call(update, "group_name")
-          ? update.group_name ?? curr.group_name ?? null
-          : curr.group_name ?? null,
-      group_avatar_url:
-        Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
-          ? update.group_avatar_url ?? curr.group_avatar_url ?? null
-          : curr.group_avatar_url ?? null,
-      remote_id:
-        Object.prototype.hasOwnProperty.call(update, "remote_id")
-          ? update.remote_id ?? curr.remote_id ?? null
-          : curr.remote_id ?? null,
-      kind: update.kind ?? curr.kind ?? null,
-      status: update.status ?? curr.status,
-    };
-    arr[idx] = patched;
+    const current = arr[idx];
+    const mergedRaw = {
+      ...current,
+      last_message: update.last_message ?? current.last_message ?? null,
+      last_message_at: update.last_message_at ?? current.last_message_at ?? current.created_at ?? null,
+      last_message_from: update.last_message_from ?? current.last_message_from ?? null,
+      last_message_type: Object.prototype.hasOwnProperty.call(update, "last_message_type")
+        ? update.last_message_type ?? current.last_message_type ?? null
+        : current.last_message_type ?? null,
+      last_message_media_url: Object.prototype.hasOwnProperty.call(update, "last_message_media_url")
+        ? update.last_message_media_url ?? current.last_message_media_url ?? null
+        : current.last_message_media_url ?? null,
+      customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
+        ? update.customer_name ?? current.customer_name ?? null
+        : current.customer_name ?? null,
+      customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
+        ? update.customer_phone ?? current.customer_phone ?? null
+        : current.customer_phone ?? null,
+      group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
+        ? update.group_name ?? current.group_name ?? null
+        : current.group_name ?? null,
+      group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
+        ? update.group_avatar_url ?? current.group_avatar_url ?? null
+        : current.group_avatar_url ?? null,
+      remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
+        ? update.remote_id ?? current.remote_id ?? null
+        : current.remote_id ?? null,
+      kind: update.kind ?? current.kind ?? null,
+      status: update.status ?? current.status,
+    } as Chat;
 
-    arr.sort((a, b) => {
-      const ta = new Date(a.last_message_at || a.created_at).getTime();
-      const tb = new Date(b.last_message_at || b.created_at).getTime();
-      return tb - ta;
-    });
+    const normalized = normalizeChat(mergedRaw);
+    arr[idx] = normalized;
+    arr.sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
+    updateChatSnapshots(normalized);
     return arr;
   });
 
-  setSelectedChat((prev) =>
-    prev && prev.id === update.chatId
-      ? {
-          ...prev,
-          ...update,
-        }
-      : prev,
-  );
+  setSelectedChat((prev) => {
+    if (prev && prev.id === update.chatId) {
+      return normalizeChat({ ...prev, ...update });
+    }
+    return prev;
+  });
 
-  setCurrentChat((prev) =>
-    prev && prev.id === update.chatId
-      ? {
-          ...prev,
-          last_message: update.last_message ?? prev.last_message,
-          last_message_at: update.last_message_at ?? prev.last_message_at,
-          last_message_from: update.last_message_from ?? prev.last_message_from,
-          last_message_type:
-            Object.prototype.hasOwnProperty.call(update, "last_message_type")
-              ? update.last_message_type ?? prev.last_message_type ?? null
-              : prev.last_message_type ?? null,
-          last_message_media_url:
-            Object.prototype.hasOwnProperty.call(update, "last_message_media_url")
-              ? update.last_message_media_url ?? prev.last_message_media_url ?? null
-              : prev.last_message_media_url ?? null,
-          customer_name:
-            Object.prototype.hasOwnProperty.call(update, "customer_name")
-              ? update.customer_name ?? prev.customer_name ?? null
-              : prev.customer_name ?? null,
-          customer_phone:
-            Object.prototype.hasOwnProperty.call(update, "customer_phone")
-              ? update.customer_phone ?? prev.customer_phone ?? null
-              : prev.customer_phone ?? null,
-          group_name:
-            Object.prototype.hasOwnProperty.call(update, "group_name")
-              ? update.group_name ?? prev.group_name ?? null
-              : prev.group_name ?? null,
-          group_avatar_url:
-            Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
-              ? update.group_avatar_url ?? prev.group_avatar_url ?? null
-              : prev.group_avatar_url ?? null,
-          remote_id:
-            Object.prototype.hasOwnProperty.call(update, "remote_id")
-              ? update.remote_id ?? prev.remote_id ?? null
-              : prev.remote_id ?? null,
-          kind: update.kind ?? prev.kind ?? null,
-          status: update.status ?? prev.status,
-        }
-      : prev,
-  );
-}
+  setCurrentChat((prev) => {
+    if (prev && prev.id === update.chatId) {
+      return normalizeChat({ ...prev, ...update });
+    }
+    return prev;
+  });
+}, [normalizeChat, updateChatSnapshots]);
+
 
 
 
@@ -648,7 +780,7 @@ function bumpChatToTop(update: {
     const s = socketRef.current;
     if (!s) return;
 
-    // Novo contrato (relay j� emite tamb�m os legados)
+    // Novo contrato (relay j? emite tamb?m os legados)
     const handleChatUpdated = (u: any) => bumpChatToTop(u);
     const handleMessageActivity = (m: any) => {
       bumpChatToTop({
@@ -676,7 +808,7 @@ function bumpChatToTop(update: {
 
     s.on("chat:updated", handleChatUpdated);
     s.on("message:new", handleMessageActivity);
-    // (Opcional) se voc� quiser tratar diferente:
+    // (Opcional) se voc? quiser tratar diferente:
     s.on("message:inbound", handleMessageActivity);
     s.on("message:outbound", handleMessageActivity);
     s.on("message:status", handleMessageStatus);
@@ -761,24 +893,6 @@ const scrollToBottom = useCallback(
     return [...list].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   };
 
-  const normalizeChat = useCallback((raw: any): Chat => {
-    if (!raw) return raw as Chat;
-    const base = { ...raw };
-    base.last_message = base.last_message ?? null;
-    base.last_message_at = base.last_message_at ?? null;
-    base.last_message_from = base.last_message_from ?? null;
-    base.last_message_type = base.last_message_type ?? null;
-    base.last_message_media_url = base.last_message_media_url ?? null;
-    base.kind = base.kind ?? null;
-    base.remote_id = base.remote_id ?? base.external_id ?? null;
-    base.group_name = base.group_name ?? null;
-    base.group_avatar_url = base.group_avatar_url ?? null;
-    base.customer_avatar_url = base.customer_avatar_url ?? null;
-    return base as Chat;
-  }, []);
-
-  const normalizeChats = useCallback((list: any[]): Chat[] => list.map((item) => normalizeChat(item)), [normalizeChat]);
-
   const normalizeMessage = useCallback((raw: any): Message => {
     if (!raw) return raw as Message;
     return {
@@ -810,22 +924,22 @@ const scrollToBottom = useCallback(
     (msg: Message) => {
       const normalized = normalizeMessage(msg);
       const chatId = normalized.chat_id;
-      const existing = messagesCacheRef.current[chatId] || [];
+      const existing = messagesCache.get(chatId) ?? [];
       if (existing.some((item) => item.id === normalized.id)) return;
       const updated = sortMessagesAsc([...existing, normalized]);
-      messagesCacheRef.current[chatId] = updated;
+      messagesCache.set(chatId, updated);
       if (currentChatIdRef.current === chatId) {
         setMessages(updated);
         scrollToBottom();
       }
     },
-    [normalizeMessage, scrollToBottom, setMessages],
+    [normalizeMessage, scrollToBottom, setMessages, messagesCache],
   );
 
   const updateMessageStatusInCache = useCallback(
     (payload: { chatId?: string | null; messageId?: string | null; view_status?: string | null }) => {
       if (!payload?.chatId || !payload?.messageId) return;
-      const cached = messagesCacheRef.current[payload.chatId] || [];
+      const cached = messagesCache.get(payload.chatId) ?? [];
       if (cached.length === 0) return;
       let changed = false;
       const next = cached.map((msg) => {
@@ -835,12 +949,12 @@ const scrollToBottom = useCallback(
         return { ...msg, view_status: payload.view_status ?? null };
       });
       if (!changed) return;
-      messagesCacheRef.current[payload.chatId] = next;
+      messagesCache.set(payload.chatId, next);
       if (currentChatIdRef.current === payload.chatId) {
         setMessages(next);
       }
     },
-    [setMessages],
+    [setMessages, messagesCache],
   );
 
   useEffect(() => {
@@ -893,69 +1007,113 @@ const scrollToBottom = useCallback(
       s.off("chat:updated", onChatUpdated);
       s.disconnect();
     };
-  }, [appendMessageToCache, updateMessageStatusInCache]);
+  }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop]);
 
   const loadChats = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
+      const activeKindParam = chatScope === "groups" ? "GROUP" : "DIRECT";
+      const statusKey = status && status !== "ALL" ? status : "ALL";
+      const inboxKey = inboxId || "*";
+      const searchKey = debouncedQ.trim();
+      const cacheKey = JSON.stringify({
+        inbox: inboxKey,
+        status: statusKey,
+        kind: activeKindParam,
+        q: searchKey || "",
+        limit: PAGE_SIZE,
+      });
 
-      // se for reset, aborta a anterior e zera offsets
-      if (reset) {
-        try { chatsAbortRef.current?.abort(); } catch { }
+      const metaEntry = chatsCacheMetaRef.current[cacheKey];
+      const effectiveReset = reset || currentChatsKeyRef.current !== cacheKey;
+
+      if (effectiveReset) {
+        try {
+          chatsAbortRef.current?.abort();
+        } catch {}
         chatsAbortRef.current = new AbortController();
-        setChats([]);
         chatsOffsetRef.current = 0;
-        setHasMoreChats(true);
-      } else {
-        // paginao/infinite scroll mantm o gate pra no duplicar
-        if (isChatsLoadingRef.current) {
-          return { items: chatsRef.current, total: chatsTotal };
-        }
+      } else if (isChatsLoadingRef.current) {
+        return { items: chatsRef.current, total: chatsTotalRef.current };
       }
 
       const myReqId = ++chatsReqIdRef.current;
-      const controller = reset ? chatsAbortRef.current! : new AbortController();
+      const controller = effectiveReset ? chatsAbortRef.current! : new AbortController();
+      const previousOffsetValue = chatsOffsetRef.current;
+      const previousHasMoreValue = hasMoreChatsRef.current;
 
       isChatsLoadingRef.current = true;
       setIsChatsLoading(true);
 
-      const offset = reset ? 0 : chatsOffsetRef.current;
+      const offset = effectiveReset ? 0 : chatsOffsetRef.current;
       const params: any = {
         limit: PAGE_SIZE,
         offset,
-        q: debouncedQ.trim() || undefined, // <-- use debouncedQ
+        q: searchKey || undefined,
         status,
         inboxId: inboxId || undefined,
+        kind: activeKindParam,
       };
 
       const applyResult = (items: Chat[], total: number) => {
         const normalizedItems = normalizeChats(items);
+        let nextList = normalizedItems;
+        console.debug("[livechat] applyResult", {
+          cacheKey,
+          rawCount: items?.length ?? 0,
+          normalizedCount: normalizedItems.length,
+          total,
+          effectiveReset,
+        });
+
         if (myReqId !== chatsReqIdRef.current) {
-          return { items: chatsRef.current, total: chatsTotal };
+          console.debug("[livechat] applyResult aborted (stale req)", { myReqId, currentReqId: chatsReqIdRef.current });
+          return { items: chatsRef.current, total: chatsTotalRef.current };
         }
 
         setChats((prev) => {
-          if (reset) return normalizedItems;
+          if (effectiveReset) {
+            nextList = [...normalizedItems].sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
+            console.debug("[livechat] setChats(reset)", { nextCount: nextList.length });
+            return nextList;
+          }
           const map = new Map<string, Chat>();
           for (const c of prev) map.set(c.id, c);
           for (const c of normalizedItems) map.set(c.id, c);
-          return Array.from(map.values());
+          nextList = Array.from(map.values());
+          nextList.sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
+          console.debug("[livechat] setChats(merge)", { prevCount: prev.length, nextCount: nextList.length });
+          return nextList;
         });
 
-        const baseOffset = reset ? 0 : offset;
+        const baseOffset = effectiveReset ? 0 : offset;
         const nextOffset = baseOffset + normalizedItems.length;
         chatsOffsetRef.current = nextOffset;
 
-        setChatsTotal(total ?? 0);
+        setChatsTotal(total ?? nextList.length);
         const more = total != null
           ? nextOffset < total && normalizedItems.length === PAGE_SIZE
           : normalizedItems.length === PAGE_SIZE;
         setHasMoreChats(more);
 
-        return { items: normalizedItems, total };
+        chatsStoreRef.current[cacheKey] = {
+          items: nextList,
+          total: total ?? nextList.length,
+          offset: chatsOffsetRef.current,
+          hasMore: more,
+        };
+        currentChatsKeyRef.current = cacheKey;
+        console.debug("[livechat] store updated", {
+          cacheKey,
+          storedCount: nextList.length,
+          total: total ?? nextList.length,
+          hasMore: more,
+          offset: chatsOffsetRef.current,
+        });
+
+        return { items: nextList, total };
       };
 
       try {
-        // tenta via socket com timeout
         const s = socketRef.current;
         if (s?.connected) {
           const ack = await new Promise<{ items: Chat[]; total: number } | null>((resolve) => {
@@ -967,46 +1125,160 @@ const scrollToBottom = useCallback(
               settled = true;
               window.clearTimeout(timer);
               if (!resp?.ok) return resolve(null);
-              resolve({ items: (resp.items || []) as Chat[], total: (resp.total ?? (resp.items || []).length) as number });
+              resolve({
+                items: (resp.items || []) as Chat[],
+                total: (resp.total ?? (resp.items || []).length) as number,
+              });
             });
           });
-          if (ack) return applyResult(ack.items || [], ack.total || 0);
+          if (ack) {
+            if (effectiveReset) currentChatsKeyRef.current = cacheKey;
+            return applyResult(ack.items || [], ack.total || 0);
+          }
         }
 
-        // fallback HTTP (com abort)
         const qs = new URLSearchParams();
         if (params.limit) qs.set("limit", String(params.limit));
         if (params.offset) qs.set("offset", String(params.offset));
         if (params.q) qs.set("q", String(params.q));
         if (params.status && params.status !== "ALL") qs.set("status", String(params.status));
         if (params.inboxId) qs.set("inboxId", String(params.inboxId));
+        if (params.kind) qs.set("kind", String(params.kind));
 
-        const resp = await fetchJson<{ items: Chat[]; total: number }>(
-          `${API}/livechat/chats?${qs.toString()}`,
-          { signal: controller.signal } as any
-        );
+        const headers = new Headers();
+        headers.set("Accept", "application/json");
+        const token = getAccessToken();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+        if (offset === 0 && metaEntry?.etag) {
+          headers.set("If-None-Match", metaEntry.etag);
+        }
+        if (offset === 0 && metaEntry?.lastModified) {
+          headers.set("If-Modified-Since", metaEntry.lastModified);
+        }
 
-        return applyResult(resp.items || [], resp.total || 0);
+        const url = `${API}/livechat/chats?${qs.toString()}`;
+        console.debug("[livechat] fetch chats init", { url, headers });
+        const response = await fetch(url, {
+          method: "GET",
+          headers,
+          credentials: "include",
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        console.debug("[livechat] fetch chats response", { status: response.status, url });
+
+        if (response.status === 304) {
+          if (offset === 0) {
+            const etagHeader = response.headers.get("ETag");
+            const lastModHeader = response.headers.get("Last-Modified");
+            if (etagHeader || lastModHeader) {
+              chatsCacheMetaRef.current[cacheKey] = {
+                etag: etagHeader || metaEntry?.etag || null,
+                lastModified: lastModHeader || metaEntry?.lastModified || null,
+              };
+            }
+          }
+          if (effectiveReset) {
+            const snapshot = chatsStoreRef.current[cacheKey];
+            if (snapshot) {
+              console.debug("[livechat] using snapshot after 304", { cacheKey, count: snapshot.items.length });
+              setChats(snapshot.items);
+              setChatsTotal(snapshot.total);
+              setHasMoreChats(snapshot.hasMore);
+              chatsOffsetRef.current = snapshot.offset;
+              currentChatsKeyRef.current = cacheKey;
+            } else {
+              console.debug("[livechat] 304 without snapshot, retrying", { cacheKey });
+              const retryHeaders = new Headers(headers);
+              retryHeaders.delete("If-None-Match");
+              retryHeaders.delete("If-Modified-Since");
+              retryHeaders.set("Cache-Control", "no-cache");
+
+              const retryResponse = await fetch(url, {
+                method: "GET",
+                headers: retryHeaders,
+                credentials: "include",
+                cache: "no-store",
+              });
+              console.debug("[livechat] retry response", { status: retryResponse.status });
+
+              if (retryResponse.status === 401) {
+                navigate("/login");
+                throw new Error("Unauthorized");
+              }
+
+              if (!retryResponse.ok) {
+                let retryPayload: any = null;
+                try {
+                  retryPayload = await retryResponse.json();
+                } catch {
+                  retryPayload = null;
+                }
+                const retryMessage = retryPayload?.error || `HTTP ${retryResponse.status}`;
+                throw new Error(retryMessage);
+              }
+
+              const retryData = (await retryResponse.json()) as { items: Chat[]; total: number };
+              const retryEtag = retryResponse.headers.get("ETag");
+              const retryLastMod = retryResponse.headers.get("Last-Modified");
+              chatsCacheMetaRef.current[cacheKey] = {
+                etag: retryEtag || null,
+                lastModified: retryLastMod || null,
+              };
+              currentChatsKeyRef.current = cacheKey;
+              console.debug("[livechat] retry apply result", { items: retryData.items?.length ?? 0, total: retryData.total });
+              return applyResult(retryData.items || [], retryData.total ?? 0);
+            }
+          }
+          return { items: chatsRef.current, total: chatsTotalRef.current };
+        }
+
+        if (response.status === 401) {
+          navigate("/login");
+          throw new Error("Unauthorized");
+        }
+
+        if (!response.ok) {
+          let payload: any = null;
+          try {
+            payload = await response.json();
+          } catch {}
+          const message = payload?.error || `HTTP ${response.status}`;
+          throw new Error(message);
+        }
+
+        const data = (await response.json()) as { items: Chat[]; total: number };
+        console.debug("[livechat] fetch chats ok", { items: data.items?.length ?? 0, total: data.total });
+        const etagHeader = response.headers.get("ETag");
+        const lastModHeader = response.headers.get("Last-Modified");
+        chatsCacheMetaRef.current[cacheKey] = {
+          etag: etagHeader || null,
+          lastModified: lastModHeader || null,
+        };
+
+        if (effectiveReset) currentChatsKeyRef.current = cacheKey;
+
+        return applyResult(data.items || [], data.total ?? 0);
       } catch (error: any) {
-        // se foi abort, apenas ignore
+        console.error("[livechat] loadChats error", error);
         if (error?.name === "AbortError") {
-          return { items: chatsRef.current, total: chatsTotal };
+          return { items: chatsRef.current, total: chatsTotalRef.current };
         }
         console.error("Falha ao carregar chats", error);
-        return { items: chatsRef.current, total: chatsTotal };
+        if (myReqId === chatsReqIdRef.current) {
+          chatsOffsetRef.current = previousOffsetValue;
+          setHasMoreChats(previousHasMoreValue);
+        }
+        return { items: chatsRef.current, total: chatsTotalRef.current };
       } finally {
         if (myReqId === chatsReqIdRef.current) {
           isChatsLoadingRef.current = false;
           setIsChatsLoading(false);
         }
-        // se no for reset, controller  local e no reaproveitado
       }
     },
-    [API, debouncedQ, status, inboxId, PAGE_SIZE, normalizeChats, chatsTotal]
+    [API, debouncedQ, status, inboxId, PAGE_SIZE, normalizeChats, navigate, chatScope],
   );
-
-
-
 
   const loadMessages = useCallback(
     async (chatId: string, options: { reset?: boolean; before?: string | null } = {}) => {
@@ -1081,10 +1353,10 @@ const scrollToBottom = useCallback(
         );
         const nextBefore = hasMore ? (headerCursor ?? fallbackCursor) : null;
 
-        const existing = messagesCacheRef.current[chatId] || [];
+        const existing = messagesCache.get(chatId) ?? [];
         const prevCount = existing.length;
         const combined = reset ? normalizedList : mergeMessagesAscending(existing, normalizedList);
-        messagesCacheRef.current[chatId] = combined;
+        messagesCache.set(chatId, combined);
         messagesMetaRef.current[chatId] = { nextBefore, hasMore };
 
         const isLatest = messagesRequestRef.current === requestId;
@@ -1107,7 +1379,7 @@ const scrollToBottom = useCallback(
         throw error;
       }
     },
-    [API, navigate, scrollToBottom, setMessagesHasMore, normalizeMessagesList],
+    [API, navigate, scrollToBottom, setMessagesHasMore, normalizeMessagesList, messagesCache],
   );
 
 
@@ -1185,8 +1457,35 @@ const scrollToBottom = useCallback(
 
 
   useEffect(() => {
+    const activeKindParam = chatScope === "groups" ? "GROUP" : "DIRECT";
+    const statusKey = status && status !== "ALL" ? status : "ALL";
+    const inboxKey = inboxId || "*";
+    const searchKey = debouncedQ.trim();
+    const cacheKey = JSON.stringify({
+      inbox: inboxKey,
+      status: statusKey,
+      kind: activeKindParam,
+      q: searchKey || "",
+      limit: PAGE_SIZE,
+    });
+
+    const snapshot = chatsStoreRef.current[cacheKey];
+    if (snapshot) {
+      currentChatsKeyRef.current = cacheKey;
+      setChats(snapshot.items);
+      setChatsTotal(snapshot.total);
+      setHasMoreChats(snapshot.hasMore);
+      chatsOffsetRef.current = snapshot.offset;
+    } else {
+      currentChatsKeyRef.current = cacheKey;
+      setChats([]);
+      setChatsTotal(0);
+      setHasMoreChats(true);
+      chatsOffsetRef.current = 0;
+    }
+
     loadChats({ reset: true }).catch(() => { });
-  }, [debouncedQ, status, inboxId, loadChats]);
+  }, [debouncedQ, status, inboxId, chatScope, loadChats]);
 
 
 
@@ -1200,7 +1499,7 @@ const scrollToBottom = useCallback(
       messagesRequestRef.current = null;
       return;
     }
-    const cached = messagesCacheRef.current[chatId];
+    const cached = messagesCache.get(chatId);
     const hasCache = Array.isArray(cached);
     if (hasCache && cached) {
       setMessages(cached);
@@ -1224,7 +1523,7 @@ const scrollToBottom = useCallback(
     return () => {
       disposed = true;
     };
-  }, [currentChat?.id, loadMessages]);
+  }, [currentChat?.id, loadMessages, messagesCache]);
 
 
 
@@ -1294,19 +1593,6 @@ const scrollToBottom = useCallback(
       setChatTags([]);
     }
   }, [section]);
-
-
-  useEffect(() => {
-    setCurrentChat(null);
-    setMessages([]);
-    setChatTags([]);
-    loadChats()
-      .then((resp) => {
-        const first = resp?.items?.[0];
-        if (!first) return;
-      })
-      .catch(() => { });
-  }, [inboxId, loadChats]);
 
 
   useEffect(() => {
@@ -1502,7 +1788,7 @@ const scrollToBottom = useCallback(
     e.target.value = "";
   };
 
-  // substitua sua fun��o por esta
+  // substitua sua fun??o por esta
   const toggleRecording = async () => {
     try {
       if (isRecording) {
@@ -1763,6 +2049,29 @@ const scrollToBottom = useCallback(
                     <option value="CLOSED">Fechados</option>
                   </select>
                 </div>
+
+                <div className="mb-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setChatScope("conversations")}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "conversations"
+                      ? "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] border-[color:var(--color-primary)]/50"
+                      : "bg-[color:var(--color-surface-muted)] text-[var(--color-text)] border-transparent hover:bg-[color:var(--color-surface-muted)]/80"}
+                    `}
+                  >
+                    Conversas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChatScope("groups")}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "groups"
+                      ? "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] border-[color:var(--color-primary)]/50"
+                      : "bg-[color:var(--color-surface-muted)] text-[var(--color-text)] border-transparent hover:bg-[color:var(--color-surface-muted)]/80"}
+                    `}
+                  >
+                    Grupos
+                  </button>
+                </div>
               </div>
 
               <div
@@ -1780,17 +2089,28 @@ const scrollToBottom = useCallback(
               >
                 {chatListItems.length === 0 ? (
                   <div className="p-3 text-sm text-[var(--color-text-muted)]">
-                    {isChatsLoading ? "Carregando chats..." : "Nenhum chat"}
+                    {isChatsLoading
+                      ? "Carregando chats..."
+                      : chatScope === "groups"
+                        ? "Nenhum grupo"
+                        : "Nenhuma conversa"}
                   </div>
                 ) : (
-                  <ChatList chats={chatListItems} activeChatId={currentChat?.id} onSelectChat={handleSelectChat} />
+                  <ChatList
+                    chats={chatListItems}
+                    activeChatId={currentChat?.id}
+                    onSelectChat={handleSelectChat}
+                    isGroupList={chatScope === "groups"}
+                  />
                 )}
 
                 {chatListItems.length > 0 && isChatsLoading && (
                   <div className="p-3 text-xs text-[var(--color-text-muted)] text-center">Carregando chats...</div>
                 )}
                 {chatListItems.length > 0 && !hasMoreChats && !isChatsLoading && (
-                  <div className="p-3 text-xs text-[var(--color-text-muted)] opacity-60 text-center">N?o h? mais chats.</div>
+                  <div className="p-3 text-xs text-[var(--color-text-muted)] opacity-60 text-center">
+                    {chatScope === "groups" ? "N�o h� mais grupos." : "N�o h� mais conversas."}
+                  </div>
                 )}
               </div>
             </div>
@@ -1798,7 +2118,7 @@ const scrollToBottom = useCallback(
 
 
           {section === "all" || section === "unanswered" ? (
-            <div className="col-span-6 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-4 flex flex-col relative min-h-screen max-h-screen transition-colors dura��o-300">
+            <div className="col-span-6 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-4 flex flex-col relative min-h-screen max-h-screen transition-colors dura??o-300">
               <ChatHeader
                 apiBase={API}
                 chat={currentChat}
@@ -1863,14 +2183,14 @@ const scrollToBottom = useCallback(
                 <div className="flex items-center gap-2 mb-2">
                   <button
                     onClick={() => setIsPrivateOpen(true)}
-                    className="rounded border border-[color:var(--color-primary)]/45 bg-[color:var(--color-primary)]/15 px-2.5 py-1.5 text-xs font-medium text-[var(--color-highlight)] transition-colors dura��o-150 hover:bg-[color:var(--color-primary)]/25"
+                    className="rounded border border-[color:var(--color-primary)]/45 bg-[color:var(--color-primary)]/15 px-2.5 py-1.5 text-xs font-medium text-[var(--color-highlight)] transition-colors dura??o-150 hover:bg-[color:var(--color-primary)]/25"
                   >
                     Mensagem privada
                   </button>
 
                   <button
                     onClick={handlePickFile}
-                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura��o-150 hover:bg-[color:var(--color-surface-muted)]/85"
+                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura??o-150 hover:bg-[color:var(--color-surface-muted)]/85"
                     title="Enviar anexo"
                   >
                     <FiPaperclip className="h-5 w-5 text-[var(--color-highlight)]" />
@@ -1878,7 +2198,7 @@ const scrollToBottom = useCallback(
 
                   <button
                     onClick={toggleRecording}
-                    className={`rounded border p-2 transition-colors dura��o-150 ${isRecording
+                    className={`rounded border p-2 transition-colors dura??o-150 ${isRecording
                       ? "bg-red-900/40 border-red-700 text-red-300"
                       : "border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/85"
                       }`}
@@ -1889,7 +2209,7 @@ const scrollToBottom = useCallback(
 
                   <button
                     onClick={() => setShowEmoji((v) => !v)}
-                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura��o-150 hover:bg-[color:var(--color-surface-muted)]/85"
+                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura??o-150 hover:bg-[color:var(--color-surface-muted)]/85"
                     title="Emoji"
                   >
                     <FiSmile className="h-5 w-5 text-[var(--color-highlight)]" />
@@ -1914,7 +2234,7 @@ const scrollToBottom = useCallback(
 
                 <div className="flex gap-2">
                   <input
-                    className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors dura��o-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                    className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors dura??o-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
                     placeholder={isRecording ? "Gravando ?udio..." : "Digite sua mensagem..."}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
@@ -1927,7 +2247,7 @@ const scrollToBottom = useCallback(
                     disabled={isRecording}
                   />
                   <button
-                    className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-colors dura��o-150 hover:bg-[var(--color-primary-strong)]"
+                    className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-colors dura??o-150 hover:bg-[var(--color-primary-strong)]"
                     onClick={send}
                     disabled={isRecording}
                   >
@@ -1976,7 +2296,7 @@ const scrollToBottom = useCallback(
 
               {currentChat && (
                 <div className="text-sm text-[var(--color-text-muted)] mb-2">
-                  Agente atribu�do:{" "}
+                  Agente atribu?do:{" "}
                   <span className="font-medium text-[var(--color-heading)]">
                     {currentChat.assigned_agent_name || "?"}
                   </span>
@@ -1984,7 +2304,7 @@ const scrollToBottom = useCallback(
               )}
 
               <div className="text-xs text-[var(--color-text-muted)] mb-3">
-                Somente sua equipe v� estas mensagens. Elas tamb�m aparecem no hist�rico do chat, destacadas como privadas.
+                Somente sua equipe v? estas mensagens. Elas tamb?m aparecem no hist?rico do chat, destacadas como privadas.
               </div>
 
               <div
@@ -2036,12 +2356,6 @@ const scrollToBottom = useCallback(
 
   );
 }
-
-
-
-
-
-
 
 
 

@@ -165,6 +165,13 @@ Habilite os blocos, teste com `nginx -t` e faça reload (`systemctl reload nginx
 - Configure secrets no repositório (Supabase, WAHA, RabbitMQ, etc.) caso expanda o pipeline para deploy.
 
 ## Troubleshooting
-- Certifique-se de rodar `npm run build:backend` após qualquer alteração TS para publicar novo `dist`.
+- Certifique-se de rodar `npm run build:backend` apos qualquer alteracao TS para publicar novo `dist`.
+- Ajuste CORS (`FRONTEND_ORIGIN`) quando publicar novos dominios.
 - Em caso de erro nos workers, verifique filas mortas (`RABBIT_Q_OUTBOUND_DLQ`).
-- Ajuste CORS (`FRONTEND_ORIGIN`) quando publicar novos domínios.
+
+## Telemetria de Mensagens
+Os workers e o frontend geram logs estruturados com a chave `durationMs` para acompanhar o tempo de processamento ponta a ponta:
+- `[metrics][ui]` mede do clique de envio ate a confirmacao via socket na interface.
+- `[metrics][api]` mostra o tempo que a rota `POST /livechat/messages` levou para persistir a mensagem e acionar a fila.
+- `[metrics][worker]` cobre as etapas internas dos workers (`inbound`, `inboundMedia`, `outbound`) incluindo `chatId`/`externalId` quando disponiveis.
+Use esses registros para identificar gargalos sem depender de ferramentas externas.

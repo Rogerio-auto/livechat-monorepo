@@ -2,6 +2,8 @@
 import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { performance } from "node:perf_hooks";
+import { createHash } from "node:crypto";
 import {
   consume,
   publish,
@@ -32,7 +34,7 @@ import {
   markChatRemoteParticipantLeft,
   findChatMessageIdByExternalId,
 } from "../src/services/meta/store.ts";
-import { rDel, rDelMatch, rSet, k } from "../src/lib/redis.ts";
+import { redis, rDel, rDelMatch, rSet, k } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 
@@ -83,7 +85,7 @@ type InboundMediaJobPayload = {
   } | null;
 };
 
-const CACHE_TTL_MSGS = Number(process.env.CACHE_TTL_MSGS ?? 180);
+const CACHE_TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS ?? 60));
 const PAGE_LIMIT_PREWARM = 20;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
 
@@ -100,7 +102,7 @@ const INBOUND_MEDIA_PREFETCH = parsePositiveInt(process.env.INBOUND_MEDIA_PREFET
 const OUTBOUND_WORKERS = parsePositiveInt(process.env.OUTBOUND_WORKERS, 2);
 const OUTBOUND_PREFETCH = parsePositiveInt(process.env.OUTBOUND_PREFETCH, 5);
 
-// === Mídia local / Graph ===
+// === M??dia local / Graph ===
 const MEDIA_DIR =
   process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
 const MEDIA_PUBLIC_BASE =
@@ -124,22 +126,6 @@ const metrics = {
   outbound: { processed: 0 },
 };
 
-function formatMetricsMeta(meta: Record<string, unknown>): string {
-  return Object.entries(meta)
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .map(([key, value]) => {
-      if (typeof value === "object") {
-        try {
-          return `${key}=${JSON.stringify(value)}`;
-        } catch {
-          return `${key}=[unserializable]`;
-        }
-      }
-      return `${key}=${String(value)}`;
-    })
-    .join(" ");
-}
-
 function measureJob<T>(
   worker: "inbound" | "inboundMedia" | "outbound",
   meta: Record<string, unknown>,
@@ -149,24 +135,23 @@ function measureJob<T>(
   return fn()
     .then((result) => {
       metrics[worker].processed += 1;
-      const durationMs = Math.round(performance.now() - started);
-      const metaInfo = formatMetricsMeta(meta);
-      console.log(
-        `[metrics][${worker}] success durationMs=${durationMs} processed=${metrics[worker].processed}${
-          metaInfo ? ` ${metaInfo}` : ""
-        }`,
-      );
+      const durationMs = Number((performance.now() - started).toFixed(1));
+      console.log("[metrics][worker]", {
+        worker,
+        durationMs,
+        processed: metrics[worker].processed,
+        ...meta,
+      });
       return result;
     })
     .catch((error) => {
-      const durationMs = Math.round(performance.now() - started);
-      const metaInfo = formatMetricsMeta(meta);
-      console.error(
-        `[metrics][${worker}] error durationMs=${durationMs} processed=${metrics[worker].processed}${
-          metaInfo ? ` ${metaInfo}` : ""
-        }`,
-        error,
-      );
+      const durationMs = Number((performance.now() - started).toFixed(1));
+      console.error("[metrics][worker]", {
+        worker,
+        durationMs,
+        ...meta,
+        error: error instanceof Error ? error.message : error,
+      });
       throw error;
     });
 }
@@ -176,11 +161,16 @@ async function logQueueStats(): Promise<void> {
   for (const queue of queues) {
     try {
       const info = await getQueueInfo(queue);
-      console.log(
-        `[metrics][queues] queue=${info.queue} depth=${info.messageCount} consumers=${info.consumerCount}`,
-      );
+      console.log("[metrics][queue]", {
+        queue: info.queue,
+        depth: info.messageCount,
+        consumers: info.consumerCount,
+      });
     } catch (error) {
-      console.error(`[metrics][queues] error queue=${queue}`, error);
+      console.error("[metrics][queue]", {
+        queue,
+        error: error instanceof Error ? error.message : error,
+      });
     }
   }
 }
@@ -399,6 +389,108 @@ function extractWahaMessageId(response: any): string | null {
     }
   }
   return null;
+}
+
+async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM): Promise<void> {
+  try {
+    const rows = await db.any<{
+      id: string;
+      chat_id: string;
+      content: string | null;
+      is_from_customer: boolean;
+      sender_id: string | null;
+      created_at: string;
+      type: string | null;
+      view_status: string | null;
+      media_url: string | null;
+      remote_participant_id: string | null;
+      remote_sender_id: string | null;
+      remote_sender_name: string | null;
+      remote_sender_phone: string | null;
+      remote_sender_avatar_url: string | null;
+      remote_sender_is_admin: boolean | null;
+      replied_message_id: string | null;
+    }>(
+      `select id,
+              chat_id,
+              content,
+              is_from_customer,
+              sender_id,
+              created_at,
+              type,
+              view_status,
+              media_url,
+              remote_participant_id,
+              remote_sender_id,
+              remote_sender_name,
+              remote_sender_phone,
+              remote_sender_avatar_url,
+              remote_sender_is_admin,
+              replied_message_id
+         from public.chat_messages
+        where chat_id = $1
+        order by created_at desc
+        limit $2`,
+      [chatId, limit],
+    );
+
+    const mappedAsc = rows
+      .slice()
+      .reverse()
+      .map((row) => ({
+        id: row.id,
+        chat_id: row.chat_id,
+        body: row.content,
+        sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_id: row.sender_id,
+        created_at: row.created_at,
+        view_status: row.view_status,
+        type: row.type ?? "TEXT",
+        is_private: false,
+        media_url: row.media_url ?? null,
+        remote_participant_id: row.remote_participant_id ?? null,
+        remote_sender_id: row.remote_sender_id ?? null,
+        remote_sender_name: row.remote_sender_name ?? null,
+        remote_sender_phone: row.remote_sender_phone ?? null,
+        remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
+        remote_sender_is_admin: row.remote_sender_is_admin ?? null,
+        replied_message_id: row.replied_message_id ?? null,
+      }));
+
+    const hasMore = rows.length === limit;
+    const nextBefore = hasMore && mappedAsc.length > 0 ? mappedAsc[0].created_at : "";
+    const payload = {
+      items: mappedAsc,
+      nextBefore,
+      hasMore,
+    };
+
+    const cacheKey = k.msgsKey(chatId, undefined, limit);
+    const envelope = {
+      data: payload,
+      meta: {
+        etag: createHash("sha1").update(JSON.stringify(payload)).digest("base64url"),
+        lastModified: mappedAsc.length > 0 ? mappedAsc[mappedAsc.length - 1].created_at : new Date().toISOString(),
+        cachedAt: new Date().toISOString(),
+      },
+    };
+
+    await rSet(cacheKey, envelope, CACHE_TTL_MSGS);
+    try {
+      const setKey = k.msgsSet(chatId);
+      const pipeline = redis.pipeline();
+      pipeline.sadd(setKey, cacheKey);
+      pipeline.expire(setKey, CACHE_TTL_MSGS * 2);
+      await pipeline.exec();
+    } catch (err) {
+      console.warn("[worker][cache] warmChatMessagesCache index update failed", err instanceof Error ? err.message : err);
+    }
+  } catch (err) {
+    console.warn("[worker][cache] warmChatMessagesCache failed", {
+      chatId,
+      error: err instanceof Error ? err.message : err,
+    });
+  }
 }
 
 async function graphUploadMedia(
@@ -1116,12 +1208,21 @@ async function handleInboundChange(job: InboundJobPayload) {
         );
       }
 
+      setTimeout(() => {
+        warmChatMessagesCache(chatId).catch((error) => {
+          console.warn("[inbound] warm cache failed", {
+            chatId,
+            error: error instanceof Error ? error.message : error,
+          });
+        });
+      }, 0);
+
       try {
         await rDel(k.chat(chatId));
       } catch {}
 
-      // Cache de listas e pré-aquecimento ficam para o job assíncrono.
-      // O socket já recebeu o evento acima.
+      // Cache de listas e pre-aquecimento ficam para o job assincrono.
+      // O socket ja recebeu o evento acima.
     }
   }
 }
@@ -1144,7 +1245,7 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
         phone_number_id: creds.phone_number_id ?? undefined,
       };
       const info = await getMediaInfo(graphCreds, mediaId);
-      if (!info?.url) throw new Error("Meta não retornou URL da mídia");
+      if (!info?.url) throw new Error("Meta n??o retornou URL da m??dia");
 
       const bin = await downloadMedia(graphCreds, info.url);
       const buf = Buffer.from(bin);
@@ -1761,7 +1862,7 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
   }
 }
 
-async function handleWahaOutboundRequest(job: any): Promise<void> {
+export async function handleWahaOutboundRequest(job: any): Promise<void> {
   const inboxId = String(job?.inboxId || "");
   if (!inboxId) throw new Error("WAHA outbound sem inboxId");
 
@@ -1978,6 +2079,15 @@ async function handleWahaOutboundRequest(job: any): Promise<void> {
   });
 
   if (chatIdForStatus) {
+    setTimeout(() => {
+      warmChatMessagesCache(chatIdForStatus).catch((error) => {
+        console.warn("[worker][WAHA] warm cache failed", {
+          chatId: chatIdForStatus,
+          error: error instanceof Error ? error.message : error,
+        });
+      });
+    }, 0);
+
     try {
       await invalidateChatCaches(chatIdForStatus, job.companyId);
     } catch (error) {
@@ -2288,17 +2398,17 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         );
         console.log("[outbound] graphUploadMedia ok", { mediaId, mimeType });
 
-        // normaliza número para E.164 sem '+'
+        // normaliza n??mero para E.164 sem '+'
         function toE164(n: string): string {
           const only = String(n || "").replace(/\D+/g, "");
           return only.replace(/^00/, ""); // ex: 0055... -> 55...
         }
         const to = toE164(customer_phone);
 
-        // envia mídia
+        // envia m??dia
         const wamid = await graphSendMedia(
           { access_token: creds.access_token, phone_number_id: creds.phone_number_id },
-          to,                   // <<< usa o número normalizado
+          to,                   // <<< usa o n??mero normalizado
           mediaType,
           mediaId,
           job.caption ?? null,
@@ -2306,7 +2416,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         );
         console.log("[outbound] graphSendMedia ok", { wamid });
 
-        // garante persistência do status, com ou sem wamid
+        // garante persist??ncia do status, com ou sem wamid
         if (!wamid) {
           console.error("[outbound] graphSendMedia retornou 200 mas sem wamid");
           await db.none(
@@ -2350,6 +2460,17 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
 
         console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
         meta.chatId = chat_id ?? chatId;
+
+        setTimeout(() => {
+          const targetChatId = chat_id ?? chatId;
+          if (!targetChatId) return;
+          warmChatMessagesCache(targetChatId).catch((error) => {
+            console.warn("[worker][outbound] warm cache failed", {
+              chatId: targetChatId,
+              error: error instanceof Error ? error.message : error,
+            });
+          });
+        }, 0);
 
 
         ch.ack(msg);
@@ -2448,6 +2569,17 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         });
         meta.chatId = chat_id ?? chatId;
 
+        setTimeout(() => {
+          const targetChatId = chat_id ?? chatId;
+          if (!targetChatId) return;
+          warmChatMessagesCache(targetChatId).catch((error) => {
+            console.warn("[worker][outbound] warm cache failed", {
+              chatId: targetChatId,
+              error: error instanceof Error ? error.message : error,
+            });
+          });
+        }, 0);
+
         ch.ack(msg);
       });
     } catch (e: any) {
@@ -2491,7 +2623,7 @@ async function startOutboundWorkers(count: number, prefetch: number): Promise<vo
 async function main(): Promise<void> {
   const target = (process.argv[2] ?? "all").toLowerCase();
 
-  // Ajuste de concorrência via env:
+  // Ajuste de concorr??ncia via env:
   // INBOUND_WORKERS / INBOUND_PREFETCH / INBOUND_MEDIA_WORKERS / INBOUND_MEDIA_PREFETCH / OUTBOUND_WORKERS / OUTBOUND_PREFETCH
   switch (target) {
     case "inbound":
@@ -2652,7 +2784,7 @@ async function tickCampaigns() {
     for (const c of camps || []) {
       if (!c.inbox_id) continue;
 
-      // pega até N recipients ainda sem envio (last_step_sent is null)
+      // pega at?? N recipients ainda sem envio (last_step_sent is null)
       const limit = Math.max(1, Number(c.rate_limit_per_minute || 30));
       const { data: step } = await supabaseAdmin
         .from("campaign_steps").select("id, template_id, delay_sec")
@@ -2690,7 +2822,7 @@ async function tickCampaigns() {
           });
         }
 
-        // opcional: já marca progresso local (o evento real pode atualizar depois)
+        // opcional: j?? marca progresso local (o evento real pode atualizar depois)
         await supabaseAdmin
           .from("campaign_recipients")
           .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
@@ -2706,10 +2838,11 @@ async function tickCampaigns() {
 setInterval(tickCampaigns, 60_000);
 setInterval(syncWahaGroupMetadata, 300_000);
 
-
-main().catch((e) => {
-  console.error("[worker] fatal:", e);
-  process.exit(1);
-});
+if (!process.env.SKIP_WORKER_AUTOSTART) {
+  main().catch((e) => {
+    console.error("[worker] fatal:", e);
+    process.exit(1);
+  });
+}
 
 

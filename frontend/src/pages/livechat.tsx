@@ -118,6 +118,7 @@ export default function LiveChatPage() {
   const chatsTotalRef = useRef(0);
   const hasMoreChatsRef = useRef(true);
   const messagesCache = useMemo(() => new Map<string, Message[]>(), []);
+  const messageLatencyRef = useRef<Map<string, number>>(new Map());
   const messagesRequestRef = useRef<symbol | null>(null);
   const [messageStatuses, setMessageStatuses] = useState<Record<string, string | null>>({});
   const chatsAbortRef = useRef<AbortController | null>(null);
@@ -912,6 +913,28 @@ const scrollToBottom = useCallback(
 
   const normalizeMessagesList = useCallback((list: any[]): Message[] => list.map((item) => normalizeMessage(item)), [normalizeMessage]);
 
+  const trackMessageLatency = useCallback((messageId: string | null | undefined, startedAt: number) => {
+    if (typeof messageId !== "string" || !messageId.trim()) return;
+    messageLatencyRef.current.set(messageId, startedAt);
+  }, []);
+
+  const logSendLatency = useCallback(
+    (chatId: string | null | undefined, messageId: string | null | undefined, status?: string | null) => {
+      if (typeof messageId !== "string" || !messageId) return;
+      const startedAt = messageLatencyRef.current.get(messageId);
+      if (startedAt == null) return;
+      messageLatencyRef.current.delete(messageId);
+      const durationMs = Number((performance.now() - startedAt).toFixed(1));
+      console.log("[metrics][ui]", {
+        chatId: chatId ?? null,
+        messageId,
+        durationMs,
+        status: status ?? null,
+      });
+    },
+    [],
+  );
+
   const mergeMessagesAscending = (current: Message[], incoming: Message[]) => {
     if (!incoming.length) return sortMessagesAsc(current);
     const map = new Map<string, Message>();
@@ -963,14 +986,19 @@ const scrollToBottom = useCallback(
 
     const onMessageNew = (m: Message) => {
       appendMessageToCache(m);
+      logSendLatency(m.chat_id ?? null, m.id ?? null, m.view_status ?? null);
     };
 
     const onMessageStatus = (payload: any) => {
+      const chatId = payload?.chatId ?? payload?.chat_id ?? null;
+      const messageId = payload?.messageId ?? payload?.message_id ?? null;
+      const viewStatus = payload?.view_status ?? payload?.raw_status ?? null;
       updateMessageStatusInCache({
-        chatId: payload?.chatId ?? payload?.chat_id ?? null,
-        messageId: payload?.messageId ?? payload?.message_id ?? null,
-        view_status: payload?.view_status ?? null,
+        chatId,
+        messageId,
+        view_status: viewStatus ?? null,
       });
+      logSendLatency(chatId ?? null, messageId ?? null, viewStatus ?? null);
     };
 
     s.on("message:new", onMessageNew);
@@ -1007,7 +1035,7 @@ const scrollToBottom = useCallback(
       s.off("chat:updated", onChatUpdated);
       s.disconnect();
     };
-  }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop]);
+  }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop, logSendLatency]);
 
   const loadChats = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
@@ -1629,6 +1657,7 @@ const scrollToBottom = useCallback(
 
   const send = async () => {
     if (!currentChat) return;
+    const sendStartedAt = performance.now();
     const trimmedText = text.trim();
     if (!trimmedText) return;
 
@@ -1685,6 +1714,7 @@ const scrollToBottom = useCallback(
             chatId: currentChat.id,
           });
         }
+        trackMessageLatency(draftId, sendStartedAt);
         const nowIso = new Date().toISOString();
         appendMessageToCache({
           id: draftId,
@@ -1724,6 +1754,7 @@ const scrollToBottom = useCallback(
       });
       const inserted = (response?.data ?? response) as any;
       if (inserted?.id) {
+        trackMessageLatency(inserted.id, sendStartedAt);
         appendMessageToCache({
           id: inserted.id,
           chat_id: inserted.chat_id ?? payload.chatId,

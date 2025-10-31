@@ -11,7 +11,8 @@ import { normalizeMsisdn } from "../util.ts";
 
 const TTL_LIST = Number(process.env.CACHE_TTL_LIST || 30);
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
-const TTL_MSGS = Number(process.env.CACHE_TTL_MSGS || 10);
+const TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS || 60));
+const PRIVATE_CHAT_CACHE_TTL = Math.max(60, Number(process.env.PRIVATE_CHAT_CACHE_TTL || TTL_MSGS * 2));
 const TRACE_EXPLAIN = process.env.LIVECHAT_TRACE_EXPLAIN === "1";
 
 type CacheEnvelope<T> = {
@@ -57,6 +58,72 @@ function ensureEnvelope<T>(raw: CacheEnvelope<T> | T, lastModifiedHint?: string 
     return env;
   }
   return buildCacheEnvelope(raw as T, lastModifiedHint);
+}
+
+async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("chat_messages")
+      .select(
+        "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+      )
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.warn("[livechat/messages] warm cache skipped", error);
+      return;
+    }
+
+    const rows = Array.isArray(data) ? data : [];
+    const mappedAsc = rows
+      .slice()
+      .reverse()
+      .map((row: any) => ({
+        id: row.id,
+        chat_id: row.chat_id,
+        body: row.content,
+        sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_id: row.sender_id || null,
+        created_at: row.created_at,
+        view_status: row.view_status || null,
+        type: row.type || "TEXT",
+        is_private: false,
+        media_url: row.media_url ?? null,
+        remote_participant_id: row.remote_participant_id ?? null,
+        remote_sender_id: row.remote_sender_id ?? null,
+        remote_sender_name: row.remote_sender_name ?? null,
+        remote_sender_phone: row.remote_sender_phone ?? null,
+        remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
+        remote_sender_is_admin: row.remote_sender_is_admin ?? null,
+        replied_message_id: row.replied_message_id ?? null,
+      }));
+
+    const hasMore = rows.length === limit;
+    const nextBefore = hasMore && mappedAsc.length > 0 ? mappedAsc[0].created_at : "";
+    const payload = {
+      items: mappedAsc,
+      nextBefore,
+      hasMore,
+    };
+    const lastModifiedIso =
+      mappedAsc.length > 0 ? mappedAsc[mappedAsc.length - 1].created_at : new Date().toISOString();
+    const envelope = buildCacheEnvelope(payload, lastModifiedIso);
+    const cacheKey = k.msgsKey(chatId, undefined, limit);
+    await rSet(cacheKey, envelope, TTL_MSGS);
+    try {
+      const setKey = k.msgsSet(chatId);
+      const pipeline = redis.pipeline();
+      pipeline.sadd(setKey, cacheKey);
+      pipeline.expire(setKey, TTL_MSGS * 2);
+      await pipeline.exec();
+    } catch (err) {
+      console.warn("[livechat/messages] warm cache index update failed:", err instanceof Error ? err.message : err);
+    }
+  } catch (err) {
+    console.warn("[livechat/messages] warm cache failed:", err instanceof Error ? err.message : err);
+  }
 }
 
 function applyConditionalHeaders(res: express.Response, envelope: CacheEnvelope<any>) {
@@ -682,8 +749,26 @@ export function registerLivechatChatRoutes(app: express.Application) {
     }
   });
   app.post("/livechat/messages", requireAuth, async (req: any, res) => {
+    const startedAt = performance.now();
+    let insertedId: string | null = null;
+    let logStatus: "ok" | "error" = "ok";
+    let logError: string | null = null;
     const { chatId, text, senderType = "AGENT" } = req.body || {};
+    const logMetrics = () => {
+      const durationMs = Number((performance.now() - startedAt).toFixed(1));
+      console.log("[metrics][api]", {
+        chatId: chatId ?? null,
+        durationMs,
+        insertedId,
+        status: logStatus,
+        error: logError,
+      });
+    };
+
     if (!chatId || !text) {
+      logStatus = "error";
+      logError = "chatId_text_missing";
+      logMetrics();
       return res.status(400).json({ error: "chatId e text obrigatorios" });
     }
 
@@ -729,11 +814,21 @@ export function registerLivechatChatRoutes(app: express.Application) {
           : null;
 
       const chatRow = chatResp?.data as any;
-      if (chatResp?.error) return res.status(500).json({ error: chatResp.error.message });
-      if (!chatRow?.inbox_id) return res.status(404).json({ error: "Inbox do chat nao encontrada" });
+      if (chatResp?.error) {
+        logStatus = "error";
+        logError = chatResp.error.message || "chat_load_error";
+        return res.status(500).json({ error: chatResp.error.message });
+      }
+      if (!chatRow?.inbox_id) {
+        logStatus = "error";
+        logError = "inbox_missing";
+        return res.status(404).json({ error: "Inbox do chat nao encontrada" });
+      }
 
       const inboxRow = (chatRow as any)?.inbox || null;
       if (!inboxRow) {
+        logStatus = "error";
+        logError = "inbox_not_found";
         return res.status(404).json({ error: "Inbox nao encontrada" });
       }
 
@@ -746,6 +841,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
         null;
 
       if (isWahaProvider && (!companyId || typeof companyId !== "string")) {
+        logStatus = "error";
+        logError = "company_missing_for_waha";
         return res.status(400).json({ error: "companyId ausente para inbox WAHA" });
       }
 
@@ -793,7 +890,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
           "id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type",
         )
         .single();
-      if (insErr) return res.status(500).json({ error: insErr.message });
+      if (insErr) {
+        logStatus = "error";
+        logError = insErr.message || "insert_error";
+        return res.status(500).json({ error: insErr.message });
+      }
+      insertedId = inserted?.id ?? null;
 
       await supabaseAdmin
         .from("chats")
@@ -805,7 +907,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
           Promise.all([
             rDel(k.chat(chatId)),
             clearMessageCache(chatId, (key) => key.includes(":nil:")),
-            rDelMatch(k.listPrefixCompany(companyId ?? null)),
+            warmChatMessagesCache(chatId).catch((err) => {
+              console.warn("[livechat:send] warm cache failure", err instanceof Error ? err.message : err);
+            }),
           ]).catch((err) => {
             console.warn("[livechat:send] cache invalidate failure", err instanceof Error ? err.message : err);
           });
@@ -869,7 +973,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
       return res.status(201).json({ ok: true, data: inserted });
     } catch (e: any) {
       console.error("[livechat:send] error (service route)", e);
+      logStatus = "error";
+      logError = e?.message || "send error";
       return res.status(500).json({ error: e?.message || "send error" });
+    } finally {
+      logMetrics();
     }
   });
 
@@ -894,9 +1002,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
     if (errUpsert) return res.status(500).json({ error: errUpsert.message });
 
-    await rDel(k.chat(chat.id));
-    await clearMessageCache(chat.id);
-    await rDelMatch(k.listPrefixCompany(req.user?.company_id));
+    setTimeout(() => {
+      Promise.all([
+        rDel(k.chat(chat.id)),
+        clearMessageCache(chat.id),
+        warmChatMessagesCache(chat.id).catch((err) => {
+          console.warn("[livechat:create-chat] warm cache failure", err instanceof Error ? err.message : err);
+        }),
+      ]).catch((err) => {
+        console.warn("[livechat:create-chat] cache invalidate failure", err instanceof Error ? err.message : err);
+      });
+    }, 0);
 
     if (initialMessage) {
       const nowIso = new Date().toISOString();
@@ -918,8 +1034,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
         .update({ last_message: String(initialMessage), last_message_at: nowIso })
         .eq("id", chat.id);
 
-      await rDel(k.chat(chat.id));
-      await clearMessageCache(chat.id);
+      setTimeout(() => {
+        Promise.all([
+          rDel(k.chat(chat.id)),
+          clearMessageCache(chat.id),
+          warmChatMessagesCache(chat.id).catch((err) => {
+            console.warn("[livechat:create-chat] warm cache failure (initial message)", err instanceof Error ? err.message : err);
+          }),
+        ]).catch((err) => {
+          console.warn("[livechat:create-chat] cache invalidate failure (initial message)", err instanceof Error ? err.message : err);
+        });
+      }, 0);
 
       await publish(EX_APP, "outbound.request", {
         jobType: "message.send",
@@ -1053,25 +1178,32 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       res.setHeader("X-Cache", "MISS");
 
-      const [pubResp, privChatResp] = await Promise.all([
-        traceSupabase(
-          "chat_messages.page",
-          "chat_messages",
-          queryLog,
-          async () => {
-            let query = supabaseAdmin
-              .from("chat_messages")
-              .select(
-                "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
-              )
-              .eq("chat_id", id)
-              .order("created_at", { ascending: false })
-              .limit(limit);
-            if (before) query = query.lt("created_at", before);
-            return await query;
-          },
-        ),
-        traceSupabase(
+      const privMetaKey = k.privateChat(id);
+      const cachedPrivMeta = await rGet<{ privateChatId: string | null }>(privMetaKey);
+
+      const pubResp = await traceSupabase(
+        "chat_messages.page",
+        "chat_messages",
+        queryLog,
+        async () => {
+          let query = supabaseAdmin
+            .from("chat_messages")
+            .select(
+              "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+            )
+            .eq("chat_id", id)
+            .order("created_at", { ascending: false })
+            .limit(limit);
+          if (before) query = query.lt("created_at", before);
+          return await query;
+        },
+      );
+
+      let privateChatId: string | null = cachedPrivMeta?.privateChatId ?? null;
+      let privChatError: any = null;
+
+      if (!cachedPrivMeta) {
+        const privResp = await traceSupabase(
           "private_chats.single",
           "private_chats",
           queryLog,
@@ -1081,8 +1213,22 @@ export function registerLivechatChatRoutes(app: express.Application) {
               .select("id")
               .eq("chat_id", id)
               .maybeSingle(),
-        ),
-      ]);
+        );
+        if (privResp.error) {
+          privChatError = privResp.error;
+        } else {
+          privateChatId = privResp.data?.id ?? null;
+          await rSet(privMetaKey, { privateChatId }, PRIVATE_CHAT_CACHE_TTL);
+        }
+      } else {
+        queryLog.push({
+          label: "private_chats.cache",
+          table: "private_chats",
+          durationMs: 0,
+          rows: privateChatId ? 1 : 0,
+          count: null,
+        });
+      }
 
       if (pubResp.error) {
         endTimer({ error: pubResp.error.message ?? "messages query error", queries: queryLog });
@@ -1113,10 +1259,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }));
 
       let mappedPrivate: any[] = [];
-      if (privChatResp.error) {
-        console.warn("[livechat/messages] private chat lookup skipped", privChatResp.error);
-      } else if (privChatResp.data?.id) {
-        const privateChatId = privChatResp.data.id as string;
+      if (privChatError) {
+        console.warn("[livechat/messages] private chat lookup skipped", privChatError);
+      } else if (privateChatId) {
         const privateMsgsResp = await traceSupabase(
           "private_messages.list",
           "private_messages",
@@ -1253,10 +1398,18 @@ export function registerLivechatChatRoutes(app: express.Application) {
         .update({ last_message: String(text), last_message_at: nowIso })
         .eq("id", chatId);
 
-      // invalida caches relacionados
-      await rDel(k.chat(chatId));
-      await clearMessageCache(chatId, (key) => key.includes(":nil:"));
-      await rDelMatch(k.listPrefixCompany(req.user?.company_id));
+      // invalida caches relacionados e reaquece mensagens recentes
+      setTimeout(() => {
+        Promise.all([
+          rDel(k.chat(chatId)),
+          clearMessageCache(chatId, (key) => key.includes(":nil:")),
+          warmChatMessagesCache(chatId).catch((err) => {
+            console.warn("[livechat:chat-message] warm cache failure", err instanceof Error ? err.message : err);
+          }),
+        ]).catch((err) => {
+          console.warn("[livechat:chat-message] cache invalidate failure", err instanceof Error ? err.message : err);
+        });
+      }, 0);
 
       const io = getIO();
       if (io) {
@@ -1359,10 +1512,18 @@ export function registerLivechatChatRoutes(app: express.Application) {
         .update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso })
         .eq("id", id);
 
-      // invalida caches
-      await rDel(k.chat(id));
-      await clearMessageCache(id);
-      await rDelMatch(k.listPrefixCompany(req.user?.company_id));
+      // invalida caches e reaquece mensagens
+      setTimeout(() => {
+        Promise.all([
+          rDel(k.chat(id)),
+          clearMessageCache(id),
+          warmChatMessagesCache(id).catch((err) => {
+            console.warn("[livechat:chat-file] warm cache failure", err instanceof Error ? err.message : err);
+          }),
+        ]).catch((err) => {
+          console.warn("[livechat:chat-file] cache invalidate failure", err instanceof Error ? err.message : err);
+        });
+      }, 0);
 
       const mapped = {
         id: inserted.id,

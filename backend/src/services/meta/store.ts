@@ -2,7 +2,7 @@
 import db from "../../pg.ts";
 import { normalizeMsisdn } from "../../util.ts";
 import { supabaseAdmin } from "../../lib/supabase.js";
-import { clearMessageCache, rDel, rDelMatch, rGet, rSet, k } from "../../lib/redis.ts";
+import { clearMessageCache, rDel, rGet, rSet, k } from "../../lib/redis.ts";
 import { decryptSecret } from "../../lib/crypto.ts";
 import { WAHA_PROVIDER } from "../waha/client.ts";
 
@@ -50,19 +50,6 @@ const chatPhoneCacheKey = (chatId: string) => `meta:chat:phone:${chatId}`;
 export async function invalidateChatCaches(chatId: string, companyId?: string | null) {
   await rDel(k.chat(chatId));
   await clearMessageCache(chatId);
-
-  let company = companyId ?? null;
-  if (!company) {
-    try {
-      const row = await db.oneOrNone<{ company_id: string | null }>(
-        `select company_id from public.chats where id = $1`,
-        [chatId],
-      );
-      company = row?.company_id || null;
-    } catch { }
-  }
-
-  await rDelMatch(k.listPrefixCompany(company));
 }
 
 type ChatRemoteParticipant = {

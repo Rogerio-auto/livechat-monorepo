@@ -7,7 +7,7 @@ export const redis = new IORedis(REDIS_URL, {
   maxRetriesPerRequest: null,
 });
 
-const DEFAULT_MSGS_TTL = Number(process.env.CACHE_TTL_MSGS || 10);
+const DEFAULT_MSGS_TTL = Math.max(30, Number(process.env.CACHE_TTL_MSGS || 60));
 
 redis.on("connect", () => console.log("[Redis] connect ok"));
 redis.on("ready", () => console.log("[Redis] ready"));
@@ -108,6 +108,7 @@ export const k = {
     `lc:msgs:${chatId}:${encodeCursor(before)}:${Math.max(1, limit ?? 50)}`,
   msgsPrefix: (chatId: string) => `lc:msgs:${chatId}:*`,
   msgsSet: (chatId: string) => `lc:msgs:set:${chatId}`,
+  privateChat: (chatId: string) => `lc:priv:${chatId}`,
   listPrefixCompany: (companyId?: string | null) =>
     `lc:list:${safeSegment(companyId || "", "*")}:*`,
   avatar: (companyId: string | null | undefined, remoteId: string | null | undefined) =>

@@ -6,9 +6,11 @@ import {
   consume,
   publish,
   publishApp,
+  getQueueInfo,
   EX_DLX,
   Q_INBOUND,
   Q_OUTBOUND,
+  Q_INBOUND_MEDIA,
   EX_APP,
 } from "../src/queue/rabbit.ts";
 import db from "../src/pg.ts";
@@ -30,7 +32,7 @@ import {
   markChatRemoteParticipantLeft,
   findChatMessageIdByExternalId,
 } from "../src/services/meta/store.ts";
-import { rDelMatch, rSet, k } from "../src/lib/redis.ts";
+import { rDel, rDelMatch, rSet, k } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 
@@ -67,10 +69,36 @@ type WahaInboundPayload = {
   raw?: any;
 };
 type InboundJobPayload = MetaInboundPayload | WahaInboundPayload;
+type InboundMediaJobPayload = {
+  provider: "META";
+  inboxId: string;
+  companyId: string;
+  chatId: string;
+  messageId: string;
+  externalId?: string | null;
+  media?: {
+    type: string;
+    mediaId: string;
+    filename?: string | null;
+  } | null;
+};
 
 const CACHE_TTL_MSGS = Number(process.env.CACHE_TTL_MSGS ?? 180);
 const PAGE_LIMIT_PREWARM = 20;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
+
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+}
+
+const INBOUND_WORKERS = parsePositiveInt(process.env.INBOUND_WORKERS, 1);
+const INBOUND_PREFETCH = parsePositiveInt(process.env.INBOUND_PREFETCH, 1);
+const INBOUND_MEDIA_WORKERS = parsePositiveInt(process.env.INBOUND_MEDIA_WORKERS, 1);
+const INBOUND_MEDIA_PREFETCH = parsePositiveInt(process.env.INBOUND_MEDIA_PREFETCH, 2);
+const OUTBOUND_WORKERS = parsePositiveInt(process.env.OUTBOUND_WORKERS, 2);
+const OUTBOUND_PREFETCH = parsePositiveInt(process.env.OUTBOUND_PREFETCH, 5);
 
 // === Mídia local / Graph ===
 const MEDIA_DIR =
@@ -87,6 +115,88 @@ const META_GRAPH_VERSION = (process.env.META_GRAPH_VERSION || "v20.0").replace(
 
 let chatAttachmentsSupportsChatId = true;
 let wahaGroupSyncRunning = false;
+
+const METRICS_INTERVAL_MS = Number(process.env.METRICS_INTERVAL_MS || 30_000); // Ajuste via env se precisar.
+
+const metrics = {
+  inbound: { processed: 0 },
+  inboundMedia: { processed: 0 },
+  outbound: { processed: 0 },
+};
+
+function formatMetricsMeta(meta: Record<string, unknown>): string {
+  return Object.entries(meta)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => {
+      if (typeof value === "object") {
+        try {
+          return `${key}=${JSON.stringify(value)}`;
+        } catch {
+          return `${key}=[unserializable]`;
+        }
+      }
+      return `${key}=${String(value)}`;
+    })
+    .join(" ");
+}
+
+function measureJob<T>(
+  worker: "inbound" | "inboundMedia" | "outbound",
+  meta: Record<string, unknown>,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  return fn()
+    .then((result) => {
+      metrics[worker].processed += 1;
+      const durationMs = Math.round(performance.now() - started);
+      const metaInfo = formatMetricsMeta(meta);
+      console.log(
+        `[metrics][${worker}] success durationMs=${durationMs} processed=${metrics[worker].processed}${
+          metaInfo ? ` ${metaInfo}` : ""
+        }`,
+      );
+      return result;
+    })
+    .catch((error) => {
+      const durationMs = Math.round(performance.now() - started);
+      const metaInfo = formatMetricsMeta(meta);
+      console.error(
+        `[metrics][${worker}] error durationMs=${durationMs} processed=${metrics[worker].processed}${
+          metaInfo ? ` ${metaInfo}` : ""
+        }`,
+        error,
+      );
+      throw error;
+    });
+}
+
+async function logQueueStats(): Promise<void> {
+  const queues = [Q_INBOUND, Q_INBOUND_MEDIA, Q_OUTBOUND];
+  for (const queue of queues) {
+    try {
+      const info = await getQueueInfo(queue);
+      console.log(
+        `[metrics][queues] queue=${info.queue} depth=${info.messageCount} consumers=${info.consumerCount}`,
+      );
+    } catch (error) {
+      console.error(`[metrics][queues] error queue=${queue}`, error);
+    }
+  }
+}
+
+const queueMetricsInterval = setInterval(logQueueStats, METRICS_INTERVAL_MS);
+queueMetricsInterval.unref?.();
+
+const stopQueueMetricsInterval = (): void => {
+  clearInterval(queueMetricsInterval);
+};
+
+process.once("beforeExit", stopQueueMetricsInterval);
+process.once("exit", stopQueueMetricsInterval);
+
+void logQueueStats();
+
 
 async function fetchChatUpdateForSocket(chatId: string): Promise<{
   chatId: string;
@@ -188,6 +298,11 @@ async function ensureDir(dir: string) {
 }
 
 type GraphCreds = { access_token: string; phone_number_id?: string };
+
+async function enqueueInboundMediaJob(payload: InboundMediaJobPayload): Promise<void> {
+  await publishApp("inbound.media", payload);
+}
+
 async function getMediaInfo(
   creds: GraphCreds,
   mediaId: string,
@@ -854,71 +969,32 @@ async function handleInboundChange(job: InboundJobPayload) {
         continue;
       }
 
-      // ====== MÍDIA (document|image|audio|video|sticker) ======
       const msgType = String(m?.type || "").toLowerCase();
-      if (["document", "image", "audio", "video", "sticker"].includes(msgType)) {
-        try {
-          const media = m?.[msgType];
-          const mediaId: string | undefined = media?.id;
-          const origFilename: string | undefined = media?.filename;
+      const mediaRoot = ["document", "image", "audio", "video", "sticker"].includes(msgType)
+        ? (m as any)?.[msgType] ?? null
+        : null;
+      const mediaId =
+        mediaRoot && typeof mediaRoot?.id === "string" && mediaRoot.id.trim() ? mediaRoot.id.trim() : null;
+      const mediaFilename =
+        mediaRoot && typeof mediaRoot?.filename === "string" && mediaRoot.filename.trim()
+          ? mediaRoot.filename.trim()
+          : null;
 
-          if (mediaId) {
-            const creds = await getDecryptedCredsForInbox(inboxId);
-            const graphCreds: GraphCreds = {
-              access_token: creds.access_token,
-              phone_number_id: creds.phone_number_id ?? undefined,
-            };
-            const info = await getMediaInfo(graphCreds, mediaId);
-            if (!info?.url) throw new Error("Meta não retornou URL da mídia");
-
-            const bin = await downloadMedia(graphCreds, info.url);
-            const buf = Buffer.from(bin);
-
-            const ymd = new Date().toISOString().slice(0, 10);
-            const safeBase = origFilename
-              ? sanitizeFilename(origFilename)
-              : `${mediaId}.${extFromMime(info.mime_type) || "bin"}`;
-            const relativeKey = `${companyId}/${chatId}/${ymd}/${(inserted as any).external_id || inserted.id
-              }-${safeBase}`;
-            const absFilePath = path.join(MEDIA_DIR, relativeKey);
-
-            await ensureDir(path.dirname(absFilePath));
-            await fs.writeFile(absFilePath, buf);
-
-            const publicUrl = MEDIA_PUBLIC_BASE
-              ? `${MEDIA_PUBLIC_BASE}/${relativeKey}`
-              : `${FILES_PUBLIC_BASE}/files/${inserted.id}`;
-
-            await db.none(
-              `insert into public.chat_attachments
-                (message_id, provider, provider_media_id, kind, mime_type, filename, bytes, sha256, storage_bucket, storage_key, public_url)
-               values ($1,'META',$2,$3,$4,$5,$6,$7,'local',$8,$9)`,
-              [
-                inserted.id,
-                mediaId,
-                msgType.toUpperCase(),
-                info.mime_type ?? null,
-                origFilename ?? null,
-                buf.length,
-                info.sha256 ?? null,
-                relativeKey,
-                publicUrl,
-              ],
-            );
-
-            await db.none(
-              `update public.chat_messages set media_url = $2 where id = $1`,
-              [inserted.id, publicUrl],
-            );
-          }
-        } catch (err) {
-          console.error(
-            "[inbound] media handling error:",
-            (err as any)?.message || err,
-          );
-        }
-      }
-      // ====== FIM MÍDIA ======
+      await enqueueInboundMediaJob({
+        provider: "META",
+        inboxId,
+        companyId,
+        chatId,
+        messageId: inserted.id,
+        externalId: wamid,
+        media: mediaId
+          ? {
+              type: msgType,
+              mediaId,
+              filename: mediaFilename,
+            }
+          : null,
+      });
 
       const msgRow = await db.one<{
         id: string;
@@ -1041,97 +1117,150 @@ async function handleInboundChange(job: InboundJobPayload) {
       }
 
       try {
-        const companyId = String(job.companyId || "");
-        if (companyId) {
-          if (typeof (k as any)?.listPrefixCompany === "function") {
-            await rDelMatch((k as any).listPrefixCompany(companyId));
-          } else {
-            await rDelMatch(`livechat:chats:list:${companyId}:*`);
-          }
-        }
-      } catch { }
+        await rDel(k.chat(chatId));
+      } catch {}
 
-      try {
-        type Row = {
-          id: string;
-          chat_id: string;
-          content: string | null;
-          is_from_customer: boolean;
-          sender_id: string | null;
-          created_at: string;
-          type: string | null;
-          view_status: string | null;
-          media_url: string | null;
-          remote_participant_id: string | null;
-          remote_sender_id: string | null;
-          remote_sender_name: string | null;
-          remote_sender_phone: string | null;
-          remote_sender_avatar_url: string | null;
-          remote_sender_is_admin: boolean | null;
-          replied_message_id: string | null;
-        };
+      // Cache de listas e pré-aquecimento ficam para o job assíncrono.
+      // O socket já recebeu o evento acima.
+    }
+  }
+}
 
-        const { rows } = await db.query(
-          `
-    select id,
-           chat_id,
-           content,
-           is_from_customer,
-           sender_id,
-           created_at,
-           type,
-           view_status,
-           media_url,
-           remote_participant_id,
-           remote_sender_id,
-           remote_sender_name,
-           remote_sender_phone,
-           remote_sender_avatar_url,
-           remote_sender_is_admin,
-           replied_message_id
-      from public.chat_messages
-     where chat_id = $1
-     order by created_at desc
-     limit $2
-    `,
-          [chatId, PAGE_LIMIT_PREWARM],
-        );
+async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void> {
+  if (job.provider !== "META") {
+    console.warn("[inbound.media] unsupported provider", job.provider);
+    return;
+  }
 
-        const mappedDesc = (rows || []).map((r) => ({
-          id: r.id,
-          chat_id: r.chat_id,
-          body: r.content,
-          sender_type: r.is_from_customer ? "CUSTOMER" : "AGENT",
-          sender_id: r.sender_id,
-          created_at: r.created_at,
-          view_status: r.view_status,
-          type: r.type ?? "TEXT",
-          is_private: false,
-          media_url: r.media_url ?? null,
-          remote_participant_id: r.remote_participant_id ?? null,
-          remote_sender_id: r.remote_sender_id ?? null,
-          remote_sender_name: r.remote_sender_name ?? null,
-          remote_sender_phone: r.remote_sender_phone ?? null,
-          remote_sender_avatar_url: r.remote_sender_avatar_url ?? null,
-          remote_sender_is_admin: r.remote_sender_is_admin ?? null,
-          replied_message_id: r.replied_message_id ?? null,
-        }));
+  const { inboxId, companyId, chatId, messageId, externalId } = job;
+  const companyKey = typeof companyId === "string" && companyId.trim() ? companyId.trim() : "";
 
-        const pubAsc = [...mappedDesc].sort(
-          (a, b) =>
-            new Date(a.created_at).getTime() -
-            new Date(b.created_at).getTime(),
-        );
+  if (job.media && job.media.mediaId) {
+    const mediaId = job.media.mediaId;
+    try {
+      const creds = await getDecryptedCredsForInbox(inboxId);
+      const graphCreds: GraphCreds = {
+        access_token: creds.access_token,
+        phone_number_id: creds.phone_number_id ?? undefined,
+      };
+      const info = await getMediaInfo(graphCreds, mediaId);
+      if (!info?.url) throw new Error("Meta não retornou URL da mídia");
 
-        const key = k.msgsKey(chatId, undefined, PAGE_LIMIT_PREWARM);
-        await rSet(key, pubAsc, CACHE_TTL_MSGS);
-      } catch (e) {
-        console.warn(
-          "[inbound] cache prewarm error:",
-          (e as any)?.message || e,
-        );
+      const bin = await downloadMedia(graphCreds, info.url);
+      const buf = Buffer.from(bin);
+
+      const ymd = new Date().toISOString().slice(0, 10);
+      const safeBase = job.media.filename
+        ? sanitizeFilename(job.media.filename)
+        : `${mediaId}.${extFromMime(info.mime_type) || "bin"}`;
+      const ownerSegment = companyKey || "unknown";
+      const keyBase = (externalId && externalId.trim()) || messageId;
+      const relativeKey = `${ownerSegment}/${chatId}/${ymd}/${keyBase}-${safeBase}`;
+      const absFilePath = path.join(MEDIA_DIR, relativeKey);
+
+      await ensureDir(path.dirname(absFilePath));
+      await fs.writeFile(absFilePath, buf);
+
+      const publicUrl = MEDIA_PUBLIC_BASE
+        ? `${MEDIA_PUBLIC_BASE}/${relativeKey}`
+        : `${FILES_PUBLIC_BASE}/files/${messageId}`;
+
+      await db.none(
+        `insert into public.chat_attachments
+            (message_id, provider, provider_media_id, kind, mime_type, filename, bytes, sha256, storage_bucket, storage_key, public_url)
+         values ($1,'META',$2,$3,$4,$5,$6,$7,'local',$8,$9)`,
+        [
+          messageId,
+          mediaId,
+          String(job.media.type || "").toUpperCase(),
+          info.mime_type ?? null,
+          job.media.filename ?? null,
+          buf.length,
+          info.sha256 ?? null,
+          relativeKey,
+          publicUrl,
+        ],
+      );
+
+      await db.none(
+        `update public.chat_messages set media_url = $2 where id = $1`,
+        [messageId, publicUrl],
+      );
+    } catch (err) {
+      console.error("[inbound.media] media handling error:", (err as any)?.message || err);
+      throw err;
+    }
+  }
+
+  try {
+    if (companyKey) {
+      const listKey =
+        typeof (k as any)?.listPrefixCompany === "function"
+          ? (k as any).listPrefixCompany(companyKey)
+          : `livechat:chats:list:${companyKey}:*`;
+      if (listKey) {
+        await rDelMatch(listKey);
       }
     }
+  } catch (err) {
+    console.warn("[inbound.media] list cache purge failure:", (err as any)?.message || err);
+  }
+
+  try {
+    const { rows } = await db.query(
+      `
+      select id,
+             chat_id,
+             content,
+             is_from_customer,
+             sender_id,
+             created_at,
+             type,
+             view_status,
+             media_url,
+             remote_participant_id,
+             remote_sender_id,
+             remote_sender_name,
+             remote_sender_phone,
+             remote_sender_avatar_url,
+             remote_sender_is_admin,
+             replied_message_id
+        from public.chat_messages
+       where chat_id = $1
+       order by created_at desc
+       limit $2
+      `,
+      [chatId, PAGE_LIMIT_PREWARM],
+    );
+
+    const mappedDesc = (rows || []).map((r) => ({
+      id: r.id,
+      chat_id: r.chat_id,
+      body: r.content,
+      sender_type: r.is_from_customer ? "CUSTOMER" : "AGENT",
+      sender_id: r.sender_id,
+      created_at: r.created_at,
+      view_status: r.view_status,
+      type: r.type ?? "TEXT",
+      is_private: false,
+      media_url: r.media_url ?? null,
+      remote_participant_id: r.remote_participant_id ?? null,
+      remote_sender_id: r.remote_sender_id ?? null,
+      remote_sender_name: r.remote_sender_name ?? null,
+      remote_sender_phone: r.remote_sender_phone ?? null,
+      remote_sender_avatar_url: r.remote_sender_avatar_url ?? null,
+      remote_sender_is_admin: r.remote_sender_is_admin ?? null,
+      replied_message_id: r.replied_message_id ?? null,
+    }));
+
+    const pubAsc = [...mappedDesc].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+
+    const key = k.msgsKey(chatId, undefined, PAGE_LIMIT_PREWARM);
+    await rSet(key, pubAsc, CACHE_TTL_MSGS);
+  } catch (err) {
+    console.warn("[inbound.media] cache prewarm error:", (err as any)?.message || err);
   }
 }
 
@@ -1860,20 +1989,147 @@ async function handleWahaOutboundRequest(job: any): Promise<void> {
   }
 }
 
-async function startInboundWorker(): Promise<void> {
-  console.log("[worker] inbound starting…");
-  await consume(Q_INBOUND, async (msg, ch) => {
-    if (!msg) return;
-    try {
-      const job = JSON.parse(msg.content.toString()) as InboundJobPayload;
-      await handleInboundChange(job);
-      ch.ack(msg);
-    } catch (e: any) {
-      console.error("[inbound.worker] error:", e?.message || e);
-      ch.nack(msg, false, false);
-    }
-  });
-  console.log("[worker] inbound listening on:", Q_INBOUND);
+function buildInboundMetricsMeta(job: InboundJobPayload): Record<string, unknown> {
+  const meta: Record<string, unknown> = {
+    provider: job.provider,
+  };
+
+  if (job.provider === "WAHA") {
+    const payload: any = job.payload ?? {};
+    const chat: any = payload?.chat ?? {};
+    const chatId =
+      typeof payload?.chatId === "string"
+        ? payload.chatId
+        : typeof chat?.id === "string"
+          ? chat.id
+          : typeof chat?.jid === "string"
+            ? chat.jid
+            : typeof payload?.remoteJid === "string"
+              ? payload.remoteJid
+              : typeof job.session === "string"
+                ? job.session
+                : null;
+    const type =
+      typeof job.event === "string"
+        ? job.event
+        : typeof payload?.type === "string"
+          ? payload.type
+          : typeof payload?.message?.type === "string"
+            ? payload.message.type
+            : null;
+    meta.chatId = chatId ?? null;
+    meta.type = type ?? null;
+  } else {
+    const value: any = job.value ?? {};
+    const messages = Array.isArray(value?.messages) ? value.messages : [];
+    const statuses = Array.isArray(value?.statuses) ? value.statuses : [];
+    const firstMessage = messages.find(Boolean) as any;
+    const firstStatus = statuses.find(Boolean) as any;
+    const chatId =
+      (firstMessage && typeof firstMessage.chatId === "string" && firstMessage.chatId) ||
+      (firstMessage && typeof firstMessage.from === "string" && firstMessage.from) ||
+      (firstMessage && typeof firstMessage.id === "string" && firstMessage.id) ||
+      null;
+    const type =
+      (firstMessage && typeof firstMessage.type === "string" && firstMessage.type) ||
+      (firstStatus && typeof firstStatus.status === "string" && firstStatus.status) ||
+      null;
+    meta.chatId = chatId ?? null;
+    meta.type = type ?? null;
+  }
+
+  if (!("chatId" in meta)) meta.chatId = null;
+  if (!("type" in meta)) meta.type = null;
+
+  return meta;
+}
+
+function buildInboundMediaMetricsMeta(job: InboundMediaJobPayload): Record<string, unknown> {
+  return {
+    provider: job.provider,
+    chatId: job.chatId,
+    type: job.media?.type ?? null,
+  };
+}
+
+function buildOutboundMetricsMeta(job: any): Record<string, unknown> {
+  const chatId =
+    (typeof job?.chatId === "string" && job.chatId) ||
+    (typeof job?.chat_id === "string" && job.chat_id) ||
+    (typeof job?.customerPhone === "string" && job.customerPhone) ||
+    null;
+  return {
+    jobType:
+      (typeof job?.jobType === "string" && job.jobType) ||
+      (typeof job?.kind === "string" && job.kind) ||
+      null,
+    provider: typeof job?.provider === "string" ? job.provider : null,
+    chatId,
+  };
+}
+
+async function startInboundWorkerInstance(index: number, prefetch: number): Promise<void> {
+  const label = `[worker][inbound#${index}]`;
+  console.log(`${label} starting (prefetch=${prefetch})`);
+  await consume(
+    Q_INBOUND,
+    async (msg, ch) => {
+      if (!msg) return;
+      try {
+        const job = JSON.parse(msg.content.toString()) as InboundJobPayload;
+        const meta = buildInboundMetricsMeta(job);
+        await measureJob("inbound", meta, async () => {
+          await handleInboundChange(job);
+        });
+        ch.ack(msg);
+      } catch (e: any) {
+        console.error("[inbound.worker] error:", e?.message || e);
+        ch.nack(msg, false, false);
+      }
+    },
+    {
+      prefetch,
+      options: { noAck: false, consumerTag: `inbound-${index}` },
+    },
+  );
+  console.log(`${label} listening on:`, Q_INBOUND);
+}
+
+async function startInboundWorkers(count: number, prefetch: number): Promise<void> {
+  const tasks = Array.from({ length: count }, (_, idx) => startInboundWorkerInstance(idx + 1, prefetch));
+  await Promise.all(tasks);
+}
+
+async function startInboundMediaWorkerInstance(index: number, prefetch: number): Promise<void> {
+  const label = `[worker][inbound-media#${index}]`;
+  console.log(`${label} starting (prefetch=${prefetch})`);
+  await consume(
+    Q_INBOUND_MEDIA,
+    async (msg, ch) => {
+      if (!msg) return;
+      try {
+        const job = JSON.parse(msg.content.toString()) as InboundMediaJobPayload;
+        const meta = buildInboundMediaMetricsMeta(job);
+        await measureJob("inboundMedia", meta, async () => {
+          await handleInboundMediaJob(job);
+        });
+        ch.ack(msg);
+      } catch (e: any) {
+        console.error("[inbound.media.worker] error:", e?.message || e);
+        ch.nack(msg, false, false);
+      }
+    },
+    {
+      prefetch,
+      options: { noAck: false, consumerTag: `inbound-media-${index}` },
+    },
+  );
+  console.log(`${label} listening on:`, Q_INBOUND_MEDIA);
+}
+
+async function startInboundMediaWorkers(count: number, prefetch: number): Promise<void> {
+  const tasks = Array.from({ length: count }, (_, idx) => startInboundMediaWorkerInstance(idx + 1, prefetch));
+  await Promise.all(tasks);
 }
 
 async function sendMetaText(args: {
@@ -1911,9 +2167,12 @@ async function sendMetaText(args: {
   return { wamid };
 }
 
-async function startOutboundWorker(): Promise<void> {
-  console.log("[worker] outbound starting…");
-  await consume(Q_OUTBOUND, async (msg, ch) => {
+async function startOutboundWorkerInstance(index: number, prefetch: number): Promise<void> {
+  const label = `[worker][outbound#${index}]`;
+  console.log(`${label} starting (prefetch=${prefetch})`);
+  await consume(
+    Q_OUTBOUND,
+    async (msg, ch) => {
     if (!msg) return;
 
     let job: any;
@@ -1933,44 +2192,65 @@ async function startOutboundWorker(): Promise<void> {
       headerAttempt,
       Number(job?.attempt ?? 0) || 0,
     );
+    const meta = buildOutboundMetricsMeta(job);
 
     try {
-      let jobKind = String(job?.jobType || job?.kind || "");
-      const jobKindLower = jobKind.toLowerCase();
-      const provider = String(job?.provider || "").toUpperCase();
+      await measureJob("outbound", meta, async () => {
+        let jobKind = String(job?.jobType || job?.kind || "");
+        let provider = String(job?.provider || "").toUpperCase();
+        const jobKindLower = jobKind.toLowerCase();
+        meta.jobType = jobKind || null;
+        meta.provider = provider || meta.provider || null;
+        if (typeof job?.chatId === "string" && !meta.chatId) {
+          meta.chatId = job.chatId;
+        }
 
-      if (jobKindLower === "outbound.request") {
-        if (provider === WAHA_PROVIDER) {
+        if (jobKindLower === "outbound.request") {
+          if (provider === WAHA_PROVIDER) {
+            if (typeof job?.chatId === "string") {
+              meta.chatId = job.chatId;
+            }
+            await handleWahaOutboundRequest(job);
+            ch.ack(msg);
+            return;
+          }
+          if (!provider || provider === "META" || provider === "META_CLOUD") {
+            jobKind = "message.send";
+            meta.jobType = jobKind;
+            provider = provider || "META";
+            meta.provider = provider;
+          } else {
+            throw new Error(`unknown provider ${provider} for outbound.request`);
+          }
+        }
+
+        if (provider === WAHA_PROVIDER && jobKind === "message.send") {
+          meta.jobType = jobKind;
+          if (typeof job?.chatId === "string") {
+            meta.chatId = job.chatId;
+          }
           await handleWahaOutboundRequest(job);
           ch.ack(msg);
           return;
         }
-        if (!provider || provider === "META" || provider === "META_CLOUD") {
-          jobKind = "message.send";
-        } else {
-          throw new Error(`unknown provider ${provider} for outbound.request`);
+
+        if (jobKind === "livechat.startChat") {
+          meta.jobType = jobKind;
+          ch.ack(msg);
+          return;
         }
-      }
 
-      if (provider === WAHA_PROVIDER && jobKind === "message.send") {
-        await handleWahaOutboundRequest(job);
-        ch.ack(msg);
-        return;
-      }
-
-      if (jobKind === "livechat.startChat") {
-        ch.ack(msg);
-        return;
-      }
-
-      if (jobKind === "meta.sendMedia") {
-        const chatId = String(job.chatId || "");
-        const messageId = String(job.messageId || "");
-        const storageKey = String(job.storage_key || "");
-        const mimeType = String(job.mime_type || "");
-        if (!chatId || !messageId || !storageKey || !mimeType) {
-          throw new Error("meta.sendMedia missing fields");
-        }
+        if (jobKind === "meta.sendMedia") {
+          meta.jobType = jobKind;
+          const chatId = String(job.chatId || "");
+          const messageId = String(job.messageId || "");
+          const storageKey = String(job.storage_key || "");
+          const mimeType = String(job.mime_type || "");
+          meta.chatId = chatId || meta.chatId || null;
+          meta.provider = provider || meta.provider || "META";
+          if (!chatId || !messageId || !storageKey || !mimeType) {
+            throw new Error("meta.sendMedia missing fields");
+          }
 
         const { chat_id, customer_phone, inbox_id } =
           await getChatWithCustomerPhone(chatId);
@@ -2069,6 +2349,7 @@ async function startOutboundWorker(): Promise<void> {
         });
 
         console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
+        meta.chatId = chat_id ?? chatId;
 
 
         ch.ack(msg);
@@ -2160,13 +2441,15 @@ async function startOutboundWorker(): Promise<void> {
         }
       }
 
-      console.log("[worker][outbound] message sent", {
-        chatId,
-        inboxId,
-        wamid,
-      });
+        console.log("[worker][outbound] message sent", {
+          chatId,
+          inboxId,
+          wamid,
+        });
+        meta.chatId = chat_id ?? chatId;
 
-      ch.ack(msg);
+        ch.ack(msg);
+      });
     } catch (e: any) {
       console.error("[worker][outbound] error", {
         message: e?.message || e,
@@ -2191,25 +2474,45 @@ async function startOutboundWorker(): Promise<void> {
       }
       ch.ack(msg);
     }
-  });
-  console.log("[worker] outbound listening on:", Q_OUTBOUND);
+    },
+    {
+      prefetch,
+      options: { noAck: false, consumerTag: `outbound-${index}` },
+    },
+  );
+  console.log(`${label} listening on:`, Q_OUTBOUND);
+}
+
+async function startOutboundWorkers(count: number, prefetch: number): Promise<void> {
+  const tasks = Array.from({ length: count }, (_, idx) => startOutboundWorkerInstance(idx + 1, prefetch));
+  await Promise.all(tasks);
 }
 
 async function main(): Promise<void> {
   const target = (process.argv[2] ?? "all").toLowerCase();
 
+  // Ajuste de concorrência via env:
+  // INBOUND_WORKERS / INBOUND_PREFETCH / INBOUND_MEDIA_WORKERS / INBOUND_MEDIA_PREFETCH / OUTBOUND_WORKERS / OUTBOUND_PREFETCH
   switch (target) {
     case "inbound":
-      await startInboundWorker();
+      await startInboundWorkers(INBOUND_WORKERS, INBOUND_PREFETCH);
+      break;
+    case "inbound-media":
+      await startInboundMediaWorkers(INBOUND_MEDIA_WORKERS, INBOUND_MEDIA_PREFETCH);
       break;
     case "outbound":
-      await startOutboundWorker();
+      await startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH);
       break;
     case "all":
     default:
-      await startInboundWorker();
-      await startOutboundWorker();
-      console.log("[worker] inbound & outbound running.");
+      await Promise.all([
+        startInboundWorkers(INBOUND_WORKERS, INBOUND_PREFETCH),
+        startInboundMediaWorkers(INBOUND_MEDIA_WORKERS, INBOUND_MEDIA_PREFETCH),
+        startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH),
+      ]);
+      console.log(
+        `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) running.`,
+      );
       break;
   }
 }
@@ -2408,3 +2711,5 @@ main().catch((e) => {
   console.error("[worker] fatal:", e);
   process.exit(1);
 });
+
+

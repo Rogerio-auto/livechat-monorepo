@@ -688,79 +688,88 @@ export function registerLivechatChatRoutes(app: express.Application) {
     }
 
     try {
-      let senderSupabaseId: string | null = null;
-      let actorCompanyId: string | null =
-        (req.user?.company_id as string | null) || null;
-      try {
-        const { data: urow } = await supabaseAdmin
-          .from("users")
-          .select("id, company_id")
-          .eq("user_id", req.user.id)
-          .maybeSingle();
-        senderSupabaseId = (urow as any)?.id || null;
-        const companyFromUser = (urow as any)?.company_id || null;
-        if (!actorCompanyId && companyFromUser) {
-          actorCompanyId = companyFromUser;
-          if (req.user) (req.user as any).company_id = companyFromUser;
-        }
-      } catch {}
+      const authUserId = typeof req.user?.id === "string" ? req.user.id : null;
+      const needsSenderId = String(senderType).toUpperCase() !== "CUSTOMER";
+      const chatSelect = `
+        id,
+        inbox_id,
+        customer_id,
+        external_id,
+        inbox:inboxes (
+          id,
+          provider,
+          company_id
+        ),
+        customer:customers (
+          phone,
+          cellphone,
+          celular,
+          telefone,
+          contact
+        )
+      `;
 
-      const { data: chatRow, error: chatErr } = await supabaseAdmin
-        .from("chats")
-        .select("id, inbox_id, customer_id, external_id")
-        .eq("id", chatId)
-        .maybeSingle();
-      if (chatErr) return res.status(500).json({ error: chatErr.message });
+      const [chatResp, userResp] = await Promise.all([
+        supabaseAdmin.from("chats").select(chatSelect).eq("id", chatId).maybeSingle(),
+        needsSenderId && authUserId
+          ? supabaseAdmin
+              .from("users")
+              .select("id")
+              .eq("user_id", authUserId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null } as { data: any; error: any }),
+      ]);
+
+      if (userResp?.error) {
+        console.warn("[livechat:send] user lookup failed", userResp.error.message || userResp.error);
+      }
+      const senderSupabaseId: string | null =
+        (userResp?.data as any)?.id && typeof (userResp.data as any).id === "string"
+          ? (userResp.data as any).id
+          : null;
+
+      const chatRow = chatResp?.data as any;
+      if (chatResp?.error) return res.status(500).json({ error: chatResp.error.message });
       if (!chatRow?.inbox_id) return res.status(404).json({ error: "Inbox do chat nao encontrada" });
 
-      const inboxId = String(chatRow.inbox_id);
-      const { data: inboxRow, error: inboxErr } = await supabaseAdmin
-        .from("inboxes")
-        .select("id, provider, company_id")
-        .eq("id", inboxId)
-        .maybeSingle();
-      if (inboxErr) return res.status(500).json({ error: inboxErr.message });
+      const inboxRow = (chatRow as any)?.inbox || null;
       if (!inboxRow) {
         return res.status(404).json({ error: "Inbox nao encontrada" });
       }
 
+      const inboxId = String(chatRow.inbox_id);
       const provider = String((inboxRow as any)?.provider || "").toUpperCase();
       const isWahaProvider = provider === WAHA_PROVIDER;
       const companyId =
-        actorCompanyId || (inboxRow as any)?.company_id || req.user?.company_id || null;
+        (typeof req.user?.company_id === "string" && req.user.company_id.trim()) ||
+        (typeof (inboxRow as any)?.company_id === "string" && String((inboxRow as any).company_id).trim()) ||
+        null;
 
       if (isWahaProvider && (!companyId || typeof companyId !== "string")) {
         return res.status(400).json({ error: "companyId ausente para inbox WAHA" });
       }
 
-      let customerPhone: string | null = null;
-      if (chatRow.customer_id) {
-        try {
-          const { data: customerRow } = await supabaseAdmin
-            .from("customers")
-            .select("phone, cellphone, celular, telefone, contact")
-            .eq("id", chatRow.customer_id)
-            .maybeSingle();
-          customerPhone =
-            (customerRow as any)?.phone ||
-            (customerRow as any)?.cellphone ||
-            (customerRow as any)?.celular ||
-            (customerRow as any)?.telefone ||
-            (customerRow as any)?.contact ||
-            null;
-        } catch {}
-      }
+      const customerRow = (chatRow as any)?.customer || null;
+      const customerPhoneCandidates = customerRow
+        ? [
+            customerRow.phone,
+            customerRow.cellphone,
+            customerRow.celular,
+            customerRow.telefone,
+            customerRow.contact,
+          ]
+        : [];
+      const customerPhone =
+        customerPhoneCandidates.find((value: unknown) => typeof value === "string" && value.trim()) ||
+        null;
 
       let wahaRecipient: string | null = null;
       if (isWahaProvider) {
-        const digits = normalizeMsisdn(customerPhone || "");
+        const digits = normalizeMsisdn((customerPhone as string | null) || "");
         if (digits) {
           wahaRecipient = `${digits}@c.us`;
-        } else if (
-          typeof (chatRow as any)?.external_id === "string" &&
-          (chatRow as any).external_id.trim()
-        ) {
-          wahaRecipient = (chatRow as any).external_id.trim();
+        } else if (typeof chatRow?.external_id === "string" && chatRow.external_id.trim()) {
+          wahaRecipient = chatRow.external_id.trim();
         }
       }
 
@@ -791,9 +800,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
         .update({ last_message: String(text), last_message_at: nowIso })
         .eq("id", chatId);
 
-      await rDel(k.chat(chatId));
-      await clearMessageCache(chatId, (key) => key.includes(":nil:"));
-      await rDelMatch(k.listPrefixCompany(req.user?.company_id));
+      const runCacheInvalidation = () => {
+        setTimeout(() => {
+          Promise.all([
+            rDel(k.chat(chatId)),
+            clearMessageCache(chatId, (key) => key.includes(":nil:")),
+            rDelMatch(k.listPrefixCompany(companyId ?? null)),
+          ]).catch((err) => {
+            console.warn("[livechat:send] cache invalidate failure", err instanceof Error ? err.message : err);
+          });
+        }, 0);
+      };
 
       const io = getIO();
       if (io) {
@@ -848,6 +865,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         });
       }
 
+      runCacheInvalidation();
       return res.status(201).json({ ok: true, data: inserted });
     } catch (e: any) {
       console.error("[livechat:send] error (service route)", e);

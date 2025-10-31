@@ -15,6 +15,7 @@ export const EX_META = process.env.RABBIT_EXCHANGE_META || "livechat.meta";
 export const EX_DLX  = process.env.RABBIT_EXCHANGE_DLX  || "livechat.dlx";
 
 export const Q_INBOUND        = process.env.RABBIT_Q_INBOUND        || "q.inbound.message";
+export const Q_INBOUND_MEDIA  = process.env.RABBIT_Q_INBOUND_MEDIA  || "q.inbound.media";
 export const Q_OUTBOUND       = process.env.RABBIT_Q_OUTBOUND       || "q.outbound.request";
 export const Q_OUTBOUND_RETRY = process.env.RABBIT_Q_OUTBOUND_RETRY || "q.outbound.retry.10s";
 export const Q_OUTBOUND_DLQ   = process.env.RABBIT_Q_OUTBOUND_DLQ   || "q.outbound.dlq";
@@ -56,6 +57,12 @@ async function setupTopology(ch: AmqpChannel) {
     deadLetterExchange: EX_DLX,
   });
   await ch.bindQueue(Q_INBOUND, EX_META, "inbound.message");
+
+  await ch.assertQueue(Q_INBOUND_MEDIA, {
+    durable: true,
+    deadLetterExchange: EX_DLX,
+  });
+  await ch.bindQueue(Q_INBOUND_MEDIA, EX_APP, "inbound.media");
 
   // OUTBOUND (App -> processamento)
   // Se o worker der nack (rejeitar), manda pro DLX com rk "outbound.retry"
@@ -149,12 +156,43 @@ export async function publish(
 }
 
 /** Helper de consumo. */
+type ConsumeSettings = {
+  prefetch?: number;
+  options?: Options.Consume;
+};
+
+async function ensureConnection(): Promise<AmqpConnection> {
+  if (_conn) return _conn;
+  await getChannel();
+  if (_conn) return _conn;
+  throw new Error("Rabbit connection not available after initialization");
+}
+
 export async function consume(
   queue: string,
   onMessage: (msg: import("amqplib").ConsumeMessage, ch: AmqpChannel) => Promise<void> | void,
-  opts: import("amqplib").Options.Consume = { noAck: false }
+  config?: ConsumeSettings | Options.Consume,
 ) {
-  const ch = await getChannel();
+  let settings: ConsumeSettings;
+  if (!config) {
+    settings = {};
+  } else if ("prefetch" in (config as ConsumeSettings) || "options" in (config as ConsumeSettings)) {
+    settings = config as ConsumeSettings;
+  } else {
+    settings = { options: config as Options.Consume };
+  }
+
+  const conn = await ensureConnection();
+  const ch = await conn.createChannel();
+  await setupTopology(ch);
+
+  const prefetch = settings.prefetch ?? PREFETCH;
+  if (prefetch > 0) {
+    await ch.prefetch(prefetch);
+  }
+
+  const consumeOptions = settings.options ?? { noAck: false };
+
   await ch.consume(
     queue,
     async (msg) => {
@@ -165,7 +203,7 @@ export async function consume(
         console.error(`[Rabbit] consumer error on ${queue}:`, (e as any)?.message || e);
       }
     },
-    opts
+    consumeOptions,
   );
 }
 
@@ -193,4 +231,14 @@ export async function publishApp(routingKey: string, payload: unknown, opts?: Op
 }
 export async function publishMeta(routingKey: string, payload: unknown, opts?: Options.Publish) {
   return publish(EX_META, routingKey, payload, opts);
+}
+
+export async function getQueueInfo(name: string): Promise<{ queue: string; messageCount: number; consumerCount: number }> {
+  const ch = await getChannel();
+  const info = await ch.checkQueue(name);
+  return {
+    queue: info.queue,
+    messageCount: info.messageCount,
+    consumerCount: info.consumerCount,
+  };
 }

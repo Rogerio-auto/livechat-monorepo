@@ -1699,8 +1699,16 @@ const scrollToBottom = useCallback(
           type: "TEXT",
           is_private: false,
         });
+        bumpChatToTop({
+          chatId: currentChat.id,
+          last_message: trimmedText,
+          last_message_at: nowIso,
+          last_message_from: "AGENT",
+          last_message_type: "TEXT",
+          last_message_media_url: null,
+        });
+        // Atualiza preview local antes do socket confirmar.
         scrollToBottom();
-        await loadChats();
         return;
       }
 
@@ -1730,8 +1738,16 @@ const scrollToBottom = useCallback(
           is_private: Boolean(inserted.is_private),
         });
         scrollToBottom();
+        bumpChatToTop({
+          chatId: inserted.chat_id ?? payload.chatId,
+          last_message: inserted.body ?? inserted.content ?? payload.text,
+          last_message_at: inserted.created_at ?? new Date().toISOString(),
+          last_message_from: inserted.sender_type ?? (inserted.is_from_customer ? "CUSTOMER" : "AGENT"),
+          last_message_type: inserted.type ?? "TEXT",
+          last_message_media_url: inserted.media_url ?? null,
+        });
+        // Evita reload: confiamos no socket para sincronizar.
       }
-      await loadChats();
     } catch (err) {
       console.error("Falha ao enviar mensagem", err);
       setText(trimmedText); // restaura texto para tentativa posterior
@@ -1773,8 +1789,16 @@ const scrollToBottom = useCallback(
         type: inserted.type ?? "DOCUMENT",
         is_private: false,
       });
+      bumpChatToTop({
+        chatId: inserted.chat_id ?? currentChat.id,
+        last_message: inserted.content ?? file.name,
+        last_message_at: inserted.created_at ?? new Date().toISOString(),
+        last_message_from: "AGENT",
+        last_message_type: inserted.type ?? "DOCUMENT",
+        last_message_media_url: inserted.media_url ?? null,
+      });
+      // Mantem lista consistente sem recarregar.
       scrollToBottom();
-      await loadChats();
     } catch (err) {
       console.error("Falha ao enviar arquivo", err);
     }

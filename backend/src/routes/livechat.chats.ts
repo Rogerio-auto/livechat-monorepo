@@ -5,15 +5,28 @@ import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 import { EX_APP, publish } from "../queue/rabbit.ts"; // <??" padroniza ??oqueue???
-import { redis, rGet, rSet, rDel, rDelMatch, k, clearMessageCache } from "../lib/redis.ts";
+import {
+  redis,
+  rGet,
+  rSet,
+  rDel,
+  k,
+  clearMessageCache,
+  rememberMessageCacheKey,
+  rememberListCacheKey,
+  clearListCacheIndexes,
+} from "../lib/redis.ts";
 import { WAHA_PROVIDER } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 
-const TTL_LIST = Number(process.env.CACHE_TTL_LIST || 30);
+const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
-const TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS || 60));
+const TTL_MSGS = Math.max(60, Number(process.env.CACHE_TTL_MSGS || 60));
 const PRIVATE_CHAT_CACHE_TTL = Math.max(60, Number(process.env.PRIVATE_CHAT_CACHE_TTL || TTL_MSGS * 2));
 const TRACE_EXPLAIN = process.env.LIVECHAT_TRACE_EXPLAIN === "1";
+
+let chatsSupportsLastMessageType = true;
+let chatsSupportsLastMessageMediaUrl = true;
 
 type CacheEnvelope<T> = {
   data: T;
@@ -112,15 +125,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
     const envelope = buildCacheEnvelope(payload, lastModifiedIso);
     const cacheKey = k.msgsKey(chatId, undefined, limit);
     await rSet(cacheKey, envelope, TTL_MSGS);
-    try {
-      const setKey = k.msgsSet(chatId);
-      const pipeline = redis.pipeline();
-      pipeline.sadd(setKey, cacheKey);
-      pipeline.expire(setKey, TTL_MSGS * 2);
-      await pipeline.exec();
-    } catch (err) {
-      console.warn("[livechat/messages] warm cache index update failed:", err instanceof Error ? err.message : err);
-    }
+    await rememberMessageCacheKey(chatId, cacheKey, TTL_MSGS);
   } catch (err) {
     console.warn("[livechat/messages] warm cache failed:", err instanceof Error ? err.message : err);
   }
@@ -344,6 +349,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         offset,
         limit,
       );
+      const listIndexKey = k.listIndex(companyId, inboxId || null, statusSegment, kindSegment);
       const cachedRaw = await rGet<
         CacheEnvelope<{ items: any[]; total: number }> | { items: any[]; total: number }
       >(cacheKey);
@@ -394,65 +400,90 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
-      const listResp = await traceSupabase(
-        "chats.list",
-        "chats",
-        queryLog,
-        async () => {
-          let query = supabaseAdmin
-            .from("chats")
-            .select(
-              `
-                id,
-                kind,
-                remote_id,
-                group_name,
-                group_avatar_url,
-                external_id,
-                status,
-                last_message,
-                last_message_at,
-                inbox_id,
-                customer_id,
-                chat_type,
-                created_at,
-                updated_at,
-                assignee_agent,
-                inbox:inboxes!inner(id, company_id)
-              `,
-              { count: "exact" },
-            )
-            .eq("inbox.company_id", companyId)
-            .order("last_message_at", { ascending: false, nullsFirst: false })
-            .order("created_at", { ascending: false })
-            .order("id", { ascending: true });
-          if (inboxId) query = query.eq("inbox_id", inboxId);
-          if (statusFilter) query = query.eq("status", statusFilter);
-          if (kindFilter === "GROUP") {
-            query = query.or(
-              [
-                "kind.eq.GROUP",
-                "remote_id.ilike.%@g.us",
-                "chat_type.eq.GROUP",
-              ].join(","),
-            );
-          } else if (kindFilter === "DIRECT") {
-            query = query.or("kind.eq.DIRECT,kind.is.null");
-            query = query.or("remote_id.is.null,remote_id.not.ilike.%@g.us");
-            query = query.or(
-              [
-                "chat_type.eq.CONTACT",
-                "chat_type.is.null",
-              ].join(","),
-            );
-          }
-          if (q && q.trim()) {
-            const term = q.trim();
-            query = query.or(`last_message.ilike.%${term}%,external_id.ilike.%${term}%`);
-          }
-          return await query.range(offset, offset + Math.max(0, limit - 1));
-        },
-      );
+      const buildChatSelectFields = () => {
+        const fields = [
+          "id",
+          "kind",
+          "remote_id",
+          "group_name",
+          "group_avatar_url",
+          "external_id",
+          "status",
+          "last_message",
+          "last_message_at",
+          "last_message_from",
+        ];
+        if (chatsSupportsLastMessageType) fields.push("last_message_type");
+        if (chatsSupportsLastMessageMediaUrl) fields.push("last_message_media_url");
+        fields.push(
+          "inbox_id",
+          "customer_id",
+          "chat_type",
+          "created_at",
+          "updated_at",
+          "assignee_agent",
+          "inbox:inboxes!inner(id, company_id)",
+        );
+        return fields.join(",");
+      };
+
+      const runChatsQuery = async (label: string) =>
+        await traceSupabase(
+          label,
+          "chats",
+          queryLog,
+          async () => {
+            let query = supabaseAdmin
+              .from("chats")
+              .select(buildChatSelectFields(), { count: "exact" })
+              .eq("inbox.company_id", companyId)
+              .order("last_message_at", { ascending: false, nullsFirst: false })
+              .order("created_at", { ascending: false })
+              .order("id", { ascending: true });
+            if (inboxId) query = query.eq("inbox_id", inboxId);
+            if (statusFilter) query = query.eq("status", statusFilter);
+            if (kindFilter === "GROUP") {
+              query = query.or(
+                [
+                  "kind.eq.GROUP",
+                  "remote_id.ilike.%@g.us",
+                  "chat_type.eq.GROUP",
+                ].join(","),
+              );
+            } else if (kindFilter === "DIRECT") {
+              query = query.or("kind.eq.DIRECT,kind.is.null");
+              query = query.or("remote_id.is.null,remote_id.not.ilike.%@g.us");
+              query = query.or(
+                [
+                  "chat_type.eq.CONTACT",
+                  "chat_type.is.null",
+                ].join(","),
+              );
+            }
+            if (q && q.trim()) {
+              const term = q.trim();
+              query = query.or(`last_message.ilike.%${term}%,external_id.ilike.%${term}%`);
+            }
+            return await query.range(offset, offset + Math.max(0, limit - 1));
+          },
+        );
+
+      let listResp = await runChatsQuery("chats.list");
+      if (listResp.error) {
+        const message = String(listResp.error.message || "").toLowerCase();
+        let retried = false;
+        if (chatsSupportsLastMessageType && message.includes("last_message_type")) {
+          chatsSupportsLastMessageType = false;
+          retried = true;
+        }
+        if (chatsSupportsLastMessageMediaUrl && message.includes("last_message_media_url")) {
+          chatsSupportsLastMessageMediaUrl = false;
+          retried = true;
+        }
+        if (retried) {
+          listResp = await runChatsQuery("chats.list.retry");
+        }
+      }
 
       if (listResp.error) {
         const parsedError = normalizeSupabaseError(listResp.error);
@@ -477,11 +508,10 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
-      const chatIds = toUuidArray(items.map((c: any) => c.id));
       const linkIds = toUuidArray(items.map((c: any) => c.assignee_agent));
       const customerIds = toUuidArray(items.map((c: any) => c.customer_id));
 
-      const [linksResp, customersResp, leadsResp, lastMessagesResp] = await Promise.all([
+      const [linksResp, customersResp, leadsResp] = await Promise.all([
         linkIds.length
           ? traceSupabase(
               "inbox_users.by_id",
@@ -516,19 +546,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
                   .from("leads")
                   .select("id, name, phone")
                   .in("id", customerIds),
-            )
-          : Promise.resolve({ data: [], error: null, count: null } as const),
-        chatIds.length
-          ? traceSupabase(
-              "chat_messages.last",
-              "chat_messages",
-              queryLog,
-              async () =>
-                await supabaseAdmin
-                  .from("chat_messages")
-                  .select("chat_id, is_from_customer, created_at, media_url, type, content")
-                  .in("chat_id", chatIds)
-                  .order("created_at", { ascending: false }),
             )
           : Promise.resolve({ data: [], error: null, count: null } as const),
       ]);
@@ -665,27 +682,30 @@ export function registerLivechatChatRoutes(app: express.Application) {
             chat.display_name = remoteKey.replace(/@.*/, "");
           }
         }
-      }
 
-      const lastByChat: Record<string, any> = {};
-      for (const row of (((lastMessagesResp as any).data || []) as any[])) {
-        const cid = String(row.chat_id);
-        if (lastByChat[cid]) continue;
-        lastByChat[cid] = row;
-      }
+        const senderRaw =
+          typeof chat.last_message_from === "string"
+            ? chat.last_message_from.trim().toUpperCase()
+            : "";
+        chat.last_message_from =
+          senderRaw === "CUSTOMER" || senderRaw === "AGENT" ? senderRaw : null;
 
-      for (const chat of items as any[]) {
-        const cid = String(chat.id);
-        const lastMsg = lastByChat[cid];
-        if (lastMsg) {
-          const senderType = lastMsg.is_from_customer ? "CUSTOMER" : "AGENT";
-          chat.last_message_from = senderType;
-          chat.last_message_type = lastMsg.type ?? null;
-          chat.last_message_media_url = lastMsg.media_url ?? null;
-          if (!chat.last_message && lastMsg.media_url) {
-            chat.last_message = `[${String(lastMsg.type || "MEDIA").toUpperCase()}]`;
-          }
+        const typeRaw =
+          typeof chat.last_message_type === "string"
+            ? chat.last_message_type.trim().toUpperCase()
+            : "";
+        chat.last_message_type = typeRaw || null;
+
+        const mediaUrlRaw =
+          typeof chat.last_message_media_url === "string"
+            ? chat.last_message_media_url.trim()
+            : "";
+        chat.last_message_media_url = mediaUrlRaw || null;
+        if (!chat.last_message && chat.last_message_media_url) {
+          const normalizedType = (chat.last_message_type || "MEDIA").toString().toUpperCase();
+          chat.last_message = `[${normalizedType}]`;
         }
+
         const chatTypeUpper = typeof chat.chat_type === "string" ? chat.chat_type.toUpperCase() : null;
         if (chatTypeUpper === "GROUP" || chatTypeUpper === "GRUPO") {
           chat.kind = "GROUP";
@@ -711,6 +731,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           : new Date().toISOString();
       const envelope = buildCacheEnvelope(payload, lastModifiedIso);
       await rSet(cacheKey, envelope, TTL_LIST);
+      await rememberListCacheKey(listIndexKey, cacheKey, TTL_LIST);
       try {
         await Promise.all(
           items
@@ -1005,7 +1026,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
     setTimeout(() => {
       Promise.all([
         rDel(k.chat(chat.id)),
-        clearMessageCache(chat.id),
+        clearMessageCache(chat.id, (key) => key.includes(":nil:")),
         warmChatMessagesCache(chat.id).catch((err) => {
           console.warn("[livechat:create-chat] warm cache failure", err instanceof Error ? err.message : err);
         }),
@@ -1037,7 +1058,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       setTimeout(() => {
         Promise.all([
           rDel(k.chat(chat.id)),
-          clearMessageCache(chat.id),
+          clearMessageCache(chat.id, (key) => key.includes(":nil:")),
           warmChatMessagesCache(chat.id).catch((err) => {
             console.warn("[livechat:create-chat] warm cache failure (initial message)", err instanceof Error ? err.message : err);
           }),
@@ -1098,7 +1119,45 @@ export function registerLivechatChatRoutes(app: express.Application) {
     if (error) return res.status(500).json({ error: error.message });
 
     await rDel(k.chat(id));
-    await rDelMatch(k.listPrefixCompany(req.user?.company_id));
+    const companyId = (data as any)?.company_id ?? req.user?.company_id ?? null;
+    if (companyId) {
+      const inboxCandidate = (data as any)?.inbox_id ?? null;
+      const remoteId = (data as any)?.remote_id ?? null;
+      const chatType = (data as any)?.chat_type ?? null;
+      let baseKind =
+        typeof (data as any)?.kind === "string" && (data as any).kind
+          ? String((data as any).kind).trim().toUpperCase()
+          : null;
+      const chatTypeUpper = typeof chatType === "string" ? chatType.trim().toUpperCase() : null;
+      if (!baseKind && chatTypeUpper) {
+        baseKind = chatTypeUpper === "GROUP" ? "GROUP" : "DIRECT";
+      }
+      if (
+        !baseKind &&
+        typeof remoteId === "string" &&
+        remoteId.trim().toLowerCase().includes("@g.us")
+      ) {
+        baseKind = "GROUP";
+      }
+
+      const statuses = new Set<string>(["ALL"]);
+      const statusUpper = typeof status === "string" ? status.trim().toUpperCase() : "";
+      if (statusUpper) statuses.add(statusUpper);
+
+      const kinds = new Set<string>(["ALL"]);
+      if (baseKind) kinds.add(baseKind);
+
+      const inboxes = new Set<string | null>([inboxCandidate ?? null, null]);
+      const indexKeys: string[] = [];
+      for (const inbox of inboxes) {
+        for (const statusKey of statuses) {
+          for (const kindKey of kinds) {
+            indexKeys.push(k.listIndex(companyId, inbox, statusKey, kindKey));
+          }
+        }
+      }
+      await clearListCacheIndexes(indexKeys);
+    }
 
     return res.json(data);
   });
@@ -1131,12 +1190,15 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
     try {
       const cacheKey = k.msgsKey(id, before, limit);
-      const cacheSetKey = k.msgsSet(id);
-      const cachedRaw = await rGet<
-        CacheEnvelope<{ items: any[]; nextBefore: string; hasMore: boolean }> |
-        { items: any[]; nextBefore?: string; hasMore?: boolean } |
-        any[]
-      >(cacheKey);
+      const privMetaKey = k.privateChat(id);
+      const [cachedRaw, cachedPrivMeta] = await Promise.all([
+        rGet<
+          CacheEnvelope<{ items: any[]; nextBefore: string; hasMore: boolean }> |
+          { items: any[]; nextBefore?: string; hasMore?: boolean } |
+          any[]
+        >(cacheKey),
+        rGet<{ privateChatId: string | null }>(privMetaKey),
+      ]);
       if (cachedRaw) {
         const cachedEnvelope = ensureEnvelope(cachedRaw);
         const cachedData = Array.isArray(cachedEnvelope.data)
@@ -1177,9 +1239,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
 
       res.setHeader("X-Cache", "MISS");
-
-      const privMetaKey = k.privateChat(id);
-      const cachedPrivMeta = await rGet<{ privateChatId: string | null }>(privMetaKey);
 
       const pubResp = await traceSupabase(
         "chat_messages.page",
@@ -1336,14 +1395,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           : new Date().toISOString();
       const envelope = buildCacheEnvelope(payload, lastModifiedIso);
       await rSet(cacheKey, envelope, TTL_MSGS);
-      try {
-        const pipeline = redis.pipeline();
-        pipeline.sadd(cacheSetKey, cacheKey);
-        pipeline.expire(cacheSetKey, TTL_MSGS * 2);
-        await pipeline.exec();
-      } catch (err) {
-        console.warn("[livechat/messages] cache index update failed:", err instanceof Error ? err.message : err);
-      }
+      await rememberMessageCacheKey(id, cacheKey, TTL_MSGS);
       applyConditionalHeaders(res, envelope);
       res.json(payload.items);
       endTimer({
@@ -1516,7 +1568,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       setTimeout(() => {
         Promise.all([
           rDel(k.chat(id)),
-          clearMessageCache(id),
+          clearMessageCache(id, (key) => key.includes(":nil:")),
           warmChatMessagesCache(id).catch((err) => {
             console.warn("[livechat:chat-file] warm cache failure", err instanceof Error ? err.message : err);
           }),

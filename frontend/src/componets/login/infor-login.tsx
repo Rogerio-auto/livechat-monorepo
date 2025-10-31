@@ -7,7 +7,7 @@ export function InfLogin() {
         {/* Texto central */}
         <div className="flex flex-1 items-center justify-center">
           <h1 className="text-3xl font-bold text-white text-center leading-relaxed">
-            Bem-vindo à <span className="text-green-400">SolarStrive</span>
+            Bem-vindo à <span className="text-blue-400">7 SION</span>
             <br />
             Energia inteligente para um futuro sustentável.
           </h1>

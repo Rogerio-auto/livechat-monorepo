@@ -3,6 +3,7 @@ version: "3.8"
 networks:
   internal:
     driver: bridge
+    enable_ipv6: true
 
 volumes:
   redis-data:

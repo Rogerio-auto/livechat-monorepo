@@ -8,6 +8,8 @@ export const redis = new IORedis(REDIS_URL, {
 });
 
 const DEFAULT_MSGS_TTL = Math.max(30, Number(process.env.CACHE_TTL_MSGS || 60));
+const DEFAULT_LIST_TTL = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
+const DEFAULT_INDEX_TTL = Math.max(DEFAULT_LIST_TTL * 2, DEFAULT_MSGS_TTL * 2, 120);
 
 redis.on("connect", () => console.log("[Redis] connect ok"));
 redis.on("ready", () => console.log("[Redis] ready"));
@@ -103,6 +105,18 @@ export const k = {
     const qq = encodeSearch(q || undefined);
     return `lc:list:${c}:${i}:${s}:${kindSeg}:${off}:${lim}:${qq}`;
   },
+  listIndex: (
+    companyId: string | null | undefined,
+    inboxId?: string | null,
+    status?: string | null,
+    kind?: string | null,
+  ) => {
+    const c = safeSegment(companyId || "", "x");
+    const i = safeSegment(inboxId || "", "*");
+    const s = safeSegment((status || "ALL").toUpperCase(), "ALL");
+    const kindSeg = safeSegment((kind || "ALL").toUpperCase(), "ALL");
+    return `lc:list:set:${c}:${i}:${s}:${kindSeg}`;
+  },
   chat: (chatId: string) => `lc:chat:${chatId}`,
   msgsKey: (chatId: string, before?: string, limit?: number) =>
     `lc:msgs:${chatId}:${encodeCursor(before)}:${Math.max(1, limit ?? 50)}`,
@@ -114,6 +128,26 @@ export const k = {
   avatar: (companyId: string | null | undefined, remoteId: string | null | undefined) =>
     `lc:avatar:${safeSegment(companyId || "", "x")}:${encodeKeyValue(remoteId)}`,
 };
+
+export async function rememberMessageCacheKey(
+  chatId: string,
+  cacheKey: string,
+  ttlSec: number,
+): Promise<void> {
+  const setKey = k.msgsSet(chatId);
+  try {
+    const pipeline = redis.pipeline();
+    pipeline.sadd(setKey, cacheKey);
+    const ttl = ttlSec > 0 ? ttlSec * 2 : DEFAULT_MSGS_TTL * 2;
+    pipeline.expire(setKey, Math.max(1, ttl));
+    await pipeline.exec();
+  } catch (err) {
+    console.warn(
+      "[Redis] rememberMessageCacheKey failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
 
 export async function clearMessageCache(
   chatId: string,
@@ -141,4 +175,83 @@ export async function clearMessageCache(
       err instanceof Error ? err.message : err,
     );
   }
+}
+
+export async function rememberListCacheKey(
+  indexKey: string,
+  cacheKey: string,
+  ttlSec: number,
+): Promise<void> {
+  if (!indexKey || !cacheKey) return;
+  try {
+    const pipeline = redis.pipeline();
+    pipeline.sadd(indexKey, cacheKey);
+    const ttl = ttlSec > 0 ? ttlSec * 2 : DEFAULT_INDEX_TTL;
+    pipeline.expire(indexKey, Math.max(1, ttl));
+    await pipeline.exec();
+  } catch (err) {
+    console.warn(
+      "[Redis] rememberListCacheKey failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
+export async function clearListCacheIndexes(
+  rawIndexKeys: Array<string | null | undefined>,
+): Promise<void> {
+  const uniqueKeys = Array.from(
+    new Set(
+      rawIndexKeys
+        .map((key) => (typeof key === "string" ? key.trim() : ""))
+        .filter((key): key is string => Boolean(key)),
+    ),
+  );
+  if (uniqueKeys.length === 0) return;
+
+  await Promise.all(
+    uniqueKeys.map(async (indexKey) => {
+      try {
+        const keys = await redis.smembers(indexKey);
+        if (keys && keys.length > 0) {
+          const pipeline = redis.pipeline();
+          pipeline.del(...keys);
+          pipeline.srem(indexKey, ...keys);
+          await pipeline.exec();
+        }
+        await redis.del(indexKey);
+      } catch (err) {
+        console.warn(
+          "[Redis] clearListCacheIndexes failed:",
+          indexKey,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }),
+  );
+}
+
+export async function clearCompanyListCaches(
+  companyId: string | null | undefined,
+): Promise<void> {
+  if (!companyId || !companyId.trim()) return;
+  const companySegment = safeSegment(companyId, "x");
+  const pattern = `lc:list:set:${companySegment}:*`;
+  const indexKeys: string[] = [];
+  try {
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", "200");
+      if (keys.length > 0) indexKeys.push(...keys);
+      cursor = nextCursor;
+    } while (cursor !== "0");
+  } catch (err) {
+    console.warn(
+      "[Redis] clearCompanyListCaches scan failed:",
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  if (indexKeys.length === 0) return;
+  await clearListCacheIndexes(indexKeys);
 }

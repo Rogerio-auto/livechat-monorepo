@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { requireAuth } from "../middlewares/requireAuth";
 import { publish, publishMeta, EX_APP } from "../queue/rabbit";
 import { getIO } from "../lib/io";
-import { rDelMatch, rGet, rSet, k } from "../lib/redis";
+import { clearCompanyListCaches, rGet, rSet, k } from "../lib/redis";
 import { supabaseAdmin } from "../lib/supabase";
 import { getDecryptedCredsForInbox } from "../services/meta/store";
 import { WAHA_BASE_URL, WAHA_PROVIDER, wahaFetch, WahaHttpError } from "../services/waha/client";
@@ -28,6 +28,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const CONNECTED_STATUSES = new Set(["WORKING", "CONNECTED", "READY", "OPEN", "RUNNING"]);
 const DISCONNECTED_STATUSES = new Set(["FAILED", "STOPPED", "CLOSED", "LOGGED_OUT", "DISCONNECTED", "QR_TIMEOUT"]);
+
+let draftKindColumnMissing = false;
 
 type InboxLookupRow = {
   id: string;
@@ -146,11 +148,10 @@ const GetMessagesQuery = z.object({
 // ====== Helpers ======
 async function invalidateCompanyChatLists(companyId: string) {
   try {
-    await rDelMatch(`livechat:chats:list:${companyId}:*`);
-  } catch {}
-  try {
-    await rDelMatch(k.listPrefixCompany(companyId));
-  } catch {}
+    await clearCompanyListCaches(companyId);
+  } catch (err) {
+    console.warn("[WAHA] invalidateCompanyChatLists failed", err);
+  }
 }
 
 async function persistDraftMessage(params: {
@@ -165,26 +166,45 @@ async function persistDraftMessage(params: {
   caption?: string | null;
   quotedMessageId?: string | null;
 }) {
-  const { data, error } = await supabaseAdmin
-    .from("chat_messages")
-    .insert([{
-      company_id: params.companyId,
-      chat_id: params.chatId ?? null,
-      inbox_id: params.inboxId,
-      to_remote: params.to,
-      from_user_id: params.fromUserId ?? null,
-      kind: params.kind,
-      content: params.content ?? null,
-      media_url: params.mediaUrl ?? null,
-      caption: params.caption ?? null,
-      quoted_message_id: params.quotedMessageId ?? null,
-      status: "DRAFT",
-    }])
-    .select()
-    .maybeSingle();
+  const baseRecord: Record<string, unknown> = {
+    company_id: params.companyId,
+    chat_id: params.chatId ?? null,
+    inbox_id: params.inboxId,
+    to_remote: params.to,
+    from_user_id: params.fromUserId ?? null,
+    content: params.content ?? null,
+    media_url: params.mediaUrl ?? null,
+    caption: params.caption ?? null,
+    quoted_message_id: params.quotedMessageId ?? null,
+    status: "DRAFT",
+  };
+  if (!draftKindColumnMissing) {
+    baseRecord.kind = params.kind;
+  }
 
-  if (error) console.warn("[WAHA] persistDraftMessage failed:", error.message);
-  return data || null;
+  const attemptInsert = async (record: Record<string, unknown>) =>
+    await supabaseAdmin.from("chat_messages").insert([record]).select().maybeSingle();
+
+  let result = await attemptInsert(baseRecord);
+
+  if (result.error) {
+    const message = String(result.error.message || "");
+    const missingKind =
+      !draftKindColumnMissing &&
+      (result.error.code === "42703" || message.toLowerCase().includes("kind"));
+    if (missingKind) {
+      draftKindColumnMissing = true;
+      console.warn("[WAHA] persistDraftMessage kind column missing. Retrying without it.");
+      const fallbackRecord = { ...baseRecord };
+      delete fallbackRecord.kind;
+      result = await attemptInsert(fallbackRecord);
+    }
+  }
+
+  if (result.error) {
+    console.warn("[WAHA] persistDraftMessage failed:", result.error.message);
+  }
+  return result.data || null;
 }
 
 function authHeaderBearer(req: Request): string {

@@ -34,7 +34,7 @@ import {
   markChatRemoteParticipantLeft,
   findChatMessageIdByExternalId,
 } from "../src/services/meta/store.ts";
-import { redis, rDel, rDelMatch, rSet, k } from "../src/lib/redis.ts";
+import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 
@@ -476,15 +476,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
     };
 
     await rSet(cacheKey, envelope, CACHE_TTL_MSGS);
-    try {
-      const setKey = k.msgsSet(chatId);
-      const pipeline = redis.pipeline();
-      pipeline.sadd(setKey, cacheKey);
-      pipeline.expire(setKey, CACHE_TTL_MSGS * 2);
-      await pipeline.exec();
-    } catch (err) {
-      console.warn("[worker][cache] warmChatMessagesCache index update failed", err instanceof Error ? err.message : err);
-    }
+    await rememberMessageCacheKey(chatId, cacheKey, CACHE_TTL_MSGS);
   } catch (err) {
     console.warn("[worker][cache] warmChatMessagesCache failed", {
       chatId,
@@ -1293,75 +1285,21 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
     }
   }
 
-  try {
-    if (companyKey) {
-      const listKey =
-        typeof (k as any)?.listPrefixCompany === "function"
-          ? (k as any).listPrefixCompany(companyKey)
-          : `livechat:chats:list:${companyKey}:*`;
-      if (listKey) {
-        await rDelMatch(listKey);
-      }
+  if (chatId) {
+    try {
+      await invalidateChatCaches(chatId, {
+        companyId: job.companyId,
+        inboxId,
+      });
+    } catch (err) {
+      console.warn("[inbound.media] cache invalidate failure:", (err as any)?.message || err);
     }
-  } catch (err) {
-    console.warn("[inbound.media] list cache purge failure:", (err as any)?.message || err);
-  }
 
-  try {
-    const { rows } = await db.query(
-      `
-      select id,
-             chat_id,
-             content,
-             is_from_customer,
-             sender_id,
-             created_at,
-             type,
-             view_status,
-             media_url,
-             remote_participant_id,
-             remote_sender_id,
-             remote_sender_name,
-             remote_sender_phone,
-             remote_sender_avatar_url,
-             remote_sender_is_admin,
-             replied_message_id
-        from public.chat_messages
-       where chat_id = $1
-       order by created_at desc
-       limit $2
-      `,
-      [chatId, PAGE_LIMIT_PREWARM],
-    );
-
-    const mappedDesc = (rows || []).map((r) => ({
-      id: r.id,
-      chat_id: r.chat_id,
-      body: r.content,
-      sender_type: r.is_from_customer ? "CUSTOMER" : "AGENT",
-      sender_id: r.sender_id,
-      created_at: r.created_at,
-      view_status: r.view_status,
-      type: r.type ?? "TEXT",
-      is_private: false,
-      media_url: r.media_url ?? null,
-      remote_participant_id: r.remote_participant_id ?? null,
-      remote_sender_id: r.remote_sender_id ?? null,
-      remote_sender_name: r.remote_sender_name ?? null,
-      remote_sender_phone: r.remote_sender_phone ?? null,
-      remote_sender_avatar_url: r.remote_sender_avatar_url ?? null,
-      remote_sender_is_admin: r.remote_sender_is_admin ?? null,
-      replied_message_id: r.replied_message_id ?? null,
-    }));
-
-    const pubAsc = [...mappedDesc].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-    );
-
-    const key = k.msgsKey(chatId, undefined, PAGE_LIMIT_PREWARM);
-    await rSet(key, pubAsc, CACHE_TTL_MSGS);
-  } catch (err) {
-    console.warn("[inbound.media] cache prewarm error:", (err as any)?.message || err);
+    try {
+      await warmChatMessagesCache(chatId);
+    } catch (err) {
+      console.warn("[inbound.media] cache prewarm error:", (err as any)?.message || err);
+    }
   }
 }
 
@@ -1570,6 +1508,15 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     chatId,
     content: body,
     lastMessageFrom: isFromCustomer ? "CUSTOMER" : "AGENT",
+    lastMessageType: upsertResult.message.type ?? messageType ?? "TEXT",
+    lastMessageMediaUrl: upsertResult.message.media_url ?? mediaUrl ?? null,
+    listContext: {
+      companyId: job.companyId,
+      inboxId: job.inboxId,
+      kind: isGroupChat ? "GROUP" : "DIRECT",
+      chatType: isGroupChat ? "GROUP" : "CONTACT",
+      remoteId: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
+    },
   });
 
   if (mediaUrl) {
@@ -1660,7 +1607,13 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   }
 
   try {
-    await invalidateChatCaches(chatId, job.companyId);
+    await invalidateChatCaches(chatId, {
+      companyId: job.companyId,
+      inboxId: job.inboxId,
+      kind: isGroupChat ? "GROUP" : "DIRECT",
+      chatType: isGroupChat ? "GROUP" : "CONTACT",
+      remoteId: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
+    });
   } catch (error) {
     console.warn("[WAHA][worker] failed to invalidate caches after inbound", {
       chatId,
@@ -1999,6 +1952,12 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
           chatId: messageRow.chat_id,
           content: messageRow.content,
           lastMessageFrom: "AGENT",
+          lastMessageType: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
+          lastMessageMediaUrl: messageRow.media_url ?? payload?.mediaUrl ?? null,
+          listContext: {
+            companyId: job.companyId,
+            inboxId,
+          },
         });
       } catch (error) {
         console.warn("[worker][WAHA] touchChatAfterMessage failed", {
@@ -2012,6 +1971,15 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
           chatId: internalChatId,
           content: contentForChat,
           lastMessageFrom: "AGENT",
+          lastMessageType:
+            messageType === "media"
+              ? String(payload?.kind || "DOCUMENT").toUpperCase()
+              : "TEXT",
+          lastMessageMediaUrl: payload?.mediaUrl ?? null,
+          listContext: {
+            companyId: job.companyId,
+            inboxId,
+          },
         });
       } catch (error) {
         console.warn("[worker][WAHA] touchChatAfterMessage failed (no message row)", {
@@ -2089,7 +2057,13 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     }, 0);
 
     try {
-      await invalidateChatCaches(chatIdForStatus, job.companyId);
+      await invalidateChatCaches(chatIdForStatus, {
+        companyId: job.companyId,
+        inboxId,
+        kind: typeof remoteChatId === "string" && remoteChatId.includes("@g.us") ? "GROUP" : "DIRECT",
+        chatType: typeof remoteChatId === "string" && remoteChatId.includes("@g.us") ? "GROUP" : "CONTACT",
+        remoteId: remoteChatId ?? null,
+      });
     } catch (error) {
       console.warn("[worker][WAHA] failed to invalidate caches after outbound", {
         chatId: chatIdForStatus,

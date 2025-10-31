@@ -2,12 +2,14 @@
 import db from "../../pg.ts";
 import { normalizeMsisdn } from "../../util.ts";
 import { supabaseAdmin } from "../../lib/supabase.js";
-import { clearMessageCache, rDel, rGet, rSet, k } from "../../lib/redis.ts";
+import { clearMessageCache, clearListCacheIndexes, rDel, rGet, rSet, k } from "../../lib/redis.ts";
 import { decryptSecret } from "../../lib/crypto.ts";
 import { WAHA_PROVIDER } from "../waha/client.ts";
 
 let customerAvatarColumnMissing = false;
 let chatLastMessageFromColumnMissing = false;
+let chatLastMessageTypeColumnMissing = false;
+let chatLastMessageMediaUrlColumnMissing = false;
 let chatMessagesSupportsRemoteSenderColumns = true;
 let chatsSupportsGroupMetadata = true;
 let chatRemoteParticipantsTableMissing = false;
@@ -47,9 +49,118 @@ const boardCacheKey = (companyId: string) => `meta:board:${companyId}`;
 const credsCacheKey = (inboxId: string) => `meta:inbox:creds:${inboxId}`;
 const chatPhoneCacheKey = (chatId: string) => `meta:chat:phone:${chatId}`;
 
-export async function invalidateChatCaches(chatId: string, companyId?: string | null) {
+type ChatListContext =
+  | string
+  | null
+  | {
+      companyId?: string | null;
+      inboxId?: string | null;
+      status?: string | null;
+      kind?: string | null;
+      chatType?: string | null;
+      remoteId?: string | null;
+    };
+
+function normalizeChatKind(
+  kind?: string | null,
+  chatType?: string | null,
+  remoteId?: string | null,
+): "GROUP" | "DIRECT" | null {
+  const primary = kind ?? null;
+  if (typeof primary === "string" && primary.trim()) {
+    const upper = primary.trim().toUpperCase();
+    if (upper === "GROUP" || upper === "DIRECT") return upper;
+  }
+  if (typeof chatType === "string" && chatType.trim()) {
+    const upper = chatType.trim().toUpperCase();
+    if (upper === "GROUP" || upper === "DIRECT") return upper === "GROUP" ? "GROUP" : "DIRECT";
+  }
+  if (typeof remoteId === "string" && remoteId.trim()) {
+    return remoteId.includes("@g.us") ? "GROUP" : "DIRECT";
+  }
+  return null;
+}
+
+export async function invalidateChatCaches(chatId: string, context?: ChatListContext) {
   await rDel(k.chat(chatId));
-  await clearMessageCache(chatId);
+  await clearMessageCache(chatId, (key) => key.includes(":nil:"));
+
+  let companyId: string | null | undefined;
+  let inboxId: string | null | undefined;
+  let status: string | null | undefined;
+  let kind: string | null | undefined;
+  let chatType: string | null | undefined;
+  let remoteId: string | null | undefined;
+
+  if (typeof context === "string" || context === null) {
+    companyId = context ?? null;
+  } else if (context) {
+    companyId = context.companyId ?? null;
+    inboxId = context.inboxId ?? null;
+    status = context.status ?? null;
+    kind = context.kind ?? null;
+    chatType = context.chatType ?? null;
+    remoteId = context.remoteId ?? null;
+  }
+
+  const needsLookup =
+    !companyId || inboxId === undefined || status === undefined || kind === undefined || chatType === undefined;
+
+  if (needsLookup) {
+    try {
+      const row = await db.oneOrNone<{
+        company_id: string | null;
+        inbox_id: string | null;
+        status: string | null;
+        kind: string | null;
+        chat_type: string | null;
+        remote_id: string | null;
+      }>(
+        `select company_id, inbox_id, status, kind, chat_type, remote_id
+           from public.chats
+          where id = $1
+          limit 1`,
+        [chatId],
+      );
+      if (row) {
+        companyId = companyId ?? row.company_id ?? null;
+        inboxId = inboxId ?? row.inbox_id ?? null;
+        status = status ?? row.status ?? null;
+        kind = kind ?? row.kind ?? null;
+        chatType = chatType ?? row.chat_type ?? null;
+        remoteId = remoteId ?? row.remote_id ?? null;
+      }
+    } catch (err) {
+      console.warn("[META][store] invalidateChatCaches lookup failed", {
+        chatId,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  if (!companyId) return;
+
+  const statuses = new Set<string>(["ALL"]);
+  if (typeof status === "string" && status.trim()) {
+    statuses.add(status.trim().toUpperCase());
+  }
+
+  const resolvedKind = normalizeChatKind(kind, chatType, remoteId);
+  const kinds = new Set<string>(["ALL"]);
+  if (resolvedKind) kinds.add(resolvedKind);
+
+  const inboxes = new Set<string | null>([inboxId ?? null, null]);
+
+  const indexKeys: string[] = [];
+  for (const inboxCandidate of inboxes) {
+    for (const statusCandidate of statuses) {
+      for (const kindCandidate of kinds) {
+        indexKeys.push(k.listIndex(companyId, inboxCandidate, statusCandidate, kindCandidate));
+      }
+    }
+  }
+
+  await clearListCacheIndexes(indexKeys);
 }
 
 type ChatRemoteParticipant = {
@@ -548,7 +659,10 @@ export async function createLeadCustomerChatAndMessageTx(args: {
     [chatId, args.content]
   );
 
-  await invalidateChatCaches(chatId, args.companyId);
+  await invalidateChatCaches(chatId, {
+    companyId: args.companyId,
+    inboxId: args.inboxId,
+  });
 
   return {
     leadId,
@@ -1038,60 +1152,91 @@ export async function touchChatAfterMessage(args: {
   chatId: string;
   content: string | null;
   lastMessageFrom?: "CUSTOMER" | "AGENT" | null;
+  lastMessageType?: string | null;
+  lastMessageMediaUrl?: string | null;
+  listContext?: {
+    companyId?: string | null;
+    inboxId?: string | null;
+    status?: string | null;
+    kind?: string | null;
+    chatType?: string | null;
+    remoteId?: string | null;
+  };
 }): Promise<void> {
-  const messageFrom = args.lastMessageFrom ?? null;
+  const sanitizedContent = args.content ?? null;
+  const messageFrom =
+    typeof args.lastMessageFrom === "string"
+      ? (args.lastMessageFrom || "").trim().toUpperCase() || null
+      : null;
+  const messageType =
+    typeof args.lastMessageType === "string"
+      ? (args.lastMessageType || "").trim().toUpperCase() || null
+      : null;
+  const mediaUrl =
+    typeof args.lastMessageMediaUrl === "string"
+      ? (args.lastMessageMediaUrl || "").trim() || null
+      : null;
 
-  const updateArgsWithOrigin: [string, string | null, ("CUSTOMER" | "AGENT" | null)] = [
-    args.chatId,
-    args.content,
-    messageFrom,
-  ];
+  let attempts = 0;
+  while (attempts < 4) {
+    attempts += 1;
+    const updateFragments = ["last_message = $2", "last_message_at = now()", "updated_at = now()"];
+    const values: Array<string | null> = [args.chatId, sanitizedContent];
+    let paramIndex = values.length + 1;
 
-  try {
     if (!chatLastMessageFromColumnMissing) {
-      await db.none(
-        `update public.chats
-            set last_message = $2,
-                last_message_at = now(),
-                last_message_from = $3,
-                updated_at = now()
-          where id = $1`,
-        updateArgsWithOrigin,
-      );
-    } else {
-      await db.none(
-        `update public.chats
-            set last_message = $2,
-                last_message_at = now(),
-                updated_at = now()
-          where id = $1`,
-        updateArgsWithOrigin.slice(0, 2),
-      );
+      updateFragments.push(`last_message_from = $${paramIndex++}`);
+      values.push(messageFrom);
     }
-  } catch (err) {
-    const error = err as any;
-    const message = String(error?.message || "");
-    if (!chatLastMessageFromColumnMissing && (error?.code === "42703" || message.includes("last_message_from"))) {
-      chatLastMessageFromColumnMissing = true;
-      console.warn("[META][store] chats.last_message_from column missing. Falling back without it.");
-      try {
-        await db.none(
-          `update public.chats
-              set last_message = $2,
-                  last_message_at = now(),
-                  updated_at = now()
-            where id = $1`,
-          updateArgsWithOrigin.slice(0, 2),
-        );
-      } catch (fallbackError) {
-        console.warn("[META][store] fallback chat update failed", { chatId: args.chatId, error: fallbackError });
+    if (!chatLastMessageTypeColumnMissing) {
+      updateFragments.push(`last_message_type = $${paramIndex++}`);
+      values.push(messageType);
+    }
+    if (!chatLastMessageMediaUrlColumnMissing) {
+      updateFragments.push(`last_message_media_url = $${paramIndex++}`);
+      values.push(mediaUrl);
+    }
+
+    try {
+      await db.none(
+        `update public.chats
+            set ${updateFragments.join(", ")}
+          where id = $1`,
+        values,
+      );
+      break;
+    } catch (err) {
+      const error = err as any;
+      const message = String(error?.message || "");
+      let handledMissingColumn = false;
+      if (error?.code === "42703" || message.includes("column")) {
+        if (!chatLastMessageFromColumnMissing && message.includes("last_message_from")) {
+          chatLastMessageFromColumnMissing = true;
+          handledMissingColumn = true;
+          console.warn("[META][store] chats.last_message_from column missing. Retrying without it.");
+        }
+        if (!chatLastMessageTypeColumnMissing && message.includes("last_message_type")) {
+          chatLastMessageTypeColumnMissing = true;
+          handledMissingColumn = true;
+          console.warn("[META][store] chats.last_message_type column missing. Retrying without it.");
+        }
+        if (!chatLastMessageMediaUrlColumnMissing && message.includes("last_message_media_url")) {
+          chatLastMessageMediaUrlColumnMissing = true;
+          handledMissingColumn = true;
+          console.warn("[META][store] chats.last_message_media_url column missing. Retrying without it.");
+        }
       }
-    } else {
-      console.warn("[META][store] failed to update chat last_message", { chatId: args.chatId, error });
+      if (!handledMissingColumn) {
+        console.warn("[META][store] failed to update chat last_message", {
+          chatId: args.chatId,
+          error,
+        });
+        break;
+      }
     }
   }
 
-  await invalidateChatCaches(args.chatId);
+  await invalidateChatCaches(args.chatId, args.listContext);
 }
 
 export async function insertInboundMessage(args: {
@@ -1134,6 +1279,8 @@ export async function insertInboundMessage(args: {
     chatId: args.chatId,
     content: args.content,
     lastMessageFrom: "CUSTOMER",
+    lastMessageType: args.type ?? result.message.type ?? "TEXT",
+    lastMessageMediaUrl: result.message.media_url ?? null,
   });
 
   return {
@@ -1172,7 +1319,7 @@ export async function updateMessageStatusByExternalId(args: {
       [args.externalId, args.viewStatus],
     );
     if (updated?.chat_id) {
-      await invalidateChatCaches(updated.chat_id);
+      await invalidateChatCaches(updated.chat_id, { inboxId: args.inboxId });
     }
     return updated
       ? {
@@ -1413,7 +1560,7 @@ export async function insertOutboundMessage(args: {
       return null;
     }
 
-    await invalidateChatCaches(row.chat_id);
+    await invalidateChatCaches(row.chat_id, { inboxId: args.inboxId });
     return { message: row, operation };
   } catch (e) {
     console.error("[DB] insertOutboundMessage error", e);

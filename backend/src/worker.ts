@@ -69,6 +69,7 @@ type WahaInboundPayload = {
   payload: any;
   receivedAt: string;
   raw?: any;
+  draftId?: string | null;
 };
 type InboundJobPayload = MetaInboundPayload | WahaInboundPayload;
 type InboundMediaJobPayload = {

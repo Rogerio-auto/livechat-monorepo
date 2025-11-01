@@ -175,3 +175,26 @@ Os workers e o frontend geram logs estruturados com a chave `durationMs` para ac
 - `[metrics][api]` mostra o tempo que a rota `POST /livechat/messages` levou para persistir a mensagem e acionar a fila.
 - `[metrics][worker]` cobre as etapas internas dos workers (`inbound`, `inboundMedia`, `outbound`) incluindo `chatId`/`externalId` quando disponiveis.
 Use esses registros para identificar gargalos sem depender de ferramentas externas.
+
+## Buffer Inteligente de Mensagens (Agents)
+O backend suporta agregacao de mensagens recebidas antes de acionar a IA. Isso evita respostas interrompidas quando o cliente envia varias mensagens em sequencia.
+
+Como funciona:
+- Para cada empresa, o agente ativo (tabela `agents`) pode habilitar `aggregation_enabled`.
+- Quando habilitado, o tempo de janela de inatividade e definido em `aggregation_window_sec`.
+- Mensagens recebidas enquanto o chat esta com status `AI` sao enfileiradas no Redis por chat; a cada nova mensagem o timer e rearmado.
+- Ao expirar a janela, as mensagens acumuladas sao agregadas em um unico prompt e enviadas ao modelo; a resposta e publicada como mensagem do agente.
+
+Configuracao por agente (tabela `agents`):
+- `aggregation_enabled` (boolean): ativa/desativa o buffer.
+- `aggregation_window_sec` (number): segundos de inatividade para disparar o flush.
+- `max_batch_messages` (number, opcional): limite maximo de mensagens em um lote; excedente e descartado do inicio.
+
+Variaveis de ambiente relacionadas ao scheduler:
+- `BUFFER_TICK_MS` (default: 1000): intervalo em ms para varrer e liberar lotes vencidos.
+- `BUFFER_MAX_FLUSH` (default: 50): limite de chats liberados por tick para evitar picos.
+
+Observacoes:
+- O buffer so atua quando o `status` do chat e `AI`. Qualquer outra situacao descarta silenciosamente o lote pendente.
+- Se preferir responder imediatamente (sem buffer), deixe `aggregation_enabled=false` ou `aggregation_window_sec` nulo/0 no agente ativo.
+- As rotas `/livechat/chats` e `/livechat/chats/:id` agora expõem `ai_agent_id` e `ai_agent_name` para exibir na UI qual agente IA esta ativo.

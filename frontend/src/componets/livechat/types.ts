@@ -53,6 +53,9 @@ export type Message = {
   remote_sender_avatar_url?: string | null;
   remote_sender_is_admin?: boolean | null;
   replied_message_id?: string | null;
+  delivery_status?: string | null;
+  client_draft_id?: string | null;
+  error_reason?: string | null;
 };
 
 export type Inbox = {

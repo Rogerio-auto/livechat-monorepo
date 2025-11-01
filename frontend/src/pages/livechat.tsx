@@ -119,6 +119,9 @@ export default function LiveChatPage() {
   const hasMoreChatsRef = useRef(true);
   const messagesCache = useMemo(() => new Map<string, Message[]>(), []);
   const messageLatencyRef = useRef<Map<string, number>>(new Map());
+  const draftsRef = useRef<Map<string, { chatId: string; content: string; type: string; createdAt: string }>>(
+    new Map(),
+  );
   const messagesRequestRef = useRef<symbol | null>(null);
   const [messageStatuses, setMessageStatuses] = useState<Record<string, string | null>>({});
   const chatsAbortRef = useRef<AbortController | null>(null);
@@ -890,12 +893,33 @@ const scrollToBottom = useCallback(
   [bottomRef],
 );
 
+  const generateDraftId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
   const sortMessagesAsc = (list: Message[]) => {
     return [...list].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   };
 
   const normalizeMessage = useCallback((raw: any): Message => {
     if (!raw) return raw as Message;
+    const deliveryStatus =
+      typeof raw?.delivery_status === "string" && raw.delivery_status
+        ? raw.delivery_status.toUpperCase()
+        : typeof raw?.view_status === "string" && raw.view_status
+          ? raw.view_status.toUpperCase()
+          : null;
+    const clientDraftId =
+      typeof raw?.client_draft_id === "string" && raw.client_draft_id
+        ? raw.client_draft_id
+        : typeof raw?.draftId === "string" && raw.draftId
+          ? raw.draftId
+          : typeof raw?.draft_id === "string" && raw.draft_id
+            ? raw.draft_id
+            : null;
     return {
       ...raw,
       media_url: raw.media_url ?? null,
@@ -908,6 +932,13 @@ const scrollToBottom = useCallback(
       remote_sender_is_admin:
         typeof raw.remote_sender_is_admin === "boolean" ? raw.remote_sender_is_admin : null,
       replied_message_id: raw.replied_message_id ?? null,
+      delivery_status: deliveryStatus,
+      client_draft_id: clientDraftId,
+      error_reason: raw?.error_reason ?? null,
+      view_status:
+        typeof raw?.view_status === "string" && raw.view_status
+          ? raw.view_status.toUpperCase()
+          : deliveryStatus,
     } as Message;
   }, []);
 
@@ -948,8 +979,29 @@ const scrollToBottom = useCallback(
       const normalized = normalizeMessage(msg);
       const chatId = normalized.chat_id;
       const existing = messagesCache.get(chatId) ?? [];
-      if (existing.some((item) => item.id === normalized.id)) return;
-      const updated = sortMessagesAsc([...existing, normalized]);
+      const index = existing.findIndex(
+        (item) =>
+          item.id === normalized.id ||
+          (normalized.client_draft_id && item.client_draft_id === normalized.client_draft_id),
+      );
+      let updated: Message[];
+      if (index >= 0) {
+        const previous = existing[index];
+        const merged = { ...previous, ...normalized };
+        const clone = [...existing];
+        clone[index] = merged;
+        if (
+          normalized.client_draft_id &&
+          (normalized.id !== previous.id || previous.client_draft_id === normalized.client_draft_id)
+        ) {
+          draftsRef.current.delete(normalized.client_draft_id);
+        } else if (!normalized.client_draft_id && previous.client_draft_id) {
+          draftsRef.current.delete(previous.client_draft_id);
+        }
+        updated = sortMessagesAsc(clone);
+      } else {
+        updated = sortMessagesAsc([...existing, normalized]);
+      }
       messagesCache.set(chatId, updated);
       if (currentChatIdRef.current === chatId) {
         setMessages(updated);
@@ -960,24 +1012,165 @@ const scrollToBottom = useCallback(
   );
 
   const updateMessageStatusInCache = useCallback(
-    (payload: { chatId?: string | null; messageId?: string | null; view_status?: string | null }) => {
-      if (!payload?.chatId || !payload?.messageId) return;
+    (payload: {
+      chatId?: string | null;
+      messageId?: string | null;
+      draftId?: string | null;
+      view_status?: string | null;
+      delivery_status?: string | null;
+      error_reason?: string | null;
+      merge?: Partial<Message>;
+    }) => {
+      if (!payload?.chatId) return;
       const cached = messagesCache.get(payload.chatId) ?? [];
       if (cached.length === 0) return;
+
+      const normalizedView =
+        typeof payload.view_status === "string" && payload.view_status
+          ? payload.view_status.toUpperCase()
+          : undefined;
+      const normalizedDelivery =
+        typeof payload.delivery_status === "string" && payload.delivery_status
+          ? payload.delivery_status.toUpperCase()
+          : undefined;
+
       let changed = false;
       const next = cached.map((msg) => {
-        if (msg.id !== payload.messageId) return msg;
-        if (msg.view_status === payload.view_status) return msg;
-        changed = true;
-        return { ...msg, view_status: payload.view_status ?? null };
+        const matches =
+          (payload.messageId && msg.id === payload.messageId) ||
+          (payload.draftId &&
+            (msg.id === payload.draftId || msg.client_draft_id === payload.draftId));
+        if (!matches) return msg;
+
+        const updated: Message = { ...msg };
+        if (normalizedView !== undefined && updated.view_status !== normalizedView) {
+          updated.view_status = normalizedView;
+          changed = true;
+        }
+        if (normalizedDelivery !== undefined && updated.delivery_status !== normalizedDelivery) {
+          updated.delivery_status = normalizedDelivery;
+          changed = true;
+        }
+        if (payload.error_reason !== undefined && updated.error_reason !== payload.error_reason) {
+          updated.error_reason = payload.error_reason ?? null;
+          changed = true;
+        }
+        if (payload.merge) {
+          Object.assign(updated, payload.merge);
+          changed = true;
+        }
+        return updated;
       });
       if (!changed) return;
-      messagesCache.set(payload.chatId, next);
+      const updatedList = sortMessagesAsc(next);
+      messagesCache.set(payload.chatId, updatedList);
       if (currentChatIdRef.current === payload.chatId) {
-        setMessages(next);
+        setMessages(updatedList);
       }
     },
-    [setMessages, messagesCache],
+    [messagesCache, setMessages],
+  );
+
+  const removeMessageFromCache = useCallback(
+    (chatId: string, messageId: string) => {
+      const cached = messagesCache.get(chatId) ?? [];
+      if (cached.length === 0) return;
+      const filtered = cached.filter(
+        (msg) => msg.id !== messageId && msg.client_draft_id !== messageId,
+      );
+      if (filtered.length === cached.length) return;
+      messagesCache.set(chatId, filtered);
+      if (currentChatIdRef.current === chatId) {
+        setMessages(filtered);
+      }
+    },
+    [messagesCache, setMessages],
+  );
+
+  const replaceDraftWithMessage = useCallback(
+    (draftId: string, message: Partial<Message> & { id: string; chat_id?: string }) => {
+      const stored = draftsRef.current.get(draftId);
+      const chatId = message.chat_id ?? stored?.chatId ?? null;
+      if (!chatId) return;
+      draftsRef.current.delete(draftId);
+
+      const normalized = normalizeMessage({
+        ...message,
+        chat_id: chatId,
+        delivery_status: (message.delivery_status ?? "SENT") as string,
+        view_status: message.view_status ?? "SENT",
+        client_draft_id: draftId,
+        error_reason: null,
+      });
+
+      const cached = messagesCache.get(chatId) ?? [];
+      const filtered = cached.filter(
+        (msg) =>
+          msg.id !== draftId &&
+          msg.client_draft_id !== draftId &&
+          msg.id !== normalized.id,
+      );
+      const updated = sortMessagesAsc([...filtered, normalized]);
+      messagesCache.set(chatId, updated);
+      if (currentChatIdRef.current === chatId) {
+        setMessages(updated);
+      }
+    },
+    [normalizeMessage, messagesCache, setMessages],
+  );
+
+  const markDraftAsError = useCallback(
+    (draftId: string, chatId?: string | null, reason?: string | null) => {
+      const stored = draftsRef.current.get(draftId);
+      const effectiveChatId = chatId ?? stored?.chatId ?? null;
+      if (!effectiveChatId) return;
+      if (!stored) {
+        draftsRef.current.set(draftId, {
+          chatId: effectiveChatId,
+          content: "",
+          type: "TEXT",
+          createdAt: new Date().toISOString(),
+        });
+      }
+      updateMessageStatusInCache({
+        chatId: effectiveChatId,
+        draftId,
+        view_status: "ERROR",
+        delivery_status: "ERROR",
+        error_reason: reason ?? "Falha ao enviar",
+      });
+    },
+    [updateMessageStatusInCache],
+  );
+
+  const createDraftMessage = useCallback(
+    (chat: Chat, content: string, type: string = "TEXT") => {
+      const draftId = generateDraftId();
+      const createdAt = new Date().toISOString();
+      draftsRef.current.set(draftId, {
+        chatId: chat.id,
+        content,
+        type,
+        createdAt,
+      });
+      appendMessageToCache({
+        id: draftId,
+        chat_id: chat.id,
+        body: content,
+        content,
+        sender_type: "AGENT",
+        sender_id: null,
+        created_at: createdAt,
+        view_status: "SENDING",
+        delivery_status: "SENDING",
+        type,
+        is_private: false,
+        client_draft_id: draftId,
+        error_reason: null,
+      } as Message);
+      return { draftId, createdAt };
+    },
+    [appendMessageToCache],
   );
 
   useEffect(() => {
@@ -992,13 +1185,27 @@ const scrollToBottom = useCallback(
     const onMessageStatus = (payload: any) => {
       const chatId = payload?.chatId ?? payload?.chat_id ?? null;
       const messageId = payload?.messageId ?? payload?.message_id ?? null;
-      const viewStatus = payload?.view_status ?? payload?.raw_status ?? null;
+      const draftId = payload?.draftId ?? payload?.draft_id ?? null;
+      const statusValue =
+        payload?.status ??
+        payload?.delivery_status ??
+        payload?.view_status ??
+        payload?.raw_status ??
+        null;
+      const reason = payload?.reason ?? payload?.error ?? null;
       updateMessageStatusInCache({
         chatId,
         messageId,
-        view_status: viewStatus ?? null,
+        draftId,
+        view_status: payload?.view_status ?? statusValue ?? null,
+        delivery_status: statusValue ?? null,
+        error_reason: reason ?? null,
       });
-      logSendLatency(chatId ?? null, messageId ?? null, viewStatus ?? null);
+      if (draftId) {
+        logSendLatency(chatId ?? null, draftId, statusValue ?? null);
+      } else {
+        logSendLatency(chatId ?? null, messageId ?? null, statusValue ?? null);
+      }
     };
 
     s.on("message:new", onMessageNew);
@@ -1655,135 +1862,172 @@ const scrollToBottom = useCallback(
 
 
 
-  const send = async () => {
-    if (!currentChat) return;
-    const sendStartedAt = performance.now();
-    const trimmedText = text.trim();
-    if (!trimmedText) return;
+  const sendMessageToChat = useCallback(
+    async (chat: Chat, rawContent: string) => {
+      const trimmed = rawContent.trim();
+      if (!trimmed) return;
 
-    const provider =
-      (inboxes.find((inbox) => inbox.id === currentChat.inbox_id)?.provider || "").toUpperCase();
-    const isWaha = provider === "WAHA";
+      const providerId =
+        (inboxes.find((inbox) => inbox.id === chat.inbox_id)?.provider || "").toUpperCase();
+      const isWaha = providerId === "WAHA";
 
-    setText("");
-    try {
+      const { draftId, createdAt } = createDraftMessage(chat, trimmed);
+      const sendStartedAt = performance.now();
+      trackMessageLatency(draftId, sendStartedAt);
+      bumpChatToTop({
+        chatId: chat.id,
+        last_message: trimmed,
+        last_message_at: createdAt,
+        last_message_from: "AGENT",
+        last_message_type: "TEXT",
+        last_message_media_url: null,
+      });
+      scrollToBottom();
+
       if (isWaha) {
-        const candidates = [currentChat.customer_phone, currentChat.external_id];
+        const candidates = [chat.customer_phone, chat.external_id];
         let to = "";
         for (const candidate of candidates) {
           if (typeof candidate !== "string") continue;
-          const trimmed = candidate.trim();
-          if (!trimmed) continue;
-          if (trimmed.includes("@")) {
-            to = trimmed;
+          const normalized = candidate.trim();
+          if (!normalized) continue;
+          if (normalized.includes("@")) {
+            to = normalized;
             break;
           }
-          const digits = trimmed.replace(/\D/g, "");
+          const digits = normalized.replace(/\D/g, "");
           if (digits) {
             to = `${digits}@c.us`;
             break;
           }
         }
         if (!to) {
-          console.error("Falha ao resolver destinatario WAHA do chat", currentChat.id);
-          setText(trimmedText);
+          console.error("Falha ao resolver destinatario WAHA do chat", chat.id);
+          markDraftAsError(draftId, chat.id, "Destinatário inválido");
+          logSendLatency(chat.id, draftId, "ERROR");
           return;
         }
 
-        const response = await fetchJson<any>(`${API}/waha/sendText`, {
-          method: "POST",
-          body: JSON.stringify({
-            inboxId: currentChat.inbox_id,
-            chatId: currentChat.id,
-            to,
-            content: trimmedText,
-          }),
-        });
-        const draftIdRaw =
-          (response && typeof response === "object" && "draftId" in response
-            ? (response as any).draftId
-            : null) ?? ((response as any)?.data?.draftId ?? null);
-
-        const draftId =
-          draftIdRaw ||
-          (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-            ? crypto.randomUUID()
-            : `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-        if (!draftIdRaw) {
-          console.warn("[livechat] WAHA draftId missing; using fallback id", {
-            chatId: currentChat.id,
+        try {
+          const response = await fetchJson<any>(`${API}/waha/sendText`, {
+            method: "POST",
+            body: JSON.stringify({
+              inboxId: chat.inbox_id,
+              chatId: chat.id,
+              to,
+              content: trimmed,
+              draftId,
+            }),
           });
+          const responseDraftId =
+            (response && typeof response === "object" && "draftId" in response
+              ? (response as any).draftId
+              : null) ?? null;
+          if (responseDraftId && responseDraftId !== draftId) {
+            const stored = draftsRef.current.get(draftId);
+            if (stored) {
+              draftsRef.current.set(responseDraftId, stored);
+              draftsRef.current.delete(draftId);
+            }
+            updateMessageStatusInCache({
+              chatId: chat.id,
+              draftId,
+              delivery_status: "SENT",
+              view_status: "SENT",
+              error_reason: null,
+              merge: { client_draft_id: responseDraftId },
+            });
+          } else {
+            updateMessageStatusInCache({
+              chatId: chat.id,
+              draftId,
+              delivery_status: "SENT",
+              view_status: "SENT",
+              error_reason: null,
+            });
+          }
+          logSendLatency(chat.id, draftId, "SENT");
+        } catch (error: any) {
+          const reason = error instanceof Error ? error.message : "Falha ao enviar mensagem";
+          markDraftAsError(draftId, chat.id, reason);
+          logSendLatency(chat.id, draftId, "ERROR");
+          console.error("Falha ao enviar mensagem (WAHA)", error);
         }
-        trackMessageLatency(draftId, sendStartedAt);
-        const nowIso = new Date().toISOString();
-        appendMessageToCache({
-          id: draftId,
-          chat_id: currentChat.id,
-          body: trimmedText,
-          content: trimmedText,
-          media_url: null,
-          sender_type: "AGENT",
-          sender_id: null,
-          created_at: nowIso,
-          view_status: "Pending",
-          type: "TEXT",
-          is_private: false,
-        });
-        bumpChatToTop({
-          chatId: currentChat.id,
-          last_message: trimmedText,
-          last_message_at: nowIso,
-          last_message_from: "AGENT",
-          last_message_type: "TEXT",
-          last_message_media_url: null,
-        });
-        // Atualiza preview local antes do socket confirmar.
-        scrollToBottom();
         return;
       }
 
-      const payload = {
-        chatId: currentChat.id,
-        text: trimmedText,
-        senderType: "AGENT",
-      };
-
-      const response = await fetchJson<any>(`${API}/livechat/messages`, {
-        method: "POST",
-        body: JSON.stringify({ chatId: currentChat.id, text: payload.text, senderType: payload.senderType }),
-      });
-      const inserted = (response?.data ?? response) as any;
-      if (inserted?.id) {
-        trackMessageLatency(inserted.id, sendStartedAt);
-        appendMessageToCache({
-          id: inserted.id,
-          chat_id: inserted.chat_id ?? payload.chatId,
-          body: inserted.body ?? inserted.content ?? payload.text,
-          content: inserted.content ?? inserted.body ?? payload.text,
-          media_url: inserted.media_url ?? null,
-          sender_type: inserted.sender_type ?? (inserted.is_from_customer ? "CUSTOMER" : "AGENT"),
-          sender_id: inserted.sender_id ?? null,
-          created_at: inserted.created_at ?? new Date().toISOString(),
-          view_status: inserted.view_status ?? null,
-          type: inserted.type ?? "TEXT",
-          is_private: Boolean(inserted.is_private),
+      try {
+        const token = getAccessToken();
+        const headers = new Headers();
+        headers.set("Content-Type", "application/json");
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+        const response = await fetch(`${API}/livechat/messages`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+          body: JSON.stringify({ chatId: chat.id, text: trimmed, senderType: "AGENT", draftId }),
         });
-        scrollToBottom();
-        bumpChatToTop({
-          chatId: inserted.chat_id ?? payload.chatId,
-          last_message: inserted.body ?? inserted.content ?? payload.text,
-          last_message_at: inserted.created_at ?? new Date().toISOString(),
-          last_message_from: inserted.sender_type ?? (inserted.is_from_customer ? "CUSTOMER" : "AGENT"),
-          last_message_type: inserted.type ?? "TEXT",
-          last_message_media_url: inserted.media_url ?? null,
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload?.ok === false) {
+          const err = new Error(payload?.error || `HTTP ${response.status}`);
+          (err as any).draftId = payload?.draftId ?? draftId;
+          throw err;
+        }
+        const inserted = (payload?.data ?? payload) as any;
+        replaceDraftWithMessage(draftId, {
+          ...inserted,
+          chat_id: inserted?.chat_id ?? chat.id,
+          delivery_status: "SENT",
+          view_status: inserted?.view_status ?? "SENT",
         });
-        // Evita reload: confiamos no socket para sincronizar.
+        logSendLatency(chat.id, draftId, "SENT");
+      } catch (error: any) {
+        const reason = error instanceof Error ? error.message : "Falha ao enviar mensagem";
+        const failedDraftId =
+          typeof (error as any)?.draftId === "string" ? (error as any).draftId : draftId;
+        markDraftAsError(failedDraftId, chat.id, reason);
+        logSendLatency(chat.id, draftId, "ERROR");
+        console.error("Falha ao enviar mensagem", error);
       }
-    } catch (err) {
-      console.error("Falha ao enviar mensagem", err);
-      setText(trimmedText); // restaura texto para tentativa posterior
-    }
-  };
+    },
+    [
+      API,
+      inboxes,
+      createDraftMessage,
+      trackMessageLatency,
+      bumpChatToTop,
+      scrollToBottom,
+      markDraftAsError,
+      updateMessageStatusInCache,
+      replaceDraftWithMessage,
+      logSendLatency,
+    ],
+  );
+
+  const send = useCallback(async () => {
+    if (!currentChat) return;
+    const trimmedText = text.trim();
+    if (!trimmedText) return;
+    setText("");
+    await sendMessageToChat(currentChat, trimmedText);
+  }, [currentChat, text, sendMessageToChat]);
+
+  const retryFailedMessage = useCallback(
+    async (message: Message) => {
+      const draftKey = message.client_draft_id || message.id;
+      const stored = draftsRef.current.get(draftKey);
+      const chatId = message.chat_id;
+      if (!chatId) return;
+      const chat =
+        (currentChat && currentChat.id === chatId ? currentChat : chatsRef.current.find((c) => c.id === chatId)) ||
+        null;
+      if (!chat || !stored || !stored.content.trim()) return;
+      removeMessageFromCache(chatId, message.id);
+      draftsRef.current.delete(draftKey);
+      await sendMessageToChat(chat, stored.content);
+    },
+    [currentChat, removeMessageFromCache, sendMessageToChat],
+  );
 
 
 
@@ -1819,6 +2063,7 @@ const scrollToBottom = useCallback(
         view_status: inserted.view_status ?? "Pending",
         type: inserted.type ?? "DOCUMENT",
         is_private: false,
+        delivery_status: "SENT",
       });
       bumpChatToTop({
         chatId: inserted.chat_id ?? currentChat.id,
@@ -2224,6 +2469,7 @@ const scrollToBottom = useCallback(
                     mediaItems={mediaItems}
                     mediaIndex={mediaIndexById.get(m.id) ?? undefined}
                     showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
+                    onRetry={retryFailedMessage}
                   />
                 ))}
 
@@ -2379,6 +2625,7 @@ const scrollToBottom = useCallback(
                       isAgent={true}
                       mediaItems={mediaItems}
                       mediaIndex={mediaIndexById.get(m.id) ?? undefined}
+                      onRetry={retryFailedMessage}
                     />
                   ))}
               </div>

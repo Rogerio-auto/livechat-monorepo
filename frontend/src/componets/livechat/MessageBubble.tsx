@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FiClock, FiCheck, FiLock } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -19,6 +19,7 @@ type MessageBubbleProps = {
   mediaItems?: MediaLightboxItem[];
   mediaIndex?: number | null;
   showRemoteSenderInfo?: boolean;
+  onRetry?: (message: Message) => void;
 };
 
 export function MessageBubble({
@@ -27,8 +28,15 @@ export function MessageBubble({
   mediaItems,
   mediaIndex,
   showRemoteSenderInfo = false,
+  onRetry,
 }: MessageBubbleProps) {
-  const status = (m.view_status || "").toLowerCase();
+  const deliveryStatusSource =
+    typeof m.delivery_status === "string" && m.delivery_status
+      ? m.delivery_status
+      : typeof m.view_status === "string" && m.view_status
+        ? m.view_status
+        : "";
+  const deliveryStatus = deliveryStatusSource.toLowerCase();
   const time = new Date(m.created_at).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -149,8 +157,8 @@ export function MessageBubble({
             muted
             playsInline
           />
-          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white text-xl">
-            ▶
+          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 px-4 text-sm font-semibold text-white">
+            PLAY
           </span>
         </div>
         {textBody ? (
@@ -171,7 +179,7 @@ export function MessageBubble({
       >
         <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-background))] px-4 py-3 shadow-inner">
           <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
-            <span className="text-lg">📎</span>
+            <span className="text-lg font-semibold">DOC</span>
             <span>Documento</span>
           </div>
           <p className="text-xs text-[var(--color-text-muted)]">
@@ -186,6 +194,25 @@ export function MessageBubble({
   } else {
     bubbleContent = textBody || (messageType ? `[${messageType}]` : "");
   }
+
+  const renderStatusIcon = () => {
+    if (!isAgent) return null;
+    switch (deliveryStatus) {
+      case "sending":
+      case "pending":
+        return <FiClock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />;
+      case "sent":
+        return <FiCheck className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />;
+      case "delivered":
+        return <BiCheckDouble className="h-4 w-4 text-[var(--color-text-muted)]" />;
+      case "read":
+        return <BiCheckDouble className="h-4 w-4 text-[var(--color-primary)]" />;
+      case "error":
+        return <FiAlertTriangle className="w-3.5 h-3.5 text-red-400" />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <>
@@ -217,24 +244,30 @@ export function MessageBubble({
               <FiLock className="w-3.5 h-3.5" />
               <span className="opacity-90">Privado</span>
               {m.sender_name && (
-                <>
-                  <span>•</span>
-                  <span className="max-w-[12rem] truncate font-medium text-[var(--color-highlight)]">{m.sender_name}</span>
-                </>
+                <span className="max-w-[12rem] truncate font-medium text-[var(--color-highlight)]">- {m.sender_name}</span>
               )}
             </div>
           )}
           <div className="text-[var(--color-text)]">{bubbleContent}</div>
           <div className="mt-1 flex items-center justify-end gap-1">
             <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
-            {isAgent && (
-              <span className="flex items-center text-xs">
-                {status === "pending" && <FiClock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />}
-                {status === "sent" && <FiCheck className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />}
-                {status === "read" && <BiCheckDouble className="h-4 w-4 text-[var(--color-primary)]" />}
-              </span>
-            )}
+            {renderStatusIcon()}
           </div>
+          {isAgent && deliveryStatus === "error" && (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-red-400">
+              <span>{m.error_reason || "Falha ao enviar mensagem."}</span>
+              {onRetry && (
+                <button
+                  type="button"
+                  onClick={() => onRetry(m)}
+                  className="inline-flex items-center gap-1 rounded-full border border-red-500/50 px-2 py-0.5 text-[10px] font-medium text-red-200 hover:bg-red-500/10 transition"
+                >
+                  <FiRotateCcw className="h-3.5 w-3.5" />
+                  Tentar novamente
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {resolvedMediaItems.length > 0 && (

@@ -1416,8 +1416,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
   app.post("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
     try {
       const { id: chatId } = req.params as { id: string };
-      const { text, senderType = "AGENT" } = req.body || {};
+      const { text, senderType = "AGENT", draftId } = req.body || {};
       if (!text) return res.status(400).json({ error: "text obrigatorio" });
+
+      const clientDraftId =
+        typeof draftId === "string" && draftId.trim().length > 0 ? draftId.trim() : null;
 
       const { data: chat, error: chatErr } = await supabaseAdmin
         .from("chats")
@@ -1464,6 +1467,10 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }, 0);
 
       const io = getIO();
+      const mappedForCache = {
+        ...(inserted as any),
+        client_draft_id: clientDraftId,
+      };
       if (io) {
         const mapped = {
           id: inserted.id,
@@ -1475,6 +1482,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           view_status: inserted.view_status || "Pending",
           type: inserted.type || "TEXT",
           is_private: false,
+          client_draft_id: clientDraftId,
         };
         io.to(`chat:${chatId}`).emit("message:new", mapped);
         io.emit("chat:updated", {
@@ -1499,13 +1507,22 @@ export function registerLivechatChatRoutes(app: express.Application) {
           content: String(text),
           attempt: 0,
           createdAt: nowIso,
+          draftId: clientDraftId,
         });
       }
 
-      return res.status(201).json({ ok: true, data: inserted });
+      return res.status(201).json({ ok: true, data: mappedForCache, draftId: clientDraftId });
     } catch (e: any) {
       console.error("[livechat:send] error", e);
-      return res.status(500).json({ error: e?.message || "send error" });
+      const draftId =
+        typeof req?.body?.draftId === "string" && req.body.draftId.trim().length > 0
+          ? req.body.draftId.trim()
+          : null;
+      return res.status(500).json({
+        ok: false,
+        error: e?.message || "send error",
+        draftId,
+      });
     }
   });
 

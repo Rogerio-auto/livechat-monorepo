@@ -1413,10 +1413,11 @@ export function registerWAHARoutes(app: Express) {
       to: z.string().min(6),
       content: z.string().min(1),
       quotedMessageId: z.string().optional(),
+      draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
-    const { inboxId, chatId, to, content, quotedMessageId } = body.data;
+    const { inboxId, chatId, to, content, quotedMessageId, draftId: clientDraftId } = body.data;
     const companyId = String((req as any).user?.company_id || "");
     if (!companyId) return res.status(400).json({ error: "companyId ausente" });
 
@@ -1430,7 +1431,7 @@ export function registerWAHARoutes(app: Express) {
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: "text", content, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
       });
-      const draftId = draft?.id ?? randomUUID();
+      const draftId = clientDraftId || draft?.id || randomUUID();
 
       const payload: Record<string, unknown> = {
         to,
@@ -1446,6 +1447,7 @@ export function registerWAHARoutes(app: Express) {
         companyId,
         inboxId,
         chatId: chatId ?? null,
+        draftId,
         payload,
       });
 
@@ -1468,10 +1470,22 @@ export function registerWAHARoutes(app: Express) {
       filename: z.string().optional(),
       mimeType: z.string().optional(),
       quotedMessageId: z.string().optional(),
+      draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
-    const { inboxId, chatId, to, mediaUrl, caption, kind, filename, mimeType, quotedMessageId } = body.data;
+    const {
+      inboxId,
+      chatId,
+      to,
+      mediaUrl,
+      caption,
+      kind,
+      filename,
+      mimeType,
+      quotedMessageId,
+      draftId: clientDraftId,
+    } = body.data;
     const companyId = String((req as any).user?.company_id || "");
     if (!companyId) return res.status(400).json({ error: "companyId ausente" });
 
@@ -1486,12 +1500,13 @@ export function registerWAHARoutes(app: Express) {
         kind: kind === "image" ? "image" : kind === "audio" ? "audio" : kind === "video" ? "video" : "document",
         mediaUrl, caption: caption ?? null, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
       });
-      const draftId = draft?.id ?? randomUUID();
+      const draftId = clientDraftId || draft?.id || randomUUID();
 
       await publish(EX_APP, "outbound.request", {
         jobType: "outbound.request",
         provider: WAHA_PROVIDER,
         companyId, inboxId, chatId: chatId ?? null,
+        draftId,
         payload: {
           to, type: "media", kind, mediaUrl,
           caption: caption ?? null, filename: filename ?? null, mimeType: mimeType ?? null,

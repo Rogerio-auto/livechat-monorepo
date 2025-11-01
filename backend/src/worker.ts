@@ -942,6 +942,10 @@ async function handleInboundChange(job: InboundJobPayload) {
       });
       if (statusUpdate) {
         try {
+          const normalizedStatus =
+            typeof statusUpdate.viewStatus === "string"
+              ? statusUpdate.viewStatus.toUpperCase()
+              : null;
           await publishApp("socket.livechat.status", {
             kind: "livechat.message.status",
             chatId: statusUpdate.chatId,
@@ -949,6 +953,9 @@ async function handleInboundChange(job: InboundJobPayload) {
             externalId: wamid,
             view_status: statusUpdate.viewStatus,
             raw_status: status,
+            status: normalizedStatus,
+            draftId: null,
+            reason: null,
           });
         } catch (err) {
           console.warn(
@@ -1533,6 +1540,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   if (!upsertResult.inserted) {
     if (ackStatus && !isFromCustomer) {
+      const normalizedStatus = typeof ackStatus === "string" ? ackStatus.toUpperCase() : null;
       await publishApp("socket.livechat.status", {
         kind: "livechat.message.status",
         chatId,
@@ -1540,6 +1548,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         externalId: messageId,
         view_status: ackStatus,
         raw_status: ackStatus,
+        status: normalizedStatus,
+        draftId: job?.draftId ?? payload?.draftId ?? null,
+        reason: null,
       });
     }
     return;
@@ -1563,6 +1574,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     remote_sender_is_admin: upsertResult.message.remote_sender_is_admin ?? null,
     remote_participant_id: upsertResult.message.remote_participant_id ?? null,
     replied_message_id: upsertResult.message.replied_message_id ?? null,
+    client_draft_id: job?.draftId ?? payload?.draftId ?? null,
   };
 
   try {
@@ -1596,6 +1608,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   }
 
   if (ackStatus && !isFromCustomer) {
+    const normalizedStatus = typeof ackStatus === "string" ? ackStatus.toUpperCase() : null;
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId,
@@ -1603,6 +1616,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       externalId: messageId,
       view_status: ackStatus,
       raw_status: ackStatus,
+      status: normalizedStatus,
+      draftId: job?.draftId ?? payload?.draftId ?? null,
+      reason: null,
     });
   }
 
@@ -1804,6 +1820,8 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
     viewStatus: status,
   });
   if (statusUpdate) {
+    const normalizedStatus =
+      typeof statusUpdate.viewStatus === "string" ? statusUpdate.viewStatus.toUpperCase() : null;
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId: statusUpdate.chatId,
@@ -1811,6 +1829,9 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
       externalId: messageId,
       view_status: statusUpdate.viewStatus,
       raw_status: status,
+      status: normalizedStatus,
+      draftId: job?.draftId ?? payload?.draftId ?? null,
+      reason: null,
     });
   }
 }
@@ -2011,6 +2032,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       type: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
       is_private: false,
       media_url: messageRow.media_url ?? null,
+      client_draft_id: job?.draftId ?? payload?.draftId ?? null,
     };
 
     await publishApp("socket.livechat.outbound", {
@@ -2028,7 +2050,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   }
 
   if (chatIdForStatus && messageIdForStatus) {
-    const rawStatus = viewStatus.toLowerCase();
+    const normalizedStatus = typeof viewStatus === "string" ? viewStatus.toUpperCase() : null;
+    const rawStatus = String(viewStatus || "").toLowerCase();
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId: chatIdForStatus,
@@ -2036,6 +2059,9 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       externalId: externalId || null,
       view_status: viewStatus,
       raw_status: rawStatus,
+      status: normalizedStatus,
+      draftId: job?.draftId ?? payload?.draftId ?? null,
+      reason: null,
     });
   }
 
@@ -2430,6 +2456,9 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           externalId: wamid || null,
           view_status: "Sent",
           raw_status: "sent",
+          status: "SENT",
+          draftId: job?.draftId ?? null,
+          reason: null,
         });
 
         console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
@@ -2491,6 +2520,9 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           externalId: wamid || null,
           view_status: "Sent",
           raw_status: "sent",
+          status: "SENT",
+          draftId: job?.draftId ?? null,
+          reason: null,
         });
       } catch (err) {
         console.warn(
@@ -2511,6 +2543,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           type: upsert.message.type ?? "TEXT",
           is_private: false,
           media_url: upsert.message.media_url ?? null,
+          client_draft_id: job?.draftId ?? null,
         };
         try {
           await publishApp("socket.livechat.outbound", {
@@ -2577,6 +2610,29 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           attempt,
           error: e?.message || String(e),
         });
+        try {
+          const chatIdPayload = typeof job?.chatId === "string" ? job.chatId : null;
+          const messageIdPayload = typeof job?.messageId === "string" ? job.messageId : null;
+          if (chatIdPayload && (messageIdPayload || job?.draftId)) {
+            await publishApp("socket.livechat.status", {
+              kind: "livechat.message.status",
+              chatId: chatIdPayload,
+              messageId: messageIdPayload,
+              externalId: (job as any)?.externalId ?? null,
+              view_status: "Error",
+              raw_status: "error",
+              status: "ERROR",
+              draftId: job?.draftId ?? null,
+              reason: e?.message || String(e),
+            });
+          }
+        } catch (notifyError) {
+          console.warn("[worker][outbound] failed to emit error status", {
+            chatId: job?.chatId,
+            messageId: job?.messageId,
+            error: notifyError instanceof Error ? notifyError.message : notifyError,
+          });
+        }
       }
       ch.ack(msg);
     }

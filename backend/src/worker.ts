@@ -37,7 +37,8 @@ import {
 import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
-import { runAgentReply } from "./services/agents.runtime.ts";
+import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
+import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey } from "./services/buffer.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -121,6 +122,8 @@ let chatAttachmentsSupportsChatId = true;
 let wahaGroupSyncRunning = false;
 
 const METRICS_INTERVAL_MS = Number(process.env.METRICS_INTERVAL_MS || 30_000); // Ajuste via env se precisar.
+const BUFFER_TICK_MS = Math.max(250, Number(process.env.BUFFER_TICK_MS || 1000));
+const BUFFER_MAX_FLUSH_PER_TICK = Math.max(1, Number(process.env.BUFFER_MAX_FLUSH || 50));
 
 const metrics = {
   inbound: { processed: 0 },
@@ -188,6 +191,74 @@ process.once("beforeExit", stopQueueMetricsInterval);
 process.once("exit", stopQueueMetricsInterval);
 
 void logQueueStats();
+
+// === Buffer scheduler ===
+async function flushDueBuffers(): Promise<void> {
+  try {
+    const dueKeys = await bufferGetDue(new Date());
+    if (!dueKeys || dueKeys.length === 0) return;
+    const slice = dueKeys.slice(0, BUFFER_MAX_FLUSH_PER_TICK);
+    for (const listKey of slice) {
+      // Remove from due set first to avoid double work
+      await bufferClearDue(listKey);
+      const items = await bufferPopBatch(listKey);
+      if (!items || items.length === 0) continue;
+      const meta = bufferParseListKey(listKey);
+      const last = items[items.length - 1];
+      if (!meta || !last) continue;
+      // Re-check chat status
+      const statusRow = await db.oneOrNone<{ status: string | null }>(
+        `select status from public.chats where id = $1`,
+        [meta.chatId],
+      );
+      const chatStatus = (statusRow?.status || "").toUpperCase();
+      if (chatStatus !== "AI") {
+        // drop silently
+        continue;
+      }
+
+      // Aggregate user messages into a single prompt
+      const lines = items
+        .map((it) => (typeof it.text === "string" ? it.text.trim() : ""))
+        .filter((t) => t.length > 0);
+      if (lines.length === 0) continue;
+
+      const aggregated = lines.join("\n");
+      try {
+        const ai = await runAgentReply({
+          companyId: last.companyId,
+          inboxId: last.inboxId,
+          userMessage: aggregated,
+          chatHistory: [],
+        });
+        const reply = (ai.reply || "").trim();
+        if (reply) {
+          await publish(EX_APP, "outbound.request", {
+            provider: last.provider,
+            inboxId: last.inboxId,
+            chatId: meta.chatId,
+            payload: { content: reply },
+            attempt: 0,
+            kind: "message.send",
+          });
+        }
+      } catch (err) {
+        console.warn("[buffer][flush] agent reply failed", {
+          companyId: last.companyId,
+          chatId: meta.chatId,
+          error: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("[buffer] flush tick failed", error instanceof Error ? error.message : error);
+  }
+}
+
+const bufferInterval = setInterval(() => {
+  void flushDueBuffers();
+}, BUFFER_TICK_MS);
+bufferInterval.unref?.();
 
 
 async function fetchChatUpdateForSocket(chatId: string): Promise<{
@@ -1090,32 +1161,50 @@ async function handleInboundChange(job: InboundJobPayload) {
       });
 
 
-          // ====== Auto-reply (Agents) — META inbound (only if chat status == 'AI') ======
+          // ====== Auto-reply / Buffer (Agents) — META inbound (only if chat status == 'AI') ======
           try {
             const bodyText = typeof content === "string" ? content.trim() : "";
-            if (bodyText) {
+            if (!bodyText) {
+              // do nothing
+            } else {
               const row = await db.oneOrNone<{ status: string | null }>(
                 `select status from public.chats where id = $1`,
                 [chatId],
               );
               const chatStatus = (row?.status || "").toUpperCase();
               if (chatStatus === "AI") {
-                const ai = await runAgentReply({
-                  companyId,
-                  inboxId,
-                  userMessage: bodyText,
-                  chatHistory: [],
-                });
-                const reply = (ai.reply || "").trim();
-                if (reply) {
-                  await publish(EX_APP, "outbound.request", {
-                    provider: "META",
+                // Check agent aggregation config
+                const agent = await getRuntimeAgent(companyId, null);
+                const windowSec = Number(agent?.aggregation_window_sec || 0);
+                const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
+                const maxBatch = agent?.max_batch_messages ?? null;
+                if (enabled) {
+                  await bufferEnqueue({
+                    companyId,
                     inboxId,
                     chatId,
-                    payload: { content: reply },
-                    attempt: 0,
-                    kind: "message.send",
+                    provider: "META",
+                    text: bodyText,
+                    config: { windowSec, maxBatch },
                   });
+                } else {
+                  const ai = await runAgentReply({
+                    companyId,
+                    inboxId,
+                    userMessage: bodyText,
+                    chatHistory: [],
+                  });
+                  const reply = (ai.reply || "").trim();
+                  if (reply) {
+                    await publish(EX_APP, "outbound.request", {
+                      provider: "META",
+                      inboxId,
+                      chatId,
+                      payload: { content: reply },
+                      attempt: 0,
+                      kind: "message.send",
+                    });
+                  }
                 }
               }
             }
@@ -1672,7 +1761,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     });
   }
 
-  // ====== Auto-reply (Agents) — WAHA inbound (from customer only, and chat status == 'AI') ======
+  // ====== Auto-reply / Buffer (Agents) — WAHA inbound (from customer only, and chat status == 'AI') ======
   try {
     if (isFromCustomer && body && body.trim()) {
       const row = await db.oneOrNone<{ status: string | null }>(
@@ -1681,22 +1770,37 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       );
       const chatStatus = (row?.status || "").toUpperCase();
       if (chatStatus === "AI") {
-        const ai = await runAgentReply({
-          companyId: job.companyId,
-          inboxId: job.inboxId,
-          userMessage: body,
-          chatHistory: [],
-        });
-        const reply = (ai.reply || "").trim();
-        if (reply) {
-          await publish(EX_APP, "outbound.request", {
-            provider: WAHA_PROVIDER,
+        const agent = await getRuntimeAgent(job.companyId, null);
+        const windowSec = Number(agent?.aggregation_window_sec || 0);
+        const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
+        const maxBatch = agent?.max_batch_messages ?? null;
+        if (enabled) {
+          await bufferEnqueue({
+            companyId: job.companyId,
             inboxId: job.inboxId,
             chatId,
-            payload: { content: reply },
-            attempt: 0,
-            kind: "message.send",
+            provider: WAHA_PROVIDER,
+            text: body,
+            config: { windowSec, maxBatch },
           });
+        } else {
+          const ai = await runAgentReply({
+            companyId: job.companyId,
+            inboxId: job.inboxId,
+            userMessage: body,
+            chatHistory: [],
+          });
+          const reply = (ai.reply || "").trim();
+          if (reply) {
+            await publish(EX_APP, "outbound.request", {
+              provider: WAHA_PROVIDER,
+              inboxId: job.inboxId,
+              chatId,
+              payload: { content: reply },
+              attempt: 0,
+              kind: "message.send",
+            });
+          }
         }
       }
     }

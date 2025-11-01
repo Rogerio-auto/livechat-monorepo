@@ -18,6 +18,7 @@ import {
 } from "../lib/redis.ts";
 import { WAHA_PROVIDER } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
+import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -721,6 +722,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
+      // Attach active AI agent identity (per company) for UI visibility
+      try {
+        const activeAgent = await getRuntimeAgent(companyId, null);
+        for (const chat of items as any[]) {
+          chat.ai_agent_id = activeAgent?.id ?? null;
+          chat.ai_agent_name = activeAgent?.name ?? null;
+        }
+      } catch (err) {
+        console.warn("[livechat/chats] get active agent failed", err instanceof Error ? err.message : err);
+      }
+
       const payload = { items, total: listResp.count ?? items.length };
       const lastModifiedIso =
         items.length > 0
@@ -1099,6 +1111,23 @@ export function registerLivechatChatRoutes(app: express.Application) {
       .maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: "Chat nao encontrado" });
+
+    // Attach active AI agent identity
+    try {
+      const companyId = (data as any)?.company_id ?? null;
+      if (companyId) {
+        const activeAgent = await getRuntimeAgent(companyId, null);
+        (data as any).ai_agent_id = activeAgent?.id ?? null;
+        (data as any).ai_agent_name = activeAgent?.name ?? null;
+      } else {
+        (data as any).ai_agent_id = null;
+        (data as any).ai_agent_name = null;
+      }
+    } catch (err) {
+      console.warn("[livechat/chat] enrich ai agent failed", err instanceof Error ? err.message : err);
+      (data as any).ai_agent_id = null;
+      (data as any).ai_agent_name = null;
+    }
 
     await rSet(cacheKey, data, TTL_CHAT);
     return res.json(data);

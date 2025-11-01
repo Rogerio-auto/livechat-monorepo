@@ -1,10 +1,12 @@
 import type { Application } from "express";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
-import { createAgent, deleteAgent, listAgents, updateAgent } from "../repos/agents.repo.ts";
+import { createAgent, deleteAgent, listAgentsFiltered, updateAgent, getAgent } from "../repos/agents.repo.ts";
 import { AgentSchema } from "../types/integrations.ts";
+import { runAgentReply } from "../services/agents.runtime.ts";
+import type { ChatTurn } from "../services/agents.runtime.ts";
 
 const updateAgentSchema = AgentSchema.partial();
 
@@ -55,7 +57,10 @@ export function registerAgentsRoutes(app: Application) {
   app.get("/agents", requireAuth, async (req: any, res) => {
     try {
       const companyId = await resolveCompanyId(req);
-      const agents = await listAgents(companyId);
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const activeParam = typeof req.query.active === "string" ? req.query.active : undefined;
+      const active = activeParam === undefined ? undefined : /^(1|true|yes)$/i.test(activeParam);
+      const agents = await listAgentsFiltered(companyId, { q, active });
       return res.json(agents);
     } catch (error) {
       const { status, payload } = formatRouteError(error);
@@ -106,6 +111,66 @@ export function registerAgentsRoutes(app: Application) {
 
       const result = await deleteAgent(companyId, id);
       return res.json(result);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  // GET /agents/:id (detalhe)
+  app.get("/agents/:id", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params as { id?: string };
+      if (!id) return res.status(400).json({ error: "agent id obrigatorio" });
+      const row = await getAgent(companyId, id);
+      if (!row) return res.status(404).json({ error: "Agent not found" });
+      return res.json(row);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  // POST /agents/:id/test — executa o agente contra um prompt
+  app.post("/agents/:id/test", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params as { id?: string };
+      if (!id) return res.status(400).json({ error: "agent id obrigatorio" });
+
+      const bodySchema = z.object({
+        message: z.string().min(1),
+        inboxId: z.string().uuid().optional(),
+        chatContext: z
+          .object({
+            messages: z
+              .array(
+                z.object({
+                  from: z.enum(["CUSTOMER", "AGENT"]),
+                  text: z.string(),
+                  ts: z.string().optional(),
+                }),
+              )
+              .default([]),
+          })
+          .optional(),
+      });
+      const parsed = bodySchema.parse(req.body ?? {});
+
+      const history: ChatTurn[] = (parsed.chatContext?.messages || []).map((m: any) => ({
+        role: (m.from === "CUSTOMER" ? "user" : "assistant") as ChatTurn["role"],
+        content: m.text,
+      }));
+
+      const out = await runAgentReply({
+        companyId,
+        inboxId: parsed.inboxId ?? null,
+        agentId: id,
+        userMessage: parsed.message,
+        chatHistory: history,
+      });
+      return res.json({ reply: out.reply, usage: out.usage, agentId: out.agentId, model: out.model });
     } catch (error) {
       const { status, payload } = formatRouteError(error);
       return res.status(status).json(payload);

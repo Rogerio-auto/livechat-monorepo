@@ -216,7 +216,7 @@ export async function ensureGroupChat(args: {
         const inserted = await tx.one<GroupChatRow>(
           `insert into public.chats
              (inbox_id, company_id, remote_id, kind, chat_type, status, group_name, group_avatar_url, last_message_at)
-           values ($1, $2, $3, 'GROUP', 'GROUP', 'OPEN', $4, $5, now())
+           values ($1, $2, $3, 'GROUP', 'GROUP', 'AI', $4, $5, now())
             returning id, group_name, group_avatar_url`,
           [args.inboxId, args.companyId, trimmedRemote, args.groupName ?? null, args.groupAvatarUrl ?? null],
         );
@@ -953,7 +953,7 @@ export async function ensureLeadCustomerChat(args: {
       try {
         chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
             `insert into public.chats (inbox_id, customer_id, status, last_message_at, external_id, chat_type)
-           values ($1, $2, 'OPEN', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
+           values ($1, $2, 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
            returning id, external_id, chat_type`,
           [args.inboxId, customer.id, externalIdCandidate ?? null, "CONTACT"],
         );

@@ -46,6 +46,11 @@ type ChatHeaderProps = {
 
   /** Título sugerido do card (fallback se não houver lead): ex.: nome do cliente */
   fallbackCardTitle?: string | null;
+
+  /** Status atual do chat e opções disponíveis para troca */
+  currentStatus?: string | null;
+  statusOptions?: Array<{ value: string; label: string }>;
+  onChangeStatus?: (nextStatus: string) => Promise<void> | void;
 };
 
 type DragContext = {
@@ -170,6 +175,9 @@ export function ChatHeader({
   onUpdateNote,
   kanbanBoardId: propKanbanBoardId = null,
   fallbackCardTitle: fallbackCardTitleProp = null,
+  currentStatus = null,
+  statusOptions = [],
+  onChangeStatus,
 }: ChatHeaderProps) {
   const [overlayMode, setOverlayMode] = useState<"menu" | null>(null);
   const [tagsOpen, setTagsOpen] = useState(false);
@@ -798,6 +806,27 @@ const chatLeadId = getChatLeadId(chat);
                       style={{ backgroundColor: tag.color || "#6B7280" }}
                     />
                   ))}
+                </div>
+              )}
+
+              {/* Status selector */}
+              {chat && statusOptions && statusOptions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-[var(--color-text-muted)]">Status</label>
+                  <select
+                    className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2 py-1.5 text-xs text-[var(--color-text)] outline-none hover:bg-[color:var(--color-bg)]/40"
+                    value={(currentStatus || chat.status || "").toString().toUpperCase()}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v && onChangeStatus) onChangeStatus(v);
+                    }}
+                  >
+                    {statusOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
 

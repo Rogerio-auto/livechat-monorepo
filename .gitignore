@@ -4,14 +4,38 @@ node_modules/
 .pnpm-debug.log*
 npm-debug.log*
 *.log
+logs/
+
+# TypeScript cache
+*.tsbuildinfo
 
 # Build outputs
 backend/dist/
 frontend/dist/
+dist/
+
+# Temporary/cache directories
+.cache/
+tmp/
+temp/
+tmp_*
+*.diff
+snapshot.txt
+frontend/.vite/
+frontend/.eslintcache
+backend/.eslintcache
+
+# IDE/editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
 
 # Environment files
 .env
 .env.*
+.env.local
+.env.*.local
 
 # OS / editor files
 .DS_Store
@@ -19,3 +43,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Outros
+.collect-snapshots

@@ -37,6 +37,7 @@ import {
 import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
+import { runAgentReply } from "./services/agents.runtime.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -1088,6 +1089,39 @@ async function handleInboundChange(job: InboundJobPayload) {
           : null,
       });
 
+
+          // ====== Auto-reply (Agents) — META inbound (only if chat status == 'AI') ======
+          try {
+            const bodyText = typeof content === "string" ? content.trim() : "";
+            if (bodyText) {
+              const row = await db.oneOrNone<{ status: string | null }>(
+                `select status from public.chats where id = $1`,
+                [chatId],
+              );
+              const chatStatus = (row?.status || "").toUpperCase();
+              if (chatStatus === "AI") {
+                const ai = await runAgentReply({
+                  companyId,
+                  inboxId,
+                  userMessage: bodyText,
+                  chatHistory: [],
+                });
+                const reply = (ai.reply || "").trim();
+                if (reply) {
+                  await publish(EX_APP, "outbound.request", {
+                    provider: "META",
+                    inboxId,
+                    chatId,
+                    payload: { content: reply },
+                    attempt: 0,
+                    kind: "message.send",
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[agents][auto-reply][META] failed:", (e as any)?.message || e);
+          }
       const msgRow = await db.one<{
         id: string;
         chat_id: string;
@@ -1636,6 +1670,38 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       chatId,
       error,
     });
+  }
+
+  // ====== Auto-reply (Agents) — WAHA inbound (from customer only, and chat status == 'AI') ======
+  try {
+    if (isFromCustomer && body && body.trim()) {
+      const row = await db.oneOrNone<{ status: string | null }>(
+        `select status from public.chats where id = $1`,
+        [chatId],
+      );
+      const chatStatus = (row?.status || "").toUpperCase();
+      if (chatStatus === "AI") {
+        const ai = await runAgentReply({
+          companyId: job.companyId,
+          inboxId: job.inboxId,
+          userMessage: body,
+          chatHistory: [],
+        });
+        const reply = (ai.reply || "").trim();
+        if (reply) {
+          await publish(EX_APP, "outbound.request", {
+            provider: WAHA_PROVIDER,
+            inboxId: job.inboxId,
+            chatId,
+            payload: { content: reply },
+            attempt: 0,
+            kind: "message.send",
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[agents][auto-reply][WAHA] failed:", (e as any)?.message || e);
   }
 }
 

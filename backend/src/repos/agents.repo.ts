@@ -117,6 +117,61 @@ export async function listAgents(companyId: string): Promise<AgentRow[]> {
   return (data as AgentRowInternal[]).map(mapAgent);
 }
 
+export async function listAgentsFiltered(
+  companyId: string,
+  opts?: { q?: string; active?: boolean | undefined },
+): Promise<AgentRow[]> {
+  let query = supabaseAdmin
+    .from(TABLE)
+    .select(SELECT_COLUMNS)
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false });
+
+  if (opts?.q && opts.q.trim()) {
+    query = query.ilike("name", `%${opts.q.trim()}%`);
+  }
+  if (typeof opts?.active === "boolean") {
+    if (opts.active) query = query.eq("status", "ACTIVE");
+    else query = query.neq("status", "ACTIVE");
+  }
+
+  const { data, error } = await query;
+  if (error || !data) {
+    throw new Error(error?.message || "Failed to list agents");
+  }
+  return (data as AgentRowInternal[]).map(mapAgent);
+}
+
+export async function getAgent(companyId: string, id: string): Promise<AgentRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from(TABLE)
+    .select(SELECT_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapAgent(data as AgentRowInternal) : null;
+}
+
+export async function getActiveAgentForInbox(
+  companyId: string,
+  _inboxId?: string,
+): Promise<AgentRow | null> {
+  // Schema atual não possui coluna inbox_id. Estratégia: pegar o mais recente ACTIVE com allow_handoff=true
+  const { data, error } = await supabaseAdmin
+    .from(TABLE)
+    .select(SELECT_COLUMNS)
+    .eq("company_id", companyId)
+    .eq("status", "ACTIVE")
+    .eq("allow_handoff", true)
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapAgent(data as AgentRowInternal) : null;
+}
+
 export async function updateAgent(
   companyId: string,
   id: string,

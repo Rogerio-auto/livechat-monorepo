@@ -127,6 +127,10 @@ export const k = {
     `lc:list:${safeSegment(companyId || "", "*")}:*`,
   avatar: (companyId: string | null | undefined, remoteId: string | null | undefined) =>
     `lc:avatar:${safeSegment(companyId || "", "x")}:${encodeKeyValue(remoteId)}`,
+  wahaSyncState: (session: string | null | undefined) =>
+    `waha:sync:${safeSegment(session || "", "default")}`,
+  wahaSyncLock: (session: string | null | undefined) =>
+    `waha:sync:${safeSegment(session || "", "default")}:lock`,
 };
 
 export async function rememberMessageCacheKey(

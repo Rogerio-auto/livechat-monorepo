@@ -130,6 +130,25 @@ export default function LiveChatPage() {
   const currentChatsKeyRef = useRef<string | null>(null);
   const chatsReqIdRef = useRef(0);
 
+  // Status options: used for filtering and per-chat status change
+  const FILTER_STATUS_OPTIONS = useMemo(
+    () => [
+      { value: "ALL", label: "Todos" },
+      { value: "OPEN", label: "Abertos" },
+      { value: "PENDING", label: "Pendentes" },
+      { value: "AI", label: "Agente de IA" },
+      { value: "RESOLVED", label: "Resolvidos" },
+      { value: "CLOSED", label: "Fechados" },
+    ],
+    [],
+  );
+  const CHAT_STATUS_OPTIONS = useMemo(
+    () => FILTER_STATUS_OPTIONS.filter((o) => o.value !== "ALL"),
+    [FILTER_STATUS_OPTIONS],
+  );
+
+  
+
   const activeInbox = useMemo(() => {
     if (!inboxId) {
       return inboxes.length > 0 ? inboxes[0] : null;
@@ -273,6 +292,37 @@ export default function LiveChatPage() {
       };
     });
   }, []);
+
+  // Toggle chat status between 'AI' and 'OPEN'
+  const updateChatStatus = useCallback(async (chatId: string, nextStatus: string) => {
+    // optimistic update
+    const prev = chatsRef.current.find((c) => c.id === chatId) || currentChat || selectedChat || null;
+    const prevStatus = (prev as any)?.status ?? null;
+    patchChatLocal(chatId, { status: nextStatus } as any);
+    try {
+      const res = await fetch(`${API}/livechat/chats/${chatId}/status`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error || res.statusText || "Falha ao alterar status");
+      }
+      const data = (await res.json()) as Chat;
+      // ensure normalized update across snapshots
+      const normalized = normalizeChat(data);
+      setCurrentChat((prev) => (prev && prev.id === chatId ? ({ ...prev, status: normalized.status } as Chat) : prev));
+      setSelectedChat((prev) => (prev && prev.id === chatId ? ({ ...prev, status: normalized.status } as Chat) : prev));
+      setChats((prev) => prev.map((c) => (c.id === chatId ? ({ ...c, status: normalized.status } as Chat) : c)));
+      updateChatSnapshots(normalized);
+    } catch (error) {
+      // rollback
+      if (prevStatus) patchChatLocal(chatId, { status: prevStatus } as any);
+      console.error("[livechat] updateChatStatus error", error);
+    }
+  }, [API, patchChatLocal, normalizeChat, updateChatSnapshots]);
 
   const filteredChats = useMemo(() => {
     return chats.filter((chat) => (chatScope === "groups" ? isGroupChat(chat) : !isGroupChat(chat)));
@@ -2341,12 +2391,11 @@ const scrollToBottom = useCallback(
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                   >
-                    <option value="ALL">Todos</option>
-                    <option value="OPEN">Abertos</option>
-                    <option value="PENDING">Pendentes</option>
-                    <option value="AI">Agente de IA</option>
-                    <option value="RESOLVED">Resolvidos</option>
-                    <option value="CLOSED">Fechados</option>
+                    {FILTER_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -2435,7 +2484,11 @@ const scrollToBottom = useCallback(
                 currentNote={(selectedChat?.note ?? "") as any}
                 onChangeStage={handleChangeStage}
                 onUpdateNote={handleUpdateNote}
+                currentStatus={(currentChat?.status ?? null) as any}
+                statusOptions={CHAT_STATUS_OPTIONS}
+                onChangeStatus={(next) => { if (currentChat) return updateChatStatus(currentChat.id, next); }}
               />
+
 
               <div
                 ref={messagesContainerRef}

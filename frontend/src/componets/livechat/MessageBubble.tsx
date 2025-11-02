@@ -248,6 +248,13 @@ export function MessageBubble({
               )}
             </div>
           )}
+          {!isPrivate && isAgent && m.sender_name && (
+            <div className="mb-1 flex items-center gap-1">
+              <span className="text-[10px] font-semibold text-[var(--color-text-muted)] opacity-80 truncate">
+                {m.sender_name}
+              </span>
+            </div>
+          )}
           <div className="text-[var(--color-text)]">{bubbleContent}</div>
           <div className="mt-1 flex items-center justify-end gap-1">
             <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>

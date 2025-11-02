@@ -491,6 +491,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
       content: string | null;
       is_from_customer: boolean;
       sender_id: string | null;
+      sender_name: string | null;
       created_at: string;
       type: string | null;
       view_status: string | null;
@@ -508,6 +509,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
               content,
               is_from_customer,
               sender_id,
+              sender_name,
               created_at,
               type,
               view_status,
@@ -535,6 +537,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
         body: row.content,
         sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
         sender_id: row.sender_id,
+        sender_name: row.sender_name,
         created_at: row.created_at,
         view_status: row.view_status,
         type: row.type ?? "TEXT",
@@ -1246,6 +1249,7 @@ async function handleInboundChange(job: InboundJobPayload) {
         content: string | null;
         is_from_customer: boolean;
         sender_id: string | null;
+        sender_name: string | null;
         created_at: string;
         type: string | null;
         view_status: string | null;
@@ -1263,6 +1267,7 @@ async function handleInboundChange(job: InboundJobPayload) {
                 content,
                 is_from_customer,
                 sender_id,
+                sender_name,
                 created_at,
                 type,
                 view_status,
@@ -1284,6 +1289,7 @@ async function handleInboundChange(job: InboundJobPayload) {
         body: msgRow.content,
         sender_type: msgRow.is_from_customer ? ("CUSTOMER" as const) : ("AGENT" as const),
         sender_id: msgRow.sender_id,
+        sender_name: msgRow.sender_name,
         created_at: msgRow.created_at,
         view_status: msgRow.view_status,
         type: msgRow.type ?? "TEXT",
@@ -2710,6 +2716,33 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         content,
       });
 
+      // Resolve sender_name: check if AI agent or human user
+      let senderName: string | null = null;
+      try {
+        const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
+          `select ai_agent_id from public.chats where id = $1`,
+          [chat_id],
+        );
+        if (chatRow?.ai_agent_id) {
+          const agentRow = await db.oneOrNone<{ name: string | null }>(
+            `select name from public.agents where id = $1`,
+            [chatRow.ai_agent_id],
+          );
+          senderName = agentRow?.name ?? null;
+        } else if (job.senderId || job.senderUserSupabaseId) {
+          const userId = job.senderId || job.senderUserSupabaseId;
+          const userRow = await db.oneOrNone<{ name: string | null; email: string | null }>(
+            `select name, email from public.users where id = $1`,
+            [userId],
+          );
+          if (userRow) {
+            senderName = userRow.name || userRow.email || null;
+          }
+        }
+      } catch (err) {
+        console.warn("[worker][outbound] failed to resolve sender_name", err instanceof Error ? err.message : err);
+      }
+
       const upsert = await insertOutboundMessage({
         chatId: chat_id,
         inboxId,
@@ -2718,6 +2751,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         content,
         type: "TEXT",
         senderId: job.senderId || job.senderUserSupabaseId || null,
+        senderName,
         messageId: job.messageId || null,
         viewStatus: "Sent",
       });
@@ -2748,6 +2782,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           body: upsert.message.content,
           sender_type: "AGENT" as const,
           sender_id: upsert.message.sender_id,
+          sender_name: (upsert.message as any).sender_name ?? senderName ?? null,
           created_at: upsert.message.created_at,
           view_status: upsert.message.view_status ?? "Sent",
           type: upsert.message.type ?? "TEXT",

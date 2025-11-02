@@ -1475,6 +1475,23 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
       const nowIso = new Date().toISOString();
 
+      // Resolve sender_name from user if agent message
+      let senderName: string | null = null;
+      if (!isFromCustomer && req.user?.id) {
+        try {
+          const userRow = await supabaseAdmin
+            .from("users")
+            .select("name, email")
+            .eq("id", req.user.id)
+            .maybeSingle();
+          if (userRow?.data) {
+            senderName = userRow.data.name || userRow.data.email || null;
+          }
+        } catch (err) {
+          console.warn("[livechat:send] failed to resolve sender_name", err instanceof Error ? err.message : err);
+        }
+      }
+
       const { data: inserted, error: insErr } = await supabaseAdmin
         .from("chat_messages")
         .insert([{
@@ -1483,10 +1500,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
           type: "TEXT",
           is_from_customer: isFromCustomer,
           sender_id: req.user?.id || null,
+          sender_name: senderName,
           created_at: nowIso,
           view_status: "Pending",
         }])
-        .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, created_at, view_status, type")
         .single();
       if (insErr) return res.status(500).json({ error: insErr.message });
 
@@ -1520,6 +1538,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           body: inserted.content,
           sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
           sender_id: inserted.sender_id || null,
+          sender_name: inserted.sender_name || null,
           created_at: inserted.created_at,
           view_status: inserted.view_status || "Pending",
           type: inserted.type || "TEXT",

@@ -424,6 +424,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
           "updated_at",
           "assignee_agent",
           "inbox:inboxes!inner(id, company_id)",
+          // join AI agent identity by FK (requires constraint chats_ai_agent_id_fkey)
+          "ai_agent:agents!chats_ai_agent_id_fkey(id, name)",
         );
         return fields.join(",");
       };
@@ -494,6 +496,15 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       const rawItems = ((listResp.data || []) as any[]).map((row: any) => {
         if (row?.inbox) delete row.inbox;
+        // flatten AI agent relationship
+        if (row?.ai_agent) {
+          row.ai_agent_id = row.ai_agent?.id ?? null;
+          row.ai_agent_name = row.ai_agent?.name ?? null;
+          delete row.ai_agent;
+        } else {
+          row.ai_agent_id = row.ai_agent_id ?? null;
+          row.ai_agent_name = row.ai_agent_name ?? null;
+        }
         return row;
       });
       const items = rawItems;
@@ -722,12 +733,14 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
-      // Attach active AI agent identity (per company) for UI visibility
+      // Attach AI agent identity: prefer per-chat agent; fallback to active company agent when null
       try {
         const activeAgent = await getRuntimeAgent(companyId, null);
         for (const chat of items as any[]) {
-          chat.ai_agent_id = activeAgent?.id ?? null;
-          chat.ai_agent_name = activeAgent?.name ?? null;
+          if (!chat.ai_agent_id) {
+            chat.ai_agent_id = activeAgent?.id ?? null;
+            chat.ai_agent_name = activeAgent?.name ?? null;
+          }
         }
       } catch (err) {
         console.warn("[livechat/chats] get active agent failed", err instanceof Error ? err.message : err);
@@ -1106,27 +1119,27 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
     const { data, error } = await supabaseAdmin
       .from("chats")
-      .select("*")
+      .select("*, ai_agent:agents!chats_ai_agent_id_fkey(id, name)")
       .eq("id", id)
       .maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: "Chat nao encontrado" });
 
-    // Attach active AI agent identity
+    // Flatten AI agent relationship and fallback to active company agent if missing
     try {
+      if ((data as any)?.ai_agent) {
+        (data as any).ai_agent_id = (data as any).ai_agent?.id ?? null;
+        (data as any).ai_agent_name = (data as any).ai_agent?.name ?? null;
+        delete (data as any).ai_agent;
+      }
       const companyId = (data as any)?.company_id ?? null;
-      if (companyId) {
+      if (companyId && !(data as any).ai_agent_id) {
         const activeAgent = await getRuntimeAgent(companyId, null);
         (data as any).ai_agent_id = activeAgent?.id ?? null;
         (data as any).ai_agent_name = activeAgent?.name ?? null;
-      } else {
-        (data as any).ai_agent_id = null;
-        (data as any).ai_agent_name = null;
       }
     } catch (err) {
       console.warn("[livechat/chat] enrich ai agent failed", err instanceof Error ? err.message : err);
-      (data as any).ai_agent_id = null;
-      (data as any).ai_agent_name = null;
     }
 
     await rSet(cacheKey, data, TTL_CHAT);

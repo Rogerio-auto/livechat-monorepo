@@ -5,10 +5,10 @@ import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { createHash } from "node:crypto";
 import {
-  consume,
   publish,
   publishApp,
   getQueueInfo,
+  consume,
   EX_DLX,
   Q_INBOUND,
   Q_OUTBOUND,
@@ -233,6 +233,16 @@ async function flushDueBuffers(): Promise<void> {
         });
         const reply = (ai.reply || "").trim();
         if (reply) {
+          if (ai.agentId) {
+            try {
+              await db.none(
+                `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                [meta.chatId, ai.agentId],
+              );
+            } catch (err) {
+              console.warn("[buffer][flush] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+            }
+          }
           await publish(EX_APP, "outbound.request", {
             provider: last.provider,
             inboxId: last.inboxId,
@@ -1196,6 +1206,16 @@ async function handleInboundChange(job: InboundJobPayload) {
                   });
                   const reply = (ai.reply || "").trim();
                   if (reply) {
+                    if (ai.agentId) {
+                      try {
+                        await db.none(
+                          `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                          [chatId, ai.agentId],
+                        );
+                      } catch (err) {
+                        console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+                      }
+                    }
                     await publish(EX_APP, "outbound.request", {
                       provider: "META",
                       inboxId,
@@ -1792,6 +1812,16 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           });
           const reply = (ai.reply || "").trim();
           if (reply) {
+            if (ai.agentId) {
+              try {
+                await db.none(
+                  `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                  [chatId, ai.agentId],
+                );
+              } catch (err) {
+                console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+              }
+            }
             await publish(EX_APP, "outbound.request", {
               provider: WAHA_PROVIDER,
               inboxId: job.inboxId,

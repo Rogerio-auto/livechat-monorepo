@@ -285,6 +285,8 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   group_name?: string | null;
   group_avatar_url?: string | null;
   remote_id?: string | null;
+  ai_agent_id?: string | null;
+  ai_agent_name?: string | null;
 } | null> {
   const row = await db.oneOrNone<{
     chat_id: string;
@@ -299,6 +301,8 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     group_name: string | null;
     group_avatar_url: string | null;
     remote_id: string | null;
+    ai_agent_id: string | null;
+    ai_agent_name: string | null;
   }>(
     `select ch.id as chat_id,
             ch.inbox_id,
@@ -309,11 +313,14 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             ch.group_name,
             ch.group_avatar_url,
             ch.remote_id,
+            ch.ai_agent_id,
+            ag.name as ai_agent_name,
             cust.name as customer_name,
             cust.phone as customer_phone,
             cust.id as customer_id
        from public.chats ch
-  left join public.customers cust on cust.id = ch.customer_id
+ left join public.customers cust on cust.id = ch.customer_id
+ left join public.agents ag on ag.id = ch.ai_agent_id
       where ch.id = $1`,
     [chatId],
   );
@@ -331,6 +338,8 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     group_name: row.group_name,
     group_avatar_url: row.group_avatar_url,
     remote_id: row.remote_id,
+    ai_agent_id: row.ai_agent_id,
+    ai_agent_name: row.ai_agent_name,
   };
 }
 
@@ -2747,20 +2756,23 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           client_draft_id: job?.draftId ?? null,
         };
         try {
+          const chatSummary = await fetchChatUpdateForSocket(mapped.chat_id);
           await publishApp("socket.livechat.outbound", {
             kind: "livechat.outbound.message",
             chatId: mapped.chat_id,
             inboxId,
             message: mapped,
-            chatUpdate: {
-              chatId: mapped.chat_id,
-              inboxId,
-              last_message: mapped.body,
-              last_message_at: mapped.created_at,
-              last_message_from: mapped.sender_type,
-              last_message_type: mapped.type,
-              last_message_media_url: mapped.media_url,
-            },
+            chatUpdate: chatSummary
+              ? { ...chatSummary, last_message_from: mapped.sender_type }
+              : {
+                  chatId: mapped.chat_id,
+                  inboxId,
+                  last_message: mapped.body,
+                  last_message_at: mapped.created_at,
+                  last_message_from: mapped.sender_type,
+                  last_message_type: mapped.type,
+                  last_message_media_url: mapped.media_url,
+                },
           });
         } catch (err) {
           console.warn(

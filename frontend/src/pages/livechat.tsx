@@ -802,6 +802,12 @@ const bumpChatToTop = useCallback((update: {
         : current.remote_id ?? null,
       kind: update.kind ?? current.kind ?? null,
       status: update.status ?? current.status,
+        ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
+          ? (update as any).ai_agent_id ?? (current as any)?.ai_agent_id ?? null
+          : (current as any)?.ai_agent_id ?? null,
+        ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
+          ? (update as any).ai_agent_name ?? (current as any)?.ai_agent_name ?? null
+          : (current as any)?.ai_agent_name ?? null,
     } as Chat;
 
     const normalized = normalizeChat(mergedRaw);

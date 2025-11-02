@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { FiCheck, FiCheckSquare, FiMoreVertical, FiTag, FiUserMinus, FiUsers } from "react-icons/fi";
+import { FiCheck, FiCheckSquare, FiMoreVertical, FiTag, FiUserMinus, FiUsers, FiCpu } from "react-icons/fi";
 import type { Chat, Tag } from "./types";
 
 type InboxAgent = {
@@ -806,6 +806,14 @@ const chatLeadId = getChatLeadId(chat);
                       style={{ backgroundColor: tag.color || "#6B7280" }}
                     />
                   ))}
+                </div>
+              )}
+
+              {/* AI agent pill */}
+              {chat && (chat as any).ai_agent_name && (
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/60 text-xs text-[color:var(--color-text)]">
+                  <FiCpu className="h-3.5 w-3.5 opacity-80" />
+                  <span className="font-medium">{(chat as any).ai_agent_name}</span>
                 </div>
               )}
 

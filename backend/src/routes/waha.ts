@@ -3,13 +3,14 @@ import type { Express } from "express";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { requireAuth } from "../middlewares/requireAuth";
-import { publish, publishMeta, EX_APP } from "../queue/rabbit";
+import { publish, publishMeta, publishApp, EX_APP } from "../queue/rabbit";
 import { getIO } from "../lib/io";
 import { clearCompanyListCaches, rGet, rSet, k } from "../lib/redis";
 import { supabaseAdmin } from "../lib/supabase";
 import { getDecryptedCredsForInbox } from "../services/meta/store";
 import { WAHA_BASE_URL, WAHA_PROVIDER, wahaFetch, WahaHttpError } from "../services/waha/client";
 import { normalizeMsisdn } from "../util";
+import db from "../pg";
 
 // ====== CONFIG ======
 const WAHA_WEBHOOK_SECRET = process.env.WAHA_WEBHOOK_SECRET || ""; // opcional
@@ -269,6 +270,108 @@ async function persistDraftMessage(params: {
     });
   }
   return result.data || null;
+}
+
+/**
+ * Create optimistic inbound message draft and emit via socket immediately
+ * Returns draft ID for worker to update later
+ */
+async function createInboundDraft(params: {
+  companyId: string;
+  inboxId: string;
+  chatId: string | null;
+  externalId: string;
+  content: string;
+  type: string;
+  remoteSenderId: string | null;
+  remoteSenderName: string | null;
+  remoteSenderPhone: string | null;
+}) {
+  try {
+    const draftId = randomUUID();
+    const createdAt = new Date().toISOString();
+    
+    // Insert draft message with conflict handling
+    const { data, error } = await supabaseAdmin
+      .from("chat_messages")
+      .insert({
+        id: draftId,
+        company_id: params.companyId,
+        chat_id: params.chatId,
+        inbox_id: params.inboxId,
+        external_id: params.externalId,
+        content: params.content,
+        type: params.type,
+        is_from_customer: true,
+        remote_sender_id: params.remoteSenderId,
+        remote_sender_name: params.remoteSenderName,
+        remote_sender_phone: params.remoteSenderPhone,
+        view_status: "Pending",
+        created_at: createdAt,
+      })
+      .select()
+      .maybeSingle();
+
+    // If conflict (worker already inserted), that's OK - just skip draft
+    if (error) {
+      // Check if it's a unique constraint violation (code 23505)
+      if (error.code === '23505') {
+        console.log("[WAHA] createInboundDraft skipped - message already exists:", { 
+          externalId: params.externalId,
+          chatId: params.chatId 
+        });
+        return null;
+      }
+      console.error("[WAHA] createInboundDraft failed:", error);
+      return null;
+    }
+
+    if (!data) {
+      console.warn("[WAHA] createInboundDraft returned no data");
+      return null;
+    }
+
+    console.log("[WAHA] createInboundDraft success:", { 
+      draftId, 
+      chatId: params.chatId,
+      externalId: params.externalId 
+    });
+
+    // Emit via socket immediately
+    if (params.chatId) {
+      const mapped = {
+        id: data.id,
+        chat_id: data.chat_id,
+        body: data.content,
+        content: data.content,
+        sender_type: "CUSTOMER",
+        sender_id: null,
+        sender_name: params.remoteSenderName,
+        sender_avatar_url: null,
+        created_at: data.created_at,
+        view_status: "Pending",
+        type: data.type,
+        is_private: false,
+        media_url: data.media_url,
+        external_id: data.external_id,
+        remote_sender_id: params.remoteSenderId,
+        remote_sender_name: params.remoteSenderName,
+        remote_sender_phone: params.remoteSenderPhone,
+      };
+
+      await publishApp("socket.livechat.inbound", {
+        kind: "livechat.inbound.message",
+        chatId: params.chatId,
+        inboxId: params.inboxId,
+        message: mapped,
+      });
+    }
+
+    return data;
+  } catch (e) {
+    console.error("[WAHA] createInboundDraft error:", e);
+    return null;
+  }
 }
 
 function authHeaderBearer(req: Request): string {
@@ -1605,6 +1708,52 @@ export function registerWAHARoutes(app: Express) {
         return res.status(202).json({ ok: true });
       }
 
+      // Try to create optimistic draft for message.any events
+      let draftId: string | null = null;
+      if (eventType === "message.any" || eventType === "message") {
+        const payload = envelope?.payload ?? envelope;
+        const msgData = payload?.data ?? payload;
+        
+        // Extract basic message info
+        const externalId = String(msgData?.id || "");
+        const content = String(msgData?.body || msgData?.text || "");
+        const type = String(msgData?.type || "TEXT").toUpperCase();
+        const fromRemote = String(msgData?.from || "");
+        const chatRemoteId = String(msgData?.chatId || fromRemote);
+        
+        if (externalId && content && chatRemoteId) {
+          // Try to find existing chat by remote_id
+          const chatRow = await db.oneOrNone<{ id: string }>(
+            `SELECT id FROM chats WHERE company_id = $1 AND inbox_id = $2 AND remote_id = $3 LIMIT 1`,
+            [inbox.company_id, inbox.id, chatRemoteId]
+          );
+
+          if (chatRow) {
+            // Extract sender info
+            const remoteSenderId = fromRemote || null;
+            const remoteSenderName = String(msgData?.notifyName || msgData?._data?.notifyName || "").trim() || null;
+            const remoteSenderPhone = null; // Could parse from 'from' if needed
+
+            const draft = await createInboundDraft({
+              companyId: inbox.company_id,
+              inboxId: inbox.id,
+              chatId: chatRow.id,
+              externalId,
+              content,
+              type,
+              remoteSenderId,
+              remoteSenderName,
+              remoteSenderPhone,
+            });
+
+            if (draft) {
+              draftId = draft.id;
+              console.log("[WAHA webhook] Optimistic draft created:", { draftId, chatId: chatRow.id });
+            }
+          }
+        }
+      }
+
       const job = {
         provider: WAHA_PROVIDER,
         inboxId: inbox.id,
@@ -1614,6 +1763,7 @@ export function registerWAHARoutes(app: Express) {
         payload: envelope?.payload ?? envelope,
         raw: envelope,
         receivedAt: new Date().toISOString(),
+        draftId: draftId || undefined, // Pass draft ID to worker for update
       };
 
       await publishMeta("inbound.message", job);

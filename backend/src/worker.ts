@@ -91,11 +91,70 @@ type InboundMediaJobPayload = {
 const CACHE_TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS ?? 60));
 const PAGE_LIMIT_PREWARM = 20;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
+const SOCKET_RETRY_ATTEMPTS = 3;
+const SOCKET_RETRY_BASE_DELAY = 5000; // 5s
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
   return Math.floor(parsed);
+}
+
+/**
+ * Emit socket event with automatic retry and exponential backoff
+ * @param event - Event name to publish
+ * @param data - Event payload
+ * @param maxAttempts - Maximum retry attempts (default: 3)
+ * @returns true if succeeded, false if all retries failed
+ */
+async function emitSocketWithRetry(
+  event: string,
+  data: any,
+  maxAttempts: number = SOCKET_RETRY_ATTEMPTS
+): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await publishApp(event, data);
+      
+      if (attempt > 1) {
+        console.log(`[Socket] ✅ Success on attempt ${attempt}/${maxAttempts}:`, {
+          event,
+          chatId: data?.chatId,
+          messageId: data?.message?.id
+        });
+      }
+      
+      return true;
+    } catch (err) {
+      const isLastAttempt = attempt === maxAttempts;
+      
+      console.warn(`[Socket] ⚠️ Attempt ${attempt}/${maxAttempts} failed:`, {
+        event,
+        chatId: data?.chatId,
+        messageId: data?.message?.id,
+        error: err instanceof Error ? err.message : String(err),
+        willRetry: !isLastAttempt
+      });
+      
+      if (!isLastAttempt) {
+        // Exponential backoff: 5s, 10s, 20s
+        const delay = SOCKET_RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
+        console.log(`[Socket] ⏳ Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // Final failure - log as metric
+        console.error(`[Socket] ❌ METRIC: All ${maxAttempts} attempts failed:`, {
+          event,
+          chatId: data?.chatId,
+          messageId: data?.message?.id,
+          inboxId: data?.inboxId,
+          totalRetryTime: `${(SOCKET_RETRY_BASE_DELAY * (Math.pow(2, maxAttempts) - 1)) / 1000}s`
+        });
+      }
+    }
+  }
+  
+  return false;
 }
 
 const INBOUND_WORKERS = parsePositiveInt(process.env.INBOUND_WORKERS, 1);
@@ -1326,7 +1385,7 @@ async function handleInboundChange(job: InboundJobPayload) {
 
       try {
         const chatSummary = await fetchChatUpdateForSocket(chatId);
-        await publishApp("socket.livechat.inbound", {
+        const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
           kind: "livechat.inbound.message",
           chatId,
           inboxId: inboxIdForSocket,
@@ -1350,6 +1409,16 @@ async function handleInboundChange(job: InboundJobPayload) {
                 remote_id: isGroupMessage ? metaContext.groupId ?? null : participantWaId ?? null,
               },
         });
+
+        if (!socketSuccess) {
+          console.error("[worker][META] METRIC: Socket emission failed after all retries:", {
+            operation: 'inbound',
+            messageId: mappedMessage.id,
+            chatId,
+            inboxId: inboxIdForSocket,
+            provider: 'META'
+          });
+        }
       } catch (e) {
         console.warn(
           "[inbound] failed to publish socket event:",
@@ -1744,7 +1813,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   try {
     const chatSummary = await fetchChatUpdateForSocket(chatId);
-    await publishApp("socket.livechat.inbound", {
+    const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
       kind: "livechat.inbound.message",
       chatId,
       inboxId: job.inboxId,
@@ -1768,6 +1837,17 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
             remote_id: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
           },
     });
+
+    if (!socketSuccess) {
+      console.error("[worker][WAHA] METRIC: Socket emission failed after all retries:", {
+        operation: 'inbound',
+        messageId: mappedMessage.id,
+        chatId,
+        inboxId: job.inboxId,
+        provider: 'WAHA',
+        hasDraft: !!job?.draftId
+      });
+    }
   } catch (error) {
     console.warn("[WAHA][worker] failed to publish socket inbound message", error);
   }
@@ -2316,7 +2396,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       client_draft_id: job?.draftId ?? payload?.draftId ?? null,
     };
 
-    await publishApp("socket.livechat.outbound", {
+    const socketSuccess = await emitSocketWithRetry("socket.livechat.outbound", {
       kind: "livechat.outbound.message",
       chatId: mapped.chat_id,
       inboxId,
@@ -2328,6 +2408,16 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
           }
         : undefined,
     });
+
+    if (!socketSuccess) {
+      console.error("[worker][WAHA] METRIC: Socket emission failed after all retries:", {
+        operation: 'outbound',
+        messageId: mapped.id,
+        chatId: mapped.chat_id,
+        inboxId,
+        provider: 'WAHA'
+      });
+    }
   }
 
   if (chatIdForStatus && messageIdForStatus) {
@@ -2868,7 +2958,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         };
         try {
           const chatSummary = await fetchChatUpdateForSocket(mapped.chat_id);
-          await publishApp("socket.livechat.outbound", {
+          const socketSuccess = await emitSocketWithRetry("socket.livechat.outbound", {
             kind: "livechat.outbound.message",
             chatId: mapped.chat_id,
             inboxId,
@@ -2885,6 +2975,16 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
                   last_message_media_url: mapped.media_url,
                 },
           });
+
+          if (!socketSuccess) {
+            console.error("[worker][META] METRIC: Socket emission failed after all retries:", {
+              operation: 'outbound',
+              messageId: mapped.id,
+              chatId: mapped.chat_id,
+              inboxId,
+              provider: 'META'
+            });
+          }
         } catch (err) {
           console.warn(
             "[worker][outbound] failed to publish outbound message event:",

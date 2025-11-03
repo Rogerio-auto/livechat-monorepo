@@ -2165,17 +2165,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     let wSenderName: string | null = null;
     let wSenderAvatarUrl: string | null = null;
     try {
-      const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
-        `select ai_agent_id from public.chats where id = $1`,
-        [internalChatId],
-      );
-      if (chatRow?.ai_agent_id) {
-        const agentRow = await db.oneOrNone<{ name: string | null }>(
-          `select name from public.agents where id = $1`,
-          [chatRow.ai_agent_id],
-        );
-        wSenderName = agentRow?.name ?? null;
-      } else if (job?.senderId || job?.senderUserSupabaseId) {
+      // FIRST: Check if this is a human agent message (senderId provided)
+      if (job?.senderId || job?.senderUserSupabaseId) {
         // If senderId provided, it's the local users.id; query by id
         // If senderUserSupabaseId provided, it's auth user.id; query by user_id
         const userId = job.senderId || job.senderUserSupabaseId;
@@ -2192,10 +2183,30 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
             job.senderId = userRow.id;
           }
         }
+      } else {
+        // FALLBACK: If no senderId, check if it's an AI agent message
+        const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
+          `select ai_agent_id from public.chats where id = $1`,
+          [internalChatId],
+        );
+        if (chatRow?.ai_agent_id) {
+          const agentRow = await db.oneOrNone<{ name: string | null }>(
+            `select name from public.agents where id = $1`,
+            [chatRow.ai_agent_id],
+          );
+          wSenderName = agentRow?.name ?? null;
+        }
       }
     } catch (e) {
       console.warn("[worker][WAHA] failed to resolve sender identity", e instanceof Error ? e.message : e);
     }
+
+    console.log("[worker][WAHA] insertOutboundMessage params:", {
+      messageId: payload?.draftId || job?.messageId || null,
+      senderId: job?.senderId,
+      senderName: wSenderName,
+      senderAvatarUrl: wSenderAvatarUrl,
+    });
 
     const upsert = await insertOutboundMessage({
       chatId: internalChatId,
@@ -2212,6 +2223,14 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       senderAvatarUrl: wSenderAvatarUrl ?? null,
       messageId: payload?.draftId || job?.messageId || null,
       viewStatus: externalId ? "Sent" : "Pending",
+    });
+
+    console.log("[worker][WAHA] insertOutboundMessage result:", {
+      operation: upsert?.operation,
+      messageId: upsert?.message?.id,
+      sender_id: upsert?.message?.sender_id,
+      sender_name: upsert?.message?.sender_name,
+      sender_avatar_url: upsert?.message?.sender_avatar_url,
     });
     messageRow = upsert?.message ?? null;
     messageOperation = upsert?.operation ?? null;
@@ -2280,7 +2299,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       ? await fetchChatUpdateForSocket(chatIdForStatus)
       : null;
 
-  if (messageRow && messageOperation === "insert") {
+  if (messageRow) {
     const mapped = {
       id: messageRow.id,
       chat_id: messageRow.chat_id,

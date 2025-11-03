@@ -137,6 +137,13 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         supaUser.email,
       company_id: companyId ?? null,
     };
+    
+    console.log("[requireAuth] 🔑 User authenticated:", {
+      authUserId: supaUser.id,
+      email: (req as any).user.email,
+      company_id: companyId,
+    });
+    
     next();
   } catch (e: any) {
     if (isDev) console.error("[requireAuth] fatal:", e?.message);

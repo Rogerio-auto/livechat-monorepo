@@ -166,17 +166,63 @@ async function persistDraftMessage(params: {
   caption?: string | null;
   quotedMessageId?: string | null;
 }) {
+  console.log("[WAHA] persistDraftMessage called:", {
+    chatId: params.chatId,
+    fromUserId: params.fromUserId,
+    kind: params.kind,
+  });
+
+  // Resolve sender identity from users table
+  let senderId: string | null = null;
+  let senderName: string | null = null;
+  let senderAvatarUrl: string | null = null;
+  
+  if (params.fromUserId) {
+    try {
+      const userResp = await supabaseAdmin
+        .from("users")
+        .select("id, name, email, avatar")
+        .eq("user_id", params.fromUserId)
+        .maybeSingle();
+      
+      console.log("[WAHA] persistDraftMessage user lookup:", {
+        authUserId: params.fromUserId,
+        found: !!userResp.data,
+        data: userResp.data,
+        error: userResp.error,
+      });
+      
+      if (userResp.data) {
+        senderId = userResp.data.id;
+        senderName = userResp.data.name || userResp.data.email || null;
+        senderAvatarUrl = userResp.data.avatar || null;
+      }
+    } catch (e) {
+      console.warn("[WAHA] persistDraftMessage sender resolution failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
+  console.log("[WAHA] persistDraftMessage resolved sender:", {
+    senderId,
+    senderName,
+    senderAvatarUrl,
+  });
+
   const baseRecord: Record<string, unknown> = {
     company_id: params.companyId,
     chat_id: params.chatId ?? null,
     inbox_id: params.inboxId,
-    to_remote: params.to,
+    // to_remote: params.to, // Column doesn't exist
     from_user_id: params.fromUserId ?? null,
+    sender_id: senderId,
+    sender_name: senderName,
+    sender_avatar_url: senderAvatarUrl,
+    is_from_customer: false, // Message from agent
     content: params.content ?? null,
     media_url: params.mediaUrl ?? null,
     caption: params.caption ?? null,
-    quoted_message_id: params.quotedMessageId ?? null,
-    status: "DRAFT",
+    // quoted_message_id: params.quotedMessageId ?? null, // Column doesn't exist
+    // status: "DRAFT", // Column doesn't exist
   };
   if (!draftKindColumnMissing) {
     baseRecord.kind = params.kind;
@@ -198,11 +244,29 @@ async function persistDraftMessage(params: {
       const fallbackRecord = { ...baseRecord };
       delete fallbackRecord.kind;
       result = await attemptInsert(fallbackRecord);
+      
+      if (result.error) {
+        console.error("[WAHA] persistDraftMessage RETRY FAILED:", {
+          code: result.error.code,
+          message: result.error.message,
+          details: result.error.details,
+          hint: result.error.hint
+        });
+      } else {
+        console.log("[WAHA] persistDraftMessage RETRY SUCCESS:", result.data);
+      }
     }
   }
 
   if (result.error) {
-    console.warn("[WAHA] persistDraftMessage failed:", result.error.message);
+    console.warn("[WAHA] persistDraftMessage final error:", result.error.message);
+  } else {
+    console.log("[WAHA] persistDraftMessage SUCCESS - returning:", {
+      id: result.data?.id,
+      sender_id: result.data?.sender_id,
+      sender_name: result.data?.sender_name,
+      sender_avatar_url: result.data?.sender_avatar_url
+    });
   }
   return result.data || null;
 }
@@ -1431,15 +1495,16 @@ export function registerWAHARoutes(app: Express) {
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: "text", content, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
       });
-      const draftId = clientDraftId || draft?.id || randomUUID();
+      const draftId = draft?.id || clientDraftId || randomUUID();
+      const senderId = draft?.sender_id || null;
 
       const payload: Record<string, unknown> = {
         to,
         type: "text",
         content,
         quotedMessageId: quotedMessageId ?? null,
+        draftId,  // Use the draft ID, not a random one
       };
-      payload.draftId = draftId;
 
       await publish(EX_APP, "outbound.request", {
         jobType: "outbound.request",
@@ -1448,6 +1513,7 @@ export function registerWAHARoutes(app: Express) {
         inboxId,
         chatId: chatId ?? null,
         draftId,
+        senderId,  // Pass sender ID to worker
         payload,
       });
 
@@ -1500,13 +1566,15 @@ export function registerWAHARoutes(app: Express) {
         kind: kind === "image" ? "image" : kind === "audio" ? "audio" : kind === "video" ? "video" : "document",
         mediaUrl, caption: caption ?? null, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
       });
-      const draftId = clientDraftId || draft?.id || randomUUID();
+      const draftId = draft?.id || clientDraftId || randomUUID();
+      const senderId = draft?.sender_id || null;
 
       await publish(EX_APP, "outbound.request", {
         jobType: "outbound.request",
         provider: WAHA_PROVIDER,
         companyId, inboxId, chatId: chatId ?? null,
         draftId,
+        senderId,  // Pass sender ID to worker
         payload: {
           to, type: "media", kind, mediaUrl,
           caption: caption ?? null, filename: filename ?? null, mimeType: mimeType ?? null,

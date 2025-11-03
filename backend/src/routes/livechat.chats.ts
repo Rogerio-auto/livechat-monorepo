@@ -833,10 +833,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         ),
         customer:customers (
           phone,
-          cellphone,
-          celular,
-          telefone,
-          contact
+          msisdn
         )
       `;
 
@@ -851,6 +848,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           : Promise.resolve({ data: null, error: null } as { data: any; error: any }),
       ]);
 
+      console.log("[POST /livechat/messages] 🔍 User resolution:", {
+        needsSenderId,
+        authUserId,
+        userRespData: userResp?.data,
+        userRespError: userResp?.error,
+      });
+
       if (userResp?.error) {
         console.warn("[livechat:send] user lookup failed", userResp.error.message || userResp.error);
       }
@@ -861,6 +865,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const senderName: string | null =
         userResp?.data?.name || userResp?.data?.email || null;
       const senderAvatarUrl: string | null = userResp?.data?.avatar || null;
+
+      console.log("[POST /livechat/messages] 📝 Resolved sender:", {
+        senderSupabaseId,
+        senderName,
+        senderAvatarUrl,
+      });
 
       const chatRow = chatResp?.data as any;
       if (chatResp?.error) {
@@ -899,10 +909,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const customerPhoneCandidates = customerRow
         ? [
             customerRow.phone,
-            customerRow.cellphone,
-            customerRow.celular,
-            customerRow.telefone,
-            customerRow.contact,
+            customerRow.msisdn,
           ]
         : [];
       const customerPhone =
@@ -941,6 +948,15 @@ export function registerLivechatChatRoutes(app: express.Application) {
           "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type",
         )
         .single();
+      
+      console.log("[POST /livechat/messages] 💾 Inserted message:", {
+        id: inserted?.id,
+        sender_id: inserted?.sender_id,
+        sender_name: (inserted as any)?.sender_name,
+        sender_avatar_url: (inserted as any)?.sender_avatar_url,
+        insertError: insErr,
+      });
+      
       if (insErr) {
         logStatus = "error";
         logError = insErr.message || "insert_error";
@@ -982,6 +998,14 @@ export function registerLivechatChatRoutes(app: express.Application) {
           type: inserted.type || "TEXT",
           is_private: false,
         };
+        
+        console.log("[POST /livechat/messages] 📡 Socket emit message:new:", {
+          messageId: mapped.id,
+          sender_id: mapped.sender_id,
+          sender_name: mapped.sender_name,
+          sender_avatar_url: mapped.sender_avatar_url,
+        });
+        
         io.to(`chat:${chatId}`).emit("message:new", mapped);
       }
 
@@ -1642,18 +1666,37 @@ export function registerLivechatChatRoutes(app: express.Application) {
       let senderId: string | null = null;
       let senderName: string | null = null;
       let senderAvatarUrl: string | null = null;
+      
+      console.log("[POST /messages/file] 🔍 Starting sender resolution:", {
+        authUserId: req.user?.id,
+        hasUser: !!req.user,
+      });
+      
       if (req.user?.id) {
         const userRow = await supabaseAdmin
           .from("users")
           .select("id, name, email, avatar")
           .eq("user_id", req.user.id)
           .maybeSingle();
+        
+        console.log("[POST /messages/file] 📊 User lookup result:", {
+          found: !!userRow.data,
+          data: userRow.data,
+          error: userRow.error,
+        });
+        
         if (userRow.data) {
           senderId = userRow.data.id;
           senderName = userRow.data.name || userRow.data.email || null;
           senderAvatarUrl = userRow.data.avatar || null;
         }
       }
+
+      console.log("[POST /messages/file] 📝 Resolved sender:", {
+        senderId,
+        senderName,
+        senderAvatarUrl,
+      });
 
       const { data: inserted, error } = await supabaseAdmin
         .from("chat_messages")
@@ -1670,6 +1713,15 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }])
         .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
         .single();
+      
+      console.log("[POST /messages/file] 💾 Inserted message:", {
+        id: inserted?.id,
+        sender_id: inserted?.sender_id,
+        sender_name: inserted?.sender_name,
+        sender_avatar_url: inserted?.sender_avatar_url,
+        error,
+      });
+      
       if (error) return res.status(500).json({ error: error.message });
 
       await supabaseAdmin
@@ -1703,6 +1755,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
         type: inserted.type || kind,
         is_private: false,
       };
+
+      console.log("[POST /messages/file] 📡 Socket emit message:new:", {
+        messageId: mapped.id,
+        sender_id: mapped.sender_id,
+        sender_name: mapped.sender_name,
+        sender_avatar_url: mapped.sender_avatar_url,
+      });
 
       const io = getIO();
       io?.to(`chat:${id}`).emit("message:new", mapped);

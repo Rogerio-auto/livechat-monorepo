@@ -97,6 +97,7 @@ export default function LiveChatPage() {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
 
   const chatsListRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -370,6 +371,32 @@ export default function LiveChatPage() {
   useEffect(() => {
     hasMoreChatsRef.current = hasMoreChats;
   }, [hasMoreChats]);
+
+  // Fetch current user data on mount
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      try {
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+        const response = await fetch(`${API}/settings/users/me`, {
+          headers,
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentUser({
+            id: data.id,
+            name: data.name || data.email || "Usuário",
+            avatar: data.avatar || null,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch current user:", error);
+      }
+    };
+    fetchCurrentUser();
+  }, [API]);
 
 
   // Contacts state
@@ -844,6 +871,16 @@ const bumpChatToTop = useCallback((update: {
     // Novo contrato (relay j? emite tamb?m os legados)
     const handleChatUpdated = (u: any) => bumpChatToTop(u);
     const handleMessageActivity = (m: any) => {
+      console.log("[Frontend] 📡 Socket message received:", {
+        id: m.id,
+        chat_id: m.chat_id,
+        sender_type: m.sender_type,
+        sender_id: m.sender_id,
+        sender_name: m.sender_name,
+        sender_avatar_url: m.sender_avatar_url,
+        body: m.body?.substring(0, 50),
+      });
+      
       bumpChatToTop({
         chatId: m.chat_id,
         last_message: m.body ?? (m.media_url ? "[MEDIA]" : ""),
@@ -963,6 +1000,14 @@ const scrollToBottom = useCallback(
 
   const normalizeMessage = useCallback((raw: any): Message => {
     if (!raw) return raw as Message;
+    
+    console.log("[Frontend] 🔄 normalizeMessage input:", {
+      id: raw.id,
+      sender_id: raw.sender_id,
+      sender_name: raw.sender_name,
+      sender_avatar_url: raw.sender_avatar_url,
+    });
+    
     const deliveryStatus =
       typeof raw?.delivery_status === "string" && raw.delivery_status
         ? raw.delivery_status.toUpperCase()
@@ -977,7 +1022,8 @@ const scrollToBottom = useCallback(
           : typeof raw?.draft_id === "string" && raw.draft_id
             ? raw.draft_id
             : null;
-    return {
+    
+    const normalized = {
       ...raw,
       media_url: raw.media_url ?? null,
       type: raw.type ?? "TEXT",
@@ -997,6 +1043,15 @@ const scrollToBottom = useCallback(
           ? raw.view_status.toUpperCase()
           : deliveryStatus,
     } as Message;
+    
+    console.log("[Frontend] ✅ normalizeMessage output:", {
+      id: normalized.id,
+      sender_id: normalized.sender_id,
+      sender_name: normalized.sender_name,
+      sender_avatar_url: normalized.sender_avatar_url,
+    });
+    
+    return normalized;
   }, []);
 
   const normalizeMessagesList = useCallback((list: any[]): Message[] => list.map((item) => normalizeMessage(item)), [normalizeMessage]);
@@ -1216,7 +1271,9 @@ const scrollToBottom = useCallback(
         body: content,
         content,
         sender_type: "AGENT",
-        sender_id: null,
+        sender_id: currentUser?.id || null,
+        sender_name: currentUser?.name || null,
+        sender_avatar_url: currentUser?.avatar || null,
         created_at: createdAt,
         view_status: "SENDING",
         delivery_status: "SENDING",
@@ -1227,7 +1284,7 @@ const scrollToBottom = useCallback(
       } as Message);
       return { draftId, createdAt };
     },
-    [appendMessageToCache],
+    [appendMessageToCache, currentUser],
   );
 
   useEffect(() => {

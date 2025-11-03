@@ -142,6 +142,12 @@ export function registerSendMessageRoutes(app: Application) {
         let localSenderId: string | null = null;
         let localSenderName: string | null = null;
         let localSenderAvatarUrl: string | null = null;
+        
+        console.log("[POST /messages/media] 🔍 Starting sender resolution:", {
+          authUserId: (req as any)?.user?.id,
+          hasUser: !!(req as any)?.user,
+        });
+        
         try {
           const authUserId = (req as any)?.user?.id as string | undefined;
           if (authUserId && typeof authUserId === "string") {
@@ -154,6 +160,12 @@ export function registerSendMessageRoutes(app: Application) {
               `select id, name, email, avatar from public.users where user_id = $1`,
               [authUserId],
             );
+            
+            console.log("[POST /messages/media] 📊 User lookup result:", {
+              found: !!userRow,
+              data: userRow,
+            });
+            
             if (userRow) {
               localSenderId = userRow.id;
               localSenderName = userRow.name || userRow.email || null;
@@ -163,6 +175,12 @@ export function registerSendMessageRoutes(app: Application) {
         } catch (e) {
           console.warn("[messages.media] sender resolution failed", e instanceof Error ? e.message : e);
         }
+
+        console.log("[POST /messages/media] 📝 Resolved sender:", {
+          localSenderId,
+          localSenderName,
+          localSenderAvatarUrl,
+        });
 
         const inserted = await db.one<{
           id: string;
@@ -190,6 +208,13 @@ export function registerSendMessageRoutes(app: Application) {
             draftUrl,
           ],
         );
+
+        console.log("[POST /messages/media] 💾 Inserted message:", {
+          id: inserted.id,
+          sender_id: inserted.sender_id,
+          sender_name: inserted.sender_name,
+          sender_avatar_url: inserted.sender_avatar_url,
+        });
 
         const viewStatus = inserted.view_status ?? "Pending";
         let effectiveMediaUrl = draftUrl ?? inserted.media_url ?? null;
@@ -239,6 +264,13 @@ export function registerSendMessageRoutes(app: Application) {
           is_private: false,
           media_url: responsePayload.media_url ?? null,
         };
+
+        console.log("[POST /messages/media] 📡 Socket emit (via rabbit):", {
+          messageId: mappedMessage.id,
+          sender_id: mappedMessage.sender_id,
+          sender_name: mappedMessage.sender_name,
+          sender_avatar_url: mappedMessage.sender_avatar_url,
+        });
 
         try {
           await publishApp("socket.livechat.outbound", {

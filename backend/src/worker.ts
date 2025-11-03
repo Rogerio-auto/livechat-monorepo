@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { createHash } from "node:crypto";
+import { encryptMediaUrl, decryptMediaUrl } from "../src/lib/crypto.ts";
 import {
   publish,
   publishApp,
@@ -93,6 +94,22 @@ const PAGE_LIMIT_PREWARM = 20;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
 const SOCKET_RETRY_ATTEMPTS = 3;
 const SOCKET_RETRY_BASE_DELAY = 5000; // 5s
+const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || `http://localhost:${process.env.PORT_BACKEND || 5000}`;
+
+/**
+ * Converts an encrypted media URL token to a proxy URL
+ * This allows the frontend to fetch media through our backend proxy
+ */
+function buildProxyUrl(encryptedToken: string | null | undefined): string | null {
+  if (!encryptedToken) return null;
+  
+  // If already a full URL (not encrypted), return as-is
+  if (encryptedToken.startsWith("http://") || encryptedToken.startsWith("https://")) {
+    return encryptedToken;
+  }
+  
+  return `${BACKEND_BASE_URL}/media/proxy?token=${encodeURIComponent(encryptedToken)}`;
+}
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number(raw);
@@ -1359,7 +1376,7 @@ async function handleInboundChange(job: InboundJobPayload) {
         view_status: msgRow.view_status,
         type: msgRow.type ?? "TEXT",
         is_private: false,
-        media_url: msgRow.media_url ?? null,
+        media_url: buildProxyUrl(msgRow.media_url) ?? null,
         remote_participant_id: msgRow.remote_participant_id ?? null,
         remote_sender_id: msgRow.remote_sender_id ?? null,
         remote_sender_name: msgRow.remote_sender_name ?? null,
@@ -1516,9 +1533,12 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
         ],
       );
 
+      // Encrypt the public URL before storing in database
+      const encryptedUrl = encryptMediaUrl(publicUrl);
+
       await db.none(
         `update public.chat_messages set media_url = $2 where id = $1`,
-        [messageId, publicUrl],
+        [messageId, encryptedUrl],
       );
     } catch (err) {
       console.error("[inbound.media] media handling error:", (err as any)?.message || err);
@@ -1656,6 +1676,10 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   const isFromCustomer = !payload?.fromMe;
   const ackStatus = mapWahaAckToViewStatus(payload?.ack) ?? (isFromCustomer ? "Pending" : "Sent");
   const mediaUrl = payload?.hasMedia ? payload?.media?.url ?? null : null;
+  
+  // Encrypt media URL before storing in database
+  const encryptedMediaUrl = encryptMediaUrl(mediaUrl);
+  
   const messageType = deriveWahaMessageType(payload);
   const body =
     typeof payload?.body === "string" && payload.body.trim()
@@ -1728,7 +1752,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     type: messageType,
     viewStatus: ackStatus ?? null,
-    mediaUrl,
+    mediaUrl: encryptedMediaUrl, // Store encrypted URL
     createdAt,
     remoteParticipantId,
     remoteSenderId: remoteMeta?.remoteId ?? null,
@@ -1800,7 +1824,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     view_status: upsertResult.message.view_status ?? ackStatus ?? "Pending",
     type: upsertResult.message.type ?? messageType,
     is_private: false,
-    media_url: upsertResult.message.media_url ?? mediaUrl ?? null,
+    media_url: buildProxyUrl(upsertResult.message.media_url) ?? buildProxyUrl(encryptedMediaUrl) ?? null,
     remote_sender_id: upsertResult.message.remote_sender_id ?? null,
     remote_sender_name: upsertResult.message.remote_sender_name ?? null,
     remote_sender_phone: upsertResult.message.remote_sender_phone ?? null,
@@ -2392,7 +2416,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       view_status: messageRow.view_status ?? viewStatus,
       type: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
       is_private: false,
-      media_url: messageRow.media_url ?? null,
+      media_url: buildProxyUrl(messageRow.media_url) ?? null,
       client_draft_id: job?.draftId ?? payload?.draftId ?? null,
     };
 

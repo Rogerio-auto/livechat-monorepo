@@ -334,38 +334,13 @@ async function createInboundDraft(params: {
     console.log("[WAHA] createInboundDraft success:", { 
       draftId, 
       chatId: params.chatId,
-      externalId: params.externalId 
+      externalId: params.externalId,
+      note: 'Draft created - socket will be emitted by worker after processing'
     });
 
-    // Emit via socket immediately
-    if (params.chatId) {
-      const mapped = {
-        id: data.id,
-        chat_id: data.chat_id,
-        body: data.content,
-        content: data.content,
-        sender_type: "CUSTOMER",
-        sender_id: null,
-        sender_name: params.remoteSenderName,
-        sender_avatar_url: null,
-        created_at: data.created_at,
-        view_status: "Pending",
-        type: data.type,
-        is_private: false,
-        media_url: data.media_url,
-        external_id: data.external_id,
-        remote_sender_id: params.remoteSenderId,
-        remote_sender_name: params.remoteSenderName,
-        remote_sender_phone: params.remoteSenderPhone,
-      };
-
-      await publishApp("socket.livechat.inbound", {
-        kind: "livechat.inbound.message",
-        chatId: params.chatId,
-        inboxId: params.inboxId,
-        message: mapped,
-      });
-    }
+    // NOTE: We do NOT emit socket here to avoid duplicate processing by AI agent
+    // The worker will emit socket after complete processing (with media, avatar, etc)
+    // This prevents AI from seeing the same message twice and responding twice
 
     return data;
   } catch (e) {

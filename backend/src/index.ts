@@ -36,6 +36,7 @@ import { registerCampaignFollowupsRoutes } from "./routes/livechat.campaigns.fol
 import { registerCampaignUploadsRoutes } from "./routes/livechat.campaigns.uploads.ts";
 import { registerCampaignWorker } from "./worker.campaigns.ts";
 import { registerWAHARoutes } from "./routes/waha.ts";
+import mediaProxyRouter from "./routes/media.proxy.ts";
 import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
 import { normalizeMsisdn } from "./util.ts";
@@ -3435,6 +3436,10 @@ registerCampaignFollowupsRoutes(app);
 registerCampaignUploadsRoutes(app);
 
 registerWAHARoutes(app);
+
+// Media proxy for encrypted URLs (CORS-safe)
+app.use("/media", mediaProxyRouter);
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });
 });

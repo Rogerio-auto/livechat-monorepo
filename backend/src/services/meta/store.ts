@@ -3,7 +3,7 @@ import db from "../../pg.ts";
 import { normalizeMsisdn } from "../../util.ts";
 import { supabaseAdmin } from "../../lib/supabase.js";
 import { clearMessageCache, clearListCacheIndexes, rDel, rGet, rSet, k } from "../../lib/redis.ts";
-import { decryptSecret } from "../../lib/crypto.ts";
+import { decryptSecret, encryptMediaUrl } from "../../lib/crypto.ts";
 import { WAHA_PROVIDER } from "../waha/client.ts";
 
 let customerAvatarColumnMissing = false;
@@ -1027,6 +1027,9 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
         ? new Date(args.createdAt).toISOString()
         : null;
 
+  // Encrypt media URL before storing
+  const encryptedMediaUrl = encryptMediaUrl(args.mediaUrl);
+
   if (chatMessagesSupportsRemoteSenderColumns) {
     try {
       const row = await db.oneOrNone<UpsertChatMessageRow>(
@@ -1078,7 +1081,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.content,
           args.type ?? "TEXT",
           args.viewStatus ?? null,
-          args.mediaUrl ?? null,
+          encryptedMediaUrl ?? null,
           args.remoteParticipantId ?? null,
           args.remoteSenderId ?? null,
           args.remoteSenderName ?? null,
@@ -1141,7 +1144,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
       args.content,
       args.type ?? "TEXT",
       args.viewStatus ?? null,
-      args.mediaUrl ?? null,
+      encryptedMediaUrl ?? null,
       createdAtIso,
     ],
   );

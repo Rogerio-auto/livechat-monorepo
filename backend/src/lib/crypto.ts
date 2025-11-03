@@ -102,3 +102,73 @@ export function decryptSecret(packed: string | null | undefined): string | null 
     return packed;
   }
 }
+
+// -------- URL encryption (for media URLs) --------
+/**
+ * Encrypts a URL and returns a token that can be used in a proxy endpoint
+ * Format: encryptedData (base64url safe)
+ */
+export function encryptUrl(url: string): string {
+  if (!url) return "";
+  
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(AES_ALGO, keyBytes, iv);
+  const ciphertext = Buffer.concat([cipher.update(url, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  
+  // Pack as base64url (safe for URLs)
+  const packed = packSecret(iv, tag, ciphertext);
+  return Buffer.from(packed).toString("base64url");
+}
+
+/**
+ * Decrypts a URL token back to the original URL
+ */
+export function decryptUrl(token: string): string | null {
+  if (!token) return null;
+  
+  try {
+    const packed = Buffer.from(token, "base64url").toString("utf8");
+    const { iv, tag, ciphertext } = unpackSecret(packed);
+    const decipher = createDecipheriv(AES_ALGO, keyBytes, iv);
+    decipher.setAuthTag(tag);
+    const plain = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return plain.toString("utf8");
+  } catch (err) {
+    console.error("[crypto] Failed to decrypt URL token:", err);
+    return null;
+  }
+}
+
+/**
+ * Encrypts a media URL for storage, null-safe
+ */
+export function encryptMediaUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return encryptUrl(url);
+  } catch (err) {
+    console.error("[crypto] Failed to encrypt media URL:", err);
+    return url; // Fallback to original if encryption fails
+  }
+}
+
+/**
+ * Decrypts a media URL from storage, null-safe
+ * If already decrypted (not encrypted format), returns as-is
+ */
+export function decryptMediaUrl(encrypted: string | null | undefined): string | null {
+  if (!encrypted) return null;
+  
+  // Check if it looks like a URL (not encrypted)
+  if (encrypted.startsWith("http://") || encrypted.startsWith("https://")) {
+    return encrypted;
+  }
+  
+  try {
+    return decryptUrl(encrypted);
+  } catch (err) {
+    console.error("[crypto] Failed to decrypt media URL:", err);
+    return encrypted; // Fallback to original
+  }
+}

@@ -19,6 +19,7 @@ import {
 import { WAHA_PROVIDER } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
+import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -114,15 +115,18 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
         replied_message_id: row.replied_message_id ?? null,
       }));
 
+    // Transform encrypted media URLs to proxy URLs
+    const messagesWithProxyUrls = transformMessagesMediaUrls(mappedAsc);
+
     const hasMore = rows.length === limit;
-    const nextBefore = hasMore && mappedAsc.length > 0 ? mappedAsc[0].created_at : "";
+    const nextBefore = hasMore && messagesWithProxyUrls.length > 0 ? messagesWithProxyUrls[0].created_at : "";
     const payload = {
-      items: mappedAsc,
+      items: messagesWithProxyUrls,
       nextBefore,
       hasMore,
     };
     const lastModifiedIso =
-      mappedAsc.length > 0 ? mappedAsc[mappedAsc.length - 1].created_at : new Date().toISOString();
+      messagesWithProxyUrls.length > 0 ? messagesWithProxyUrls[messagesWithProxyUrls.length - 1].created_at : new Date().toISOString();
     const envelope = buildCacheEnvelope(payload, lastModifiedIso);
     const cacheKey = k.msgsKey(chatId, undefined, limit);
     await rSet(cacheKey, envelope, TTL_MSGS);

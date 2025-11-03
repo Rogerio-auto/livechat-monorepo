@@ -1675,9 +1675,26 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   const isFromCustomer = !payload?.fromMe;
   const ackStatus = mapWahaAckToViewStatus(payload?.ack) ?? (isFromCustomer ? "Pending" : "Sent");
-  const mediaUrl = payload?.hasMedia ? payload?.media?.url ?? null : null;
   
-  // Encrypt media URL before storing in database
+  // Extract media URL/path from WAHA payload
+  // WAHA can provide: url, file, filePath, or base64
+  let mediaUrl: string | null = null;
+  if (payload?.hasMedia) {
+    // Priority order: file path > URL > base64
+    if (payload?.media?.filePath) {
+      mediaUrl = payload.media.filePath;
+    } else if (payload?.media?.file) {
+      mediaUrl = payload.media.file;
+    } else if (payload?.media?.url) {
+      mediaUrl = payload.media.url;
+    } else if (payload?.media?.base64) {
+      // Construct data URI from base64
+      const mimeType = payload?.media?.mimetype || "application/octet-stream";
+      mediaUrl = `data:${mimeType};base64,${payload.media.base64}`;
+    }
+  }
+  
+  // Encrypt media URL/path before storing in database
   const encryptedMediaUrl = encryptMediaUrl(mediaUrl);
   
   const messageType = deriveWahaMessageType(payload);

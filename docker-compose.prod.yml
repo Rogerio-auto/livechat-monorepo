@@ -8,6 +8,7 @@ networks:
 volumes:
   redis-data:
   rabbitmq-data:
+  waha-media:
 
 services:
   api:
@@ -26,6 +27,8 @@ services:
       - internal
     ports:
       - "5000:5000"
+    volumes:
+      - waha-media:/waha-media:ro  # Mount WAHA media directory as read-only
     restart: unless-stopped
 
   worker-inbound:
@@ -40,6 +43,8 @@ services:
         condition: service_started
     networks:
       - internal
+    volumes:
+      - waha-media:/waha-media:ro  # Mount WAHA media directory as read-only
 
   worker-outbound:
     build:
@@ -53,6 +58,8 @@ services:
         condition: service_started
     networks:
       - internal
+    volumes:
+      - waha-media:/waha-media:ro  # Mount WAHA media directory as read-only
 
   worker-campaigns:
     build:

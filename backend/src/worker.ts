@@ -40,6 +40,7 @@ import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey } from "./services/buffer.ts";
+import { uploadBufferToStorage, buildStoragePath, pickFilename } from "../src/lib/storage.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -1688,9 +1689,18 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     } else if (payload?.media?.url) {
       mediaUrl = payload.media.url;
     } else if (payload?.media?.base64) {
-      // Construct data URI from base64
+      // Prefer uploading base64 to Supabase Storage, fallback to data URI if upload fails
       const mimeType = payload?.media?.mimetype || "application/octet-stream";
-      mediaUrl = `data:${mimeType};base64,${payload.media.base64}`;
+      try {
+        const buffer = Buffer.from(String(payload.media.base64), "base64");
+        const filename = pickFilename(payload?.media?.filename, mimeType);
+        const storagePath = buildStoragePath({ companyId: job.companyId, chatId, filename, prefix: "waha" });
+        const { publicUrl } = await uploadBufferToStorage({ buffer, contentType: mimeType, path: storagePath });
+        mediaUrl = publicUrl || null;
+      } catch (e) {
+        console.warn("[WAHA][worker] base64 upload failed, using data URI", e instanceof Error ? e.message : e);
+        mediaUrl = `data:${mimeType};base64,${payload.media.base64}`;
+      }
     }
   }
   

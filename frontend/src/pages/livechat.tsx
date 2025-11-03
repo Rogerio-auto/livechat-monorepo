@@ -135,6 +135,7 @@ export default function LiveChatPage() {
     () => [
       { value: "ALL", label: "Todos" },
       { value: "OPEN", label: "Abertos" },
+      { value: "ASSIGNED", label: "Atribuído" },
       { value: "PENDING", label: "Pendentes" },
       { value: "AI", label: "Agente de IA" },
       { value: "RESOLVED", label: "Resolvidos" },
@@ -2115,6 +2116,8 @@ const scrollToBottom = useCallback(
         media_url: inserted.media_url ?? null,
         sender_type: "AGENT",
         sender_id: inserted.sender_id ?? null,
+        sender_name: inserted.sender_name ?? null,
+        sender_avatar_url: inserted.sender_avatar_url ?? null,
         created_at: inserted.created_at ?? new Date().toISOString(),
         view_status: inserted.view_status ?? "Pending",
         type: inserted.type ?? "DOCUMENT",

@@ -845,7 +845,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         needsSenderId && authUserId
           ? supabaseAdmin
               .from("users")
-              .select("id")
+              .select("id, name, email, avatar")
               .eq("user_id", authUserId)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null } as { data: any; error: any }),
@@ -858,6 +858,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         (userResp?.data as any)?.id && typeof (userResp.data as any).id === "string"
           ? (userResp.data as any).id
           : null;
+      const senderName: string | null =
+        userResp?.data?.name || userResp?.data?.email || null;
+      const senderAvatarUrl: string | null = userResp?.data?.avatar || null;
 
       const chatRow = chatResp?.data as any;
       if (chatResp?.error) {
@@ -928,12 +931,14 @@ export function registerLivechatChatRoutes(app: express.Application) {
             type: "TEXT",
             is_from_customer: isFromCustomer,
             sender_id: senderSupabaseId,
+            sender_name: senderName,
+            sender_avatar_url: senderAvatarUrl,
             created_at: nowIso,
             view_status: "Pending",
           },
         ])
         .select(
-          "id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type",
+          "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type",
         )
         .single();
       if (insErr) {
@@ -970,6 +975,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
           body: inserted.content,
           sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
           sender_id: inserted.sender_id || null,
+          sender_name: (inserted as any).sender_name || senderName || null,
+          sender_avatar_url: (inserted as any).sender_avatar_url || senderAvatarUrl || null,
           created_at: inserted.created_at,
           view_status: inserted.view_status || "Pending",
           type: inserted.type || "TEXT",

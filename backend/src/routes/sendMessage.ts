@@ -138,6 +138,32 @@ export function registerSendMessageRoutes(app: Application) {
           return res.status(404).json({ error: "chat_not_found" });
         }
 
+        // Resolve local user (sender) from Supabase Auth user id
+        let localSenderId: string | null = null;
+        let localSenderName: string | null = null;
+        let localSenderAvatarUrl: string | null = null;
+        try {
+          const authUserId = (req as any)?.user?.id as string | undefined;
+          if (authUserId && typeof authUserId === "string") {
+            const userRow = await db.oneOrNone<{
+              id: string;
+              name: string | null;
+              email: string | null;
+              avatar: string | null;
+            }>(
+              `select id, name, email, avatar from public.users where user_id = $1`,
+              [authUserId],
+            );
+            if (userRow) {
+              localSenderId = userRow.id;
+              localSenderName = userRow.name || userRow.email || null;
+              localSenderAvatarUrl = userRow.avatar || null;
+            }
+          }
+        } catch (e) {
+          console.warn("[messages.media] sender resolution failed", e instanceof Error ? e.message : e);
+        }
+
         const inserted = await db.one<{
           id: string;
           chat_id: string;
@@ -147,16 +173,20 @@ export function registerSendMessageRoutes(app: Application) {
           view_status: string | null;
           media_url: string | null;
           sender_id: string | null;
+          sender_name: string | null;
+          sender_avatar_url: string | null;
         }>(
           `insert into public.chat_messages
-             (chat_id, content, type, is_from_customer, sender_id, media_url, view_status)
-           values ($1, $2, $3, false, $4, $5, 'Pending')
-           returning id, chat_id, content, type, created_at, view_status, media_url, sender_id`,
+             (chat_id, content, type, is_from_customer, sender_id, sender_name, sender_avatar_url, media_url, view_status)
+           values ($1, $2, $3, false, $4, $5, $6, $7, 'Pending')
+           returning id, chat_id, content, type, created_at, view_status, media_url, sender_id, sender_name, sender_avatar_url`,
           [
             chatId,
             caption || safeName,
             type,
-            null,
+            localSenderId,
+            localSenderName,
+            localSenderAvatarUrl,
             draftUrl,
           ],
         );
@@ -183,7 +213,8 @@ export function registerSendMessageRoutes(app: Application) {
           filename: safeName,
           mime_type: mime,
           caption: caption || null,
-          senderId: (req as any)?.user?.id ?? null,
+          senderId: localSenderId ?? null,
+          senderUserSupabaseId: (req as any)?.user?.id ?? null,
           attempt: 0,
           createdAt: new Date().toISOString(),
         });
@@ -200,6 +231,8 @@ export function registerSendMessageRoutes(app: Application) {
           body: responsePayload.content,
           sender_type: "AGENT" as const,
           sender_id: responsePayload.sender_id,
+          sender_name: responsePayload.sender_name ?? localSenderName ?? null,
+          sender_avatar_url: responsePayload.sender_avatar_url ?? localSenderAvatarUrl ?? null,
           created_at: responsePayload.created_at,
           view_status: responsePayload.view_status ?? "Pending",
           type,

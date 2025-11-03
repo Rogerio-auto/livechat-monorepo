@@ -126,45 +126,31 @@ export function MessageBubble({
   let bubbleContent: ReactNode;
   if (mediaUrl && messageType === "IMAGE") {
     bubbleContent = (
-      <button
-        type="button"
-        onClick={openLightbox}
-        className="block w-full cursor-zoom-in text-left focus:outline-none"
-      >
-        <div className="overflow-hidden rounded-2xl bg-black/20 p-2 shadow-inner">
-          <img
-            src={mediaUrl}
-            alt={textBody || "Imagem"}
-            className="max-h-72 w-full rounded-xl object-contain"
-          />
-        </div>
+      <div className="overflow-hidden rounded-2xl bg-black/20 p-2 shadow-inner">
+        <img
+          src={mediaUrl}
+          alt={textBody || "Imagem"}
+          className="max-h-72 w-full rounded-xl object-contain"
+        />
         {textBody ? (
           <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
         ) : null}
-      </button>
+      </div>
     );
   } else if (mediaUrl && messageType === "VIDEO") {
     bubbleContent = (
-      <button
-        type="button"
-        onClick={openLightbox}
-        className="block w-full cursor-zoom-in text-left focus:outline-none"
-      >
-        <div className="relative overflow-hidden rounded-2xl bg-black/80 p-2 shadow-inner">
-          <video
-            src={mediaUrl}
-            className="max-h-72 w-full rounded-xl object-contain"
-            muted
-            playsInline
-          />
-          <span className="absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 px-4 text-sm font-semibold text-white">
-            PLAY
-          </span>
-        </div>
+      <div className="relative overflow-hidden rounded-2xl bg-black/80 p-2 shadow-inner">
+        <video
+          src={mediaUrl}
+          className="max-h-72 w-full rounded-xl object-contain"
+          muted
+          playsInline
+          controls
+        />
         {textBody ? (
           <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
         ) : null}
-      </button>
+      </div>
     );
   } else if (mediaUrl && messageType === "AUDIO") {
     bubbleContent = (
@@ -172,24 +158,18 @@ export function MessageBubble({
     );
   } else if (mediaUrl && (messageType === "DOCUMENT" || messageType === "FILE")) {
     bubbleContent = (
-      <button
-        type="button"
-        onClick={openLightbox}
-        className="block w-full cursor-zoom-in text-left focus:outline-none"
-      >
-        <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-background))] px-4 py-3 shadow-inner">
-          <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
-            <span className="text-lg font-semibold">DOC</span>
-            <span>Documento</span>
-          </div>
-          <p className="text-xs text-[var(--color-text-muted)]">
-            Tocar para visualizar em tela cheia ou baixar.
-          </p>
+      <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-background))] px-4 py-3 shadow-inner">
+        <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+          <span className="text-lg font-semibold">DOC</span>
+          <span>Documento</span>
         </div>
+        <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-text-muted)] underline">
+          Baixar documento
+        </a>
         {textBody ? (
           <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
         ) : null}
-      </button>
+      </div>
     );
   } else {
     bubbleContent = textBody || (messageType ? `[${messageType}]` : "");

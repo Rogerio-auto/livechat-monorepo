@@ -811,10 +811,24 @@ const chatLeadId = getChatLeadId(chat);
 
               {/* AI agent pill */}
               {chat && (chat as any).ai_agent_name && (
-                <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/60 text-xs text-[color:var(--color-text)]">
-                  <FiCpu className="h-3.5 w-3.5 opacity-80" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onChangeStatus && chat.status === "AI") {
+                      onChangeStatus("ASSIGNED");
+                    }
+                  }}
+                  disabled={chat.status !== "AI"}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full border text-xs transition-all ${
+                    chat.status === "AI"
+                      ? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] cursor-pointer hover:bg-[color:var(--color-primary)]/30"
+                      : "border-[color:var(--color-border)] bg-[color:var(--color-surface)]/60 text-[color:var(--color-text)] opacity-50 cursor-default"
+                  }`}
+                  title={chat.status === "AI" ? "Clique para desativar o agente IA" : "Agente IA inativo"}
+                >
+                  <FiCpu className="h-3.5 w-3.5" />
                   <span className="font-medium">{(chat as any).ai_agent_name}</span>
-                </div>
+                </button>
               )}
 
               {/* Status selector */}

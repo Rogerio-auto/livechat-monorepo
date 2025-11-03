@@ -425,6 +425,8 @@ type InsertedOutboundMessage = {
   created_at: string;
   external_id: string | null;
   sender_id: string | null;
+  sender_name?: string | null;
+  sender_avatar_url?: string | null;
   media_url: string | null;
 };
 
@@ -1471,6 +1473,7 @@ export async function insertOutboundMessage(args: {
   type?: "TEXT" | string;
   senderId?: string | null;
   senderName?: string | null;
+  senderAvatarUrl?: string | null;
   messageId?: string | null;
   viewStatus?: string;
 }): Promise<UpsertOutboundMessageResult | null> {
@@ -1479,6 +1482,7 @@ export async function insertOutboundMessage(args: {
     const type = args.type ?? "TEXT";
     const senderId = args.senderId ?? null;
     const senderName = args.senderName ?? null;
+    const senderAvatarUrl = args.senderAvatarUrl ?? null;
 
     let operation: "insert" | "update" | null = null;
     let row: InsertedOutboundMessage | null = null;
@@ -1492,9 +1496,10 @@ export async function insertOutboundMessage(args: {
                 external_id = coalesce($5, external_id),
                 sender_id = coalesce($6, sender_id),
                 sender_name = coalesce($7, sender_name),
+                sender_avatar_url = coalesce($8, sender_avatar_url),
                 updated_at = now()
           where id = $1
-          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, media_url`,
+          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
         [
           args.messageId,
           args.content,
@@ -1503,6 +1508,7 @@ export async function insertOutboundMessage(args: {
           args.externalId,
           senderId,
           senderName,
+          senderAvatarUrl,
         ],
       );
       if (row) {
@@ -1514,21 +1520,23 @@ export async function insertOutboundMessage(args: {
       if (args.messageId) {
         row = await db.oneOrNone<InsertedOutboundMessage>(
           `insert into public.chat_messages
-             (id, chat_id, sender_id, sender_name, is_from_customer, external_id, content, type, view_status)
-           values ($1, $2, $3, $4, false, $5, $6, $7, $8)
+             (id, chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status)
+           values ($1, $2, $3, $4, $5, false, $6, $7, $8, $9)
            on conflict (chat_id, external_id) do update
              set view_status = excluded.view_status,
                  content = excluded.content,
                  type = excluded.type,
                  sender_id = excluded.sender_id,
                  sender_name = excluded.sender_name,
+                 sender_avatar_url = excluded.sender_avatar_url,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, media_url`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
           [
             args.messageId,
             args.chatId,
             senderId,
             senderName,
+            senderAvatarUrl,
             args.externalId,
             args.content,
             type,
@@ -1538,20 +1546,22 @@ export async function insertOutboundMessage(args: {
       } else {
         row = await db.oneOrNone<InsertedOutboundMessage>(
           `insert into public.chat_messages
-             (chat_id, sender_id, sender_name, is_from_customer, external_id, content, type, view_status)
-           values ($1, $2, $3, false, $4, $5, $6, $7)
+             (chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status)
+           values ($1, $2, $3, $4, false, $5, $6, $7, $8)
            on conflict (chat_id, external_id) do update
              set view_status = excluded.view_status,
                  content = excluded.content,
                  type = excluded.type,
                  sender_id = excluded.sender_id,
                  sender_name = excluded.sender_name,
+                 sender_avatar_url = excluded.sender_avatar_url,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, media_url`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
           [
             args.chatId,
             senderId,
             senderName,
+            senderAvatarUrl,
             args.externalId,
             args.content,
             type,

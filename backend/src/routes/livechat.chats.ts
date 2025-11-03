@@ -1290,7 +1290,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           let query = supabaseAdmin
             .from("chat_messages")
             .select(
-              "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
             )
             .eq("chat_id", id)
             .order("created_at", { ascending: false })
@@ -1345,6 +1345,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
           body: row.content,
           sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
           sender_id: row.sender_id || null,
+          sender_name: row.sender_name || null,
+          sender_avatar_url: row.sender_avatar_url || null,
           created_at: row.created_at,
           view_status: row.view_status || null,
           type: row.type || "TEXT",
@@ -1475,17 +1477,21 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
       const nowIso = new Date().toISOString();
 
-      // Resolve sender_name from user if agent message
+      // Resolve sender_name and avatar from user if agent message
+      let senderId: string | null = null;
       let senderName: string | null = null;
+      let senderAvatarUrl: string | null = null;
       if (!isFromCustomer && req.user?.id) {
         try {
           const userRow = await supabaseAdmin
             .from("users")
-            .select("name, email")
-            .eq("id", req.user.id)
+            .select("id, name, email, avatar")
+            .eq("user_id", req.user.id)
             .maybeSingle();
           if (userRow?.data) {
+            senderId = userRow.data.id || null;
             senderName = userRow.data.name || userRow.data.email || null;
+            senderAvatarUrl = (userRow.data as any).avatar || null;
           }
         } catch (err) {
           console.warn("[livechat:send] failed to resolve sender_name", err instanceof Error ? err.message : err);
@@ -1499,12 +1505,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           content: String(text),
           type: "TEXT",
           is_from_customer: isFromCustomer,
-          sender_id: req.user?.id || null,
+          sender_id: senderId,
           sender_name: senderName,
+          sender_avatar_url: senderAvatarUrl,
           created_at: nowIso,
           view_status: "Pending",
         }])
-        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, created_at, view_status, type")
+        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
         .single();
       if (insErr) return res.status(500).json({ error: insErr.message });
 
@@ -1537,8 +1544,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
           chat_id: inserted.chat_id,
           body: inserted.content,
           sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
-          sender_id: inserted.sender_id || null,
-          sender_name: inserted.sender_name || null,
+          sender_id: inserted.sender_id || senderId || null,
+          sender_name: inserted.sender_name || senderName || null,
+          sender_avatar_url: (inserted as any).sender_avatar_url || senderAvatarUrl || null,
           created_at: inserted.created_at,
           view_status: inserted.view_status || "Pending",
           type: inserted.type || "TEXT",
@@ -1566,6 +1574,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           customerId: (chat as any).customer_id,
           messageId: inserted.id,
           content: String(text),
+          senderId: senderId || req.user?.id || null,
           attempt: 0,
           createdAt: nowIso,
           draftId: clientDraftId,
@@ -1622,6 +1631,23 @@ export function registerLivechatChatRoutes(app: express.Application) {
           ? "AUDIO"
           : "FILE";
 
+      // Resolve sender from users table using user_id (auth ID) to get local id
+      let senderId: string | null = null;
+      let senderName: string | null = null;
+      let senderAvatarUrl: string | null = null;
+      if (req.user?.id) {
+        const userRow = await supabaseAdmin
+          .from("users")
+          .select("id, name, email, avatar")
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+        if (userRow.data) {
+          senderId = userRow.data.id;
+          senderName = userRow.data.name || userRow.data.email || null;
+          senderAvatarUrl = userRow.data.avatar || null;
+        }
+      }
+
       const { data: inserted, error } = await supabaseAdmin
         .from("chat_messages")
         .insert([{
@@ -1629,11 +1655,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           content: String(url || filename),
           type: kind,
           is_from_customer: false,
-          sender_id: req.user?.id || null,
+          sender_id: senderId,
+          sender_name: senderName,
+          sender_avatar_url: senderAvatarUrl,
           created_at: nowIso,
           view_status: "Sent",
         }])
-        .select("id, chat_id, content, is_from_customer, sender_id, created_at, view_status, type")
+        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
         .single();
       if (error) return res.status(500).json({ error: error.message });
 
@@ -1660,7 +1688,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         chat_id: inserted.chat_id,
         body: inserted.content,
         sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
-        sender_id: inserted.sender_id || null,
+        sender_id: inserted.sender_id || senderId || null,
+        sender_name: inserted.sender_name || senderName || null,
+        sender_avatar_url: inserted.sender_avatar_url || senderAvatarUrl || null,
         created_at: inserted.created_at,
         view_status: inserted.view_status || null,
         type: inserted.type || kind,

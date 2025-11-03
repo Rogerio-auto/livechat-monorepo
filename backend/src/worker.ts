@@ -492,6 +492,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
       is_from_customer: boolean;
       sender_id: string | null;
       sender_name: string | null;
+      sender_avatar_url: string | null;
       created_at: string;
       type: string | null;
       view_status: string | null;
@@ -510,6 +511,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
               is_from_customer,
               sender_id,
               sender_name,
+              sender_avatar_url,
               created_at,
               type,
               view_status,
@@ -538,6 +540,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
         sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
         sender_id: row.sender_id,
         sender_name: row.sender_name,
+  sender_avatar_url: row.sender_avatar_url ?? null,
         created_at: row.created_at,
         view_status: row.view_status,
         type: row.type ?? "TEXT",
@@ -1250,6 +1253,7 @@ async function handleInboundChange(job: InboundJobPayload) {
         is_from_customer: boolean;
         sender_id: string | null;
         sender_name: string | null;
+        sender_avatar_url: string | null;
         created_at: string;
         type: string | null;
         view_status: string | null;
@@ -1268,6 +1272,7 @@ async function handleInboundChange(job: InboundJobPayload) {
                 is_from_customer,
                 sender_id,
                 sender_name,
+                sender_avatar_url,
                 created_at,
                 type,
                 view_status,
@@ -1290,6 +1295,7 @@ async function handleInboundChange(job: InboundJobPayload) {
         sender_type: msgRow.is_from_customer ? ("CUSTOMER" as const) : ("AGENT" as const),
         sender_id: msgRow.sender_id,
         sender_name: msgRow.sender_name,
+  sender_avatar_url: msgRow.sender_avatar_url ?? null,
         created_at: msgRow.created_at,
         view_status: msgRow.view_status,
         type: msgRow.type ?? "TEXT",
@@ -2155,6 +2161,42 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   let messageRow: any | null = null;
   let messageOperation: "insert" | "update" | null = null;
   if (internalChatId) {
+    // Resolve sender identity metadata (name/avatar) for human agents
+    let wSenderName: string | null = null;
+    let wSenderAvatarUrl: string | null = null;
+    try {
+      const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
+        `select ai_agent_id from public.chats where id = $1`,
+        [internalChatId],
+      );
+      if (chatRow?.ai_agent_id) {
+        const agentRow = await db.oneOrNone<{ name: string | null }>(
+          `select name from public.agents where id = $1`,
+          [chatRow.ai_agent_id],
+        );
+        wSenderName = agentRow?.name ?? null;
+      } else if (job?.senderId || job?.senderUserSupabaseId) {
+        // If senderId provided, it's the local users.id; query by id
+        // If senderUserSupabaseId provided, it's auth user.id; query by user_id
+        const userId = job.senderId || job.senderUserSupabaseId;
+        const lookupColumn = job.senderId ? 'id' : 'user_id';
+        const userRow = await db.oneOrNone<{ id: string; name: string | null; email: string | null; avatar: string | null }>(
+          `select id, name, email, avatar from public.users where ${lookupColumn} = $1`,
+          [userId],
+        );
+        if (userRow) {
+          wSenderName = userRow.name || userRow.email || null;
+          wSenderAvatarUrl = userRow.avatar || null;
+          // Ensure we use local ID for persistence
+          if (!job.senderId) {
+            job.senderId = userRow.id;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[worker][WAHA] failed to resolve sender identity", e instanceof Error ? e.message : e);
+    }
+
     const upsert = await insertOutboundMessage({
       chatId: internalChatId,
       inboxId,
@@ -2166,6 +2208,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
           ? String(payload?.kind || "DOCUMENT").toUpperCase()
           : "TEXT",
       senderId: job?.senderId || job?.senderUserSupabaseId || null,
+      senderName: wSenderName ?? null,
+      senderAvatarUrl: wSenderAvatarUrl ?? null,
       messageId: payload?.draftId || job?.messageId || null,
       viewStatus: externalId ? "Sent" : "Pending",
     });
@@ -2243,6 +2287,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       body: messageRow.content,
       sender_type: "AGENT" as const,
       sender_id: messageRow.sender_id,
+      sender_name: (messageRow as any).sender_name ?? null,
+      sender_avatar_url: (messageRow as any).sender_avatar_url ?? null,
       created_at: messageRow.created_at,
       view_status: messageRow.view_status ?? viewStatus,
       type: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
@@ -2718,6 +2764,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
 
       // Resolve sender_name: check if AI agent or human user
       let senderName: string | null = null;
+      let senderAvatarUrl: string | null = null;
       try {
         const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
           `select ai_agent_id from public.chats where id = $1`,
@@ -2730,13 +2777,21 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           );
           senderName = agentRow?.name ?? null;
         } else if (job.senderId || job.senderUserSupabaseId) {
+          // If senderId provided, it's the local users.id; query by id
+          // If senderUserSupabaseId provided, it's auth user.id; query by user_id
           const userId = job.senderId || job.senderUserSupabaseId;
-          const userRow = await db.oneOrNone<{ name: string | null; email: string | null }>(
-            `select name, email from public.users where id = $1`,
+          const lookupColumn = job.senderId ? 'id' : 'user_id';
+          const userRow = await db.oneOrNone<{ id: string; name: string | null; email: string | null; avatar: string | null }>(
+            `select id, name, email, avatar from public.users where ${lookupColumn} = $1`,
             [userId],
           );
           if (userRow) {
             senderName = userRow.name || userRow.email || null;
+            senderAvatarUrl = userRow.avatar || null;
+            // Ensure we use local ID for persistence
+            if (!job.senderId) {
+              job.senderId = userRow.id;
+            }
           }
         }
       } catch (err) {
@@ -2752,6 +2807,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         type: "TEXT",
         senderId: job.senderId || job.senderUserSupabaseId || null,
         senderName,
+        senderAvatarUrl,
         messageId: job.messageId || null,
         viewStatus: "Sent",
       });
@@ -2783,6 +2839,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           sender_type: "AGENT" as const,
           sender_id: upsert.message.sender_id,
           sender_name: (upsert.message as any).sender_name ?? senderName ?? null,
+          sender_avatar_url: (upsert.message as any).sender_avatar_url ?? senderAvatarUrl ?? null,
           created_at: upsert.message.created_at,
           view_status: upsert.message.view_status ?? "Sent",
           type: upsert.message.type ?? "TEXT",

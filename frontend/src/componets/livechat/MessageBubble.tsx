@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -248,11 +248,31 @@ export function MessageBubble({
               )}
             </div>
           )}
-          {!isPrivate && isAgent && m.sender_name && (
-            <div className="mb-1 flex items-center gap-1">
-              <span className="text-[10px] font-semibold text-[var(--color-text-muted)] opacity-80 truncate">
-                {m.sender_name}
-              </span>
+          {!isPrivate && isAgent && (
+            <div className="mb-1 flex items-center gap-2">
+              {m.sender_id ? (
+                m.sender_avatar_url ? (
+                  <img
+                    src={m.sender_avatar_url}
+                    alt={m.sender_name || "Agente"}
+                    className="h-5 w-5 rounded-full object-cover"
+                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
+                  />
+                ) : (
+                  <div className="h-5 w-5 rounded-full bg-[color:var(--color-border)]/60 flex items-center justify-center text-[9px] font-semibold text-[var(--color-text-muted)]">
+                    {(m.sender_name || "A").slice(0, 1).toUpperCase()}
+                  </div>
+                )
+              ) : (
+                <div className="h-5 w-5 rounded-full bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] flex items-center justify-center">
+                  <FiCpu className="h-3.5 w-3.5" />
+                </div>
+              )}
+              {m.sender_name ? (
+                <span className="text-[10px] font-semibold text-[var(--color-text-muted)] opacity-80 truncate">
+                  {m.sender_name}
+                </span>
+              ) : null}
             </div>
           )}
           <div className="text-[var(--color-text)]">{bubbleContent}</div>

@@ -41,6 +41,7 @@ export type Message = {
   sender_type?: string | null;
   sender_id?: string | null;
   sender_name?: string | null;
+  sender_avatar_url?: string | null;
   created_at: string;
   view_status?: string | null;
   type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "FILE" | "PRIVATE" | string;

@@ -31,6 +31,8 @@ router.get("/proxy", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Missing or invalid token parameter" });
     }
 
+    console.log("[media.proxy] Received token (first 80 chars):", token.substring(0, 80) + "...");
+
     // Decrypt the URL/path
     const originalUrl = decryptUrl(token);
     
@@ -39,7 +41,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "Invalid or expired token" });
     }
 
-    console.log("[media.proxy] Processing media:", originalUrl.substring(0, 80) + "...");
+    console.log("[media.proxy] Decrypted URL:", originalUrl);
 
     // Method 1: Base64 data URI
     if (originalUrl.startsWith("data:")) {

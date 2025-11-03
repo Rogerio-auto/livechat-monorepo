@@ -127,6 +127,15 @@ export function encryptUrl(url: string): string {
 export function decryptUrl(token: string): string | null {
   if (!token) return null;
   
+  // If it's already a URL or path (not encrypted), return as-is
+  if (token.startsWith("http://") || 
+      token.startsWith("https://") || 
+      token.startsWith("data:") ||
+      token.startsWith("file://") ||
+      token.startsWith("/")) {
+    return token;
+  }
+  
   try {
     const packed = Buffer.from(token, "base64url").toString("utf8");
     const { iv, tag, ciphertext } = unpackSecret(packed);

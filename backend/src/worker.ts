@@ -1680,6 +1680,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Extract media URL/path from WAHA payload
   // WAHA can provide: url, file, filePath, or base64
   let mediaUrl: string | null = null;
+  let mediaSha256: string | null = null;
   if (payload?.hasMedia) {
     // Priority order: file path > URL > base64
     if (payload?.media?.filePath) {
@@ -1695,8 +1696,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         const buffer = Buffer.from(String(payload.media.base64), "base64");
         const filename = pickFilename(payload?.media?.filename, mimeType);
         const storagePath = buildStoragePath({ companyId: job.companyId, chatId, filename, prefix: "waha" });
-        const { publicUrl } = await uploadBufferToStorage({ buffer, contentType: mimeType, path: storagePath });
-        mediaUrl = publicUrl || null;
+        const uploadResult = await uploadBufferToStorage({ buffer, contentType: mimeType, path: storagePath });
+        mediaUrl = uploadResult.publicUrl || null;
+        mediaSha256 = uploadResult.sha256;
       } catch (e) {
         console.warn("[WAHA][worker] base64 upload failed, using data URI", e instanceof Error ? e.message : e);
         mediaUrl = `data:${mimeType};base64,${payload.media.base64}`;
@@ -1780,6 +1782,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     type: messageType,
     viewStatus: ackStatus ?? null,
     mediaUrl: encryptedMediaUrl, // Store encrypted URL
+    mediaSha256, // Store SHA-256 hash of media content
     createdAt,
     remoteParticipantId,
     remoteSenderId: remoteMeta?.remoteId ?? null,

@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./supabase.ts";
 import { SUPABASE_MEDIA_BUCKET } from "../config/env.ts";
 
 export function getMediaBucket(): string {
   return SUPABASE_MEDIA_BUCKET || "chat-uploads";
+}
+
+export function computeSha256(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex");
 }
 
 export function sanitizeFilename(name: string): string {
@@ -52,8 +57,9 @@ export async function uploadBufferToStorage(args: {
   contentType?: string;
   path: string;
   bucket?: string;
-}): Promise<{ path: string; publicUrl: string | null }>{
+}): Promise<{ path: string; publicUrl: string | null; sha256: string }>{
   const bucket = args.bucket || getMediaBucket();
+  const sha256 = computeSha256(args.buffer);
   await ensurePublicBucket(bucket);
   const { data, error } = await supabaseAdmin.storage
     .from(bucket)
@@ -61,7 +67,7 @@ export async function uploadBufferToStorage(args: {
   if (error) throw new Error(error.message || "upload failed");
   const pub = supabaseAdmin.storage.from(bucket).getPublicUrl(data!.path);
   const publicUrl = (pub as any)?.data?.publicUrl || null;
-  return { path: data!.path, publicUrl };
+  return { path: data!.path, publicUrl, sha256 };
 }
 
 export function buildStoragePath(opts: {

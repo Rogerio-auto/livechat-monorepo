@@ -340,7 +340,7 @@ export async function upsertChatRemoteParticipant(args: {
         args.name ?? null,
         args.phone ?? null,
         args.avatarUrl ?? null,
-        typeof args.isAdmin === "boolean" ? args.isAdmin : null,
+        typeof args.isAdmin === "boolean" ? args.isAdmin : false,
         joinedAtIso,
         leftAtIso,
       ],

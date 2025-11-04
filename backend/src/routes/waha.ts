@@ -2034,20 +2034,27 @@ export function registerWAHARoutes(app: Express) {
         messageIds,
       });
 
-      // 7. Update chats.unread_count = 0
-      const { error: chatUpdateError } = await supabaseAdmin
-        .from("chats")
-        .update({ unread_count: 0, updated_at: new Date().toISOString() })
-        .eq("id", chatId);
+      // 7. Reset unread_count to 0
+      try {
+        const { error: chatUpdateError } = await supabaseAdmin
+          .from("chats")
+          .update({ unread_count: 0, updated_at: new Date().toISOString() })
+          .eq("id", chatId);
 
-      if (chatUpdateError) {
-        console.warn("[READ_RECEIPTS][mark-read] Chat unread_count update error", {
+        if (chatUpdateError) {
+          console.warn("[READ_RECEIPTS][mark-read] Chat unread_count update error", {
+            chatId,
+            error: chatUpdateError.message,
+          });
+        } else {
+          console.log("[UNREAD_COUNT][reset] Chat unread_count reset to 0", { chatId });
+        }
+      } catch (err) {
+        console.warn("[UNREAD_COUNT][reset] Failed to reset unread_count", {
           chatId,
-          error: chatUpdateError.message,
+          error: err instanceof Error ? err.message : err,
         });
       }
-
-      console.log("[READ_RECEIPTS][mark-read] Chat unread_count reset", { chatId });
 
       // 8. Emit socket event for real-time sync
       const io = getIO();

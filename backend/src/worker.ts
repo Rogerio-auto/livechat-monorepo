@@ -91,7 +91,7 @@ type InboundMediaJobPayload = {
 };
 
 const CACHE_TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS ?? 60));
-const PAGE_LIMIT_PREWARM = 20;
+const PAGE_LIMIT_PREWARM = 30;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
 const SOCKET_RETRY_ATTEMPTS = 3;
 const SOCKET_RETRY_BASE_DELAY = 5000; // 5s
@@ -1098,8 +1098,8 @@ async function handleInboundChange(job: InboundJobPayload) {
   }
 
   const { inboxId, companyId, value } = job;
-  const pushname = getPushName(value);
-
+  
+  // Process META statuses
   if (Array.isArray(value?.statuses)) {
     for (const s of value.statuses) {
       const wamid = String(s?.id || "");
@@ -1111,370 +1111,375 @@ async function handleInboundChange(job: InboundJobPayload) {
       if (!isNew) continue;
 
       const mappedStatus = mapMetaStatusToViewStatus(status);
-      const statusUpdate = await updateMessageStatusByExternalId({
+      await updateMessageStatusByExternalId({
         inboxId,
         externalId: wamid,
         viewStatus: mappedStatus,
       });
-      if (statusUpdate) {
-        try {
-          const normalizedStatus =
-            typeof statusUpdate.viewStatus === "string"
-              ? statusUpdate.viewStatus.toUpperCase()
-              : null;
-          await publishApp("socket.livechat.status", {
-            kind: "livechat.message.status",
-            chatId: statusUpdate.chatId,
-            messageId: statusUpdate.messageId,
-            externalId: wamid,
-            view_status: statusUpdate.viewStatus,
-            raw_status: status,
-            status: normalizedStatus,
-            draftId: null,
-            reason: null,
-          });
-        } catch (err) {
-          console.warn(
-            "[inbound] failed to publish status event:",
-            (err as any)?.message || err,
-          );
-        }
-      }
     }
   }
 
+  // Process META messages
   if (Array.isArray(value?.messages)) {
-    for (const m of value.messages) {
-      const wamid = String(m?.id || "");
-      if (!wamid) continue;
+    await handleMetaInboundMessages({ inboxId, companyId, value, messages: value.messages });
+  }
+}
 
-      const eventUid = `messages:${wamid}`;
-      const isNew = await saveWebhookEvent(inboxId, "META", eventUid, value);
-      if (!isNew) continue;
+async function handleMetaInboundMessages(args: {
+  inboxId: string;
+  companyId: string;
+  value: any;
+  messages: any[];
+}): Promise<void> {
+  const { inboxId, companyId, value, messages } = args;
+  const pushname = getPushName(value);
 
-      const metaContext = extractMetaMessageContext(value, m);
-      const isGroupMessage = typeof metaContext.groupId === "string" && metaContext.groupId.endsWith("@g.us");
-      const participantWaId =
-        (typeof m?.from === "string" && m.from) ||
-        metaContext.participantId ||
-        null;
-      const remotePhone = participantWaId ? normalizeMsisdn(participantWaId) : null;
+  for (const m of messages) {
+    const wamid = String(m?.id || "");
+    if (!wamid) continue;
 
-      if (!remotePhone && !isGroupMessage) {
-        console.warn("[inbound] message without valid 'from'", m);
-        continue;
-      }
+    // Dedupe
+    const eventUid = `messages:${wamid}`;
+    const isNew = await saveWebhookEvent(inboxId, "META", eventUid, value);
+    if (!isNew) continue;
 
-      let chatId: string;
-      if (isGroupMessage && metaContext.groupId) {
-        const ensured = await ensureGroupChat({
-          inboxId,
-          companyId,
-          remoteId: metaContext.groupId,
-          groupName: metaContext.groupName ?? null,
-          groupAvatarUrl: metaContext.groupAvatarUrl ?? null,
-        });
-        chatId = ensured.chatId;
-      } else {
-        const ensured = await ensureLeadCustomerChat({
-          inboxId,
-          companyId,
-          phone: remotePhone || normalizeMsisdn(participantWaId || ""),
-          name: metaContext.participantName ?? pushname ?? remotePhone ?? participantWaId ?? null,
-          rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
-        });
-        chatId = ensured.chatId;
-      }
+    const metaContext = extractMetaMessageContext(value, m);
+    const isGroupMessage = typeof metaContext.groupId === "string" && metaContext.groupId.endsWith("@g.us");
+    const participantWaId =
+      (typeof m?.from === "string" && m.from) ||
+      metaContext.participantId ||
+      null;
+    const remotePhone = participantWaId ? normalizeMsisdn(participantWaId) : null;
 
-      const { content, type } = extractContentAndType(m);
-      const createdAt =
-        typeof m?.timestamp === "number"
-          ? new Date(m.timestamp * 1000)
-          : m?.timestamp
-            ? new Date(m.timestamp)
-            : null;
+    if (!remotePhone && !isGroupMessage) {
+      console.warn("[META][inbound] message without valid 'from'", { wamid });
+      continue;
+    }
 
-      let remoteParticipantId: string | null = null;
-      if (isGroupMessage && metaContext.participantId) {
-        const participant = await upsertChatRemoteParticipant({
-          chatId,
-          remoteId: metaContext.participantId,
-          name: metaContext.participantName ?? pushname ?? null,
-          phone: remotePhone ?? null,
-          avatarUrl: metaContext.participantAvatarUrl ?? null,
-          joinedAt: createdAt ?? undefined,
-        });
-        remoteParticipantId = participant?.id ?? null;
-      }
-
-      const quotedExternalId =
-        typeof m?.context?.id === "string"
-          ? m.context.id
-          : typeof m?.context?.quoted_message_id === "string"
-            ? m.context.quoted_message_id
-            : null;
-      const repliedMessageId =
-        quotedExternalId && chatId
-          ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
-          : null;
-
-      const inserted = await insertInboundMessage({
-        chatId,
-        externalId: wamid,
-        content,
-        type,
-        remoteParticipantId,
-        remoteSenderId: metaContext.participantId ?? participantWaId ?? null,
-        remoteSenderName: metaContext.participantName ?? pushname ?? null,
-        remoteSenderPhone: remotePhone ?? null,
-        remoteSenderAvatarUrl: metaContext.participantAvatarUrl ?? null,
-        remoteSenderIsAdmin: null,
-        repliedMessageId,
-        createdAt,
-      });
-      if (!inserted) {
-        continue;
-      }
-
-      const msgType = String(m?.type || "").toLowerCase();
-      const mediaRoot = ["document", "image", "audio", "video", "sticker"].includes(msgType)
-        ? (m as any)?.[msgType] ?? null
-        : null;
-      const mediaId =
-        mediaRoot && typeof mediaRoot?.id === "string" && mediaRoot.id.trim() ? mediaRoot.id.trim() : null;
-      const mediaFilename =
-        mediaRoot && typeof mediaRoot?.filename === "string" && mediaRoot.filename.trim()
-          ? mediaRoot.filename.trim()
-          : null;
-
-      await enqueueInboundMediaJob({
-        provider: "META",
+    // Ensure chat (group or direct)
+    let chatId: string;
+    if (isGroupMessage && metaContext.groupId) {
+      const ensured = await ensureGroupChat({
         inboxId,
         companyId,
-        chatId,
-        messageId: inserted.id,
-        externalId: wamid,
-        media: mediaId
-          ? {
-              type: msgType,
-              mediaId,
-              filename: mediaFilename,
-            }
-          : null,
+        remoteId: metaContext.groupId,
+        groupName: metaContext.groupName ?? null,
+        groupAvatarUrl: metaContext.groupAvatarUrl ?? null,
       });
+      chatId = ensured.chatId;
+    } else {
+      const ensured = await ensureLeadCustomerChat({
+        inboxId,
+        companyId,
+        phone: remotePhone || normalizeMsisdn(participantWaId || ""),
+        name: metaContext.participantName ?? pushname ?? remotePhone ?? participantWaId ?? null,
+        rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
+      });
+      chatId = ensured.chatId;
+    }
 
+    const { content, type } = extractContentAndType(m);
+    const createdAt =
+      typeof m?.timestamp === "number"
+        ? new Date(m.timestamp * 1000)
+        : m?.timestamp
+          ? new Date(m.timestamp)
+          : null;
 
-          // ====== Auto-reply / Buffer (Agents) — META inbound (only if chat status == 'AI') ======
-          try {
-            const bodyText = typeof content === "string" ? content.trim() : "";
-            if (!bodyText) {
-              // do nothing
-            } else {
-              const row = await db.oneOrNone<{ status: string | null }>(
-                `select status from public.chats where id = $1`,
-                [chatId],
-              );
-              const chatStatus = (row?.status || "").toUpperCase();
-              if (chatStatus === "AI") {
-                // Check agent aggregation config
-                const agent = await getRuntimeAgent(companyId, null);
-                const windowSec = Number(agent?.aggregation_window_sec || 0);
-                const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
-                const maxBatch = agent?.max_batch_messages ?? null;
-                if (enabled) {
-                  await bufferEnqueue({
-                    companyId,
-                    inboxId,
-                    chatId,
-                    provider: "META",
-                    text: bodyText,
-                    config: { windowSec, maxBatch },
-                  });
-                } else {
-                  const ai = await runAgentReply({
-                    companyId,
-                    inboxId,
-                    userMessage: bodyText,
-                    chatHistory: [],
-                  });
-                  const reply = (ai.reply || "").trim();
-                  if (reply) {
-                    if (ai.agentId) {
-                      try {
-                        await db.none(
-                          `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
-                          [chatId, ai.agentId],
-                        );
-                      } catch (err) {
-                        console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
-                      }
-                    }
-                    await publish(EX_APP, "outbound.request", {
-                      provider: "META",
-                      inboxId,
-                      chatId,
-                      payload: { content: reply },
-                      attempt: 0,
-                      kind: "message.send",
-                    });
-                  }
-                }
-              }
-            }
-          } catch (e) {
-            console.warn("[agents][auto-reply][META] failed:", (e as any)?.message || e);
-          }
-      const msgRow = await db.one<{
-        id: string;
-        chat_id: string;
-        content: string | null;
-        is_from_customer: boolean;
-        sender_id: string | null;
-        sender_name: string | null;
-        sender_avatar_url: string | null;
-        created_at: string;
-        type: string | null;
-        view_status: string | null;
-        media_url: string | null;
-        remote_participant_id: string | null;
-        remote_sender_id: string | null;
-        remote_sender_name: string | null;
-        remote_sender_phone: string | null;
-        remote_sender_avatar_url: string | null;
-        remote_sender_is_admin: boolean | null;
-        replied_message_id: string | null;
-      }>(
-        `select id,
-                chat_id,
-                content,
-                is_from_customer,
-                sender_id,
-                sender_name,
-                sender_avatar_url,
-                created_at,
-                type,
-                view_status,
-                media_url,
-                remote_participant_id,
-                remote_sender_id,
-                remote_sender_name,
-                remote_sender_phone,
-                remote_sender_avatar_url,
-                remote_sender_is_admin,
-                replied_message_id
-           from public.chat_messages where id = $1`,
-        [inserted.id],
+    // Upsert remote participant for group messages
+    let remoteParticipantId: string | null = null;
+    if (isGroupMessage && metaContext.participantId) {
+      const participant = await upsertChatRemoteParticipant({
+        chatId,
+        remoteId: metaContext.participantId,
+        name: metaContext.participantName ?? pushname ?? null,
+        phone: remotePhone ?? null,
+        avatarUrl: metaContext.participantAvatarUrl ?? null,
+        isAdmin: false, // Default to false for META messages (admin status not in payload)
+        joinedAt: createdAt ?? undefined,
+      });
+      remoteParticipantId = participant?.id ?? null;
+    }
+
+    // Resolve replied message
+    const quotedExternalId =
+      typeof m?.context?.id === "string"
+        ? m.context.id
+        : typeof m?.context?.quoted_message_id === "string"
+          ? m.context.quoted_message_id
+          : null;
+    const repliedMessageId =
+      quotedExternalId && chatId
+        ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
+        : null;
+
+    // Insert message
+    const inserted = await insertInboundMessage({
+      chatId,
+      externalId: wamid,
+      content,
+      type,
+      remoteParticipantId,
+      remoteSenderId: metaContext.participantId ?? participantWaId ?? null,
+      remoteSenderName: metaContext.participantName ?? pushname ?? null,
+      remoteSenderPhone: remotePhone ?? null,
+      remoteSenderAvatarUrl: metaContext.participantAvatarUrl ?? null,
+      remoteSenderIsAdmin: null,
+      repliedMessageId,
+      createdAt,
+    });
+    if (!inserted) {
+      continue;
+    }
+
+    // Increment unread_count (all META inbound messages are from customer)
+    try {
+      const updated = await db.oneOrNone<{ unread_count: number }>(
+        `UPDATE public.chats
+         SET unread_count = COALESCE(unread_count, 0) + 1,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING unread_count`,
+        [chatId]
       );
+      if (updated) {
+        console.log("[UNREAD_COUNT][increment][META] Chat incremented", {
+          chatId,
+          newCount: updated.unread_count,
+        });
+      }
+    } catch (err) {
+      console.warn("[UNREAD_COUNT][increment][META] Failed to increment", {
+        chatId,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
 
-      const mappedMessage = {
-        id: msgRow.id,
-        chat_id: msgRow.chat_id,
-        body: msgRow.content,
-        sender_type: msgRow.is_from_customer ? ("CUSTOMER" as const) : ("AGENT" as const),
-        sender_id: msgRow.sender_id,
-        sender_name: msgRow.sender_name,
-  sender_avatar_url: msgRow.sender_avatar_url ?? null,
-        created_at: msgRow.created_at,
-        view_status: msgRow.view_status,
-        type: msgRow.type ?? "TEXT",
-        is_private: false,
-        media_url: buildProxyUrl(msgRow.media_url) ?? null,
-        remote_participant_id: msgRow.remote_participant_id ?? null,
-        remote_sender_id: msgRow.remote_sender_id ?? null,
-        remote_sender_name: msgRow.remote_sender_name ?? null,
-        remote_sender_phone: msgRow.remote_sender_phone ?? null,
-        remote_sender_avatar_url: msgRow.remote_sender_avatar_url ?? null,
-        remote_sender_is_admin: msgRow.remote_sender_is_admin ?? null,
-        replied_message_id: msgRow.replied_message_id ?? null,
-      };
+    // Enqueue media job if needed
+    const msgType = String(m?.type || "").toLowerCase();
+    const mediaRoot = ["document", "image", "audio", "video", "sticker"].includes(msgType)
+      ? (m as any)?.[msgType] ?? null
+      : null;
+    const mediaId =
+      mediaRoot && typeof mediaRoot?.id === "string" && mediaRoot.id.trim() ? mediaRoot.id.trim() : null;
+    const mediaFilename =
+      mediaRoot && typeof mediaRoot?.filename === "string" && mediaRoot.filename.trim()
+        ? mediaRoot.filename.trim()
+        : null;
 
-      let inboxIdForSocket: string | null = null;
-      try {
-        const chatRow = await db.oneOrNone<{ inbox_id: string | null }>(
-          `select inbox_id from public.chats where id = $1`,
+    await enqueueInboundMediaJob({
+      provider: "META",
+      inboxId,
+      companyId,
+      chatId,
+      messageId: inserted.id,
+      externalId: wamid,
+      media: mediaId
+        ? {
+            type: msgType,
+            mediaId,
+            filename: mediaFilename,
+          }
+        : null,
+    });
+
+    // Auto-reply / Buffer (Agents) — only if chat status == 'AI'
+    try {
+      const bodyText = typeof content === "string" ? content.trim() : "";
+      if (bodyText) {
+        const row = await db.oneOrNone<{ status: string | null }>(
+          `select status from public.chats where id = $1`,
           [chatId],
         );
-        inboxIdForSocket = chatRow?.inbox_id ?? null;
-      } catch (e) {
-        console.warn(
-          "[inbound] failed to load chat inbox for socket broadcast:",
-          (e as any)?.message || e,
-        );
+        const chatStatus = (row?.status || "").toUpperCase();
+        if (chatStatus === "AI") {
+          const agent = await getRuntimeAgent(companyId, null);
+          const windowSec = Number(agent?.aggregation_window_sec || 0);
+          const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
+          const maxBatch = agent?.max_batch_messages ?? null;
+          if (enabled) {
+            await bufferEnqueue({
+              companyId,
+              inboxId,
+              chatId,
+              provider: "META",
+              text: bodyText,
+              config: { windowSec, maxBatch },
+            });
+          } else {
+            const ai = await runAgentReply({
+              companyId,
+              inboxId,
+              userMessage: bodyText,
+              chatHistory: [],
+            });
+            const reply = (ai.reply || "").trim();
+            if (reply) {
+              if (ai.agentId) {
+                try {
+                  await db.none(
+                    `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                    [chatId, ai.agentId],
+                  );
+                } catch (err) {
+                  console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+                }
+              }
+              await publish(EX_APP, "outbound.request", {
+                provider: "META",
+                inboxId,
+                chatId,
+                payload: { content: reply },
+                attempt: 0,
+                kind: "message.send",
+              });
+            }
+          }
+        }
       }
+    } catch (e) {
+      console.warn("[agents][auto-reply][META] failed:", (e as any)?.message || e);
+    }
 
-      try {
-        const chatSummary = await fetchChatUpdateForSocket(chatId);
-        const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
-          kind: "livechat.inbound.message",
+    // Fetch message for socket
+    const msgRow = await db.one<{
+      id: string;
+      chat_id: string;
+      content: string | null;
+      is_from_customer: boolean;
+      sender_id: string | null;
+      sender_name: string | null;
+      sender_avatar_url: string | null;
+      created_at: string;
+      type: string | null;
+      view_status: string | null;
+      media_url: string | null;
+      remote_participant_id: string | null;
+      remote_sender_id: string | null;
+      remote_sender_name: string | null;
+      remote_sender_phone: string | null;
+      remote_sender_avatar_url: string | null;
+      remote_sender_is_admin: boolean | null;
+      replied_message_id: string | null;
+    }>(
+      `select id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url,
+              created_at, type, view_status, media_url, remote_participant_id, remote_sender_id,
+              remote_sender_name, remote_sender_phone, remote_sender_avatar_url,
+              remote_sender_is_admin, replied_message_id
+         from public.chat_messages where id = $1`,
+      [inserted.id],
+    );
+
+    const mappedMessage = {
+      id: msgRow.id,
+      chat_id: msgRow.chat_id,
+      body: msgRow.content,
+      sender_type: msgRow.is_from_customer ? ("CUSTOMER" as const) : ("AGENT" as const),
+      sender_id: msgRow.sender_id,
+      sender_name: msgRow.sender_name,
+      sender_avatar_url: msgRow.sender_avatar_url ?? null,
+      created_at: msgRow.created_at,
+      view_status: msgRow.view_status,
+      type: msgRow.type ?? "TEXT",
+      is_private: false,
+      media_url: buildProxyUrl(msgRow.media_url) ?? null,
+      remote_participant_id: msgRow.remote_participant_id ?? null,
+      remote_sender_id: msgRow.remote_sender_id ?? null,
+      remote_sender_name: msgRow.remote_sender_name ?? null,
+      remote_sender_phone: msgRow.remote_sender_phone ?? null,
+      remote_sender_avatar_url: msgRow.remote_sender_avatar_url ?? null,
+      remote_sender_is_admin: msgRow.remote_sender_is_admin ?? null,
+      replied_message_id: msgRow.replied_message_id ?? null,
+    };
+
+    // Fetch chat summary for socket
+    let inboxIdForSocket: string | null = null;
+    try {
+      const chatRow = await db.oneOrNone<{ inbox_id: string | null }>(
+        `select inbox_id from public.chats where id = $1`,
+        [chatId],
+      );
+      inboxIdForSocket = chatRow?.inbox_id ?? null;
+    } catch (e) {
+      console.warn("[META][inbound] failed to load chat inbox for socket:", (e as any)?.message || e);
+    }
+
+    try {
+      const chatSummary = await fetchChatUpdateForSocket(chatId);
+      const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
+        kind: "livechat.inbound.message",
+        chatId,
+        inboxId: inboxIdForSocket,
+        message: mappedMessage,
+        chatUpdate: chatSummary
+          ? {
+              ...chatSummary,
+              last_message_from: mappedMessage.sender_type,
+            }
+          : {
+              chatId,
+              inboxId: inboxIdForSocket,
+              last_message: mappedMessage.body,
+              last_message_at: mappedMessage.created_at,
+              last_message_from: mappedMessage.sender_type,
+              customer_name: isGroupMessage ? null : metaContext.participantName ?? pushname ?? null,
+              customer_phone: isGroupMessage ? null : remotePhone ?? null,
+              kind: isGroupMessage ? "GROUP" : null,
+              group_name: isGroupMessage ? metaContext.groupName ?? null : null,
+              group_avatar_url: isGroupMessage ? metaContext.groupAvatarUrl ?? null : null,
+              remote_id: isGroupMessage ? metaContext.groupId ?? null : participantWaId ?? null,
+            },
+      });
+
+      if (!socketSuccess) {
+        console.error("[worker][META] METRIC: Socket emission failed after all retries:", {
+          operation: 'inbound',
+          messageId: mappedMessage.id,
           chatId,
           inboxId: inboxIdForSocket,
-          message: mappedMessage,
-          chatUpdate: chatSummary
-            ? {
-                ...chatSummary,
-                last_message_from: mappedMessage.sender_type,
-              }
-            : {
-                chatId,
-                inboxId: inboxIdForSocket,
-                last_message: mappedMessage.body,
-                last_message_at: mappedMessage.created_at,
-                last_message_from: mappedMessage.sender_type,
-                customer_name: isGroupMessage ? null : metaContext.participantName ?? pushname ?? null,
-                customer_phone: isGroupMessage ? null : remotePhone ?? null,
-                kind: isGroupMessage ? "GROUP" : null,
-                group_name: isGroupMessage ? metaContext.groupName ?? null : null,
-                group_avatar_url: isGroupMessage ? metaContext.groupAvatarUrl ?? null : null,
-                remote_id: isGroupMessage ? metaContext.groupId ?? null : participantWaId ?? null,
-              },
+          provider: 'META'
         });
-
-        if (!socketSuccess) {
-          console.error("[worker][META] METRIC: Socket emission failed after all retries:", {
-            operation: 'inbound',
-            messageId: mappedMessage.id,
-            chatId,
-            inboxId: inboxIdForSocket,
-            provider: 'META'
-          });
-        }
-      } catch (e) {
-        console.warn(
-          "[inbound] failed to publish socket event:",
-          (e as any)?.message || e,
-        );
       }
+    } catch (e) {
+      console.warn("[META][inbound] failed to publish socket event:", (e as any)?.message || e);
+    }
 
-      try {
-        await db.none(
-          `update public.chats
-             set last_message = $1,
-                 last_message_at = now()
-           where id = $2`,
-          [content, chatId],
-        );
-      } catch (e) {
-        console.warn(
-          "[inbound] failed to update chat last_message:",
-          (e as any)?.message || e,
-        );
-      }
+    // Update chat last_message
+    try {
+      await db.none(
+        `update public.chats
+           set last_message = $1, last_message_at = now()
+         where id = $2`,
+        [content, chatId],
+      );
+    } catch (e) {
+      console.warn("[META][inbound] failed to update chat last_message:", (e as any)?.message || e);
+    }
 
-      setTimeout(() => {
-        warmChatMessagesCache(chatId).catch((error) => {
-          console.warn("[inbound] warm cache failed", {
-            chatId,
-            error: error instanceof Error ? error.message : error,
-          });
+    // Invalidate caches and prewarm
+    setTimeout(() => {
+      warmChatMessagesCache(chatId).catch((error) => {
+        console.warn("[META][inbound] warm cache failed", {
+          chatId,
+          error: error instanceof Error ? error.message : error,
         });
-      }, 0);
+      });
+    }, 0);
 
-      try {
-        await rDel(k.chat(chatId));
-      } catch {}
+    try {
+      await rDel(k.chat(chatId));
+    } catch {}
 
-      // Cache de listas e pre-aquecimento ficam para o job assincrono.
-      // O socket ja recebeu o evento acima.
+    try {
+      await invalidateChatCaches(chatId, {
+        companyId,
+        inboxId,
+        kind: isGroupMessage ? "GROUP" : "DIRECT",
+        chatType: isGroupMessage ? "GROUP" : "CONTACT",
+        remoteId: isGroupMessage ? metaContext.groupId ?? null : participantWaId ?? null,
+      });
+    } catch (e) {
+      console.warn("[META][inbound] failed to invalidate caches:", (e as any)?.message || e);
     }
   }
 }
@@ -2026,6 +2031,31 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     return;
   }
 
+  // Increment unread_count for inbound customer messages
+  if (isFromCustomer) {
+    try {
+      const updated = await db.oneOrNone<{ unread_count: number }>(
+        `UPDATE public.chats
+         SET unread_count = COALESCE(unread_count, 0) + 1,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING unread_count`,
+        [chatId]
+      );
+      if (updated) {
+        console.log("[UNREAD_COUNT][increment][WAHA] Chat incremented", {
+          chatId,
+          newCount: updated.unread_count,
+        });
+      }
+    } catch (err) {
+      console.warn("[UNREAD_COUNT][increment][WAHA] Failed to increment", {
+        chatId,
+        error: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
   const mappedMessage = {
     id: upsertResult.message.id,
     chat_id: chatId,
@@ -2378,32 +2408,37 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
       normalizedStatus,
     });
 
-    // If message is now marked as "read", decrement unread_count
+    // Decrement unread_count when customer message is marked as READ
     if (normalizedStatus === "READ") {
       try {
-        console.log("[READ_RECEIPTS][handleWahaAck] Message marked as READ, updating chat unread_count", {
-          chatId: statusUpdate.chatId,
-        });
-
-        // Decrement unread_count (ensure it doesn't go below 0)
-        await db.none(
-          `UPDATE public.chats
+        const decremented = await db.oneOrNone<{ id: string; unread_count: number }>(
+          `WITH upd AS (
+             UPDATE public.chat_messages
+             SET view_status = 'read', updated_at = now()
+             WHERE external_id = $1
+               AND inbox_id = $2
+               AND is_from_customer = TRUE
+               AND (view_status IS DISTINCT FROM 'read')
+             RETURNING chat_id
+           )
+           UPDATE public.chats c
            SET unread_count = GREATEST(0, COALESCE(unread_count, 0) - 1),
                updated_at = now()
-           WHERE id = $1`,
-          [statusUpdate.chatId]
+           FROM upd
+           WHERE c.id = upd.chat_id
+           RETURNING c.id, c.unread_count`,
+          [messageId, job.inboxId]
         );
-
-        console.log("[READ_RECEIPTS][handleWahaAck] Chat unread_count decremented successfully", {
-          chatId: statusUpdate.chatId,
-        });
-
-        // Invalidate chat cache
-        await invalidateChatCaches(statusUpdate.chatId, { inboxId: job.inboxId });
-      } catch (error) {
-        console.error("[READ_RECEIPTS][handleWahaAck] Failed to update unread_count", {
-          chatId: statusUpdate.chatId,
-          error: error instanceof Error ? error.message : String(error),
+        if (decremented) {
+          console.log("[UNREAD_COUNT][decrement][WAHA] Chat decremented", {
+            chatId: decremented.id,
+            newCount: decremented.unread_count,
+          });
+        }
+      } catch (err) {
+        console.warn("[UNREAD_COUNT][decrement][WAHA] Failed to decrement", {
+          messageId,
+          error: err instanceof Error ? err.message : err,
         });
       }
     }

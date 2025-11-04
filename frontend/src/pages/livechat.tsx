@@ -2667,7 +2667,12 @@ const scrollToBottom = useCallback(
                 {replyingTo && (
                   <div className="mb-2">
                     <ReplyPreview 
-                      message={replyingTo}
+                      message={{
+                        id: replyingTo.id,
+                        content: replyingTo.content || '',
+                        type: replyingTo.type || 'TEXT',
+                        sender_name: replyingTo.sender_name || undefined,
+                      }}
                       onCancel={() => setReplyingTo(null)}
                     />
                   </div>

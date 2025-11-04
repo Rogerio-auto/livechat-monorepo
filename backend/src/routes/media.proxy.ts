@@ -1,6 +1,8 @@
 // backend/src/routes/media.proxy.ts
 import { Router, Request, Response } from "express";
 import { decryptUrl } from "../lib/crypto.ts";
+import { supabaseAdmin } from "../lib/supabase.ts";
+import { getMediaBucket } from "../lib/storage.ts";
 import axios from "axios";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,13 +15,36 @@ const readFileAsync = promisify(fs.readFile);
 const WAHA_MEDIA_DIR = process.env.WAHA_MEDIA_DIR || "/app/.media";
 
 /**
+ * Detect content type from file extension
+ */
+function detectContentTypeFromExt(ext: string): string {
+  const mimeMap: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogg': 'audio/ogg',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  return mimeMap[ext] || 'application/octet-stream';
+}
+
+/**
  * Proxy endpoint to serve encrypted media URLs
  * This solves CORS issues and allows the backend to decrypt and serve media
  * 
- * Supports 3 methods:
- * 1. File path from WAHA media directory (file:///...)
- * 2. HTTP/HTTPS URLs (proxied via axios)
- * 3. Base64 data URIs (data:image/...)
+ * Supports 4 methods:
+ * 1. Storage path from Supabase Storage (waha/company/chat/...)
+ * 2. File path from WAHA media directory (file:///...)
+ * 3. HTTP/HTTPS URLs (proxied via axios)
+ * 4. Base64 data URIs (data:image/...)
  * 
  * Usage: GET /media/proxy?token=<encrypted_url_token>
  */
@@ -43,7 +68,49 @@ router.get("/proxy", async (req: Request, res: Response) => {
 
     console.log("[media.proxy] Decrypted URL:", originalUrl);
 
-    // Method 1: Base64 data URI
+    // ✅ NEW: Method 1 - Storage Path (Supabase Storage)
+    // Detect if it's a storage path (doesn't start with http/file/data or /)
+    const isStoragePath = (
+      !originalUrl.startsWith('http://') &&
+      !originalUrl.startsWith('https://') &&
+      !originalUrl.startsWith('file://') &&
+      !originalUrl.startsWith('data:') &&
+      !originalUrl.startsWith('/')
+    );
+
+    if (isStoragePath) {
+      try {
+        console.log('[media.proxy] Fetching from Supabase Storage:', originalUrl);
+        
+        const { data, error } = await supabaseAdmin.storage
+          .from(getMediaBucket())
+          .download(originalUrl);
+
+        if (error || !data) {
+          console.error('[media.proxy] Storage download failed:', error);
+          return res.status(404).json({ error: 'Media not found in storage' });
+        }
+
+        // Detect content-type by path extension
+        const ext = path.extname(originalUrl).toLowerCase();
+        const contentType = detectContentTypeFromExt(ext);
+
+        const buffer = Buffer.from(await data.arrayBuffer());
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        console.log('[media.proxy] ✅ Served from storage:', originalUrl, `(${buffer.length} bytes)`);
+        return res.send(buffer);
+      } catch (error: any) {
+        console.error('[media.proxy] Storage error:', error);
+        return res.status(500).json({ error: 'Failed to fetch from storage' });
+      }
+    }
+
+    // Method 2: Base64 data URI
     if (originalUrl.startsWith("data:")) {
       const matches = originalUrl.match(/^data:([^;]+);base64,(.+)$/);
       if (!matches) {
@@ -60,7 +127,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
       return res.send(buffer);
     }
 
-    // Method 2: Local file path (file:// or absolute path)
+    // Method 3: Local file path (file:// or absolute path)
     let filePath: string | null = null;
     
     if (originalUrl.startsWith("file://")) {
@@ -80,28 +147,11 @@ router.get("/proxy", async (req: Request, res: Response) => {
           console.error("[media.proxy] Path is not a file:", filePath);
           return res.status(404).json({ error: "File not found" });
         }
-
         const buffer = await readFileAsync(filePath);
         const ext = path.extname(filePath).toLowerCase();
         
         // Determine content type based on extension
-        const mimeTypes: Record<string, string> = {
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".png": "image/png",
-          ".gif": "image/gif",
-          ".webp": "image/webp",
-          ".mp4": "video/mp4",
-          ".webm": "video/webm",
-          ".ogg": "audio/ogg",
-          ".mp3": "audio/mpeg",
-          ".wav": "audio/wav",
-          ".pdf": "application/pdf",
-          ".doc": "application/msword",
-          ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        };
-        
-        const contentType = mimeTypes[ext] || "application/octet-stream";
+        const contentType = detectContentTypeFromExt(ext);
         
         res.setHeader("Content-Type", contentType);
         res.setHeader("Content-Length", buffer.length);
@@ -122,7 +172,7 @@ router.get("/proxy", async (req: Request, res: Response) => {
       }
     }
 
-    // Method 3: HTTP/HTTPS URL (proxy via axios)
+    // Method 4: HTTP/HTTPS URL (proxy via axios)
     if (originalUrl.startsWith("http://") || originalUrl.startsWith("https://")) {
       const response = await axios.get(originalUrl, {
         responseType: "stream",

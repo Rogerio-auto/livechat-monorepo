@@ -25,6 +25,11 @@ frontend/.vite/
 frontend/.eslintcache
 backend/.eslintcache
 
+# Markdown files (except README.md)
+*.md
+!README.md
+!**/README.md
+
 # IDE/editor files
 .vscode/*
 !.vscode/extensions.json

@@ -40,7 +40,7 @@ import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey } from "./services/buffer.ts";
-import { uploadBufferToStorage, buildStoragePath, pickFilename } from "../src/lib/storage.ts";
+import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer } from "../src/lib/storage.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -1616,22 +1616,64 @@ async function handleWahaInbound(job: WahaInboundPayload) {
   }
 }
 
+/**
+ * Verifica se uma inbox requer mídias sensíveis (proxy obrigatório)
+ */
+async function checkIfInboxSensitive(inboxId: string): Promise<boolean> {
+  try {
+    const { data: inbox } = await supabaseAdmin
+      .from('inboxes')
+      .select('force_sensitive_media, tags, metadata')
+      .eq('id', inboxId)
+      .maybeSingle();
+
+    if (!inbox) return false;
+
+    // Regra 1: Configuração explícita na inbox
+    if (inbox.force_sensitive_media === true) {
+      return true;
+    }
+
+    // Regra 2: Tags específicas
+    const tags = Array.isArray(inbox.tags) ? inbox.tags : [];
+    if (tags.includes('healthcare') || tags.includes('finance') || tags.includes('confidential')) {
+      return true;
+    }
+
+    // Regra 3: Metadados
+    const metadata = inbox.metadata || {};
+    if (metadata.requires_privacy === true) {
+      return true;
+    }
+
+    // Padrão: NÃO sensível (usa CDN público)
+    return false;
+  } catch (error) {
+    console.error('[WAHA][worker] checkIfInboxSensitive failed:', error);
+    // Em caso de erro, assume sensível (seguro por padrão)
+    return true;
+  }
+}
+
 async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
-  const messageId = String(payload?.id || "");
+  // Unwrap common WAHA envelope shapes
+  const msg = payload?.data ?? payload?.message ?? payload;
+
+  const messageId = String(msg?.id || "");
   if (messageId) {
     try {
-      await saveWebhookEvent(job.inboxId, "WAHA", `waha:message:${messageId}`, job.raw ?? payload);
+      await saveWebhookEvent(job.inboxId, "WAHA", `waha:message:${messageId}`, job.raw ?? msg ?? payload);
     } catch (error) {
       console.warn("[WAHA][worker] saveWebhookEvent failed", { inboxId: job.inboxId, messageId, error });
     }
   }
 
-  const chatJid = extractWahaChatId(payload);
+  const chatJid = extractWahaChatId(msg);
   if (!chatJid) {
     console.warn("[WAHA][worker] message without chat id", { payload });
     return;
   }
-  if (isWahaStatusBroadcast(chatJid) || isWahaStatusBroadcast(payload?.from) || isWahaStatusBroadcast(payload?.to)) {
+  if (isWahaStatusBroadcast(chatJid) || isWahaStatusBroadcast(msg?.from) || isWahaStatusBroadcast(msg?.to)) {
     console.debug("[WAHA][worker] skipping status broadcast message", {
       inboxId: job.inboxId,
       chatJid,
@@ -1640,11 +1682,11 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     return;
   }
 
-  const name = extractWahaContactName(payload);
+  const name = extractWahaContactName(msg);
   const basePhone =
     normalizeMsisdn(chatJid) ||
-    normalizeMsisdn(payload?.from) ||
-    normalizeMsisdn(payload?.to);
+    normalizeMsisdn(msg?.from) ||
+    normalizeMsisdn(msg?.to);
   const isGroupChat = isWahaGroupJid(chatJid);
 
   let chatId: string;
@@ -1674,53 +1716,130 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     chatId = ensured.chatId;
   }
 
-  const isFromCustomer = !payload?.fromMe;
-  const ackStatus = mapWahaAckToViewStatus(payload?.ack) ?? (isFromCustomer ? "Pending" : "Sent");
+  const isFromCustomer = !msg?.fromMe;
+  const ackStatus = mapWahaAckToViewStatus(msg?.ack) ?? (isFromCustomer ? "Pending" : "Sent");
   
-  // Extract media URL/path from WAHA payload
-  // WAHA can provide: url, file, filePath, or base64
-  let mediaUrl: string | null = null;
-  let mediaSha256: string | null = null;
-  if (payload?.hasMedia) {
-    // Priority order: file path > URL > base64
-    if (payload?.media?.filePath) {
-      mediaUrl = payload.media.filePath;
-    } else if (payload?.media?.file) {
-      mediaUrl = payload.media.file;
-    } else if (payload?.media?.url) {
-      mediaUrl = payload.media.url;
-    } else if (payload?.media?.base64) {
-      // Prefer uploading base64 to Supabase Storage, fallback to data URI if upload fails
-      const mimeType = payload?.media?.mimetype || "application/octet-stream";
+  // ========== NEW: STORAGE-FIRST MEDIA PROCESSING ==========
+  // Extract media from WAHA payload and normalize to Buffer → Upload to Storage
+  let mediaInfo: {
+    storagePath: string;
+    publicUrl: string;
+    sha256: string;
+    source: 'waha_file' | 'waha_url' | 'waha_base64';
+  } | null = null;
+
+  // Normalize alternative shapes (file.data|url) into msg.media
+  let mediaObj: any = msg?.media || null;
+  if (!mediaObj && msg?.file) {
+    // Outbound-style schema echoed back or custom webhook shape
+    const f = msg.file;
+    mediaObj = {
+      url: f?.url || undefined,
+      base64: f?.data || undefined,
+      filename: f?.filename || msg?.filename,
+      mimetype: f?.mimetype || msg?.mimetype,
+    };
+  }
+  if (!mediaObj && (msg?.url || msg?.mimetype || msg?.filename)) {
+    mediaObj = {
+      url: msg?.url,
+      filename: msg?.filename,
+      mimetype: msg?.mimetype,
+    };
+  }
+  if (mediaObj && !msg?.media) {
+    try { (msg as any).media = mediaObj; } catch {}
+  }
+
+  const hasMedia = Boolean(msg?.hasMedia || mediaObj);
+  
+  if (hasMedia) {
+    const m = mediaObj || {};
+    let mediaSource: 'waha_file' | 'waha_url' | 'waha_base64' | null = null;
+    let mediaData: string | null = null;
+    let mimeType = m?.mimetype || 'application/octet-stream';
+
+    // Detect source and data
+    if (m.filePath) {
+      mediaSource = 'waha_file';
+      mediaData = m.filePath;
+    } else if (m.file) {
+      mediaSource = 'waha_file';
+      mediaData = m.file;
+    } else if (m.url) {
+      mediaSource = 'waha_url';
+      mediaData = m.url;
+    } else if (m.base64) {
+      mediaSource = 'waha_base64';
+      mediaData = m.base64;
+      mimeType = String(mimeType).split(";")[0].trim() || "application/octet-stream";
+    }
+
+    // Upload to Supabase Storage (normalização)
+    if (mediaSource && mediaData) {
       try {
-        const buffer = Buffer.from(String(payload.media.base64), "base64");
-        const filename = pickFilename(payload?.media?.filename, mimeType);
-        const storagePath = buildStoragePath({ companyId: job.companyId, chatId, filename, prefix: "waha" });
-        const uploadResult = await uploadBufferToStorage({ buffer, contentType: mimeType, path: storagePath });
-        mediaUrl = uploadResult.publicUrl || null;
-        mediaSha256 = uploadResult.sha256;
-      } catch (e) {
-        console.warn("[WAHA][worker] base64 upload failed, using data URI", e instanceof Error ? e.message : e);
-        mediaUrl = `data:${mimeType};base64,${payload.media.base64}`;
+        console.log('[WAHA][worker] Processing media:', {
+          source: mediaSource,
+          mimeType,
+          dataLength: mediaData.length,
+          chatId
+        });
+
+        // Download/read media to buffer
+        const { buffer, mimeType: detectedMime } = await downloadMediaToBuffer({
+          source: mediaSource === 'waha_file' ? 'file' : 
+                  mediaSource === 'waha_url' ? 'url' : 'base64',
+          data: mediaData,
+          mimeType
+        });
+
+        // Upload to storage
+        const filename = pickFilename(m?.filename, detectedMime);
+        mediaInfo = await uploadWahaMedia({
+          buffer,
+          contentType: detectedMime,
+          filename,
+          companyId: job.companyId,
+          chatId,
+          source: mediaSource
+        });
+
+        console.log('[WAHA][worker] ✅ Media uploaded to storage:', {
+          storagePath: mediaInfo.storagePath,
+          publicUrl: mediaInfo.publicUrl,
+          sha256: mediaInfo.sha256,
+          source: mediaSource,
+          size: buffer.length
+        });
+      } catch (error) {
+        console.error('[WAHA][worker] ❌ Media upload failed:', error);
+        // Continue without media - don't break the message
+        mediaInfo = null;
       }
     }
   }
+
+  // Determine if inbox requires sensitive media handling
+  const isSensitive = await checkIfInboxSensitive(job.inboxId);
   
-  // Encrypt media URL/path before storing in database
-  const encryptedMediaUrl = encryptMediaUrl(mediaUrl);
+  console.log('[WAHA][worker] Media sensitivity:', {
+    inboxId: job.inboxId,
+    isSensitive,
+    hasMedia: !!mediaInfo
+  });
   
-  const messageType = deriveWahaMessageType(payload);
+  const messageType = deriveWahaMessageType(msg);
   const body =
-    typeof payload?.body === "string" && payload.body.trim()
-      ? payload.body
-      : mediaUrl
+    typeof msg?.body === "string" && msg.body.trim()
+      ? msg.body
+      : mediaInfo
         ? `[${messageType}]`
         : "";
   const createdAt =
-    typeof payload?.timestamp === "number"
-      ? new Date(payload.timestamp * 1000)
-      : payload?.timestamp
-        ? new Date(payload.timestamp)
+    typeof msg?.timestamp === "number"
+      ? new Date(msg.timestamp * 1000)
+      : msg?.timestamp
+        ? new Date(msg.timestamp)
         : null;
 
   let remoteMeta:
@@ -1735,17 +1854,17 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   if (isFromCustomer) {
     if (isGroupChat) {
-      remoteMeta = extractWahaRemoteParticipant(payload);
+      remoteMeta = extractWahaRemoteParticipant(msg);
     } else {
-      const directRemoteId = normalizeWahaJid(payload?.from) || chatJid;
+      const directRemoteId = normalizeWahaJid(msg?.from) || chatJid;
       remoteMeta = {
         remoteId: directRemoteId,
         name: name ?? null,
         phone: normalizeMsisdn(directRemoteId ?? "") || phoneForLead || null,
         avatarUrl:
-          payload?.senderProfilePic ||
-          payload?.authorAvatar ||
-          payload?.contactAvatar ||
+          msg?.senderProfilePic ||
+          msg?.authorAvatar ||
+          msg?.contactAvatar ||
           null,
         isAdmin: null,
       };
@@ -1768,7 +1887,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     remoteParticipantId = participant?.id ?? null;
   }
 
-  const quotedExternalId = extractWahaQuotedMessageId(payload);
+  const quotedExternalId = extractWahaQuotedMessageId(msg);
   const repliedMessageId =
     quotedExternalId && chatId
       ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
@@ -1781,8 +1900,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     type: messageType,
     viewStatus: ackStatus ?? null,
-    mediaUrl: encryptedMediaUrl, // Store encrypted URL
-    mediaSha256, // Store SHA-256 hash of media content
+    // ✅ New storage-first fields
+    mediaStoragePath: mediaInfo?.storagePath ?? null,
+    mediaPublicUrl: isSensitive ? null : (mediaInfo?.publicUrl ?? null),
+    mediaSource: mediaInfo?.source ?? null,
+    isMediaSensitive: isSensitive,
+    // ⚠️ Legacy fields (for backward compatibility)
+    mediaUrl: mediaInfo?.publicUrl ?? null,
+    mediaSha256: mediaInfo?.sha256 ?? null,
     createdAt,
     remoteParticipantId,
     remoteSenderId: remoteMeta?.remoteId ?? null,
@@ -1804,7 +1929,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     lastMessageFrom: isFromCustomer ? "CUSTOMER" : "AGENT",
     lastMessageType: upsertResult.message.type ?? messageType ?? "TEXT",
-    lastMessageMediaUrl: upsertResult.message.media_url ?? mediaUrl ?? null,
+    lastMessageMediaUrl: upsertResult.message.media_url ?? (mediaInfo?.publicUrl ?? null),
     listContext: {
       companyId: job.companyId,
       inboxId: job.inboxId,
@@ -1814,13 +1939,13 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     },
   });
 
-  if (mediaUrl) {
+  if (mediaInfo) {
     await upsertWahaAttachment({
       messageId: upsertResult.message.id,
       chatId,
       inboxId: job.inboxId,
       companyId: job.companyId,
-      url: mediaUrl,
+      url: mediaInfo.publicUrl,
       mimeType: payload?.media?.mimetype ?? null,
       filename: payload?.media?.filename ?? null,
     });
@@ -1837,7 +1962,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         view_status: ackStatus,
         raw_status: ackStatus,
         status: normalizedStatus,
-        draftId: job?.draftId ?? payload?.draftId ?? null,
+        draftId: job?.draftId ?? msg?.draftId ?? null,
         reason: null,
       });
     }
@@ -1854,7 +1979,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     view_status: upsertResult.message.view_status ?? ackStatus ?? "Pending",
     type: upsertResult.message.type ?? messageType,
     is_private: false,
-    media_url: buildProxyUrl(upsertResult.message.media_url) ?? buildProxyUrl(encryptedMediaUrl) ?? null,
+    media_url: buildProxyUrl(upsertResult.message.media_url) ?? (mediaInfo?.publicUrl ?? null),
     remote_sender_id: upsertResult.message.remote_sender_id ?? null,
     remote_sender_name: upsertResult.message.remote_sender_name ?? null,
     remote_sender_phone: upsertResult.message.remote_sender_phone ?? null,
@@ -1862,7 +1987,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     remote_sender_is_admin: upsertResult.message.remote_sender_is_admin ?? null,
     remote_participant_id: upsertResult.message.remote_participant_id ?? null,
     replied_message_id: upsertResult.message.replied_message_id ?? null,
-    client_draft_id: job?.draftId ?? payload?.draftId ?? null,
+    client_draft_id: job?.draftId ?? msg?.draftId ?? null,
   };
 
   try {
@@ -1916,7 +2041,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       view_status: ackStatus,
       raw_status: ackStatus,
       status: normalizedStatus,
-      draftId: job?.draftId ?? payload?.draftId ?? null,
+      draftId: job?.draftId ?? msg?.draftId ?? null,
       reason: null,
     });
   }

@@ -22,7 +22,8 @@ export function sanitizeFilename(name: string): string {
 
 export function extFromMime(mime?: string | null, fallback = "bin"): string {
   if (!mime) return fallback;
-  const m = mime.toLowerCase();
+  // Normalize mime by stripping parameters like "; codecs=opus"
+  const m = mime.toLowerCase().split(";")[0].trim();
   if (m === "image/jpeg" || m === "image/jpg") return "jpg";
   if (m === "image/png") return "png";
   if (m === "image/webp") return "webp";
@@ -83,4 +84,116 @@ export function buildStoragePath(opts: {
   const fname = sanitizeFilename(opts.filename);
   const prefix = opts.prefix?.replace(/^\/+|\/+$|[^a-zA-Z0-9/_-]+/g, "").replace(/\/+/, "/") || "";
   return `${prefix ? prefix + "/" : ""}${safeCompany}/${safeChat}/${stamp}/${Date.now()}_${rand}_${fname}`;
+}
+
+// ========== NEW: WAHA Media Processing Functions ==========
+
+/**
+ * Upload de mídia WAHA para Supabase Storage
+ * Retorna tanto a URL pública quanto o path para storage
+ */
+export async function uploadWahaMedia(args: {
+  buffer: Buffer;
+  contentType: string;
+  filename: string;
+  companyId: string;
+  chatId: string;
+  source: 'waha_file' | 'waha_url' | 'waha_base64';
+}): Promise<{
+  storagePath: string;
+  publicUrl: string;
+  sha256: string;
+  source: 'waha_file' | 'waha_url' | 'waha_base64';
+}> {
+  const storagePath = buildStoragePath({
+    companyId: args.companyId,
+    chatId: args.chatId,
+    filename: args.filename,
+    prefix: 'waha'
+  });
+
+  const result = await uploadBufferToStorage({
+    buffer: args.buffer,
+    contentType: args.contentType,
+    path: storagePath
+  });
+
+  if (!result.publicUrl) {
+    throw new Error('Failed to get public URL from storage');
+  }
+
+  return {
+    storagePath: result.path,
+    publicUrl: result.publicUrl,
+    sha256: result.sha256,
+    source: args.source
+  };
+}
+
+/**
+ * Download de mídia de qualquer fonte e normaliza para Buffer
+ */
+export async function downloadMediaToBuffer(args: {
+  source: 'file' | 'url' | 'base64';
+  data: string;
+  mimeType?: string;
+}): Promise<{ buffer: Buffer; mimeType: string }> {
+  const fs = await import('node:fs/promises');
+  const axios = (await import('axios')).default;
+  const path = await import('node:path');
+  
+  let buffer: Buffer;
+  let detectedMime = args.mimeType || 'application/octet-stream';
+
+  switch (args.source) {
+    case 'file': {
+      // Ler arquivo local WAHA
+      const filePath = args.data.replace('file://', '');
+      buffer = await fs.readFile(filePath);
+      detectedMime = args.mimeType || detectMimeFromPath(filePath);
+      break;
+    }
+    
+    case 'url': {
+      // Download HTTP/HTTPS
+      const response = await axios.get(args.data, { 
+        responseType: 'arraybuffer',
+        timeout: 30000 
+      });
+      buffer = Buffer.from(response.data);
+      detectedMime = args.mimeType || response.headers['content-type'] || 'application/octet-stream';
+      break;
+    }
+    
+    case 'base64': {
+      // Decodificar base64
+      buffer = Buffer.from(args.data, 'base64');
+      detectedMime = args.mimeType || 'application/octet-stream';
+      break;
+    }
+    
+    default:
+      throw new Error(`Unknown media source: ${args.source}`);
+  }
+
+  return { buffer, mimeType: detectedMime };
+}
+
+function detectMimeFromPath(filePath: string): string {
+  const path = require('node:path');
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogg': 'audio/ogg',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.pdf': 'application/pdf',
+  };
+  return mimeMap[ext] || 'application/octet-stream';
 }

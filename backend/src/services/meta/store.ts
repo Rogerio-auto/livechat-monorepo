@@ -443,8 +443,17 @@ type UpsertChatMessageArgs = {
   type?: string | null;
   senderId?: string | null;
   viewStatus?: string | null;
+  
+  // ✅ New storage-first fields
+  mediaStoragePath?: string | null;
+  mediaPublicUrl?: string | null;
+  mediaSource?: string | null;
+  isMediaSensitive?: boolean;
+  
+  // ⚠️ Legacy fields (keep for backward compatibility)
   mediaUrl?: string | null;
   mediaSha256?: string | null;
+  
   createdAt?: string | Date | null;
   remoteParticipantId?: string | null;
   remoteSenderId?: string | null;
@@ -1028,7 +1037,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
         ? new Date(args.createdAt).toISOString()
         : null;
 
-  // Encrypt media URL before storing
+  // Encrypt media URL before storing (legacy field)
   const encryptedMediaUrl = encryptMediaUrl(args.mediaUrl);
 
   if (chatMessagesSupportsRemoteSenderColumns) {
@@ -1036,17 +1045,25 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
       const row = await db.oneOrNone<UpsertChatMessageRow>(
         `
           insert into public.chat_messages
-            (chat_id, sender_id, is_from_customer, external_id, content, type, view_status, media_url, media_sha256,
+            (chat_id, sender_id, is_from_customer, external_id, content, type, view_status,
+             media_storage_path, media_public_url, media_source, is_media_sensitive,
+             media_url, media_sha256,
              remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone,
              remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, created_at)
           values
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-             $10, $11, $12, $13, $14, $15, $16, coalesce($17::timestamptz, now()))
+            ($1, $2, $3, $4, $5, $6, $7,
+             $8, $9, $10, $11,
+             $12, $13,
+             $14, $15, $16, $17, $18, $19, $20, coalesce($21::timestamptz, now()))
           on conflict (chat_id, external_id) do update
             set content     = coalesce(excluded.content,     public.chat_messages.content),
                 type        = coalesce(excluded.type,        public.chat_messages.type),
                 sender_id   = coalesce(excluded.sender_id,   public.chat_messages.sender_id),
                 view_status = coalesce(excluded.view_status, public.chat_messages.view_status),
+                media_storage_path = coalesce(excluded.media_storage_path, public.chat_messages.media_storage_path),
+                media_public_url   = coalesce(excluded.media_public_url,   public.chat_messages.media_public_url),
+                media_source       = coalesce(excluded.media_source,       public.chat_messages.media_source),
+                is_media_sensitive = coalesce(excluded.is_media_sensitive, public.chat_messages.is_media_sensitive),
                 media_url   = coalesce(excluded.media_url,   public.chat_messages.media_url),
                 media_sha256 = coalesce(excluded.media_sha256, public.chat_messages.media_sha256),
                 remote_participant_id      = coalesce(excluded.remote_participant_id,      public.chat_messages.remote_participant_id),
@@ -1083,8 +1100,15 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.content,
           args.type ?? "TEXT",
           args.viewStatus ?? null,
+          // ✅ New storage fields
+          args.mediaStoragePath ?? null,
+          args.mediaPublicUrl ?? null,
+          args.mediaSource ?? null,
+          args.isMediaSensitive ?? false,
+          // ⚠️ Legacy fields
           encryptedMediaUrl ?? null,
           args.mediaSha256 ?? null,
+          // Remote sender fields
           args.remoteParticipantId ?? null,
           args.remoteSenderId ?? null,
           args.remoteSenderName ?? null,

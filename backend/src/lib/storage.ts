@@ -32,6 +32,7 @@ export function extFromMime(mime?: string | null, fallback = "bin"): string {
   if (m === "video/webm") return "webm";
   if (m === "audio/mpeg" || m === "audio/mp3") return "mp3";
   if (m === "audio/ogg") return "ogg";
+  if (m === "audio/mp4") return "m4a";
   if (m === "audio/wav") return "wav";
   if (m === "application/pdf") return "pdf";
   if (m === "text/plain") return "txt";
@@ -193,6 +194,7 @@ function detectMimeFromPath(filePath: string): string {
     '.mp4': 'video/mp4',
     '.webm': 'video/webm',
     '.ogg': 'audio/ogg',
+    '.m4a': 'audio/mp4',
     '.mp3': 'audio/mpeg',
     '.wav': 'audio/wav',
     '.pdf': 'application/pdf',

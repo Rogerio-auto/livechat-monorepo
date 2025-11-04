@@ -449,6 +449,7 @@ function extFromMime(mime?: string): string | null {
     "video/mp4": "mp4",
     "video/3gpp": "3gp",
     "video/quicktime": "mov",
+      "audio/mp4": "m4a",
   };
   return map[mime] || null;
 }
@@ -2418,13 +2419,17 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       throw new Error("WAHA media requer mediaUrl");
     }
 
+    // Para áudio, escolhe entre Voice (ogg/opus) ou Audio (ex.: m4a/mp3)
+    const normalizedMime = String(payload?.mimeType || "").split(";")[0].trim().toLowerCase();
     const endpoint =
       kind === "image"
         ? "/api/sendImage"
         : kind === "video"
           ? "/api/sendVideo"
           : kind === "audio"
-            ? "/api/sendVoice"
+            ? (normalizedMime.includes("ogg") || normalizedMime.includes("opus")
+                ? "/api/sendVoice"
+                : "/api/sendAudio")
             : "/api/sendFile";
 
     const body: any = {
@@ -2961,7 +2966,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           const chatId = String(job.chatId || "");
           const messageId = String(job.messageId || "");
           const storageKey = String(job.storage_key || "");
-          const mimeType = String(job.mime_type || "");
+          let mimeType = String(job.mime_type || "");
           meta.chatId = chatId || meta.chatId || null;
           meta.provider = provider || meta.provider || "META";
           if (!chatId || !messageId || !storageKey || !mimeType) {
@@ -2979,10 +2984,43 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           throw new Error("missing_meta_credentials");
         }
 
-        const abs = path.join(MEDIA_DIR, storageKey);
-        try {
-          await fs.access(abs);
-        } catch {
+        // Permite enviar via arquivo local (storage_key) OU via URL pública (public_url)
+        const publicUrl = typeof job.public_url === "string" && job.public_url ? String(job.public_url) : "";
+        const absFromKey = storageKey ? path.join(MEDIA_DIR, storageKey) : "";
+        let abs = absFromKey;
+        let createdTmp = false;
+        let cleanupTmp: string | null = null;
+
+        if (abs) {
+          try {
+            await fs.access(abs);
+          } catch {
+            abs = ""; // arquivo não existe, tentaremos baixar da URL pública
+          }
+        }
+
+        if (!abs && publicUrl) {
+          const res = await fetch(publicUrl);
+          if (!res.ok) {
+            throw new Error(`download_public_url ${res.status}`);
+          }
+          const arr = new Uint8Array(await res.arrayBuffer());
+          const mimeFromUrl = res.headers.get("content-type") || mimeType;
+          const tmpDir = path.join(MEDIA_DIR, "tmp");
+          await fs.mkdir(tmpDir, { recursive: true });
+          const ext = extFromMime(mimeFromUrl) || extFromMime(mimeType) || "bin";
+          const tmpPath = path.join(tmpDir, `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
+          await fs.writeFile(tmpPath, arr);
+          abs = tmpPath;
+          createdTmp = true;
+          cleanupTmp = tmpPath;
+          // Use o mimeType detectado se o job não trouxer
+          // Se job não informou mime, usamos o do download
+          const effectiveMime = (mimeType && String(mimeType)) || mimeFromUrl || "application/octet-stream";
+          mimeType = effectiveMime;
+        }
+
+        if (!abs) {
           throw new Error("media_file_missing");
         }
 
@@ -3068,6 +3106,9 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         });
 
         console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
+        if (createdTmp && cleanupTmp) {
+          try { await fs.unlink(cleanupTmp); } catch {}
+        }
         meta.chatId = chat_id ?? chatId;
 
         setTimeout(() => {

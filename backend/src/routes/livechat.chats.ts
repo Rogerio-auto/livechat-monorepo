@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import express from "express";
+import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
@@ -20,6 +21,7 @@ import { WAHA_PROVIDER } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
+import messagesRouter from "./livechat.messages.ts";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -29,6 +31,9 @@ const TRACE_EXPLAIN = process.env.LIVECHAT_TRACE_EXPLAIN === "1";
 
 let chatsSupportsLastMessageType = true;
 let chatsSupportsLastMessageMediaUrl = true;
+
+// Multer (memória) para uploads multipart (ex.: /messages/media)
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 type CacheEnvelope<T> = {
   data: T;
@@ -268,6 +273,9 @@ function toUuidArray(arr: any[]): string[] {
 
 
 export function registerLivechatChatRoutes(app: express.Application) {
+  // Mount messages sub-router for GET /livechat/messages/:id
+  app.use("/livechat/messages", messagesRouter);
+
   // Listar chats (com cache)
   app.get("/livechat/chats", requireAuth, async (req: any, res) => {
     const reqLabel = `livechat.chats#${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -803,7 +811,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
     let insertedId: string | null = null;
     let logStatus: "ok" | "error" = "ok";
     let logError: string | null = null;
-    const { chatId, text, senderType = "AGENT" } = req.body || {};
+    const { chatId, text, senderType = "AGENT", reply_to } = req.body || {};
     const logMetrics = () => {
       const durationMs = Number((performance.now() - startedAt).toFixed(1));
       console.log("[metrics][api]", {
@@ -946,6 +954,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
             sender_avatar_url: senderAvatarUrl,
             created_at: nowIso,
             view_status: "Pending",
+            reply_to_message_id: reply_to && typeof reply_to === "string" ? reply_to : null,
           },
         ])
         .select(
@@ -1021,6 +1030,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           draftId: inserted.id,
         };
         if (wahaRecipient) payload.to = wahaRecipient;
+        if (reply_to) payload.quotedMessageId = reply_to;
         await publish(EX_APP, "outbound.request", {
           jobType: "outbound.request",
           provider: WAHA_PROVIDER,
@@ -1789,6 +1799,232 @@ export function registerLivechatChatRoutes(app: express.Application) {
       return res.status(201).json(mapped);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "upload error" });
+    }
+  });
+
+  // Enviar mídia (multipart ou JSON base64) — alias mais compatível com o front
+  // Suporta: image/*, video/*, audio/*, application/*
+  app.post("/livechat/chats/:id/messages/media", requireAuth, upload.single("file"), async (req: any, res) => {
+    const { id: chatId } = req.params as { id: string };
+
+    try {
+      // 1) Extrai buffer/nome/mime a partir de multipart ou JSON base64
+      let buffer: Buffer | null = null;
+      let filename: string | null = null;
+      let contentType: string = "application/octet-stream";
+      const reply_to = req.body.reply_to || null;
+
+      if (req.file && req.file.buffer) {
+        buffer = req.file.buffer as Buffer;
+        filename = req.file.originalname || "upload.bin";
+        contentType = req.file.mimetype || contentType;
+      } else if (req.body && (req.body.data || req.body.base64)) {
+        const b64 = String(req.body.data || req.body.base64);
+        buffer = Buffer.from(b64.replace(/^data:[^;]+;base64,/, ""), "base64");
+        filename = req.body.filename || "upload.bin";
+        contentType = req.body.mime || req.body.mimetype || contentType;
+      }
+
+      if (!buffer || !filename) {
+        return res.status(400).json({ error: "arquivo ausente (use multipart field 'file' ou JSON {filename, data})" });
+      }
+
+      // 2) Upload no Storage (bucket público)
+      const ext = filename.includes(".") ? filename.split(".").pop() : "bin";
+      const path = `${chatId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+      try {
+        await (supabaseAdmin as any).storage.createBucket("chat-uploads", { public: true });
+      } catch {}
+
+      const { data: up, error: upErr } = await supabaseAdmin
+        .storage
+        .from("chat-uploads")
+        .upload(path, buffer, { contentType, upsert: false });
+      if (upErr) return res.status(500).json({ error: upErr.message });
+
+      const pub = supabaseAdmin.storage.from("chat-uploads").getPublicUrl(up!.path);
+      const publicUrl = (pub as any)?.data?.publicUrl || null;
+
+      // 3) Resolve provider/recipient para possível envio outbound
+      const chatSelect = `
+        id,
+        inbox_id,
+        customer_id,
+        external_id,
+        inbox:inboxes (
+          id,
+          provider,
+          company_id
+        ),
+        customer:customers (
+          phone,
+          msisdn
+        )
+      `;
+      const { data: chatRow, error: chatErr } = await supabaseAdmin
+        .from("chats").select(chatSelect).eq("id", chatId).maybeSingle();
+      if (chatErr) return res.status(500).json({ error: chatErr.message });
+      if (!chatRow) return res.status(404).json({ error: "Chat nao encontrado" });
+
+      const inboxRow = (chatRow as any)?.inbox || null;
+      if (!inboxRow) return res.status(404).json({ error: "Inbox nao encontrada" });
+
+      const inboxId = String(chatRow.inbox_id);
+      const provider = String((inboxRow as any)?.provider || "").toUpperCase();
+      const isWahaProvider = provider === WAHA_PROVIDER;
+      const companyId =
+        (typeof req.user?.company_id === "string" && req.user.company_id.trim()) ||
+        (typeof (inboxRow as any)?.company_id === "string" && String((inboxRow as any).company_id).trim()) ||
+        null;
+
+      // 4) Resolve remetente (para nome/avatar no histórico)
+      let senderId: string | null = null;
+      let senderName: string | null = null;
+      let senderAvatarUrl: string | null = null;
+      if (req.user?.id) {
+        try {
+          const u = await supabaseAdmin
+            .from("users")
+            .select("id, name, email, avatar")
+            .eq("user_id", req.user.id)
+            .maybeSingle();
+          if (u?.data) {
+            senderId = u.data.id;
+            senderName = u.data.name || u.data.email || null;
+            senderAvatarUrl = u.data.avatar || null;
+          }
+        } catch {}
+      }
+
+      // 5) Persiste mensagem
+      const nowIso = new Date().toISOString();
+      const kind = contentType.startsWith("image/")
+        ? "IMAGE"
+        : contentType.startsWith("video/")
+          ? "VIDEO"
+          : contentType.startsWith("audio/")
+            ? "AUDIO"
+            : "FILE";
+
+      const { data: inserted, error: insErr } = await supabaseAdmin
+        .from("chat_messages")
+        .insert([{ 
+          chat_id: chatId,
+          content: String(filename),
+          type: kind,
+          is_from_customer: false,
+          sender_id: senderId,
+          sender_name: senderName,
+          sender_avatar_url: senderAvatarUrl,
+          created_at: nowIso,
+          view_status: "Pending",
+          media_public_url: publicUrl,
+          media_storage_path: up?.path ?? null,
+          is_media_sensitive: false,
+          reply_to_message_id: reply_to && typeof reply_to === "string" ? reply_to : null,
+        }])
+        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
+        .single();
+      if (insErr) return res.status(500).json({ error: insErr.message });
+
+      await supabaseAdmin
+        .from("chats")
+        .update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso })
+        .eq("id", chatId);
+
+      // invalida caches e aquece
+      setTimeout(() => {
+        Promise.all([
+          rDel(k.chat(chatId)),
+          clearMessageCache(chatId, (key) => key.includes(":nil:")),
+          warmChatMessagesCache(chatId).catch(() => {}),
+        ]).catch(() => {});
+      }, 0);
+
+      // 6) Socket
+      const mapped = {
+        id: inserted.id,
+        chat_id: inserted.chat_id,
+        body: inserted.content,
+        sender_type: "AGENT" as const,
+        sender_id: inserted.sender_id || senderId || null,
+        sender_name: inserted.sender_name || senderName || null,
+        sender_avatar_url: inserted.sender_avatar_url || senderAvatarUrl || null,
+        created_at: inserted.created_at,
+        view_status: inserted.view_status || "Pending",
+        type: inserted.type || kind,
+        is_private: false,
+      };
+      const io = getIO();
+      io?.to(`chat:${chatId}`).emit("message:new", mapped);
+      io?.emit("chat:updated", {
+        chatId,
+        last_message: `[Arquivo] ${filename}`,
+        last_message_at: nowIso,
+        last_message_from: mapped.sender_type,
+      });
+
+  // 7) Enfileira envio outbound: WAHA ou META
+  if (isWahaProvider && companyId) {
+        // Resolve destinatário WAHA
+        const customerRow = (chatRow as any)?.customer || null;
+        const candidates = customerRow ? [customerRow.phone, customerRow.msisdn] : [];
+        const customerPhone = candidates.find((v: unknown) => typeof v === "string" && v.trim()) || null;
+        let wahaRecipient: string | null = null;
+        if (customerPhone) {
+          const digits = normalizeMsisdn(customerPhone as string);
+          if (digits) wahaRecipient = `${digits}@c.us`;
+        } else if (typeof chatRow?.external_id === "string" && chatRow.external_id.trim()) {
+          wahaRecipient = chatRow.external_id.trim();
+        }
+
+        const mediaKind = kind === "AUDIO" ? "audio" : kind === "IMAGE" ? "image" : kind === "VIDEO" ? "video" : "document";
+        const payload: any = {
+          type: "media",
+          kind: mediaKind,
+          mediaUrl: publicUrl,
+          filename,
+          mimeType: contentType,
+          draftId: inserted.id,
+        };
+        if (wahaRecipient) payload.to = wahaRecipient;
+        if (reply_to) payload.quotedMessageId = reply_to;
+
+        await publish(EX_APP, "outbound.request", {
+          jobType: "outbound.request",
+          provider: WAHA_PROVIDER,
+          companyId,
+          inboxId,
+          chatId,
+          customerId: chatRow.customer_id,
+          messageId: inserted.id,
+          payload,
+          attempt: 0,
+          createdAt: nowIso,
+          senderUserSupabaseId: senderId,
+        });
+      } else {
+        // META (Cloud API): consome via worker "meta.sendMedia"; agora suporta URL pública
+        await publish(EX_APP, "outbound.request", {
+          jobType: "meta.sendMedia",
+          provider: "META",
+          inboxId,
+          chatId,
+          customerId: chatRow.customer_id,
+          messageId: inserted.id,
+          public_url: publicUrl,
+          mime_type: contentType,
+          filename,
+          attempt: 0,
+          createdAt: nowIso,
+          senderUserSupabaseId: senderId,
+        });
+      }
+
+      return res.status(201).json({ ok: true, data: mapped });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "media upload error" });
     }
   });
 

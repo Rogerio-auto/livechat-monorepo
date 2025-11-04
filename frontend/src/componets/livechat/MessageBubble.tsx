@@ -20,6 +20,7 @@ type MessageBubbleProps = {
   mediaIndex?: number | null;
   showRemoteSenderInfo?: boolean;
   onRetry?: (message: Message) => void;
+  onReply?: () => void;
 };
 
 export function MessageBubble({
@@ -29,6 +30,7 @@ export function MessageBubble({
   mediaIndex,
   showRemoteSenderInfo = false,
   onRetry,
+  onReply,
 }: MessageBubbleProps) {
   const deliveryStatusSource =
     typeof m.delivery_status === "string" && m.delivery_status
@@ -256,9 +258,23 @@ export function MessageBubble({
             </div>
           )}
           <div className="text-[var(--color-text)]">{bubbleContent}</div>
-          <div className="mt-1 flex items-center justify-end gap-1">
-            <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
-            {renderStatusIcon()}
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {onReply && (
+                <button
+                  type="button"
+                  onClick={onReply}
+                  className="text-[9px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition opacity-70 hover:opacity-100"
+                  title="Responder"
+                >
+                  Responder
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
+              {renderStatusIcon()}
+            </div>
           </div>
           {isAgent && deliveryStatus === "error" && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-red-400">

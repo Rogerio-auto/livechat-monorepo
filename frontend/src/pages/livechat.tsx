@@ -10,6 +10,7 @@ import LivechatMenu, {
 import { ChatHeader } from "../componets/livechat/ChatHeader";
 import { MessageBubble } from "../componets/livechat/MessageBubble";
 import { LabelsManager } from "../componets/livechat/LabelsManager";
+import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/types";
 import { FiPaperclip, FiMic, FiSmile, FiX } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
@@ -111,6 +112,7 @@ export default function LiveChatPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const [isPrivateOpen, setIsPrivateOpen] = useState(false);
   const [privateText, setPrivateText] = useState("");
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [chatTags, setChatTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -1977,7 +1979,7 @@ const scrollToBottom = useCallback(
 
 
   const sendMessageToChat = useCallback(
-    async (chat: Chat, rawContent: string) => {
+    async (chat: Chat, rawContent: string, replyToMsgId?: string | null) => {
       const trimmed = rawContent.trim();
       if (!trimmed) return;
 
@@ -2031,6 +2033,7 @@ const scrollToBottom = useCallback(
               to,
               content: trimmed,
               draftId,
+              reply_to: replyToMsgId || null,
             }),
           });
           const responseDraftId =
@@ -2079,7 +2082,13 @@ const scrollToBottom = useCallback(
           method: "POST",
           headers,
           credentials: "include",
-          body: JSON.stringify({ chatId: chat.id, text: trimmed, senderType: "AGENT", draftId }),
+          body: JSON.stringify({ 
+            chatId: chat.id, 
+            text: trimmed, 
+            senderType: "AGENT", 
+            draftId,
+            reply_to: replyToMsgId || null,
+          }),
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload?.ok === false) {
@@ -2122,9 +2131,11 @@ const scrollToBottom = useCallback(
     if (!currentChat) return;
     const trimmedText = text.trim();
     if (!trimmedText) return;
+    const replyId = replyingTo?.id || null;
     setText("");
-    await sendMessageToChat(currentChat, trimmedText);
-  }, [currentChat, text, sendMessageToChat]);
+    setReplyingTo(null);
+    await sendMessageToChat(currentChat, trimmedText, replyId);
+  }, [currentChat, text, replyingTo, sendMessageToChat]);
 
   const retryFailedMessage = useCallback(
     async (message: Message) => {
@@ -2589,6 +2600,7 @@ const scrollToBottom = useCallback(
                     mediaIndex={mediaIndexById.get(m.id) ?? undefined}
                     showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
                     onRetry={retryFailedMessage}
+                    onReply={() => setReplyingTo(m)}
                   />
                 ))}
 
@@ -2649,6 +2661,15 @@ const scrollToBottom = useCallback(
                           {e}
                         </button>
                       ))}
+                  </div>
+                )}
+
+                {replyingTo && (
+                  <div className="mb-2">
+                    <ReplyPreview 
+                      message={replyingTo}
+                      onCancel={() => setReplyingTo(null)}
+                    />
                   </div>
                 )}
 

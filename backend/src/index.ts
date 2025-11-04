@@ -41,6 +41,10 @@ import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
 import { normalizeMsisdn } from "./util.ts";
 
+// Feature flag para (des)ativar a sincronização automática com WAHA
+// Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
+const WAHA_SYNC_ENABLED = String(process.env.WAHA_SYNC_ENABLED || "false").toLowerCase() === "true";
+
 process.on("uncaughtException", (err) => {
   console.error("[FATAL] uncaughtException:", err);
 });
@@ -474,6 +478,10 @@ async function syncWahaChatsForInboxes(inboxes: WahaInboxRecord[]): Promise<void
 }
 
 async function syncWahaAfterLogin(authUserId: string): Promise<void> {
+  if (!WAHA_SYNC_ENABLED) {
+    console.warn("[WAHA][sync] disabled by config (WAHA_SYNC_ENABLED=false)");
+    return;
+  }
   try {
     const { data: userRow, error: userErr } = await supabaseAdmin
       .from("users")
@@ -561,9 +569,11 @@ app.post("/login", async (req, res) => {
   });
 
   if (data.user?.id) {
-    void syncWahaAfterLogin(data.user.id).catch((error) =>
-      console.error("[WAHA][sync] login trigger failed", error),
-    );
+    if (WAHA_SYNC_ENABLED) {
+      void syncWahaAfterLogin(data.user.id).catch((error) =>
+        console.error("[WAHA][sync] login trigger failed", error),
+      );
+    }
   }
 
   return res.json({ ok: true, user: data.user });

@@ -1614,7 +1614,7 @@ export function registerWAHARoutes(app: Express) {
       to: z.string().min(6),
       content: z.string().min(1),
       quotedMessageId: z.string().optional(),
-      reply_to: z.string().optional(), // Accept reply_to from frontend
+      reply_to: z.string().optional().nullable(), // Accept reply_to from frontend
       draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
@@ -1623,23 +1623,24 @@ export function registerWAHARoutes(app: Express) {
     // Use reply_to if quotedMessageId is not provided
     let finalQuotedMessageId = quotedMessageId || null;
     
-    // If reply_to is provided (internal UUID), fetch the external_id
-    if (!finalQuotedMessageId && reply_to) {
+    // If reply_to is provided (internal UUID) and not empty, fetch the external_id
+    const cleanReplyTo = reply_to && reply_to.trim() ? reply_to.trim() : null;
+    if (!finalQuotedMessageId && cleanReplyTo) {
       try {
         const { data: originalMsg } = await supabaseAdmin
           .from("chat_messages")
           .select("external_id")
-          .eq("id", reply_to)
+          .eq("id", cleanReplyTo)
           .single();
         
         if (originalMsg?.external_id) {
           finalQuotedMessageId = originalMsg.external_id;
-          console.log(`[WAHA] Mapped reply_to ${reply_to} to external_id ${finalQuotedMessageId}`);
+          console.log(`[WAHA] Mapped reply_to ${cleanReplyTo} to external_id ${finalQuotedMessageId}`);
         } else {
-          console.warn(`[WAHA] No external_id found for reply_to ${reply_to}`);
+          console.warn(`[WAHA] No external_id found for reply_to ${cleanReplyTo}`);
         }
       } catch (error) {
-        console.error(`[WAHA] Failed to fetch external_id for reply_to ${reply_to}:`, error);
+        console.error(`[WAHA] Failed to fetch external_id for reply_to ${cleanReplyTo}:`, error);
       }
     }
     
@@ -1659,7 +1660,7 @@ export function registerWAHARoutes(app: Express) {
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: "text", content, 
         quotedMessageId: finalQuotedMessageId, // external_id for WAHA
-        repliedMessageId: reply_to, // UUID for frontend
+        repliedMessageId: cleanReplyTo, // UUID for frontend
         fromUserId: (req as any).user?.id,
         draftId, // Pass the draft ID
       });
@@ -1703,7 +1704,7 @@ export function registerWAHARoutes(app: Express) {
       filename: z.string().optional(),
       mimeType: z.string().optional(),
       quotedMessageId: z.string().optional(),
-      reply_to: z.string().optional(), // Accept reply_to from frontend
+      reply_to: z.string().optional().nullable(), // Accept reply_to from frontend
       draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
@@ -1724,23 +1725,24 @@ export function registerWAHARoutes(app: Express) {
     // Use reply_to if quotedMessageId is not provided
     let finalQuotedMessageId = quotedMessageId || null;
     
-    // If reply_to is provided (internal UUID), fetch the external_id
-    if (!finalQuotedMessageId && reply_to) {
+    // If reply_to is provided (internal UUID) and not empty, fetch the external_id
+    const cleanReplyTo = reply_to && reply_to.trim() ? reply_to.trim() : null;
+    if (!finalQuotedMessageId && cleanReplyTo) {
       try {
         const { data: originalMsg } = await supabaseAdmin
           .from("chat_messages")
           .select("external_id")
-          .eq("id", reply_to)
+          .eq("id", cleanReplyTo)
           .single();
         
         if (originalMsg?.external_id) {
           finalQuotedMessageId = originalMsg.external_id;
-          console.log(`[WAHA] Mapped reply_to ${reply_to} to external_id ${finalQuotedMessageId}`);
+          console.log(`[WAHA] Mapped reply_to ${cleanReplyTo} to external_id ${finalQuotedMessageId}`);
         } else {
-          console.warn(`[WAHA] No external_id found for reply_to ${reply_to}`);
+          console.warn(`[WAHA] No external_id found for reply_to ${cleanReplyTo}`);
         }
       } catch (error) {
-        console.error(`[WAHA] Failed to fetch external_id for reply_to ${reply_to}:`, error);
+        console.error(`[WAHA] Failed to fetch external_id for reply_to ${cleanReplyTo}:`, error);
       }
     }
     
@@ -1761,7 +1763,7 @@ export function registerWAHARoutes(app: Express) {
         kind: kind === "image" ? "image" : kind === "audio" ? "audio" : kind === "video" ? "video" : "document",
         mediaUrl, caption: caption ?? null, 
         quotedMessageId: finalQuotedMessageId, // external_id for WAHA
-        repliedMessageId: reply_to, // UUID for frontend
+        repliedMessageId: cleanReplyTo, // UUID for frontend
         fromUserId: (req as any).user?.id,
         draftId, // Pass the draft ID
       });

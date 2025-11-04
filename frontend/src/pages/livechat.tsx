@@ -328,6 +328,40 @@ export default function LiveChatPage() {
     }
   }, [API, patchChatLocal, normalizeChat, updateChatSnapshots]);
 
+  // Mark chat as read (send read receipts)
+  const markChatAsRead = useCallback(async (chatId: string) => {
+    console.log("[READ_RECEIPTS][markChatAsRead] Marking chat as read", { chatId });
+    try {
+      const res = await fetch(`${API}/livechat/chats/${chatId}/mark-read`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        console.warn("[READ_RECEIPTS][markChatAsRead] Failed to mark chat as read", {
+          chatId,
+          error: json?.error || res.statusText,
+        });
+        // Don't throw error - marking as read should not block chat opening
+        return;
+      }
+      const data = await res.json();
+      console.log("[READ_RECEIPTS][markChatAsRead] Chat marked as read successfully", {
+        chatId,
+        markedCount: data?.markedCount,
+      });
+      // Optimistically update local unread_count to 0
+      patchChatLocal(chatId, { unread_count: 0 } as any);
+    } catch (error) {
+      console.error("[READ_RECEIPTS][markChatAsRead] Unexpected error", {
+        chatId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Don't throw error - marking as read should not block chat opening
+    }
+  }, [API, patchChatLocal]);
+
   const filteredChats = useMemo(() => {
     return chats.filter((chat) => (chatScope === "groups" ? isGroupChat(chat) : !isGroupChat(chat)));
   }, [chats, chatScope, isGroupChat]);
@@ -696,6 +730,9 @@ export default function LiveChatPage() {
     }
     if (currentChat?.id && currentChatIdRef.current !== currentChat.id) {
       socketRef.current?.emit("join", { chatId: currentChat.id });
+      
+      // Mark chat as read when opening it
+      markChatAsRead(currentChat.id);
     }
     setSelectedChat((prev) => {
       if (prev && prev.id === currentChat.id) {
@@ -714,7 +751,7 @@ export default function LiveChatPage() {
         note: currentChat.note ?? null,
       };
     });
-  }, [currentChat]);
+  }, [currentChat, markChatAsRead]);
   useEffect(() => {
     if (!currentChat?.id) {
       return;
@@ -1008,6 +1045,8 @@ const scrollToBottom = useCallback(
       sender_id: raw.sender_id,
       sender_name: raw.sender_name,
       sender_avatar_url: raw.sender_avatar_url,
+      replied_message_id: raw.replied_message_id,
+      replied_message_external_id: raw.replied_message_external_id,
     });
     
     const deliveryStatus =
@@ -1051,6 +1090,7 @@ const scrollToBottom = useCallback(
       sender_id: normalized.sender_id,
       sender_name: normalized.sender_name,
       sender_avatar_url: normalized.sender_avatar_url,
+      replied_message_id: normalized.replied_message_id,
     });
     
     return normalized;
@@ -1101,7 +1141,13 @@ const scrollToBottom = useCallback(
       let updated: Message[];
       if (index >= 0) {
         const previous = existing[index];
-        const merged = { ...previous, ...normalized };
+        // Preserve replied_message_id if normalized doesn't have it but previous does
+        const merged = { 
+          ...previous, 
+          ...normalized,
+          // Don't overwrite replied_message_id with null/undefined if previous had a value
+          replied_message_id: normalized.replied_message_id ?? previous.replied_message_id ?? null,
+        };
         const clone = [...existing];
         clone[index] = merged;
         if (
@@ -1258,7 +1304,7 @@ const scrollToBottom = useCallback(
   );
 
   const createDraftMessage = useCallback(
-    (chat: Chat, content: string, type: string = "TEXT") => {
+    (chat: Chat, content: string, quotedMessage?: Message | null, type: string = "TEXT") => {
       const draftId = generateDraftId();
       const createdAt = new Date().toISOString();
       draftsRef.current.set(draftId, {
@@ -1283,6 +1329,7 @@ const scrollToBottom = useCallback(
         is_private: false,
         client_draft_id: draftId,
         error_reason: null,
+        replied_message_id: quotedMessage?.id || null, // Add replied message ID
       } as Message);
       return { draftId, createdAt };
     },
@@ -1987,7 +2034,10 @@ const scrollToBottom = useCallback(
         (inboxes.find((inbox) => inbox.id === chat.inbox_id)?.provider || "").toUpperCase();
       const isWaha = providerId === "WAHA";
 
-      const { draftId, createdAt } = createDraftMessage(chat, trimmed);
+      // Find the quoted message to include in draft
+      const quotedMsg = replyToMsgId ? messages.find(m => m.id === replyToMsgId) : null;
+
+      const { draftId, createdAt } = createDraftMessage(chat, trimmed, quotedMsg);
       const sendStartedAt = performance.now();
       trackMessageLatency(draftId, sendStartedAt);
       bumpChatToTop({
@@ -2160,6 +2210,11 @@ const scrollToBottom = useCallback(
     if (!currentChat) return;
     const formData = new FormData();
     formData.set("file", file, file.name);
+    // Include reply_to if user is replying to a message
+    const quotedMsg = replyingTo;
+    if (replyingTo?.id) {
+      formData.set("reply_to", replyingTo.id);
+    }
 
     try {
       const response = await fetch(`${API}/livechat/chats/${currentChat.id}/messages/media`, {
@@ -2168,19 +2223,20 @@ const scrollToBottom = useCallback(
         credentials: "include",
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.inserted) {
+      // Support multiple backend response shapes: {inserted}, {ok, data}, or the mapped object itself
+      const inserted = (payload?.inserted ?? payload?.data ?? (response.ok ? payload : null)) as any;
+      if (!response.ok || !inserted) {
         if ((payload as any)?.error === "mime_not_allowed") {
           alert(`Esse formato (${(payload as any)?.mimetype || "desconhecido"}) nao e suportado pelo WhatsApp. Tente outro navegador (OGG/AAC).`);
         }
         throw new Error((payload as any)?.error || "upload_failed");
       }
-      const inserted = payload.inserted as any;
 
       appendMessageToCache({
         id: inserted.id,
         chat_id: inserted.chat_id ?? currentChat.id,
-        body: inserted.content ?? file.name,
-        content: inserted.content ?? file.name,
+        body: inserted.body ?? inserted.content ?? file.name,
+        content: inserted.content ?? inserted.body ?? file.name,
         media_url: inserted.media_url ?? null,
         sender_type: "AGENT",
         sender_id: inserted.sender_id ?? null,
@@ -2191,6 +2247,7 @@ const scrollToBottom = useCallback(
         type: inserted.type ?? "DOCUMENT",
         is_private: false,
         delivery_status: "SENT",
+        replied_message_id: quotedMsg?.id || inserted.replied_message_id || null,
       });
       bumpChatToTop({
         chatId: inserted.chat_id ?? currentChat.id,
@@ -2201,7 +2258,9 @@ const scrollToBottom = useCallback(
         last_message_media_url: inserted.media_url ?? null,
       });
       // Mantem lista consistente sem recarregar.
-      scrollToBottom();
+  // Clear reply state after successful upload of a reply
+  setReplyingTo(null);
+  scrollToBottom();
     } catch (err) {
       console.error("Falha ao enviar arquivo", err);
     }
@@ -2601,6 +2660,8 @@ const scrollToBottom = useCallback(
                     showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
                     onRetry={retryFailedMessage}
                     onReply={() => setReplyingTo(m)}
+                    allMessages={messages}
+                    customerName={currentChat?.customer_name || currentChat?.display_name || null}
                   />
                 ))}
 
@@ -2771,6 +2832,8 @@ const scrollToBottom = useCallback(
                       mediaItems={mediaItems}
                       mediaIndex={mediaIndexById.get(m.id) ?? undefined}
                       onRetry={retryFailedMessage}
+                      allMessages={messages}
+                      customerName={currentChat?.customer_name || currentChat?.display_name || null}
                     />
                   ))}
               </div>

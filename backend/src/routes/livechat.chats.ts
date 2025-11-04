@@ -85,7 +85,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
     const { data, error } = await supabaseAdmin
       .from("chat_messages")
       .select(
-        "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+        "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id",
       )
       .eq("chat_id", chatId)
       .order("created_at", { ascending: false })
@@ -941,6 +941,24 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const nowIso = new Date().toISOString();
       const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
 
+      // Resolve external_id if replying
+      let repliedMessageExternalId: string | null = null;
+      if (reply_to) {
+        try {
+          const { data: originalMsg } = await supabaseAdmin
+            .from("chat_messages")
+            .select("external_id")
+            .eq("id", reply_to)
+            .maybeSingle();
+          if (originalMsg?.external_id) {
+            repliedMessageExternalId = String(originalMsg.external_id);
+            console.log("[POST /livechat/messages] Resolved reply external_id:", repliedMessageExternalId);
+          }
+        } catch (e) {
+          console.warn("[POST /livechat/messages] Failed to resolve reply external_id:", e);
+        }
+      }
+
       const { data: inserted, error: insErr } = await supabaseAdmin
         .from("chat_messages")
         .insert([
@@ -954,11 +972,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
             sender_avatar_url: senderAvatarUrl,
             created_at: nowIso,
             view_status: "Pending",
-            reply_to_message_id: reply_to && typeof reply_to === "string" ? reply_to : null,
+            replied_message_id: reply_to || null, // Save UUID for frontend
+            replied_message_external_id: repliedMessageExternalId, // Save external_id for WAHA
           },
         ])
         .select(
-          "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type",
+          "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type, replied_message_id, replied_message_external_id",
         )
         .single();
       
@@ -967,6 +986,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         sender_id: inserted?.sender_id,
         sender_name: (inserted as any)?.sender_name,
         sender_avatar_url: (inserted as any)?.sender_avatar_url,
+        replied_message_id: (inserted as any)?.replied_message_id,
+        replied_message_external_id: (inserted as any)?.replied_message_external_id,
+        reply_to_received: reply_to,
         insertError: insErr,
       });
       
@@ -1010,6 +1032,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           view_status: inserted.view_status || "Pending",
           type: inserted.type || "TEXT",
           is_private: false,
+          replied_message_id: (inserted as any)?.replied_message_id || null,
         };
         
         console.log("[POST /livechat/messages] 📡 Socket emit message:new:", {
@@ -1024,13 +1047,18 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       if (isWahaProvider) {
         const safeCompanyId = companyId as string;
+
         const payload: Record<string, any> = {
           type: "text",
           content: String(text),
           draftId: inserted.id,
         };
         if (wahaRecipient) payload.to = wahaRecipient;
-        if (reply_to) payload.quotedMessageId = reply_to;
+        if (repliedMessageExternalId) {
+          payload.quotedMessageId = repliedMessageExternalId;
+          console.log("[POST /livechat/messages] Sending WAHA with quotedMessageId:", repliedMessageExternalId);
+        }
+        
         await publish(EX_APP, "outbound.request", {
           jobType: "outbound.request",
           provider: WAHA_PROVIDER,
@@ -1339,7 +1367,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           let query = supabaseAdmin
             .from("chat_messages")
             .select(
-              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, media_storage_path, media_public_url, is_media_sensitive, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, media_storage_path, media_public_url, is_media_sensitive, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id",
             )
             .eq("chat_id", id)
             .order("created_at", { ascending: false })
@@ -1386,6 +1414,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
 
       const pubRowsDesc = (pubResp.data || []) as any[];
+      
+      // Debug: Log messages query results
+      console.log(`[livechat/messages] Query returned ${pubRowsDesc.length} messages for chat ${id}`, {
+        messageIds: pubRowsDesc.slice(0, 5).map(r => ({ id: r.id, content: r.content?.substring(0, 30), sender_id: r.sender_id, replied_message_id: r.replied_message_id }))
+      });
+      
       const mappedPubAsc = [...pubRowsDesc]
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .map((row: any) => ({
@@ -1907,9 +1941,27 @@ export function registerLivechatChatRoutes(app: express.Application) {
             ? "AUDIO"
             : "FILE";
 
+      // Resolve external_id if replying
+      let repliedMessageExternalId: string | null = null;
+      if (reply_to) {
+        try {
+          const { data: originalMsg } = await supabaseAdmin
+            .from("chat_messages")
+            .select("external_id")
+            .eq("id", reply_to)
+            .maybeSingle();
+          if (originalMsg?.external_id) {
+            repliedMessageExternalId = String(originalMsg.external_id);
+            console.log("[MEDIA UPLOAD] Resolved reply external_id:", repliedMessageExternalId);
+          }
+        } catch (e) {
+          console.warn("[MEDIA UPLOAD] Failed to resolve reply external_id:", e);
+        }
+      }
+
       const { data: inserted, error: insErr } = await supabaseAdmin
         .from("chat_messages")
-        .insert([{ 
+        .insert([{
           chat_id: chatId,
           content: String(filename),
           type: kind,
@@ -1922,9 +1974,10 @@ export function registerLivechatChatRoutes(app: express.Application) {
           media_public_url: publicUrl,
           media_storage_path: up?.path ?? null,
           is_media_sensitive: false,
-          reply_to_message_id: reply_to && typeof reply_to === "string" ? reply_to : null,
+          replied_message_id: reply_to || null, // Save UUID for frontend
+          replied_message_external_id: repliedMessageExternalId, // Save external_id for WAHA
         }])
-        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
+        .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type, replied_message_id, replied_message_external_id")
         .single();
       if (insErr) return res.status(500).json({ error: insErr.message });
 
@@ -1955,6 +2008,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
         view_status: inserted.view_status || "Pending",
         type: inserted.type || kind,
         is_private: false,
+        media_url: publicUrl,
+        replied_message_id: (inserted as any)?.replied_message_id || null,
       };
       const io = getIO();
       io?.to(`chat:${chatId}`).emit("message:new", mapped);
@@ -1980,6 +2035,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
 
         const mediaKind = kind === "AUDIO" ? "audio" : kind === "IMAGE" ? "image" : kind === "VIDEO" ? "video" : "document";
+        
         const payload: any = {
           type: "media",
           kind: mediaKind,
@@ -1989,7 +2045,10 @@ export function registerLivechatChatRoutes(app: express.Application) {
           draftId: inserted.id,
         };
         if (wahaRecipient) payload.to = wahaRecipient;
-        if (reply_to) payload.quotedMessageId = reply_to;
+        if (repliedMessageExternalId) {
+          payload.quotedMessageId = repliedMessageExternalId;
+          console.log("[MEDIA UPLOAD] Sending WAHA with quotedMessageId:", repliedMessageExternalId);
+        }
 
         await publish(EX_APP, "outbound.request", {
           jobType: "outbound.request",
@@ -2236,6 +2295,128 @@ export function registerLivechatChatRoutes(app: express.Application) {
       return res.json(list);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "participants error" });
+    }
+  });
+
+  // -------- Mark Chat as Read (Provider-Agnostic) --------
+  app.post("/livechat/chats/:id/mark-read", requireAuth, async (req: any, res) => {
+    try {
+      const { id: chatId } = req.params as { id: string };
+      console.log("[READ_RECEIPTS][livechat/mark-read] Marking chat as read (provider-agnostic)", { chatId });
+
+      // 1. Get chat details to determine provider
+      const { data: chat, error: chatError } = await supabaseAdmin
+        .from("chats")
+        .select("id, inbox_id")
+        .eq("id", chatId)
+        .maybeSingle();
+
+      if (chatError) {
+        console.error("[READ_RECEIPTS][livechat/mark-read] Chat query error", {
+          chatId,
+          error: chatError.message,
+        });
+        return res.status(500).json({ ok: false, error: chatError.message });
+      }
+
+      if (!chat) {
+        console.warn("[READ_RECEIPTS][livechat/mark-read] Chat not found", { chatId });
+        return res.status(404).json({ ok: false, error: "Chat not found" });
+      }
+
+      // 2. Get inbox provider
+      const { data: inbox, error: inboxError } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider")
+        .eq("id", chat.inbox_id)
+        .maybeSingle();
+
+      if (inboxError || !inbox) {
+        console.error("[READ_RECEIPTS][livechat/mark-read] Inbox query error", {
+          inboxId: chat.inbox_id,
+          error: inboxError?.message || "Inbox not found",
+        });
+        return res.status(500).json({ ok: false, error: "Inbox not found" });
+      }
+
+      const provider = String(inbox.provider || "").toUpperCase();
+      console.log("[READ_RECEIPTS][livechat/mark-read] Provider determined", {
+        chatId,
+        inboxId: inbox.id,
+        provider,
+      });
+
+      // 3. Delegate to provider-specific endpoint
+      if (provider === "WAHA") {
+        // Call /waha/chats/:chatId/mark-read
+        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 8080}`;
+        const wahaUrl = `${baseUrl}/waha/chats/${chatId}/mark-read`;
+        
+        console.log("[READ_RECEIPTS][livechat/mark-read] Delegating to WAHA endpoint", {
+          chatId,
+          wahaUrl,
+        });
+
+        try {
+          const response = await fetch(wahaUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: req.headers.authorization || "",
+            },
+          });
+
+          const result = await response.json();
+          
+          if (!response.ok) {
+            console.error("[READ_RECEIPTS][livechat/mark-read] WAHA endpoint error", {
+              chatId,
+              status: response.status,
+              result,
+            });
+            return res.status(response.status).json(result);
+          }
+
+          console.log("[READ_RECEIPTS][livechat/mark-read] WAHA endpoint success", {
+            chatId,
+            result,
+          });
+
+          // Emit socket event for other agents to sync
+          const io = getIO();
+          io.emit("chat:read", {
+            chatId,
+            inboxId: chat.inbox_id,
+            timestamp: new Date().toISOString(),
+          });
+
+          return res.json(result);
+        } catch (fetchError) {
+          console.error("[READ_RECEIPTS][livechat/mark-read] Failed to call WAHA endpoint", {
+            chatId,
+            error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+          });
+          return res.status(500).json({ ok: false, error: "Failed to delegate to provider" });
+        }
+      } else if (provider === "META") {
+        // META provider - placeholder for future implementation
+        console.warn("[READ_RECEIPTS][livechat/mark-read] META provider not yet implemented", {
+          chatId,
+        });
+        return res.status(501).json({ ok: false, error: "META provider not yet implemented" });
+      } else {
+        console.warn("[READ_RECEIPTS][livechat/mark-read] Unknown provider", {
+          chatId,
+          provider,
+        });
+        return res.status(400).json({ ok: false, error: `Unknown provider: ${provider}` });
+      }
+    } catch (error) {
+      console.error("[READ_RECEIPTS][livechat/mark-read] Unexpected error", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return res.status(500).json({ ok: false, error: "Internal server error" });
     }
   });
 }

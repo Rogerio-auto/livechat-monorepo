@@ -92,6 +92,31 @@ async function loadWahaInboxBySession(session: string): Promise<InboxLookupRow |
   return data;
 }
 
+async function getWahaInboxConfig(inboxId: string): Promise<{ session: string; apiKey: string }> {
+  const creds = await getDecryptedCredsForInbox(inboxId);
+  if ((creds.provider || "").toUpperCase() !== WAHA_PROVIDER) {
+    throw new Error("Inbox nao eh WAHA");
+  }
+
+  const row = await db.oneOrNone<{ instance_id: string | null; phone_number_id: string | null }>(
+    `select instance_id, phone_number_id from public.inboxes where id = $1`,
+    [inboxId],
+  );
+  if (!row) throw new Error("Inbox WAHA nao encontrada");
+
+  const session = String(row.instance_id || row.phone_number_id || creds.phone_number_id || "").trim();
+  if (!session) {
+    throw new Error("Inbox WAHA sem instance_id configurado");
+  }
+
+  const apiKey = String(creds.access_token || "").trim();
+  if (!apiKey) {
+    throw new Error("Inbox WAHA sem API key configurado");
+  }
+
+  return { session, apiKey };
+}
+
 // ====== Zod Schemas ======
 const SendTextSchema = z.object({
   session: z.string().default("default"),
@@ -165,7 +190,9 @@ async function persistDraftMessage(params: {
   content?: string | null;
   mediaUrl?: string | null;
   caption?: string | null;
-  quotedMessageId?: string | null;
+  quotedMessageId?: string | null; // external_id for WAHA
+  repliedMessageId?: string | null; // UUID for frontend
+  draftId?: string; // Accept pre-generated draft ID
 }) {
   console.log("[WAHA] persistDraftMessage called:", {
     chatId: params.chatId,
@@ -210,6 +237,7 @@ async function persistDraftMessage(params: {
   });
 
   const baseRecord: Record<string, unknown> = {
+    id: params.draftId, // Use provided draft ID if available
     company_id: params.companyId,
     chat_id: params.chatId ?? null,
     inbox_id: params.inboxId,
@@ -222,17 +250,48 @@ async function persistDraftMessage(params: {
     content: params.content ?? null,
     media_url: params.mediaUrl ?? null,
     caption: params.caption ?? null,
-    // quoted_message_id: params.quotedMessageId ?? null, // Column doesn't exist
+    type: params.kind.toUpperCase(), // Set type based on kind
+    view_status: "Pending",
+    replied_message_id: params.repliedMessageId ?? null, // UUID for frontend
+    replied_message_external_id: params.quotedMessageId ?? null, // external_id for WAHA
+    // Don't set external_id here - let worker set it
     // status: "DRAFT", // Column doesn't exist
   };
   if (!draftKindColumnMissing) {
     baseRecord.kind = params.kind;
   }
 
-  const attemptInsert = async (record: Record<string, unknown>) =>
-    await supabaseAdmin.from("chat_messages").insert([record]).select().maybeSingle();
+  // Use INSERT ... ON CONFLICT DO UPDATE with coalesce to preserve external_id
+  // This prevents race condition where persistDraftMessage overwrites worker's external_id
+  const attemptUpsert = async (record: Record<string, unknown>) => {
+    const { data, error } = await supabaseAdmin
+      .from("chat_messages")
+      .insert([record])
+      .select()
+      .maybeSingle();
+    
+    // If conflict on id (worker already created it), update with coalesce
+    if (error?.code === '23505' && error?.message?.includes('chat_messages_pkey')) {
+      // Worker already inserted - update but preserve external_id and reply fields
+      const { data: updated, error: updateError } = await supabaseAdmin
+        .from("chat_messages")
+        .update({
+          content: record.content,
+          sender_id: record.sender_id,
+          sender_name: record.sender_name,
+          sender_avatar_url: record.sender_avatar_url,
+          // Don't update external_id, replied_message_id, or replied_message_external_id - preserve what was set
+        })
+        .eq('id', record.id)
+        .select()
+        .maybeSingle();
+      return { data: updated, error: updateError };
+    }
+    
+    return { data, error };
+  };
 
-  let result = await attemptInsert(baseRecord);
+  let result = await attemptUpsert(baseRecord);
 
   if (result.error) {
     const message = String(result.error.message || "");
@@ -244,7 +303,7 @@ async function persistDraftMessage(params: {
       console.warn("[WAHA] persistDraftMessage kind column missing. Retrying without it.");
       const fallbackRecord = { ...baseRecord };
       delete fallbackRecord.kind;
-      result = await attemptInsert(fallbackRecord);
+      result = await attemptUpsert(fallbackRecord);
       
       if (result.error) {
         console.error("[WAHA] persistDraftMessage RETRY FAILED:", {
@@ -1593,11 +1652,17 @@ export function registerWAHARoutes(app: Express) {
         return res.status(400).json({ error: "Inbox não é WAHA ou não encontrada." });
       }
 
+      // Generate draft ID first to avoid race conditions
+      const draftId = clientDraftId || randomUUID();
+
       const draft = await persistDraftMessage({
         companyId, chatId: chatId ?? null, inboxId, to,
-        kind: "text", content, quotedMessageId: finalQuotedMessageId, fromUserId: (req as any).user?.id,
+        kind: "text", content, 
+        quotedMessageId: finalQuotedMessageId, // external_id for WAHA
+        repliedMessageId: reply_to, // UUID for frontend
+        fromUserId: (req as any).user?.id,
+        draftId, // Pass the draft ID
       });
-      const draftId = draft?.id || clientDraftId || randomUUID();
       const senderId = draft?.sender_id || null;
 
       const payload: Record<string, unknown> = {
@@ -1688,12 +1753,18 @@ export function registerWAHARoutes(app: Express) {
         return res.status(400).json({ error: "Inbox não é WAHA ou não encontrada." });
       }
 
+      // Generate draft ID first to avoid race conditions
+      const draftId = clientDraftId || randomUUID();
+
       const draft = await persistDraftMessage({
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: kind === "image" ? "image" : kind === "audio" ? "audio" : kind === "video" ? "video" : "document",
-        mediaUrl, caption: caption ?? null, quotedMessageId: finalQuotedMessageId, fromUserId: (req as any).user?.id,
+        mediaUrl, caption: caption ?? null, 
+        quotedMessageId: finalQuotedMessageId, // external_id for WAHA
+        repliedMessageId: reply_to, // UUID for frontend
+        fromUserId: (req as any).user?.id,
+        draftId, // Pass the draft ID
       });
-      const draftId = draft?.id || clientDraftId || randomUUID();
       const senderId = draft?.sender_id || null;
 
       await publish(EX_APP, "outbound.request", {
@@ -1796,6 +1867,178 @@ export function registerWAHARoutes(app: Express) {
     } catch (e) {
       console.error("[WAHA] /webhook failed:", e);
       res.status(500).json({ error: "Webhook handling error" });
+    }
+  });
+
+  // -------- Mark Chat as Read --------
+  router.post("/chats/:chatId/mark-read", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { chatId } = req.params;
+      console.log("[READ_RECEIPTS][mark-read] Marking chat as read", { chatId });
+
+      // 1. Get chat details to determine external_id (phone number)
+      const { data: chat, error: chatError } = await supabaseAdmin
+        .from("chats")
+        .select("id, inbox_id, external_id, customer_id")
+        .eq("id", chatId)
+        .maybeSingle();
+
+      if (chatError) {
+        console.error("[READ_RECEIPTS][mark-read] Chat query error", {
+          chatId,
+          error: chatError.message,
+        });
+        return res.status(500).json({ ok: false, error: chatError.message });
+      }
+
+      if (!chat) {
+        console.warn("[READ_RECEIPTS][mark-read] Chat not found", { chatId });
+        return res.status(404).json({ ok: false, error: "Chat not found" });
+      }
+
+      // 2. Get customer phone if external_id is not available
+      let remoteChatId = chat.external_id;
+      if (!remoteChatId && chat.customer_id) {
+        const { data: customer } = await supabaseAdmin
+          .from("customers")
+          .select("phone")
+          .eq("id", chat.customer_id)
+          .maybeSingle();
+        remoteChatId = customer?.phone || null;
+      }
+
+      if (!remoteChatId) {
+        console.warn("[READ_RECEIPTS][mark-read] Could not resolve remote chat ID", { chatId });
+        return res.status(400).json({ ok: false, error: "Could not resolve remote chat ID" });
+      }
+
+      // Ensure proper WAHA format (add @c.us suffix if needed)
+      if (!remoteChatId.includes("@")) {
+        remoteChatId = `${remoteChatId}@c.us`;
+      }
+
+      console.log("[READ_RECEIPTS][mark-read] Remote chat ID resolved", {
+        chatId,
+        remoteChatId,
+      });
+
+      // 3. Query unread messages from customer (is_from_customer=true, view_status != 'Read')
+      const { data: unreadMessages, error: messagesError } = await supabaseAdmin
+        .from("chat_messages")
+        .select("id, external_id")
+        .eq("chat_id", chatId)
+        .eq("is_from_customer", true)
+        .neq("view_status", "read")
+        .order("created_at", { ascending: false });
+
+      if (messagesError) {
+        console.error("[READ_RECEIPTS][mark-read] Messages query error", {
+          chatId,
+          error: messagesError.message,
+        });
+        return res.status(500).json({ ok: false, error: messagesError.message });
+      }
+
+      console.log("[READ_RECEIPTS][mark-read] Found unread messages", {
+        chatId,
+        count: unreadMessages?.length || 0,
+      });
+
+      if (!unreadMessages || unreadMessages.length === 0) {
+        console.log("[READ_RECEIPTS][mark-read] No unread messages to mark", { chatId });
+        return res.json({ ok: true, markedCount: 0, messageIds: [] });
+      }
+
+      // 4. Get WAHA credentials
+      const { session, apiKey } = await getWahaInboxConfig(chat.inbox_id);
+
+      // 5. Call WAHA API to mark messages as read
+      // WAHA API: POST /api/{session}/chats/{chatId}/messages/read?messages=30
+      const messagesParam = Math.min(unreadMessages.length, 30); // WAHA typically limits to recent messages
+      try {
+        await wahaFetch(`/api/${session}/chats/${encodeURIComponent(remoteChatId)}/messages/read?messages=${messagesParam}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Api-Key": apiKey,
+            Authorization: `Bearer ${apiKey}`,
+          },
+        });
+
+        console.log("[READ_RECEIPTS][mark-read] WAHA API call successful", {
+          chatId,
+          remoteChatId,
+          messagesParam,
+        });
+      } catch (wahaError) {
+        console.error("[READ_RECEIPTS][mark-read] WAHA API call failed", {
+          chatId,
+          remoteChatId,
+          error: wahaError instanceof Error ? wahaError.message : String(wahaError),
+        });
+        // Continue to update DB even if WAHA call fails
+      }
+
+      // 6. Update DB: SET view_status='read' for those messages
+      const messageIds = unreadMessages.map((m) => m.id);
+      const { error: updateError } = await supabaseAdmin
+        .from("chat_messages")
+        .update({ view_status: "read", updated_at: new Date().toISOString() })
+        .in("id", messageIds);
+
+      if (updateError) {
+        console.error("[READ_RECEIPTS][mark-read] DB update error", {
+          chatId,
+          error: updateError.message,
+        });
+        return res.status(500).json({ ok: false, error: updateError.message });
+      }
+
+      console.log("[READ_RECEIPTS][mark-read] Messages marked as read in DB", {
+        chatId,
+        messageIds,
+      });
+
+      // 7. Update chats.unread_count = 0
+      const { error: chatUpdateError } = await supabaseAdmin
+        .from("chats")
+        .update({ unread_count: 0, updated_at: new Date().toISOString() })
+        .eq("id", chatId);
+
+      if (chatUpdateError) {
+        console.warn("[READ_RECEIPTS][mark-read] Chat unread_count update error", {
+          chatId,
+          error: chatUpdateError.message,
+        });
+      }
+
+      console.log("[READ_RECEIPTS][mark-read] Chat unread_count reset", { chatId });
+
+      // 8. Emit socket event for real-time sync
+      const io = getIO();
+      for (const msg of unreadMessages) {
+        io.to(`chat:${chatId}`).emit("message:status", {
+          kind: "livechat.message.status",
+          chatId,
+          messageId: msg.id,
+          externalId: msg.external_id,
+          view_status: "read",
+          status: "READ",
+        });
+      }
+
+      console.log("[READ_RECEIPTS][mark-read] Socket events emitted", {
+        chatId,
+        count: unreadMessages.length,
+      });
+
+      return res.json({ ok: true, markedCount: unreadMessages.length, messageIds });
+    } catch (error) {
+      console.error("[READ_RECEIPTS][mark-read] Unexpected error", {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      return res.status(500).json({ ok: false, error: "Internal server error" });
     }
   });
 

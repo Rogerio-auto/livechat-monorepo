@@ -2352,14 +2352,62 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
   }
   const status = mapWahaAckToViewStatus(payload?.ack);
   if (!status) return;
+
+  console.log("[READ_RECEIPTS][handleWahaAck] Processing message ack", {
+    inboxId: job.inboxId,
+    externalId: messageId,
+    ackCode: payload?.ack,
+    mappedStatus: status,
+  });
+
   const statusUpdate = await updateMessageStatusByExternalId({
     inboxId: job.inboxId,
     externalId: messageId,
     viewStatus: status,
   });
+  
   if (statusUpdate) {
     const normalizedStatus =
       typeof statusUpdate.viewStatus === "string" ? statusUpdate.viewStatus.toUpperCase() : null;
+    
+    console.log("[READ_RECEIPTS][handleWahaAck] Message status updated", {
+      chatId: statusUpdate.chatId,
+      messageId: statusUpdate.messageId,
+      externalId: messageId,
+      viewStatus: statusUpdate.viewStatus,
+      normalizedStatus,
+    });
+
+    // If message is now marked as "read", decrement unread_count
+    if (normalizedStatus === "READ") {
+      try {
+        console.log("[READ_RECEIPTS][handleWahaAck] Message marked as READ, updating chat unread_count", {
+          chatId: statusUpdate.chatId,
+        });
+
+        // Decrement unread_count (ensure it doesn't go below 0)
+        await db.none(
+          `UPDATE public.chats
+           SET unread_count = GREATEST(0, COALESCE(unread_count, 0) - 1),
+               updated_at = now()
+           WHERE id = $1`,
+          [statusUpdate.chatId]
+        );
+
+        console.log("[READ_RECEIPTS][handleWahaAck] Chat unread_count decremented successfully", {
+          chatId: statusUpdate.chatId,
+        });
+
+        // Invalidate chat cache
+        await invalidateChatCaches(statusUpdate.chatId, { inboxId: job.inboxId });
+      } catch (error) {
+        console.error("[READ_RECEIPTS][handleWahaAck] Failed to update unread_count", {
+          chatId: statusUpdate.chatId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId: statusUpdate.chatId,
@@ -2370,6 +2418,18 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
       status: normalizedStatus,
       draftId: job?.draftId ?? payload?.draftId ?? null,
       reason: null,
+    });
+
+    console.log("[READ_RECEIPTS][handleWahaAck] Socket event published", {
+      chatId: statusUpdate.chatId,
+      messageId: statusUpdate.messageId,
+      status: normalizedStatus,
+    });
+  } else {
+    console.warn("[READ_RECEIPTS][handleWahaAck] No status update returned", {
+      inboxId: job.inboxId,
+      externalId: messageId,
+      status,
     });
   }
 }
@@ -2436,7 +2496,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       session,
       chatId: remoteChatId,
       caption: payload?.caption ?? undefined,
-      quotedMessageId: payload?.quotedMessageId ?? undefined,
+      reply_to: payload?.quotedMessageId ?? undefined, // WAHA API expects 'reply_to'
       file: {
         url: payload.mediaUrl,
         filename: payload?.filename ?? undefined,
@@ -2462,7 +2522,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       body.mentions = payload.mentions;
     }
     if (payload?.quotedMessageId) {
-      body.quotedMessageId = payload.quotedMessageId;
+      body.reply_to = payload.quotedMessageId; // WAHA API expects 'reply_to'
     }
 
     response = await wahaFetch("/api/sendText", {
@@ -2473,6 +2533,12 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   }
 
   const externalId = extractWahaMessageId(response);
+  console.log("[WAHA OUTBOUND] Extracted external_id from WAHA response:", { 
+    externalId, 
+    messageId: payload?.draftId || job?.messageId,
+    hasResponse: !!response 
+  });
+  
   const contentForChat =
     messageType === "media"
       ? payload?.caption || `[${String(payload?.kind || "MEDIA").toUpperCase()}]`
@@ -2548,6 +2614,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     console.log("[worker][WAHA] insertOutboundMessage result:", {
       operation: upsert?.operation,
       messageId: upsert?.message?.id,
+      external_id_saved: upsert?.message?.external_id,
+      content: upsert?.message?.content?.substring(0, 50),
       sender_id: upsert?.message?.sender_id,
       sender_name: upsert?.message?.sender_name,
       sender_avatar_url: upsert?.message?.sender_avatar_url,
@@ -2633,6 +2701,9 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       type: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
       is_private: false,
       media_url: buildProxyUrl(messageRow.media_url) ?? null,
+      // Preserve reply linkage so frontend can render quoted preview
+      replied_message_id: (messageRow as any).replied_message_id ?? null,
+      replied_message_external_id: (messageRow as any).replied_message_external_id ?? null,
       client_draft_id: job?.draftId ?? payload?.draftId ?? null,
     };
 

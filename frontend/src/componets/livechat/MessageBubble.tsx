@@ -21,6 +21,8 @@ type MessageBubbleProps = {
   showRemoteSenderInfo?: boolean;
   onRetry?: (message: Message) => void;
   onReply?: () => void;
+  allMessages?: Message[]; // Para buscar mensagem citada
+  customerName?: string | null; // Nome do contato/cliente do chat
 };
 
 export function MessageBubble({
@@ -31,6 +33,8 @@ export function MessageBubble({
   showRemoteSenderInfo = false,
   onRetry,
   onReply,
+  allMessages = [],
+  customerName = null,
 }: MessageBubbleProps) {
   const deliveryStatusSource =
     typeof m.delivery_status === "string" && m.delivery_status
@@ -79,6 +83,30 @@ export function MessageBubble({
     const base = remoteDisplayName || "?";
     return base.slice(0, 2).toUpperCase();
   }, [remoteDisplayName]);
+
+  // Find quoted/replied message
+  const quotedMessage = useMemo(() => {
+    if (!m.replied_message_id || !allMessages.length) {
+      if (m.replied_message_id) {
+        console.log('[MessageBubble] replied_message_id present but no messages to search:', {
+          messageId: m.id,
+          replied_message_id: m.replied_message_id,
+          allMessagesCount: allMessages.length
+        });
+      }
+      return null;
+    }
+    // Backend now returns UUID in replied_message_id field
+    const found = allMessages.find(msg => msg.id === m.replied_message_id);
+    console.log('[MessageBubble] Searching for quoted message:', {
+      messageId: m.id,
+      replied_message_id: m.replied_message_id,
+      found: !!found,
+      foundId: found?.id,
+      allMessagesCount: allMessages.length
+    });
+    return found || null;
+  }, [m.replied_message_id, m.id, allMessages]);
 
   const fallbackLightboxItems = useMemo<MediaLightboxItem[]>(() => {
     if (!mediaUrl || !["IMAGE", "VIDEO", "DOCUMENT"].includes(messageType)) {
@@ -255,6 +283,22 @@ export function MessageBubble({
                   {m.sender_name}
                 </span>
               ) : null}
+            </div>
+          )}
+          {quotedMessage && (
+            <div className="mb-2 border-l-4 border-[var(--color-primary)] bg-black/10 px-3 py-2 rounded-r-lg">
+              <div className="text-[10px] font-semibold text-[var(--color-primary)] mb-1">
+                {quotedMessage.sender_name || 
+                 (quotedMessage.sender_type === "CUSTOMER" ? (customerName || "Cliente") : "Agente")}
+              </div>
+              <div className="text-[11px] text-[var(--color-text-muted)] line-clamp-2">
+                {quotedMessage.type === "IMAGE" && "📷 Imagem"}
+                {quotedMessage.type === "VIDEO" && "🎥 Vídeo"}
+                {quotedMessage.type === "AUDIO" && "🎤 Áudio"}
+                {quotedMessage.type === "DOCUMENT" && "📄 Documento"}
+                {quotedMessage.type === "FILE" && "📎 Arquivo"}
+                {(!quotedMessage.type || quotedMessage.type === "TEXT") && (quotedMessage.body || quotedMessage.content || "")}
+              </div>
             </div>
           )}
           <div className="text-[var(--color-text)]">{bubbleContent}</div>

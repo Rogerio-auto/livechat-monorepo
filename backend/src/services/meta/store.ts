@@ -1529,7 +1529,7 @@ export async function insertOutboundMessage(args: {
                 sender_avatar_url = coalesce($8, sender_avatar_url),
                 updated_at = now()
           where id = $1
-          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
+          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
         [
           args.messageId,
           args.content,
@@ -1560,7 +1560,7 @@ export async function insertOutboundMessage(args: {
                  sender_name = excluded.sender_name,
                  sender_avatar_url = excluded.sender_avatar_url,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
           [
             args.messageId,
             args.chatId,
@@ -1586,7 +1586,7 @@ export async function insertOutboundMessage(args: {
                  sender_name = excluded.sender_name,
                  sender_avatar_url = excluded.sender_avatar_url,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
           [
             args.chatId,
             senderId,

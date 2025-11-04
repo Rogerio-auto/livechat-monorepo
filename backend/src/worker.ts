@@ -37,7 +37,7 @@ import {
 } from "../src/services/meta/store.ts";
 import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
-import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails } from "../src/services/waha/client.ts";
+import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey } from "./services/buffer.ts";
 import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer } from "../src/lib/storage.ts";
@@ -1827,11 +1827,26 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         });
 
         // Download/read media to buffer
+        // If WAHA URL, include API key headers
+        let extraHeaders: Record<string, string> | undefined;
+        if (mediaSource === 'waha_url' && typeof mediaData === 'string' && mediaData.startsWith(WAHA_BASE_URL)) {
+          try {
+            const { apiKey } = await getWahaInboxConfig(job.inboxId);
+            extraHeaders = {
+              Authorization: `Bearer ${apiKey}`,
+              "X-Api-Key": apiKey,
+            };
+          } catch (e) {
+            console.warn('[WAHA][worker] could not resolve inbox apiKey for WAHA media download', e);
+          }
+        }
+
         const { buffer, mimeType: detectedMime } = await downloadMediaToBuffer({
           source: mediaSource === 'waha_file' ? 'file' : 
                   mediaSource === 'waha_url' ? 'url' : 'base64',
           data: mediaData,
-          mimeType
+          mimeType,
+          headers: extraHeaders,
         });
 
         // Upload to storage

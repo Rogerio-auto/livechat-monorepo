@@ -137,6 +137,7 @@ export async function downloadMediaToBuffer(args: {
   source: 'file' | 'url' | 'base64';
   data: string;
   mimeType?: string;
+  headers?: Record<string, string>;
 }): Promise<{ buffer: Buffer; mimeType: string }> {
   const fs = await import('node:fs/promises');
   const axios = (await import('axios')).default;
@@ -158,7 +159,8 @@ export async function downloadMediaToBuffer(args: {
       // Download HTTP/HTTPS
       const response = await axios.get(args.data, { 
         responseType: 'arraybuffer',
-        timeout: 30000 
+        timeout: 30000,
+        headers: args.headers || undefined,
       });
       buffer = Buffer.from(response.data);
       detectedMime = args.mimeType || response.headers['content-type'] || 'application/octet-stream';

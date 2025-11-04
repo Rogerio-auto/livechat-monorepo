@@ -1658,6 +1658,16 @@ async function checkIfInboxSensitive(inboxId: string): Promise<boolean> {
 async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Unwrap common WAHA envelope shapes
   const msg = payload?.data ?? payload?.message ?? payload;
+  
+  console.log('[WAHA][worker] 📥 Raw payload received:', {
+    hasPayloadData: !!payload?.data,
+    hasPayloadMessage: !!payload?.message,
+    msgKeys: msg ? Object.keys(msg).slice(0, 20) : [],
+    msgType: msg?.type,
+    msgHasMedia: msg?.hasMedia,
+    msgMediaKeys: msg?.media ? Object.keys(msg.media) : null,
+    fullPayload: JSON.stringify(payload).substring(0, 500) // Primeiros 500 chars
+  });
 
   const messageId = String(msg?.id || "");
   if (messageId) {
@@ -1730,6 +1740,18 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   // Normalize alternative shapes (file.data|url) into msg.media
   let mediaObj: any = msg?.media || null;
+  
+    console.log('[WAHA][worker] 📦 Media object extraction:', {
+      hasMsgMedia: !!msg?.media,
+      hasMsgFile: !!msg?.file,
+      hasMsgUrl: !!msg?.url,
+      msgMedia: msg?.media,
+      msgFile: msg?.file,
+      msgUrl: msg?.url,
+      msgFilename: msg?.filename,
+      msgMimetype: msg?.mimetype
+    });
+  
   if (!mediaObj && msg?.file) {
     // Outbound-style schema echoed back or custom webhook shape
     const f = msg.file;
@@ -1753,6 +1775,15 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   const hasMedia = Boolean(msg?.hasMedia || mediaObj);
   
+  console.log('[WAHA][worker] 🔍 Media detection:', {
+    hasMedia,
+    msgHasMedia: msg?.hasMedia,
+    hasMediaObj: !!mediaObj,
+    mediaObjKeys: mediaObj ? Object.keys(mediaObj) : [],
+    messageId,
+    chatJid
+  });
+  
   if (hasMedia) {
     const m = mediaObj || {};
     let mediaSource: 'waha_file' | 'waha_url' | 'waha_base64' | null = null;
@@ -1774,6 +1805,16 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       mediaData = m.base64;
       mimeType = String(mimeType).split(";")[0].trim() || "application/octet-stream";
     }
+    
+    console.log('[WAHA][worker] 🔍 Media source detection:', {
+      mediaSource,
+      hasFilePath: !!m.filePath,
+      hasFile: !!m.file,
+      hasUrl: !!m.url,
+      hasBase64: !!m.base64,
+      mimeType,
+      mediaDataPreview: mediaData ? mediaData.substring(0, 100) : null
+    });
 
     // Upload to Supabase Storage (normalização)
     if (mediaSource && mediaData) {

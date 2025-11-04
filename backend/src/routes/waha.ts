@@ -1613,18 +1613,34 @@ export function registerWAHARoutes(app: Express) {
       chatId: z.string().optional(),
       to: z.string().min(6),
       content: z.string().min(1),
-      quotedMessageId: z.string().optional(),
-      reply_to: z.string().optional().nullable(), // Accept reply_to from frontend
-      draftId: z.string().uuid().optional(),
+      quotedMessageId: z.string().optional().transform((v) => (typeof v === "string" && v.trim() ? v.trim() : undefined)),
+      reply_to: z.string().optional().nullable().transform((v) => (typeof v === "string" && v.trim() ? v.trim() : null)), // Accept reply_to from frontend and coerce empty -> null
+      draftId: z.string().optional().nullable(),
     }).safeParse(req.body);
-    if (!body.success) return res.status(400).json({ error: body.error.flatten() });
+    if (!body.success) {
+      try {
+        console.warn("[WAHA][sendText] Zod validation failed", {
+          payloadSample: {
+            inboxId: (req.body || {}).inboxId,
+            chatId: (req.body || {}).chatId,
+            to: (req.body || {}).to,
+            contentLen: typeof (req.body || {}).content === "string" ? (req.body || {}).content.length : null,
+            quotedMessageId: (req.body || {}).quotedMessageId,
+            reply_to: (req.body || {}).reply_to,
+            draftId: (req.body || {}).draftId,
+          },
+          issues: body.error.flatten(),
+        });
+      } catch {}
+      return res.status(400).json({ error: body.error.flatten() });
+    }
 
     const { inboxId, chatId, to, content, quotedMessageId, reply_to, draftId: clientDraftId } = body.data;
     // Use reply_to if quotedMessageId is not provided
     let finalQuotedMessageId = quotedMessageId || null;
     
     // If reply_to is provided (internal UUID) and not empty, fetch the external_id
-    const cleanReplyTo = reply_to && reply_to.trim() ? reply_to.trim() : null;
+  const cleanReplyTo = reply_to && typeof reply_to === "string" && reply_to.trim() ? reply_to.trim() : null;
     if (!finalQuotedMessageId && cleanReplyTo) {
       try {
         const { data: originalMsg } = await supabaseAdmin
@@ -1703,11 +1719,28 @@ export function registerWAHARoutes(app: Express) {
       kind: z.enum(["image","audio","video","document"]).default("image"),
       filename: z.string().optional(),
       mimeType: z.string().optional(),
-      quotedMessageId: z.string().optional(),
-      reply_to: z.string().optional().nullable(), // Accept reply_to from frontend
-      draftId: z.string().uuid().optional(),
+      quotedMessageId: z.string().optional().transform((v) => (typeof v === "string" && v.trim() ? v.trim() : undefined)),
+      reply_to: z.string().optional().nullable().transform((v) => (typeof v === "string" && v.trim() ? v.trim() : null)), // Accept reply_to and coerce empty -> null
+      draftId: z.string().optional().nullable(),
     }).safeParse(req.body);
-    if (!body.success) return res.status(400).json({ error: body.error.flatten() });
+    if (!body.success) {
+      try {
+        console.warn("[WAHA][sendMedia] Zod validation failed", {
+          payloadSample: {
+            inboxId: (req.body || {}).inboxId,
+            chatId: (req.body || {}).chatId,
+            to: (req.body || {}).to,
+            mediaUrl: (req.body || {}).mediaUrl,
+            captionLen: typeof (req.body || {}).caption === "string" ? (req.body || {}).caption.length : null,
+            quotedMessageId: (req.body || {}).quotedMessageId,
+            reply_to: (req.body || {}).reply_to,
+            draftId: (req.body || {}).draftId,
+          },
+          issues: body.error.flatten(),
+        });
+      } catch {}
+      return res.status(400).json({ error: body.error.flatten() });
+    }
 
     const {
       inboxId,
@@ -1726,7 +1759,7 @@ export function registerWAHARoutes(app: Express) {
     let finalQuotedMessageId = quotedMessageId || null;
     
     // If reply_to is provided (internal UUID) and not empty, fetch the external_id
-    const cleanReplyTo = reply_to && reply_to.trim() ? reply_to.trim() : null;
+  const cleanReplyTo = reply_to && typeof reply_to === "string" && reply_to.trim() ? reply_to.trim() : null;
     if (!finalQuotedMessageId && cleanReplyTo) {
       try {
         const { data: originalMsg } = await supabaseAdmin

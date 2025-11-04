@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { FiX } from "react-icons/fi";
 
 interface ReplyPreviewProps {
   message: {
@@ -29,10 +29,10 @@ export function ReplyPreview({ message, onCancel }: ReplyPreviewProps) {
       </div>
       <button
         onClick={onCancel}
-        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1"
+        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
         aria-label="Cancelar resposta"
       >
-        <X size={16} />
+        <FiX size={16} />
       </button>
     </div>
   );

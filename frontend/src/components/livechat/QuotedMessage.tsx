@@ -1,4 +1,4 @@
-import { Reply } from "lucide-react";
+import { FiCornerDownRight } from "react-icons/fi";
 
 interface QuotedMessageProps {
   message: {
@@ -22,7 +22,7 @@ export function QuotedMessage({ message, onClickQuote }: QuotedMessageProps) {
       onClick={onClickQuote}
     >
       <div className="flex items-start gap-1.5">
-        <Reply size={14} className="text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" />
+        <FiCornerDownRight size={14} className="text-gray-500 dark:text-gray-400 mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold text-gray-600 dark:text-gray-300">
             {message.sender_name || "Usuário"}

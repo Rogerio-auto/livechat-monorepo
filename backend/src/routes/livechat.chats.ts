@@ -1305,7 +1305,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
           endTimer({ cache: "HIT-304", key: cacheKey, queries: queryLog });
           return;
         }
-        res.json(responseItems);
+        
+        // ✅ Apply media URL transformation even for cached messages
+        const transformedCached = await transformMessagesMediaUrls(responseItems);
+        
+        res.json(transformedCached);
         endTimer({
           cache: "HIT",
           key: cacheKey,
@@ -1325,7 +1329,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           let query = supabaseAdmin
             .from("chat_messages")
             .select(
-              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
+              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, media_storage_path, media_public_url, is_media_sensitive, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id",
             )
             .eq("chat_id", id)
             .order("created_at", { ascending: false })
@@ -1387,6 +1391,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
           type: row.type || "TEXT",
           is_private: false,
           media_url: row.media_url ?? null,
+          media_storage_path: row.media_storage_path ?? null,
+          media_public_url: row.media_public_url ?? null,
+          is_media_sensitive: row.is_media_sensitive ?? false,
           remote_participant_id: row.remote_participant_id ?? null,
           remote_sender_id: row.remote_sender_id ?? null,
           remote_sender_name: row.remote_sender_name ?? null,
@@ -1463,8 +1470,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       res.setHeader("X-Next-Before", hasMore ? nextBefore : "");
 
+      // ✅ Apply media URL transformation (storage-first: public URL or proxy)
+      const transformedItems = await transformMessagesMediaUrls(combined);
+
       const payload = {
-        items: combined,
+        items: transformedItems,
         nextBefore,
         hasMore,
       };

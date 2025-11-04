@@ -1555,11 +1555,35 @@ export function registerWAHARoutes(app: Express) {
       to: z.string().min(6),
       content: z.string().min(1),
       quotedMessageId: z.string().optional(),
+      reply_to: z.string().optional(), // Accept reply_to from frontend
       draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
 
-    const { inboxId, chatId, to, content, quotedMessageId, draftId: clientDraftId } = body.data;
+    const { inboxId, chatId, to, content, quotedMessageId, reply_to, draftId: clientDraftId } = body.data;
+    // Use reply_to if quotedMessageId is not provided
+    let finalQuotedMessageId = quotedMessageId || null;
+    
+    // If reply_to is provided (internal UUID), fetch the external_id
+    if (!finalQuotedMessageId && reply_to) {
+      try {
+        const { data: originalMsg } = await supabaseAdmin
+          .from("chat_messages")
+          .select("external_id")
+          .eq("id", reply_to)
+          .single();
+        
+        if (originalMsg?.external_id) {
+          finalQuotedMessageId = originalMsg.external_id;
+          console.log(`[WAHA] Mapped reply_to ${reply_to} to external_id ${finalQuotedMessageId}`);
+        } else {
+          console.warn(`[WAHA] No external_id found for reply_to ${reply_to}`);
+        }
+      } catch (error) {
+        console.error(`[WAHA] Failed to fetch external_id for reply_to ${reply_to}:`, error);
+      }
+    }
+    
     const companyId = String((req as any).user?.company_id || "");
     if (!companyId) return res.status(400).json({ error: "companyId ausente" });
 
@@ -1571,7 +1595,7 @@ export function registerWAHARoutes(app: Express) {
 
       const draft = await persistDraftMessage({
         companyId, chatId: chatId ?? null, inboxId, to,
-        kind: "text", content, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
+        kind: "text", content, quotedMessageId: finalQuotedMessageId, fromUserId: (req as any).user?.id,
       });
       const draftId = draft?.id || clientDraftId || randomUUID();
       const senderId = draft?.sender_id || null;
@@ -1580,7 +1604,7 @@ export function registerWAHARoutes(app: Express) {
         to,
         type: "text",
         content,
-        quotedMessageId: quotedMessageId ?? null,
+        quotedMessageId: finalQuotedMessageId,
         draftId,  // Use the draft ID, not a random one
       };
 
@@ -1614,6 +1638,7 @@ export function registerWAHARoutes(app: Express) {
       filename: z.string().optional(),
       mimeType: z.string().optional(),
       quotedMessageId: z.string().optional(),
+      reply_to: z.string().optional(), // Accept reply_to from frontend
       draftId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!body.success) return res.status(400).json({ error: body.error.flatten() });
@@ -1628,8 +1653,32 @@ export function registerWAHARoutes(app: Express) {
       filename,
       mimeType,
       quotedMessageId,
+      reply_to,
       draftId: clientDraftId,
     } = body.data;
+    // Use reply_to if quotedMessageId is not provided
+    let finalQuotedMessageId = quotedMessageId || null;
+    
+    // If reply_to is provided (internal UUID), fetch the external_id
+    if (!finalQuotedMessageId && reply_to) {
+      try {
+        const { data: originalMsg } = await supabaseAdmin
+          .from("chat_messages")
+          .select("external_id")
+          .eq("id", reply_to)
+          .single();
+        
+        if (originalMsg?.external_id) {
+          finalQuotedMessageId = originalMsg.external_id;
+          console.log(`[WAHA] Mapped reply_to ${reply_to} to external_id ${finalQuotedMessageId}`);
+        } else {
+          console.warn(`[WAHA] No external_id found for reply_to ${reply_to}`);
+        }
+      } catch (error) {
+        console.error(`[WAHA] Failed to fetch external_id for reply_to ${reply_to}:`, error);
+      }
+    }
+    
     const companyId = String((req as any).user?.company_id || "");
     if (!companyId) return res.status(400).json({ error: "companyId ausente" });
 
@@ -1642,7 +1691,7 @@ export function registerWAHARoutes(app: Express) {
       const draft = await persistDraftMessage({
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: kind === "image" ? "image" : kind === "audio" ? "audio" : kind === "video" ? "video" : "document",
-        mediaUrl, caption: caption ?? null, quotedMessageId: quotedMessageId ?? null, fromUserId: (req as any).user?.id,
+        mediaUrl, caption: caption ?? null, quotedMessageId: finalQuotedMessageId, fromUserId: (req as any).user?.id,
       });
       const draftId = draft?.id || clientDraftId || randomUUID();
       const senderId = draft?.sender_id || null;
@@ -1656,7 +1705,7 @@ export function registerWAHARoutes(app: Express) {
         payload: {
           to, type: "media", kind, mediaUrl,
           caption: caption ?? null, filename: filename ?? null, mimeType: mimeType ?? null,
-          quotedMessageId: quotedMessageId ?? null, draftId,
+          quotedMessageId: finalQuotedMessageId, draftId,
         },
       });
 

@@ -3,6 +3,10 @@ import multer from "multer";
 import path from "node:path";
 import fs from "node:fs/promises";
 import db from "../pg.ts";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
+import ffmpegPath from "ffmpeg-static";
 import { publish, publishApp, EX_APP } from "../queue/rabbit.ts";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 
@@ -97,24 +101,59 @@ export function registerSendMessageRoutes(app: Application) {
           return res.status(400).json({ error: "file_required" });
         }
 
+        // If browser recorded in an odd format (e.g., webm), try to convert to OGG/OPUS before validating allowed mimes
+        let incomingMime = file.mimetype;
+        let incomingBuffer = file.buffer;
+        if (/^audio\/(webm|mp4)/i.test(incomingMime || "")) {
+          try {
+            if (!ffmpegPath) throw new Error("ffmpeg binary not found");
+            const tmpIn = path.join(os.tmpdir(), `aud-in-${randomUUID()}.${incomingMime.includes("webm") ? "webm" : "m4a"}`);
+            const tmpOut = path.join(os.tmpdir(), `aud-out-${randomUUID()}.ogg`);
+            await fs.writeFile(tmpIn, incomingBuffer);
+            await new Promise<void>((resolve, reject) => {
+              const args = [
+                "-y",
+                "-i", tmpIn,
+                "-c:a", "libopus",
+                "-b:a", "64k",
+                "-vn",
+                tmpOut,
+              ];
+              const cp = spawn(ffmpegPath as string, args, { stdio: "ignore" });
+              cp.on("error", reject);
+              cp.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
+            });
+            const converted = await fs.readFile(tmpOut);
+            // cleanup best-effort
+            fs.unlink(tmpIn).catch(() => {});
+            fs.unlink(tmpOut).catch(() => {});
+            incomingBuffer = converted;
+            incomingMime = "audio/ogg";
+          } catch (e) {
+            console.warn("[messages.media] audio convert failed, using original:", (e as any)?.message || e);
+          }
+        }
+
         const allowed = (process.env.MEDIA_ALLOWED_MIME || "")
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean);
-        if (allowed.length > 0 && !allowed.includes(file.mimetype)) {
-          return res.status(415).json({ error: "mime_not_allowed", mimetype: file.mimetype });
+        if (allowed.length > 0 && !allowed.includes(incomingMime)) {
+          return res.status(415).json({ error: "mime_not_allowed", mimetype: incomingMime });
         }
 
         const ymd = new Date().toISOString().slice(0, 10);
         const safeName = sanitizeFilename(
-          file.originalname || `upload.${extFromMime(file.mimetype) || "bin"}`,
+          file.originalname
+            ? file.originalname.replace(/\.(webm|m4a)$/i, ".ogg")
+            : `upload.${extFromMime(incomingMime) || "bin"}`,
         );
         const relativeKey = `outbound/${chatId}/${ymd}/${Date.now()}-${safeName}`;
         const absPath = path.join(MEDIA_DIR, relativeKey);
         await ensureDir(path.dirname(absPath));
-        await fs.writeFile(absPath, file.buffer);
+        await fs.writeFile(absPath, incomingBuffer);
 
-        const mime = file.mimetype;
+        const mime = incomingMime;
         const type = mime.startsWith("image/")
           ? "IMAGE"
           : mime.startsWith("video/")

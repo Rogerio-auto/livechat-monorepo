@@ -17,7 +17,7 @@ import {
   rememberListCacheKey,
   clearListCacheIndexes,
 } from "../lib/redis.ts";
-import { WAHA_PROVIDER } from "../services/waha/client.ts";
+import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
@@ -28,6 +28,7 @@ const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
 const TTL_MSGS = Math.max(60, Number(process.env.CACHE_TTL_MSGS || 60));
 const PRIVATE_CHAT_CACHE_TTL = Math.max(60, Number(process.env.PRIVATE_CHAT_CACHE_TTL || TTL_MSGS * 2));
 const TRACE_EXPLAIN = process.env.LIVECHAT_TRACE_EXPLAIN === "1";
+const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
 let chatsSupportsLastMessageType = true;
 let chatsSupportsLastMessageMediaUrl = true;
@@ -597,6 +598,81 @@ export function registerLivechatChatRoutes(app: express.Application) {
             count: remoteList.length,
             error,
           });
+        }
+
+        // Attempt best-effort WAHA picture fetch for cache misses, when chat inbox is WAHA
+        try {
+          const inboxIdsAll = toUuidArray((items as any[]).map((c: any) => c.inbox_id));
+          let inboxRows: Array<{ id: string; provider: string | null; instance_id: string | null }> = [];
+          if (inboxIdsAll.length) {
+            const inboxResp = await supabaseAdmin
+              .from("inboxes")
+              .select("id, provider, instance_id")
+              .in("id", inboxIdsAll);
+            if (!inboxResp.error && Array.isArray(inboxResp.data)) {
+              inboxRows = inboxResp.data as any[];
+            }
+          }
+
+          const sessionByInbox: Record<string, string> = {};
+          for (const row of inboxRows) {
+            const provider = (row?.provider || "").toString().toUpperCase();
+            const session = (row?.instance_id || "").toString().trim();
+            if (provider === WAHA_PROVIDER && session && UUID_RE.test(String(row.id))) {
+              sessionByInbox[String(row.id)] = session;
+            }
+          }
+
+          const pendingRemotes = new Set<string>();
+          const fetchTasks: Promise<void>[] = [];
+          for (const chat of items as any[]) {
+            const remoteKey =
+              (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
+              (typeof chat.external_id === "string" && chat.external_id.trim()) ||
+              null;
+            if (!remoteKey) continue;
+            if (avatarByRemote[remoteKey]) continue; // already cached
+
+            const inboxIdForChat = typeof chat.inbox_id === "string" ? chat.inbox_id : null;
+            if (!inboxIdForChat) continue;
+            const session = sessionByInbox[inboxIdForChat];
+            if (!session) continue;
+            if (pendingRemotes.has(remoteKey)) continue;
+            pendingRemotes.add(remoteKey);
+
+            const isGroup =
+              (typeof chat.kind === "string" && chat.kind.toUpperCase() === "GROUP") ||
+              (typeof remoteKey === "string" && remoteKey.toLowerCase().endsWith("@g.us"));
+
+            fetchTasks.push(
+              (async () => {
+                try {
+                  const picResp = isGroup
+                    ? await fetchWahaChatPicture(session, remoteKey)
+                    : await fetchWahaContactPicture(session, remoteKey, { refresh: false });
+                  const url = (picResp && typeof picResp.url === "string" && picResp.url.trim()) || null;
+                  if (url) {
+                    avatarByRemote[remoteKey] = url;
+                    try {
+                      await rSet(k.avatar(companyId, remoteKey), url, TTL_AVATAR);
+                    } catch (cacheErr) {
+                      console.warn("[livechat/chats] avatar cache set failed", { remoteKey, error: cacheErr });
+                    }
+                  }
+                } catch (fetchErr) {
+                  // Swallow errors to not block the list; it's best-effort
+                  // console.debug("[livechat/chats] avatar fetch failed", { remoteKey, error: fetchErr });
+                }
+              })(),
+            );
+          }
+
+          if (fetchTasks.length) {
+            // Soft-cap to avoid very long waits; still await to enrich current response
+            await Promise.allSettled(fetchTasks);
+          }
+        } catch (avatarResolveErr) {
+          console.warn("[livechat/chats] avatar resolve pipeline failed", avatarResolveErr);
         }
       }
 

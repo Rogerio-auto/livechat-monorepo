@@ -1735,6 +1735,72 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   const isFromCustomer = !msg?.fromMe;
   const ackStatus = mapWahaAckToViewStatus(msg?.ack) ?? (isFromCustomer ? "Pending" : "Sent");
   
+  // ========== DEDUPE: Check if message already exists (agent phone vs system) ==========
+  // If fromMe=true, verify if this message was already sent by the system to avoid duplicates
+  let existingMessage: { id: string; is_from_customer: boolean; sender_id: string | null } | null = null;
+  let sentFromDevice: 'web' | 'whatsapp' | null = null;
+
+  if (msg?.fromMe && messageId) {
+    try {
+      existingMessage = await db.oneOrNone<{ id: string; is_from_customer: boolean; sender_id: string | null }>(
+        `SELECT id, is_from_customer, sender_id 
+         FROM public.chat_messages 
+         WHERE external_id = $1 AND inbox_id = $2`,
+        [messageId, job.inboxId]
+      );
+
+      if (existingMessage) {
+        // Message already exists - this is an echo from system-sent message
+        console.log('[WAHA][fromMe=true] Message already exists (system echo), updating status only', {
+          messageId,
+          existingId: existingMessage.id,
+          chatId,
+        });
+
+        // Update status if changed
+        if (ackStatus) {
+          await updateMessageStatusByExternalId({
+            inboxId: job.inboxId,
+            externalId: messageId,
+            viewStatus: ackStatus,
+          });
+          
+          const normalizedStatus = typeof ackStatus === "string" ? ackStatus.toUpperCase() : null;
+          await publishApp("socket.livechat.status", {
+            kind: "livechat.message.status",
+            chatId,
+            messageId: existingMessage.id,
+            externalId: messageId,
+            view_status: ackStatus,
+            raw_status: ackStatus,
+            status: normalizedStatus,
+            draftId: job?.draftId ?? msg?.draftId ?? null,
+            reason: null,
+          });
+        }
+        
+        return; // Skip insertion - message already processed
+      }
+
+      // Message doesn't exist - this is from agent's phone
+      console.log('[WAHA][fromMe=true] New message from agent phone (not system)', {
+        messageId,
+        chatJid,
+        chatId,
+      });
+      sentFromDevice = 'whatsapp'; // Mark as sent from WhatsApp phone
+      
+    } catch (error) {
+      console.warn('[WAHA][fromMe] Failed to check existing message', {
+        messageId,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+  } else if (!isFromCustomer) {
+    // fromMe=false messages from system (shouldn't happen in practice)
+    sentFromDevice = 'web';
+  }
+  
   // ========== NEW: STORAGE-FIRST MEDIA PROCESSING ==========
   // Extract media from WAHA payload and normalize to Buffer → Upload to Storage
   let mediaInfo: {
@@ -1962,6 +2028,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     type: messageType,
     viewStatus: ackStatus ?? null,
+      sentFromDevice,
     // ✅ New storage-first fields
     mediaStoragePath: mediaInfo?.storagePath ?? null,
     mediaPublicUrl: isSensitive ? null : (mediaInfo?.publicUrl ?? null),

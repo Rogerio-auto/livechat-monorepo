@@ -2301,7 +2301,7 @@ const scrollToBottom = useCallback(
 
       const candidates = [
         "audio/ogg;codecs=opus",
-        "audio/mp4",
+        "audio/webm;codecs=opus",
         "audio/webm",
       ];
       const pick = (t: string) => (window as any).MediaRecorder?.isTypeSupported?.(t);
@@ -2315,7 +2315,7 @@ const scrollToBottom = useCallback(
       mr.onstop = async () => {
         try {
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
-          const ext = mimeType.startsWith("audio/ogg") ? "ogg" : (mimeType === "audio/mp4" ? "m4a" : "webm");
+          const ext = mimeType.startsWith("audio/ogg") ? "ogg" : (mimeType.includes("webm") ? "webm" : "bin");
           const file = new File([blob], `audio_${Date.now()}.${ext}`, { type: mimeType });
           await uploadFile(file);
         } catch (e) {

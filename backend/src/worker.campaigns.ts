@@ -1,7 +1,10 @@
 import { consume, publish, EX_APP, Q_CAMPAIGN_FOLLOWUP } from "./queue/rabbit.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
+import "./config/env.ts";
 
 export async function registerCampaignWorker() {
+  console.log("[worker-campaigns] Starting campaign worker...");
+
   await consume(Q_CAMPAIGN_FOLLOWUP, async (msg: any) => {
     const data = JSON.parse(msg.content?.toString?.() || "{}");
     const { type, campaignId, customerId, customerPhone } = data;
@@ -57,4 +60,17 @@ export async function registerCampaignWorker() {
       }
     }
   });
+
+  console.log("[worker-campaigns] Listening on queue:", Q_CAMPAIGN_FOLLOWUP);
 }
+
+// Bootstrap
+(async () => {
+  try {
+    await registerCampaignWorker();
+    console.log("[worker-campaigns] Worker started successfully");
+  } catch (error) {
+    console.error("[worker-campaigns] Failed to start:", error);
+    process.exit(1);
+  }
+})();

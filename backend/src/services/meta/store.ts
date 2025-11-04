@@ -213,13 +213,39 @@ export async function ensureGroupChat(args: {
       );
 
       if (!existing) {
+        // Create a placeholder customer for the group
+        const groupDisplayName = args.groupName || `Group ${trimmedRemote.substring(0, 20)}`;
+        const placeholderPhone = `group_${trimmedRemote.substring(0, 30)}`;
+
+        const placeholderCustomer = await tx.one<{ id: string }>(
+          `insert into public.customers
+             (company_id, display_name, email, phone, created_at, updated_at)
+           values ($1, $2, null, $3, now(), now())
+           on conflict (company_id, phone) do update 
+           set display_name = excluded.display_name, updated_at = now()
+           returning id`,
+          [args.companyId, groupDisplayName, placeholderPhone],
+        );
+
         const inserted = await tx.one<GroupChatRow>(
           `insert into public.chats
-             (inbox_id, company_id, remote_id, kind, chat_type, status, group_name, group_avatar_url, last_message_at)
-           values ($1, $2, $3, 'GROUP', 'GROUP', 'AI', $4, $5, now())
+             (inbox_id, company_id, customer_id, remote_id, kind, chat_type, status, group_name, group_avatar_url, last_message_at)
+           values ($1, $2, $3, $4, 'GROUP', 'GROUP', 'AI', $5, $6, now())
             returning id, group_name, group_avatar_url`,
-          [args.inboxId, args.companyId, trimmedRemote, args.groupName ?? null, args.groupAvatarUrl ?? null],
+          [
+            args.inboxId,
+            args.companyId,
+            placeholderCustomer.id,
+            trimmedRemote,
+            args.groupName ?? null,
+            args.groupAvatarUrl ?? null,
+          ],
         );
+        console.log("[META][store] Group chat created:", {
+          chatId: inserted.id,
+          customerId: placeholderCustomer.id,
+          remoteId: trimmedRemote,
+        });
         return { chatId: inserted.id, created: true };
       }
 

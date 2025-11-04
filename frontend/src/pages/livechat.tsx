@@ -279,6 +279,40 @@ export default function LiveChatPage() {
 
   const normalizeChats = useCallback((list: any[]): Chat[] => list.map((item) => normalizeChat(item)), [normalizeChat]);
 
+  // [KANBAN-BACKEND] util para atualizar card localmente
+  const patchChatLocal = useCallback((chatId: string, partial: Partial<Chat>) => {
+    setSelectedChat((prev) => (prev && prev.id === chatId ? { ...prev, ...partial } : prev));
+    setChatsByStage((prev) => {
+      const draft = structuredClone(prev);
+      // Find the chat in any stage to get current values
+      let currentChat: Chat | null = null;
+      let currentStageKey: string | null = null;
+      for (const [stageKey, chats] of Object.entries(draft)) {
+        const found = chats.find((c: Chat) => c.id === chatId);
+        if (found) {
+          currentChat = found;
+          currentStageKey = stageKey;
+          break;
+        }
+      }
+      
+      // se mudou stage_id, remover da coluna antiga e p?r na nova
+      if (partial.stage_id) {
+        if (currentStageKey) {
+          draft[currentStageKey] = draft[currentStageKey].filter((c: Chat) => c.id !== chatId);
+        }
+        const updatedChat = currentChat ? { ...currentChat, ...partial } : ({ id: chatId, ...partial } as Chat);
+        draft[partial.stage_id] = [...(draft[partial.stage_id] || []), updatedChat];
+      } else if (currentStageKey && draft[currentStageKey]) {
+        // s? atualiza os campos dentro da coluna atual
+        draft[currentStageKey] = draft[currentStageKey].map((c: Chat) => 
+          c.id === chatId ? { ...c, ...partial } : c
+        );
+      }
+      return draft;
+    });
+  }, []);
+
   const updateChatSnapshots = useCallback((updatedChat: Chat) => {
     const entries = Object.entries(chatsStoreRef.current);
     if (entries.length === 0) return;
@@ -326,7 +360,7 @@ export default function LiveChatPage() {
       if (prevStatus) patchChatLocal(chatId, { status: prevStatus } as any);
       console.error("[livechat] updateChatStatus error", error);
     }
-  }, [API, patchChatLocal, normalizeChat, updateChatSnapshots]);
+  }, [patchChatLocal, normalizeChat, updateChatSnapshots]);
 
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
@@ -360,7 +394,7 @@ export default function LiveChatPage() {
       });
       // Don't throw error - marking as read should not block chat opening
     }
-  }, [API, patchChatLocal]);
+  }, [patchChatLocal]);
 
   const filteredChats = useMemo(() => {
     return chats.filter((chat) => (chatScope === "groups" ? isGroupChat(chat) : !isGroupChat(chat)));
@@ -396,6 +430,7 @@ export default function LiveChatPage() {
         photo_url: photoUrl,
         isGroup,
         group_size: chat.group_size ?? null,
+        unread_count: chat.unread_count ?? 0,
       };
     });
   }, [filteredChats, isGroupChat]);
@@ -550,33 +585,6 @@ export default function LiveChatPage() {
     return debounced;
   }
   const debouncedQ = useDebounced(q, 300);
-
-  // [KANBAN-BACKEND] util para atualizar card localmente
-
-
-
-  function patchChatLocal(chatId: string, partial: Partial<Chat>) {
-    setSelectedChat((prev) => (prev && prev.id === chatId ? { ...prev, ...partial } : prev));
-    setChatsByStage((prev) => {
-      const draft = structuredClone(prev);
-      // se mudou stage_id, remover da coluna antiga e p?r na nova
-      if (partial.stage_id) {
-        const oldStage = Object.keys(draft).find(s =>
-          (draft[s] || []).some(c => c.id === chatId)
-        );
-        if (oldStage) draft[oldStage] = draft[oldStage].filter(c => c.id !== chatId);
-        draft[partial.stage_id] = [...(draft[partial.stage_id] || []), { ...(selectedChat as Chat), ...partial }];
-      } else {
-        // s? atualiza os campos dentro da coluna atual
-
-        const stageKey = (selectedChat as any)?.stage_id;
-        if (stageKey && draft[stageKey]) {
-          draft[stageKey] = draft[stageKey].map(c => c.id === chatId ? { ...c, ...partial } : c);
-        }
-      }
-      return draft;
-    });
-  }
 
   // [KANBAN-BACKEND] mudar etapa (coluna)
 
@@ -834,6 +842,7 @@ const bumpChatToTop = useCallback((update: {
   remote_id?: string | null;
   kind?: string | null;
   status?: string;
+  unread_count?: number | null;
 }) => {
   setChats((prev) => {
     const arr = [...prev];
@@ -875,6 +884,9 @@ const bumpChatToTop = useCallback((update: {
         ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
           ? (update as any).ai_agent_name ?? (current as any)?.ai_agent_name ?? null
           : (current as any)?.ai_agent_name ?? null,
+      unread_count: Object.prototype.hasOwnProperty.call(update, "unread_count")
+        ? update.unread_count ?? current.unread_count ?? 0
+        : current.unread_count ?? 0,
     } as Chat;
 
     const normalized = normalizeChat(mergedRaw);

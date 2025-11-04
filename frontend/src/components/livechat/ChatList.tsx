@@ -15,6 +15,7 @@ type BaseChat = Partial<LivechatChat> & {
   group_avatar_url?: string | null;
   customer_avatar_url?: string | null;
   remote_id?: string | null;
+  unread_count?: number | null;
 };
 
 export type Chat = BaseChat;
@@ -219,7 +220,14 @@ export default function ChatList({
               <div className="text-sm text-[var(--color-text-muted)] truncate">{subtitle}</div>
             </div>
 
-            <div className="text-xs text-[var(--color-text-muted)]">{lastAt}</div>
+            <div className="flex flex-col items-end gap-1">
+              <div className="text-xs text-[var(--color-text-muted)]">{lastAt}</div>
+              {chat.unread_count && chat.unread_count > 0 ? (
+                <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[color:var(--color-primary)] text-white text-xs font-semibold">
+                  {chat.unread_count > 99 ? "99+" : chat.unread_count}
+                </div>
+              ) : null}
+            </div>
           </div>
         );
       })}

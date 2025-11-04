@@ -30,6 +30,7 @@ export type Chat = {
   stage_id?: string | null;
   stage_name?: string | null;
   note?: string | null;
+  unread_count?: number | null;
 };
 
 export type Message = {

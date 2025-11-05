@@ -2177,65 +2177,157 @@ const scrollToBottom = useCallback(
     [currentChat, removeMessageFromCache, sendMessageToChat],
   );
 
+  const handleEditMessage = useCallback(
+    async (
+      message: Message,
+      data: { text: string; linkPreview?: boolean; linkPreviewHighQuality?: boolean },
+    ) => {
+      if (!currentChat?.id) return;
+      const chatId = currentChat.id;
+      // optimistic UI update
+      updateMessageStatusInCache({
+        chatId,
+        messageId: message.id,
+        merge: { content: data.text, body: data.text, view_status: "Edited" as any },
+      });
+      try {
+        await fetchJson<{ ok: boolean; data?: any }>(
+          `${API}/livechat/chats/${chatId}/messages/${message.id}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ text: data.text, linkPreview: data.linkPreview ?? true, linkPreviewHighQuality: data.linkPreviewHighQuality ?? false }),
+          },
+        );
+      } catch (e) {
+        console.error("Falha ao editar mensagem", e);
+        // Soft revert marker
+        updateMessageStatusInCache({ chatId, messageId: message.id, merge: { view_status: message.view_status || null } });
+        alert("Falha ao editar mensagem");
+      }
+    },
+    [API, currentChat?.id, updateMessageStatusInCache],
+  );
+
+  const handleDeleteMessage = useCallback(
+    async (message: Message) => {
+      if (!currentChat?.id) return;
+      const chatId = currentChat.id;
+      if (!confirm("Apagar esta mensagem para todos?")) return;
+      // optimistic UI update
+      const prev = { content: message.content, body: message.body, view_status: message.view_status } as any;
+      updateMessageStatusInCache({ chatId, messageId: message.id, merge: { content: "", body: "", view_status: "Deleted" as any } });
+      try {
+        await fetchJson<{ ok: boolean; data?: any }>(
+          `${API}/livechat/chats/${chatId}/messages/${message.id}`,
+          { method: "DELETE" },
+        );
+      } catch (e) {
+        console.error("Falha ao apagar mensagem", e);
+        // revert
+        updateMessageStatusInCache({ chatId, messageId: message.id, merge: prev });
+        alert("Falha ao apagar mensagem");
+      }
+    },
+    [API, currentChat?.id, updateMessageStatusInCache],
+  );
+
 
 
   const uploadFile = async (file: File) => {
     if (!currentChat) return;
+    // Derive message type from file
+    const mt = (file.type || "").toLowerCase();
+    const type = mt.startsWith("image/")
+      ? "IMAGE"
+      : mt.startsWith("video/")
+        ? "VIDEO"
+        : mt.startsWith("audio/")
+          ? "AUDIO"
+          : "DOCUMENT";
+
+    const quotedMsg = replyingTo;
+
+    // Create optimistic draft with preview URL
+    const previewUrl = URL.createObjectURL(file);
+    const { draftId } = createDraftMessage(currentChat, file.name, quotedMsg || undefined, type);
+    updateMessageStatusInCache({
+      chatId: currentChat.id,
+      draftId,
+      delivery_status: "SENDING",
+      view_status: "SENDING",
+      merge: { media_url: previewUrl, upload_progress: 0, type },
+    });
+
+    // Prepare formData
     const formData = new FormData();
     formData.set("file", file, file.name);
-    // Include reply_to if user is replying to a message
-    const quotedMsg = replyingTo;
     if (replyingTo?.id) {
       formData.set("reply_to", replyingTo.id);
     }
 
     try {
-      const response = await fetch(`${API}/livechat/chats/${currentChat.id}/messages/media`, {
-        method: "POST",
-        body: formData,
-        credentials: "include",
+      const xhr = new XMLHttpRequest();
+      const url = `${API}/livechat/chats/${currentChat.id}/messages/media`;
+      xhr.open("POST", url, true);
+      xhr.withCredentials = true;
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const pct = Math.round((e.loaded / e.total) * 100);
+        updateMessageStatusInCache({
+          chatId: currentChat.id,
+          draftId,
+          merge: { upload_progress: pct },
+        });
+      };
+      const done = await new Promise<{ ok: boolean; payload: any }>((resolve) => {
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState === XMLHttpRequest.DONE) {
+            try {
+              const text = xhr.responseText || "{}";
+              const json = JSON.parse(text);
+              resolve({ ok: xhr.status >= 200 && xhr.status < 300, payload: json });
+            } catch {
+              resolve({ ok: xhr.status >= 200 && xhr.status < 300, payload: null });
+            }
+          }
+        };
+        xhr.send(formData);
       });
-      const payload = await response.json().catch(() => ({}));
-      // Support multiple backend response shapes: {inserted}, {ok, data}, or the mapped object itself
-      const inserted = (payload?.inserted ?? payload?.data ?? (response.ok ? payload : null)) as any;
-      if (!response.ok || !inserted) {
+
+      const payload = done.payload || {};
+      const inserted = (payload?.inserted ?? payload?.data ?? (done.ok ? payload : null)) as any;
+      if (!done.ok || !inserted) {
         if ((payload as any)?.error === "mime_not_allowed") {
           alert(`Esse formato (${(payload as any)?.mimetype || "desconhecido"}) nao e suportado pelo WhatsApp. Tente outro navegador (OGG/AAC).`);
         }
-        throw new Error((payload as any)?.error || "upload_failed");
+        throw new Error((payload as any)?.error || `upload_failed (${xhr.status})`);
       }
 
-      appendMessageToCache({
-        id: inserted.id,
+      replaceDraftWithMessage(draftId, {
+        ...inserted,
         chat_id: inserted.chat_id ?? currentChat.id,
-        body: inserted.body ?? inserted.content ?? file.name,
-        content: inserted.content ?? inserted.body ?? file.name,
-        media_url: inserted.media_url ?? null,
-        sender_type: "AGENT",
-        sender_id: inserted.sender_id ?? null,
-        sender_name: inserted.sender_name ?? null,
-        sender_avatar_url: inserted.sender_avatar_url ?? null,
-        created_at: inserted.created_at ?? new Date().toISOString(),
-        view_status: inserted.view_status ?? "Pending",
-        type: inserted.type ?? "DOCUMENT",
-        is_private: false,
         delivery_status: "SENT",
-        replied_message_id: quotedMsg?.id || inserted.replied_message_id || null,
+        view_status: inserted?.view_status ?? "SENT",
       });
       bumpChatToTop({
         chatId: inserted.chat_id ?? currentChat.id,
         last_message: inserted.content ?? file.name,
         last_message_at: inserted.created_at ?? new Date().toISOString(),
         last_message_from: "AGENT",
-        last_message_type: inserted.type ?? "DOCUMENT",
+        last_message_type: inserted.type ?? type,
         last_message_media_url: inserted.media_url ?? null,
       });
-      // Mantem lista consistente sem recarregar.
-  // Clear reply state after successful upload of a reply
-  setReplyingTo(null);
-  scrollToBottom();
-    } catch (err) {
+      setReplyingTo(null);
+      scrollToBottom();
+    } catch (err: any) {
       console.error("Falha ao enviar arquivo", err);
+      markDraftAsError(draftId, currentChat.id, err?.message || "Falha ao enviar arquivo");
+    } finally {
+      try { URL.revokeObjectURL(previewUrl); } catch {}
+      // clear progress after a moment
+      setTimeout(() => {
+        updateMessageStatusInCache({ chatId: currentChat.id, draftId, merge: { upload_progress: null } });
+      }, 1000);
     }
   };
 
@@ -2633,6 +2725,8 @@ const scrollToBottom = useCallback(
                     showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
                     onRetry={retryFailedMessage}
                     onReply={() => setReplyingTo(m)}
+                    onEdit={handleEditMessage}
+                    onDelete={handleDeleteMessage}
                     allMessages={messages}
                     customerName={currentChat?.customer_name || currentChat?.display_name || null}
                   />

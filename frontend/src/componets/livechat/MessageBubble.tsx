@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -21,6 +21,8 @@ type MessageBubbleProps = {
   showRemoteSenderInfo?: boolean;
   onRetry?: (message: Message) => void;
   onReply?: () => void;
+  onEdit?: (message: Message, data: { text: string; linkPreview?: boolean; linkPreviewHighQuality?: boolean }) => void;
+  onDelete?: (message: Message) => void;
   allMessages?: Message[]; // Para buscar mensagem citada
   customerName?: string | null; // Nome do contato/cliente do chat
 };
@@ -33,6 +35,8 @@ export function MessageBubble({
   showRemoteSenderInfo = false,
   onRetry,
   onReply,
+  onEdit,
+  onDelete,
   allMessages = [],
   customerName = null,
 }: MessageBubbleProps) {
@@ -43,6 +47,7 @@ export function MessageBubble({
         ? m.view_status
         : "";
   const deliveryStatus = deliveryStatusSource.toLowerCase();
+  const isDeleted = (m.view_status || "").toLowerCase() === "deleted";
   const time = new Date(m.created_at).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -138,6 +143,11 @@ export function MessageBubble({
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(resolvedMediaIndex);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState<string>(m.body || m.content || "");
+  const [useLinkPreview, setUseLinkPreview] = useState(true);
+  const [useLinkPreviewHQ, setUseLinkPreviewHQ] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
     setLightboxIndex(resolvedMediaIndex);
@@ -154,7 +164,11 @@ export function MessageBubble({
   };
 
   let bubbleContent: ReactNode;
-  if (mediaUrl && messageType === "IMAGE") {
+  if (isDeleted) {
+    bubbleContent = (
+      <span className="italic text-[var(--color-text-muted)]">Mensagem apagada</span>
+    );
+  } else if (mediaUrl && messageType === "IMAGE") {
     bubbleContent = (
       <div className="overflow-hidden rounded-2xl bg-black/20 p-2 shadow-inner">
         <img
@@ -301,25 +315,127 @@ export function MessageBubble({
               </div>
             </div>
           )}
-          <div className="text-[var(--color-text)]">{bubbleContent}</div>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              {onReply && (
+          {!isEditing ? (
+            <div className="text-[var(--color-text)]">{bubbleContent}</div>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                className="w-full rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-2 py-1 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                rows={2}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+              />
+              <div className="flex items-center gap-3 text-[11px] text-[var(--color-text)]">
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" checked={useLinkPreview} onChange={(e) => setUseLinkPreview(e.target.checked)} />
+                  <span>Link preview</span>
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={useLinkPreviewHQ}
+                    onChange={(e) => setUseLinkPreviewHQ(e.target.checked)}
+                    disabled={!useLinkPreview}
+                  />
+                  <span>Alta qualidade</span>
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={onReply}
-                  className="text-[9px] text-[var(--color-text-muted)] hover:text-[var(--color-primary)] transition opacity-70 hover:opacity-100"
-                  title="Responder"
+                  className="rounded px-2 py-1 text-[12px] bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/40 hover:bg-[color:var(--color-primary)]/30"
+                  onClick={() => {
+                    if (onEdit) onEdit(m, { text: editText, linkPreview: useLinkPreview, linkPreviewHighQuality: useLinkPreviewHQ });
+                    setIsEditing(false);
+                  }}
                 >
-                  Responder
+                  Salvar
                 </button>
-              )}
+                <button
+                  type="button"
+                  className="rounded px-2 py-1 text-[12px] bg-[color:var(--color-surface-muted)]/60 text-[var(--color-text)] border border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-muted)]/80"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditText(m.body || m.content || "");
+                  }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1">
+              {/* Left side empty to align */}
             </div>
             <div className="flex items-center gap-1">
               <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
               {renderStatusIcon()}
+              {(onReply || (isAgent && (onEdit || onDelete))) && (
+                <div className="relative z-50">
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-black/10"
+                    onClick={() => setShowMenu((v) => !v)}
+                    title="Ações"
+                  >
+                    <FiMoreVertical className="h-4 w-4 text-[var(--color-text-muted)]" />
+                  </button>
+                  {showMenu && (
+                    <div className="absolute right-0 bottom-full z-50 mb-1 w-40 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.35)] overflow-hidden">
+                      {onReply && (
+                        <button
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+                          onClick={() => {
+                            setShowMenu(false);
+                            onReply();
+                          }}
+                        >
+                          <FiCornerUpLeft className="h-3.5 w-3.5" /> Responder
+                        </button>
+                      )}
+                      {isAgent && onEdit && !isPrivate && (
+                        <button
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+                          onClick={() => {
+                            setShowMenu(false);
+                            setIsEditing(true);
+                          }}
+                        >
+                          <FiEdit2 className="h-3.5 w-3.5" /> Editar
+                        </button>
+                      )}
+                      {isAgent && onDelete && !isPrivate && (
+                        <button
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-red-300 hover:bg-red-900/30"
+                          onClick={() => {
+                            setShowMenu(false);
+                            onDelete(m);
+                          }}
+                        >
+                          <FiTrash2 className="h-3.5 w-3.5" /> Apagar
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
+          {/* Upload progress indicator for optimistic media/audio sends */}
+          {isAgent && (deliveryStatus === "sending" || deliveryStatus === "pending") && typeof m.upload_progress === "number" && (
+            <div className="mt-2">
+              <div className="h-1.5 w-full rounded bg-[color:var(--color-border)]/40 overflow-hidden">
+                <div
+                  className="h-1.5 bg-[color:var(--color-primary)]/70 transition-[width] duration-100"
+                  style={{ width: `${Math.max(0, Math.min(100, Math.round(m.upload_progress || 0)))}%` }}
+                />
+              </div>
+              <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+                Enviando {Math.max(0, Math.min(100, Math.round(m.upload_progress || 0)))}%
+              </div>
+            </div>
+          )}
           {isAgent && deliveryStatus === "error" && (
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-red-400">
               <span>{m.error_reason || "Falha ao enviar mensagem."}</span>

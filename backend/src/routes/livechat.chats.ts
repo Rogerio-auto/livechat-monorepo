@@ -17,7 +17,7 @@ import {
   rememberListCacheKey,
   clearListCacheIndexes,
 } from "../lib/redis.ts";
-import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture } from "../services/waha/client.ts";
+import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
@@ -1197,6 +1197,145 @@ export function registerLivechatChatRoutes(app: express.Application) {
       return res.status(500).json({ error: e?.message || "send error" });
     } finally {
       logMetrics();
+    }
+  });
+
+  // Edit a message (WAHA)
+  app.put("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: any, res) => {
+    const { chatId, messageId } = req.params as { chatId: string; messageId: string };
+    const { text, linkPreview = true, linkPreviewHighQuality = false } = req.body || {};
+    if (!chatId || !messageId || !text) return res.status(400).json({ error: "chatId, messageId e text obrigatorios" });
+    try {
+      const msgResp = await supabaseAdmin
+        .from("chat_messages")
+        .select("id, chat_id, external_id, is_from_customer")
+        .eq("id", messageId)
+        .maybeSingle();
+      if (msgResp.error || !msgResp.data) return res.status(404).json({ error: "Mensagem nao encontrada" });
+      const msg = msgResp.data as any;
+      if (msg.chat_id !== chatId) return res.status(400).json({ error: "Mensagem nao pertence ao chat" });
+      if (msg.is_from_customer) return res.status(403).json({ error: "Nao permitido editar mensagem do cliente" });
+      if (!msg.external_id) return res.status(400).json({ error: "Mensagem sem external_id para WAHA" });
+
+      const chatResp = await supabaseAdmin
+        .from("chats")
+        .select("id, external_id, inbox:inboxes(id, provider, instance_id), customer:customers(phone, msisdn)")
+        .eq("id", chatId)
+        .maybeSingle();
+      if (chatResp.error || !chatResp.data) return res.status(404).json({ error: "Chat nao encontrado" });
+      const chatRow = chatResp.data as any;
+      const provider = String(chatRow?.inbox?.provider || "").toUpperCase();
+      if (provider !== WAHA_PROVIDER) return res.status(400).json({ error: "Apenas chats WAHA suportados" });
+      const session = String(chatRow?.inbox?.instance_id || "").trim();
+      if (!session) return res.status(400).json({ error: "Sessao WAHA ausente" });
+
+      // Resolve remote chat id
+      let remoteId: string | null = null;
+      remoteId = typeof chatRow?.external_id === "string" && chatRow.external_id.trim() ? chatRow.external_id.trim() : null;
+      if (!remoteId) {
+        const phone = (chatRow?.customer?.phone || chatRow?.customer?.msisdn || "") as string;
+        const digits = (phone || "").replace(/\D+/g, "");
+        remoteId = digits ? `${digits}@c.us` : null;
+      }
+      if (!remoteId) return res.status(400).json({ error: "remote chat id ausente" });
+
+      const wahaMessageId: string = String(msg.external_id);
+      await editWahaMessage(session, remoteId, wahaMessageId, { text, linkPreview, linkPreviewHighQuality });
+
+      const { data: updated, error } = await supabaseAdmin
+        .from("chat_messages")
+        .update({ content: String(text), view_status: "Edited" })
+        .eq("id", messageId)
+        .select("id, chat_id, content, created_at, type, view_status")
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+
+      // optionally emit socket update
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`chat:${chatId}`).emit("message:new", {
+            id: updated.id,
+            chat_id: updated.chat_id,
+            body: updated.content,
+            content: updated.content,
+            view_status: updated.view_status || "Edited",
+            type: updated.type || "TEXT",
+          });
+        }
+      } catch {}
+
+      return res.json({ ok: true, data: updated });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "edit_error" });
+    }
+  });
+
+  // Delete a message (WAHA)
+  app.delete("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: any, res) => {
+    const { chatId, messageId } = req.params as { chatId: string; messageId: string };
+    if (!chatId || !messageId) return res.status(400).json({ error: "chatId e messageId obrigatorios" });
+    try {
+      const msgResp = await supabaseAdmin
+        .from("chat_messages")
+        .select("id, chat_id, external_id, is_from_customer")
+        .eq("id", messageId)
+        .maybeSingle();
+      if (msgResp.error || !msgResp.data) return res.status(404).json({ error: "Mensagem nao encontrada" });
+      const msg = msgResp.data as any;
+      if (msg.chat_id !== chatId) return res.status(400).json({ error: "Mensagem nao pertence ao chat" });
+      if (msg.is_from_customer) return res.status(403).json({ error: "Nao permitido apagar mensagem do cliente" });
+      if (!msg.external_id) return res.status(400).json({ error: "Mensagem sem external_id para WAHA" });
+
+      const chatResp = await supabaseAdmin
+        .from("chats")
+        .select("id, external_id, inbox:inboxes(id, provider, instance_id), customer:customers(phone, msisdn)")
+        .eq("id", chatId)
+        .maybeSingle();
+      if (chatResp.error || !chatResp.data) return res.status(404).json({ error: "Chat nao encontrado" });
+      const chatRow = chatResp.data as any;
+      const provider = String(chatRow?.inbox?.provider || "").toUpperCase();
+      if (provider !== WAHA_PROVIDER) return res.status(400).json({ error: "Apenas chats WAHA suportados" });
+      const session = String(chatRow?.inbox?.instance_id || "").trim();
+      if (!session) return res.status(400).json({ error: "Sessao WAHA ausente" });
+
+      let remoteId: string | null = null;
+      remoteId = typeof chatRow?.external_id === "string" && chatRow.external_id.trim() ? chatRow.external_id.trim() : null;
+      if (!remoteId) {
+        const phone = (chatRow?.customer?.phone || chatRow?.customer?.msisdn || "") as string;
+        const digits = (phone || "").replace(/\D+/g, "");
+        remoteId = digits ? `${digits}@c.us` : null;
+      }
+      if (!remoteId) return res.status(400).json({ error: "remote chat id ausente" });
+
+      const wahaMessageId: string = String(msg.external_id);
+      await deleteWahaMessage(session, remoteId, wahaMessageId);
+
+      const { data: updated, error } = await supabaseAdmin
+        .from("chat_messages")
+        .update({ content: null, view_status: "Deleted" })
+        .eq("id", messageId)
+        .select("id, chat_id, content, created_at, type, view_status")
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`chat:${chatId}`).emit("message:new", {
+            id: updated.id,
+            chat_id: updated.chat_id,
+            body: null,
+            content: null,
+            view_status: updated.view_status || "Deleted",
+            type: updated.type || "TEXT",
+          });
+        }
+      } catch {}
+
+      return res.json({ ok: true, data: updated });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "delete_error" });
     }
   });
 

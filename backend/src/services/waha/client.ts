@@ -232,6 +232,35 @@ export async function fetchWahaGroupPicture(
   }
 }
 
+export async function deleteWahaMessage(
+  sessionName: string,
+  remoteChatId: string,
+  messageId: string,
+): Promise<{ ok: boolean }> {
+  const encodedSession = encodeURIComponent(sessionName);
+  const encodedChat = encodeURIComponent(remoteChatId);
+  const encodedMsg = encodeURIComponent(messageId);
+  const url = `/api/${encodedSession}/chats/${encodedChat}/messages/${encodedMsg}`;
+  console.debug("[WAHA][deleteWahaMessage] calling", { sessionName, remoteChatId, messageId, url });
+  await wahaFetch(url, { method: "DELETE" });
+  return { ok: true };
+}
+
+export async function editWahaMessage(
+  sessionName: string,
+  remoteChatId: string,
+  messageId: string,
+  body: { text: string; linkPreview?: boolean; linkPreviewHighQuality?: boolean },
+): Promise<{ ok: boolean }> {
+  const encodedSession = encodeURIComponent(sessionName);
+  const encodedChat = encodeURIComponent(remoteChatId);
+  const encodedMsg = encodeURIComponent(messageId);
+  const url = `/api/${encodedSession}/chats/${encodedChat}/messages/${encodedMsg}`;
+  console.debug("[WAHA][editWahaMessage] calling", { sessionName, remoteChatId, messageId, body, url });
+  await wahaFetch(url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return { ok: true };
+}
+
 export async function fetchWahaContactPicture(
   sessionName: string,
   contactId: string,

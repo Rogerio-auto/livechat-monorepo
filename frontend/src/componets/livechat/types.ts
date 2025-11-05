@@ -48,6 +48,8 @@ export type Message = {
   type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "FILE" | "PRIVATE" | string;
   is_private?: boolean | null;
   media_url?: string | null;
+  // UI-only fields (not persisted):
+  upload_progress?: number | null;
   remote_participant_id?: string | null;
   remote_sender_id?: string | null;
   remote_sender_name?: string | null;

@@ -2581,17 +2581,17 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       throw new Error("WAHA media requer mediaUrl");
     }
 
-    // Para áudio, escolhe entre Voice (ogg/opus) ou Audio (ex.: m4a/mp3)
-    const normalizedMime = String(payload?.mimeType || "").split(";")[0].trim().toLowerCase();
+    // PRIORIDADE WAHA: sempre enviar áudio como Voice Note
+    // Mesmo que o navegador gere WEBM, pedimos conversão no WAHA.
+    const rawMime = String(payload?.mimeType || "");
+    const normalizedMime = rawMime.split(";")[0].trim().toLowerCase();
     const endpoint =
       kind === "image"
         ? "/api/sendImage"
         : kind === "video"
           ? "/api/sendVideo"
           : kind === "audio"
-            ? (normalizedMime.includes("ogg") || normalizedMime.includes("opus")
-                ? "/api/sendVoice"
-                : "/api/sendAudio")
+            ? "/api/sendVoice"
             : "/api/sendFile";
 
     const body: any = {
@@ -2602,9 +2602,24 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       file: {
         url: payload.mediaUrl,
         filename: payload?.filename ?? undefined,
-        mimetype: payload?.mimeType ?? undefined,
+        // Use the actual recorded mime when available; WAHA will convert
+        mimetype: rawMime || "audio/ogg; codecs=opus",
       },
     };
+
+    // Para maior compatibilidade com WAHA, habilita conversão quando enviar Voice
+    if (endpoint === "/api/sendVoice") {
+      body.convert = true;
+    }
+
+    console.log("[WAHA OUTBOUND][AUDIO]", {
+      endpoint,
+      remoteChatId,
+      mimetype: body?.file?.mimetype,
+      filename: body?.file?.filename,
+      hasUrl: !!body?.file?.url,
+      convert: body?.convert === true,
+    });
 
     response = await wahaFetch(endpoint, {
       method: "POST",

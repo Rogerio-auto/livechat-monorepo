@@ -17,7 +17,7 @@ import {
   rememberListCacheKey,
   clearListCacheIndexes,
 } from "../lib/redis.ts";
-import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture } from "../services/waha/client.ts";
+import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture } from "../services/waha/client.ts";
 import { normalizeMsisdn } from "../util.ts";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
@@ -389,7 +389,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
 
       res.setHeader("X-Cache", "MISS");
-      console.log("[livechat/chats] cache MISS", { key: cacheKey, kind: kindSegment });
+      // debug: cache MISS
 
       if (inboxId) {
         const inboxResp = await traceSupabase(
@@ -592,6 +592,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
               }
             }),
           );
+          const withCache = Object.values(avatarByRemote).filter(Boolean).length;
+          console.debug("[AVATAR][cache] leitura Redis", { total: remoteList.length, cached: withCache, misses: remoteList.length - withCache });
         } catch (error) {
           console.warn("[livechat/chats] avatar cache lookup failed", {
             companyId,
@@ -625,7 +627,14 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
           const pendingRemotes = new Set<string>();
           const fetchTasks: Promise<void>[] = [];
+          const MAX_AVATAR_FETCH = 20; // Limit to same as page size
+          let fetchCount = 0;
+          const allowGroupFetch = kindFilter === "GROUP"; // only fetch group pictures in Groups tab
+          const allowDirectFetch = kindFilter !== "GROUP"; // fetch directs in Direct or All
+          
           for (const chat of items as any[]) {
+            if (fetchCount >= MAX_AVATAR_FETCH) break; // Stop after limit
+            
             const remoteKey =
               (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
               (typeof chat.external_id === "string" && chat.external_id.trim()) ||
@@ -639,29 +648,42 @@ export function registerLivechatChatRoutes(app: express.Application) {
             if (!session) continue;
             if (pendingRemotes.has(remoteKey)) continue;
             pendingRemotes.add(remoteKey);
+            fetchCount++;
 
             const isGroup =
               (typeof chat.kind === "string" && chat.kind.toUpperCase() === "GROUP") ||
               (typeof remoteKey === "string" && remoteKey.toLowerCase().endsWith("@g.us"));
 
+            // Respect tab: only fetch group pics on Groups tab, direct pics on Direct/All
+            if (isGroup && !allowGroupFetch) continue;
+            if (!isGroup && !allowDirectFetch) continue;
+
+            // Normalize remoteKey for WAHA: ensure @c.us or @g.us suffix
+            let normalizedRemoteKey = remoteKey;
+            if (!remoteKey.includes('@')) {
+              normalizedRemoteKey = isGroup ? `${remoteKey}@g.us` : `${remoteKey}@c.us`;
+            }
+
             fetchTasks.push(
               (async () => {
                 try {
                   const picResp = isGroup
-                    ? await fetchWahaChatPicture(session, remoteKey)
-                    : await fetchWahaContactPicture(session, remoteKey, { refresh: false });
+                    ? await fetchWahaGroupPicture(session, normalizedRemoteKey)
+                    : await fetchWahaContactPicture(session, normalizedRemoteKey, { refresh: false });
                   const url = (picResp && typeof picResp.url === "string" && picResp.url.trim()) || null;
                   if (url) {
+                    console.debug("[AVATAR][livechat/chats] foto fetched do WAHA", { remoteKey, normalizedRemoteKey, isGroup, url: url.substring(0, 80) });
                     avatarByRemote[remoteKey] = url;
                     try {
                       await rSet(k.avatar(companyId, remoteKey), url, TTL_AVATAR);
                     } catch (cacheErr) {
                       console.warn("[livechat/chats] avatar cache set failed", { remoteKey, error: cacheErr });
                     }
+                  } else {
+                    console.debug("[AVATAR][livechat/chats] foto não retornada pelo WAHA", { remoteKey, normalizedRemoteKey, isGroup });
                   }
                 } catch (fetchErr) {
-                  // Swallow errors to not block the list; it's best-effort
-                  // console.debug("[livechat/chats] avatar fetch failed", { remoteKey, error: fetchErr });
+                  console.warn("[AVATAR][livechat/chats] erro ao buscar foto do WAHA", { remoteKey, normalizedRemoteKey, isGroup, error: (fetchErr as any)?.message || fetchErr });
                 }
               })(),
             );
@@ -772,6 +794,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
         } else {
           chat.customer_avatar_url = cachedAvatar ?? null;
         }
+        
+        // Debug: log avatar resolution for first 3 chats
+        if ((items as any[]).indexOf(chat) < 3) {
+          console.debug("[AVATAR][enrich]", {
+            chatId: chat.id,
+            remoteKey,
+            isGroup: isGroupChatKind,
+            cachedAvatar: cachedAvatar ? cachedAvatar.substring(0, 60) + '...' : null,
+            final_customer_avatar_url: chat.customer_avatar_url ? chat.customer_avatar_url.substring(0, 60) + '...' : null,
+          });
+        }
 
         if (!chat.display_name) {
           if (chat.customer_name) {
@@ -856,15 +889,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
       applyConditionalHeaders(res, envelope);
       res.json(payload);
-      console.log("[livechat/chats] response", {
-        cache: "MISS",
-        companyId,
-        inboxId,
-        kind: kindSegment,
-        status: statusSegment,
-        items: payload.items.length,
-        total: payload.total,
-      });
       endTimer({
         cache: "MISS",
         key: cacheKey,

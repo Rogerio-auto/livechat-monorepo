@@ -178,7 +178,58 @@ export async function fetchWahaChatPicture(
   const encodedSession = encodeURIComponent(sessionName);
   const encodedChat = encodeURIComponent(remoteChatId);
   const refresh = opts?.refresh ? "?refresh=true" : "";
-  return wahaFetch<{ url: string | null }>(`/api/${encodedSession}/chats/${encodedChat}/picture${refresh}`);
+  const url = `/api/${encodedSession}/chats/${encodedChat}/picture${refresh}`;
+  console.debug("[WAHA][fetchWahaChatPicture] calling", { sessionName, remoteChatId, url });
+  try {
+    const result = await wahaFetch<{ profilePictureURL?: string | null }>(url);
+    const pictureUrl = result?.profilePictureURL || null;
+    console.debug("[WAHA][fetchWahaChatPicture] response", { 
+      remoteChatId, 
+      hasUrl: !!pictureUrl, 
+      url: pictureUrl 
+    });
+    return { url: pictureUrl };
+  } catch (error) {
+    const err = error as any;
+    console.warn("[WAHA][fetchWahaChatPicture] error", { 
+      remoteChatId, 
+      message: err?.message, 
+      status: err?.status,
+      statusText: err?.statusText,
+      body: err?.body,
+      fullError: error 
+    });
+    return { url: null };
+  }
+}
+
+export async function fetchWahaGroupPicture(
+  sessionName: string,
+  groupId: string,
+  opts?: { refresh?: boolean },
+): Promise<{ url: string | null }> {
+  const encodedSession = encodeURIComponent(sessionName);
+  const encodedGroup = encodeURIComponent(groupId);
+  const refresh = opts?.refresh ? "?refresh=true" : "";
+  const url = `/api/${encodedSession}/groups/${encodedGroup}/picture${refresh}`;
+  console.debug("[WAHA][fetchWahaGroupPicture] calling", { sessionName, groupId, url });
+  try {
+    const result = await wahaFetch<{ url?: string | null; profilePictureURL?: string | null }>(url);
+    const pictureUrl = (result?.url || result?.profilePictureURL) ?? null;
+    console.debug("[WAHA][fetchWahaGroupPicture] response", { groupId, hasUrl: !!pictureUrl, url: pictureUrl });
+    return { url: pictureUrl };
+  } catch (error) {
+    const err = error as any;
+    console.warn("[WAHA][fetchWahaGroupPicture] error", {
+      groupId,
+      message: err?.message,
+      status: err?.status,
+      statusText: err?.statusText,
+      body: err?.body,
+      fullError: error,
+    });
+    return { url: null };
+  }
 }
 
 export async function fetchWahaContactPicture(
@@ -191,5 +242,27 @@ export async function fetchWahaContactPicture(
     session: sessionName,
   });
   if (opts?.refresh) params.set("refresh", "true");
-  return wahaFetch<{ url: string | null }>(`/api/contacts/profile-picture?${params.toString()}`);
+  const url = `/api/contacts/profile-picture?${params.toString()}`;
+  console.debug("[WAHA][fetchWahaContactPicture] calling", { sessionName, contactId, url });
+  try {
+    const result = await wahaFetch<{ profilePictureURL?: string | null }>(url);
+    const pictureUrl = result?.profilePictureURL || null;
+    console.debug("[WAHA][fetchWahaContactPicture] response", { 
+      contactId, 
+      hasUrl: !!pictureUrl, 
+      url: pictureUrl
+    });
+    return { url: pictureUrl };
+  } catch (error) {
+    const err = error as any;
+    console.warn("[WAHA][fetchWahaContactPicture] error", { 
+      contactId, 
+      message: err?.message, 
+      status: err?.status,
+      statusText: err?.statusText,
+      body: err?.body,
+      fullError: error 
+    });
+    return { url: null };
+  }
 }

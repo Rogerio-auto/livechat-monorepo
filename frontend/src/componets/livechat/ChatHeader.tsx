@@ -260,6 +260,16 @@ export function ChatHeader({
     return chat.customer_avatar_url || (chat as any)?.avatar || null;
   }, [chat, isGroupChat]);
 
+  // Debug leve do avatar do cabeçalho
+  useEffect(() => {
+    if (!chat) return;
+    console.debug("[UI][Header] avatar computed", {
+      chatId: chat.id,
+      isGroup: isGroupChat,
+      url: headerAvatarUrl,
+    });
+  }, [chat?.id, isGroupChat, headerAvatarUrl]);
+
   const headerInitials = useMemo(() => {
     const source = headerName || headerSecondary || headerSubtitle || chat?.id || "?";
     return source.slice(0, 2).toUpperCase();
@@ -764,7 +774,11 @@ const chatLeadId = getChatLeadId(chat);
                   src={headerAvatarUrl}
                   alt={headerName || "Avatar"}
                   className="h-9 w-9 rounded-full object-cover"
+                  onLoad={(e) => {
+                    console.debug("[UI][Header] avatar loaded", { chatId: chat?.id, url: headerAvatarUrl });
+                  }}
                   onError={(event) => {
+                    console.warn("[UI][Header] avatar failed", { chatId: chat?.id, url: headerAvatarUrl });
                     (event.currentTarget as HTMLImageElement).src = "";
                   }}
                 />

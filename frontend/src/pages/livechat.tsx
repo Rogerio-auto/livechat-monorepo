@@ -364,7 +364,6 @@ export default function LiveChatPage() {
 
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
-    console.log("[READ_RECEIPTS][markChatAsRead] Marking chat as read", { chatId });
     try {
       const res = await fetch(`${API}/livechat/chats/${chatId}/mark-read`, {
         method: "POST",
@@ -373,26 +372,19 @@ export default function LiveChatPage() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        console.warn("[READ_RECEIPTS][markChatAsRead] Failed to mark chat as read", {
+        console.warn("[READ_RECEIPTS] mark-read falhou", {
           chatId,
           error: json?.error || res.statusText,
         });
-        // Don't throw error - marking as read should not block chat opening
         return;
       }
-      const data = await res.json();
-      console.log("[READ_RECEIPTS][markChatAsRead] Chat marked as read successfully", {
-        chatId,
-        markedCount: data?.markedCount,
-      });
-      // Optimistically update local unread_count to 0
+      await res.json().catch(() => ({}));
       patchChatLocal(chatId, { unread_count: 0 } as any);
     } catch (error) {
-      console.error("[READ_RECEIPTS][markChatAsRead] Unexpected error", {
+      console.error("[READ_RECEIPTS] erro inesperado ao marcar como lida", {
         chatId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Don't throw error - marking as read should not block chat opening
     }
   }, [patchChatLocal]);
 
@@ -922,16 +914,7 @@ const bumpChatToTop = useCallback((update: {
     // Novo contrato (relay j? emite tamb?m os legados)
     const handleChatUpdated = (u: any) => bumpChatToTop(u);
     const handleMessageActivity = (m: any) => {
-      console.log("[Frontend] 📡 Socket message received:", {
-        id: m.id,
-        chat_id: m.chat_id,
-        sender_type: m.sender_type,
-        sender_id: m.sender_id,
-        sender_name: m.sender_name,
-        sender_avatar_url: m.sender_avatar_url,
-        body: m.body?.substring(0, 50),
-      });
-      
+      // (debug removido) socket message received
       bumpChatToTop({
         chatId: m.chat_id,
         last_message: m.body ?? (m.media_url ? "[MEDIA]" : ""),
@@ -1052,15 +1035,6 @@ const scrollToBottom = useCallback(
   const normalizeMessage = useCallback((raw: any): Message => {
     if (!raw) return raw as Message;
     
-    console.log("[Frontend] 🔄 normalizeMessage input:", {
-      id: raw.id,
-      sender_id: raw.sender_id,
-      sender_name: raw.sender_name,
-      sender_avatar_url: raw.sender_avatar_url,
-      replied_message_id: raw.replied_message_id,
-      replied_message_external_id: raw.replied_message_external_id,
-    });
-    
     const deliveryStatus =
       typeof raw?.delivery_status === "string" && raw.delivery_status
         ? raw.delivery_status.toUpperCase()
@@ -1097,14 +1071,6 @@ const scrollToBottom = useCallback(
           : deliveryStatus,
     } as Message;
     
-    console.log("[Frontend] ✅ normalizeMessage output:", {
-      id: normalized.id,
-      sender_id: normalized.sender_id,
-      sender_name: normalized.sender_name,
-      sender_avatar_url: normalized.sender_avatar_url,
-      replied_message_id: normalized.replied_message_id,
-    });
-    
     return normalized;
   }, []);
 
@@ -1122,12 +1088,7 @@ const scrollToBottom = useCallback(
       if (startedAt == null) return;
       messageLatencyRef.current.delete(messageId);
       const durationMs = Number((performance.now() - startedAt).toFixed(1));
-      console.log("[metrics][ui]", {
-        chatId: chatId ?? null,
-        messageId,
-        durationMs,
-        status: status ?? null,
-      });
+      // metrics log removed
     },
     [],
   );

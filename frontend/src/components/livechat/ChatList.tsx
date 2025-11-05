@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { Chat as LivechatChat } from "../../componets/livechat/types";
 
 type BaseChat = Partial<LivechatChat> & {
@@ -153,6 +154,12 @@ export default function ChatList({
     };
   });
 
+  // Debug leve: quantos chats vieram com foto_url para validar avatars
+  useEffect(() => {
+    const withPhoto = normalizedChats.filter((c) => !!c.photo_url).length;
+    console.debug("[UI][ChatList] avatars:", { total: normalizedChats.length, withPhoto });
+  }, [normalizedChats]);
+
   if (!normalizedChats.length) {
     return (
       <div className="p-3 text-sm text-[var(--color-text-muted)]">
@@ -191,8 +198,14 @@ export default function ChatList({
                 src={chat.photo_url ?? DEFAULT_AVATAR}
                 alt={chat.name}
                 className="w-10 h-10 rounded-full object-cover"
+                onLoad={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  if (chat.photo_url) console.debug("[UI][ChatList] avatar loaded", { chatId: chat.id, url: chat.photo_url });
+                }}
                 onError={(event) => {
-                  (event.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR;
+                  const img = event.currentTarget as HTMLImageElement;
+                  console.warn("[UI][ChatList] avatar failed, fallback", { chatId: chat.id, url: chat.photo_url });
+                  img.src = DEFAULT_AVATAR;
                 }}
               />
             ) : (

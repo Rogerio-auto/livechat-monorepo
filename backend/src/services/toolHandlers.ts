@@ -274,8 +274,62 @@ async function handleInternalDB(
     }
 
     if (action === "upsert") {
-      const { data, error } = await supabaseAdmin.from(table).upsert(finalParams).select();
+      // Map alias parameters to real columns for customers table
+      if (table === "customers" && "customer_id" in finalParams) {
+        finalParams.id = finalParams.customer_id;
+        delete finalParams.customer_id;
+      }
+
+      // Use conflict_target from handler_config, or default to 'phone' for customers
+      let upsertOptions: any = {};
+      const conflictTarget = config.conflict_target || (table === "customers" ? "phone" : undefined);
+      
+      if (conflictTarget) {
+        upsertOptions.onConflict = conflictTarget;
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(table)
+        .upsert(finalParams, upsertOptions)
+        .select();
+      
       if (error) throw new Error(`DB upsert error: ${error.message}`);
+
+      // ====== SYNC LOGIC: customers <-> leads ======
+      // If sync_to_leads is enabled and we're upserting customers, sync to related lead
+      if (table === "customers" && config.sync_to_leads === true && data && data.length > 0) {
+        const customer = data[0];
+        try {
+          // Find lead related to this customer (via lead.customer_id or matching phone)
+          const { data: relatedLeads } = await supabaseAdmin
+            .from("leads")
+            .select("id")
+            .or(`customer_id.eq.${customer.id},phone.eq.${customer.phone}`)
+            .limit(1);
+
+          if (relatedLeads && relatedLeads.length > 0) {
+            const leadId = relatedLeads[0].id;
+            const leadUpdates: Record<string, any> = {};
+            
+            // Sync common fields
+            if (finalParams.name !== undefined) leadUpdates.name = finalParams.name;
+            if (finalParams.phone !== undefined) leadUpdates.phone = finalParams.phone;
+            
+            if (Object.keys(leadUpdates).length > 0) {
+              await supabaseAdmin
+                .from("leads")
+                .update(leadUpdates)
+                .eq("id", leadId);
+              
+              console.log(`[toolHandlers] Synced upserted customer ${customer.id} to lead ${leadId}`, leadUpdates);
+            }
+          }
+        } catch (syncError) {
+          console.warn("[toolHandlers] Failed to sync upserted customer to lead:", syncError);
+          // Don't fail the whole operation if sync fails
+        }
+      }
+
       return { success: true, data };
     }
   }

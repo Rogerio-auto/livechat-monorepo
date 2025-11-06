@@ -12,6 +12,7 @@ import {
   FaCog,
   FaSun,
   FaMoon,
+  FaShieldAlt,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
@@ -81,6 +82,16 @@ const links: SidebarLink[] = [
     icon: <FaCog />,
     label: "Configuracoes",
     isActive: (path) => path.startsWith("/configuracoes"),
+  },
+];
+
+// Links especiais para ADMIN
+const adminLinks: SidebarLink[] = [
+  {
+    to: "/admin",
+    icon: <FaShieldAlt />,
+    label: "Admin",
+    isActive: (path) => path.startsWith("/admin"),
   },
 ];
 
@@ -159,6 +170,17 @@ export default function Sidebar() {
 
         <nav className="flex flex-1 flex-col gap-1 p-2">
           {links.map((item) => (
+            <SidebarItem
+              key={item.to}
+              to={item.to}
+              icon={item.icon}
+              label={item.label}
+              active={item.isActive(location.pathname)}
+            />
+          ))}
+          
+          {/* Link Admin - apenas para ADMIN */}
+          {profile && profile.role?.toUpperCase() === "ADMIN" && adminLinks.map((item) => (
             <SidebarItem
               key={item.to}
               to={item.to}

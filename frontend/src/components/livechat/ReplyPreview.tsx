@@ -22,14 +22,14 @@ export function ReplyPreview({ message, onCancel }: ReplyPreviewProps) {
         <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-1">
           Respondendo para {message.sender_name || "Usuário"}
         </div>
-        <div className="text-sm text-gray-700 dark:text-gray-300 truncate">
+        <div className="text-sm text-(--color-text) truncate">
           {message.type !== "TEXT" && `[${message.type}] `}
           {truncate(message.content)}
         </div>
       </div>
       <button
         onClick={onCancel}
-        className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+        className="text-(--color-text-muted) hover:text-(--color-text) transition-colors"
         aria-label="Cancelar resposta"
       >
         <FiX size={16} />

@@ -56,6 +56,36 @@ async function fetchActorContext(req: any) {
 }
 
 export function registerSettingsUsersRoutes(app: Application) {
+  // Current authenticated user's profile (settings scope)
+  app.get("/settings/users/me", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user?.id as string;
+      if (!authUserId) return res.status(401).json({ error: "Not authenticated" });
+
+      const { data, error } = await supabaseAdmin
+        .from("users")
+        .select("id, name, email, avatar, role, status, company_id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (error) return res.status(500).json({ error: error.message });
+      if (!data) return res.status(404).json({ error: "Usuario não encontrado" });
+
+      // Minimal shape expected by frontend livechat page
+      return res.json({
+        id: data.id,
+        name: data.name || data.email || "Usuário",
+        email: data.email || null,
+        avatar: (data as any).avatar || null,
+        role: (data as any).role || null,
+        status: (data as any).status || null,
+      });
+    } catch (e: any) {
+      const status = Number(e?.status) || 500;
+      const message = e?.message || "me profile error";
+      return res.status(status).json({ error: message });
+    }
+  });
+
   app.get("/settings/users", requireAuth, async (req: any, res) => {
     try {
       const { companyId } = await fetchActorContext(req);

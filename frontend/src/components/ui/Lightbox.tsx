@@ -108,14 +108,14 @@ export function Lightbox({ isOpen, onClose, items, index }: LightboxProps) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/90"
+  className="fixed inset-0 z-1000 flex items-center justify-center bg-(--color-overlay)"
       onClick={handleClose}
     >
       <button
         ref={closeButtonRef}
         type="button"
         aria-label="Fechar"
-        className="absolute top-4 right-4 text-3xl text-white/80 hover:text-white transition"
+        className="absolute top-4 right-4 text-3xl text-[color-mix(in_srgb,var(--color-text)_86%,transparent)] hover:text-(--color-text) transition"
         onClick={(event) => {
           event.stopPropagation();
           handleClose();
@@ -129,7 +129,7 @@ export function Lightbox({ isOpen, onClose, items, index }: LightboxProps) {
           <button
             type="button"
             aria-label="Anterior"
-            className="absolute left-6 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-white/20 text-white text-3xl flex items-center justify-center hover:bg-white/30 transition"
+            className="absolute left-6 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-[color-mix(in_srgb,var(--color-text)_12%,transparent)] text-(--color-text) text-3xl flex items-center justify-center hover:bg-[color-mix(in_srgb,var(--color-text)_18%,transparent)] transition"
             onClick={(event) => {
               event.stopPropagation();
               goToPrev();
@@ -140,7 +140,7 @@ export function Lightbox({ isOpen, onClose, items, index }: LightboxProps) {
           <button
             type="button"
             aria-label="Próximo"
-            className="absolute right-6 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-white/20 text-white text-3xl flex items-center justify-center hover:bg-white/30 transition"
+            className="absolute right-6 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-[color-mix(in_srgb,var(--color-text)_12%,transparent)] text-(--color-text) text-3xl flex items-center justify-center hover:bg-[color-mix(in_srgb,var(--color-text)_18%,transparent)] transition"
             onClick={(event) => {
               event.stopPropagation();
               goToNext();
@@ -169,27 +169,27 @@ export function Lightbox({ isOpen, onClose, items, index }: LightboxProps) {
                 <video
                   src={activeItem.url}
                   controls
-                  className="max-h-[90vh] max-w-[90vw] rounded-xl bg-black"
+                  className="max-h-[90vh] max-w-[90vw] rounded-xl bg-(--color-surface)"
                 />
               )}
               {activeItem.type === "DOCUMENT" && !iframeError && (
                 <iframe
                   src={activeItem.url}
                   title={activeItem.caption ?? "Documento"}
-                  className="h-[90vh] w-[90vw] rounded-xl bg-white"
+                  className="h-[90vh] w-[90vw] rounded-xl bg-(--color-surface)"
                   onError={() => setIframeError(true)}
                 />
               )}
               {activeItem.type === "DOCUMENT" && iframeError && (
-                <div className="flex flex-col items-center gap-3 rounded-xl bg-white/10 p-6 text-center text-white">
-                  <p className="text-sm opacity-80">
+                <div className="flex flex-col items-center gap-3 rounded-xl bg-[color-mix(in_srgb,var(--color-text)_10%,transparent)] p-6 text-center text-(--color-text)">
+                  <p className="text-sm text-[color-mix(in_srgb,var(--color-text)_80%,transparent)]">
                     Não foi possível exibir o documento embutido.
                   </p>
                   <a
                     href={activeItem.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-white/80 transition"
+                    className="rounded-md border border-(--color-border) bg-(--color-surface) px-4 py-2 text-sm font-medium text-(--color-text) hover:bg-[color-mix(in_srgb,var(--color-text)_8%,var(--color-surface))] transition"
                   >
                     Abrir/baixar documento
                   </a>
@@ -198,18 +198,18 @@ export function Lightbox({ isOpen, onClose, items, index }: LightboxProps) {
             </div>
 
             {activeItem.caption && (
-              <p className="max-w-[85vw] text-center text-sm text-white/80">
+              <p className="max-w-[85vw] text-center text-sm text-[color-mix(in_srgb,var(--color-text)_80%,transparent)]">
                 {activeItem.caption}
               </p>
             )}
             {items.length > 1 && (
-              <p className="text-xs text-white/60">
+              <p className="text-xs text-[color-mix(in_srgb,var(--color-text)_60%,transparent)]">
                 {currentIndex + 1} / {items.length}
               </p>
             )}
           </>
         ) : (
-          <p className="text-white/70">Nenhum conteúdo</p>
+          <p className="text-[color-mix(in_srgb,var(--color-text)_70%,transparent)]">Nenhum conteúdo</p>
         )}
       </div>
     </div>,

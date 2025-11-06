@@ -17,11 +17,11 @@ type EmpresaPanelProps = {
   disabled?: boolean;
 };
 
-const inputClasses = "config-input w-full rounded-xl px-3 py-2 disabled:opacity-60";
+const inputClasses = "w-full rounded-xl px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60 transition-colors duration-200";
 
 const Field = ({ label, children }: { label: string; children: ReactNode }) => (
   <label className="block">
-    <div className="text-sm config-text-muted mb-1">{label}</div>
+    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</div>
     {children}
   </label>
 );
@@ -51,10 +51,7 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
   };
 
   return (
-    <section className="config-card rounded-2xl shadow-sm p-6">
-      <h3 className="text-lg font-semibold config-heading mb-2">Configuracao da Empresa</h3>
-      <p className="text-sm config-text-muted mb-4">Atualize dados da empresa, logo e endereco.</p>
-
+    <section className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Nome da empresa">
           <input
@@ -63,6 +60,7 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
             onChange={(e) => setForm((prev) => ({ ...prev, empresa: e.target.value }))}
             autoComplete="organization"
             disabled={disabled}
+            placeholder="Digite o nome da empresa"
           />
         </Field>
 
@@ -73,29 +71,34 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
             onChange={(e) => setForm((prev) => ({ ...prev, logoUrl: e.target.value }))}
             autoComplete="off"
             disabled={disabled}
+            placeholder="https://exemplo.com/logo.png"
           />
         </Field>
 
-        <Field label="Endereco">
+        <Field label="Endereço">
           <input
             className={inputClasses}
             value={form.endereco}
             onChange={(e) => setForm((prev) => ({ ...prev, endereco: e.target.value }))}
             autoComplete="street-address"
             disabled={disabled}
+            placeholder="Rua, número, complemento"
           />
         </Field>
 
         <div className="grid grid-cols-3 gap-3">
-          <Field label="Cidade">
-            <input
-              className={inputClasses}
-              value={form.cidade}
-              onChange={(e) => setForm((prev) => ({ ...prev, cidade: e.target.value }))}
-              autoComplete="address-level2"
-              disabled={disabled}
-            />
-          </Field>
+          <div className="col-span-2">
+            <Field label="Cidade">
+              <input
+                className={inputClasses}
+                value={form.cidade}
+                onChange={(e) => setForm((prev) => ({ ...prev, cidade: e.target.value }))}
+                autoComplete="address-level2"
+                disabled={disabled}
+                placeholder="Cidade"
+              />
+            </Field>
+          </div>
           <Field label="UF">
             <input
               className={inputClasses}
@@ -104,40 +107,52 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
               onChange={(e) => setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase().slice(0, 2) }))}
               autoComplete="address-level1"
               disabled={disabled}
+              placeholder="SP"
             />
           </Field>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between">
-        <div className="text-sm config-heading">
-          <div className="font-medium">Plano atual</div>
-          <div className="config-text-muted">Recursos variam conforme plano. Entre em contato para upgrade.</div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="config-btn px-3 py-2 rounded-lg disabled:opacity-60" disabled>
-            Gerenciar pagamento
-          </button>
-          <button className="config-btn-primary px-3 py-2 rounded-lg disabled:opacity-60" disabled>
-            Ver planos
-          </button>
+  <div className="p-6 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300">
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+              </svg>
+              Plano atual
+            </div>
+            <div className="text-sm text-gray-700 dark:text-gray-300">
+              Recursos variam conforme plano. Entre em contato para upgrade.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="px-4 py-2 rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition font-medium disabled:opacity-60" disabled>
+              Gerenciar pagamento
+            </button>
+            <button className="px-4 py-2 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium transition shadow-md disabled:opacity-60" disabled>
+              Ver planos
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="mt-6 flex gap-2">
+      <div className="flex gap-3 pt-2">
         <button
           onClick={save}
           disabled={!dirty || disabled}
-          className={`px-3 py-2 rounded-lg ${
-            dirty && !disabled ? "config-btn-primary" : "config-btn"
-          } disabled:opacity-60`}
+          className={`px-6 py-2.5 rounded-xl font-medium transition shadow-md disabled:opacity-60 ${
+            dirty && !disabled 
+              ? "bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white" 
+              : "bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
+          }`}
         >
-          Salvar
+          Salvar alterações
         </button>
         <button
           onClick={reset}
           disabled={!dirty || disabled}
-          className="config-btn px-3 py-2 rounded-lg disabled:opacity-60"
+          className="px-6 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition font-medium disabled:opacity-60"
         >
           Cancelar
         </button>

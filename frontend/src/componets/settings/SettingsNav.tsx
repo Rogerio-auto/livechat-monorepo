@@ -10,32 +10,30 @@ export default function SettingsNav({
   onChange: (id: string) => void;
 }) {
   return (
-    <nav className="config-nav rounded-2xl sticky top-6">
-      <ul className="p-3 space-y-1">
+    <nav className="sticky top-6">
+      <ul className="space-y-1">
         {sections.map((s) => {
           const active = s.id === current;
           return (
             <li key={s.id}>
               <button
                 type="button"
-                className={`config-nav-btn w-full text-left px-3 py-2 rounded-xl transition ${
-                  active ? "config-nav-btn--active" : ""
+                className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
+                  active
+                    ? "bg-(--color-primary) text-(--color-on-primary) shadow-lg"
+                    : "text-(--color-text) hover:bg-(--color-sidebar-hover)"
                 }`}
                 onClick={() => onChange(s.id)}
               >
-                <div
-                  className={`text-sm font-medium ${
-                    active ? "config-heading" : "config-text-muted"
-                  }`}
-                >
+                <div className={`text-sm font-semibold ${active ? "text-(--color-on-primary)" : "text-(--color-text)"}`}>
                   {s.title}
                 </div>
                 {s.subtitle && (
-                  <div
-                    className={`config-nav-btn__subtitle text-xs ${
-                      active ? "config-nav-btn__subtitle--active" : ""
-                    }`}
-                  >
+                  <div className={`text-xs mt-0.5 ${
+                    active
+                      ? "text-(--color-on-primary) opacity-80"
+                      : "text-(--color-text-muted)"
+                  }`}>
                     {s.subtitle}
                   </div>
                 )}

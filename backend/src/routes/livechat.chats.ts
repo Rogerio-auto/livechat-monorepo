@@ -1516,6 +1516,80 @@ export function registerLivechatChatRoutes(app: express.Application) {
     return res.json(data);
   });
 
+  // Atualizar agente de IA do chat
+  app.put("/livechat/chats/:id/ai-agent", requireAuth, async (req, res) => {
+    const { id } = req.params as { id: string };
+    const { agentId } = req.body || {};
+    
+    // Permitir null para remover agente
+    if (agentId !== null && typeof agentId !== "string") {
+      return res.status(400).json({ error: "agentId deve ser string ou null" });
+    }
+
+    // Se agentId fornecido, validar se existe e pertence à empresa
+    if (agentId) {
+      const companyId = req.user?.company_id;
+      if (!companyId) return res.status(401).json({ error: "Empresa não identificada" });
+
+      const { data: agent, error: agentError } = await supabaseAdmin
+        .from("agents")
+        .select("id, name, status")
+        .eq("id", agentId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (agentError) return res.status(500).json({ error: agentError.message });
+      if (!agent) return res.status(404).json({ error: "Agente não encontrado" });
+      if (agent.status !== "ACTIVE") {
+        return res.status(400).json({ error: "Agente não está ativo" });
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("chats")
+      .update({ ai_agent_id: agentId })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Invalidar cache do chat
+    await rDel(k.chat(id));
+
+    // Buscar nome do agente para resposta
+    let agentName = null;
+    if (agentId) {
+      const { data: agentData } = await supabaseAdmin
+        .from("agents")
+        .select("name")
+        .eq("id", agentId)
+        .maybeSingle();
+      agentName = agentData?.name ?? null;
+    }
+
+    // Emitir evento socket para atualizar UI
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`chat:${id}`).emit("chat:agent-changed", {
+          kind: "livechat.chat.agent-changed",
+          chatId: id,
+          ai_agent_id: agentId,
+          ai_agent_name: agentName,
+        });
+      }
+    } catch (socketErr) {
+      console.warn("[livechat/chats] failed to emit agent-changed event:", socketErr);
+    }
+
+    return res.json({ 
+      ...data, 
+      ai_agent_id: agentId,
+      ai_agent_name: agentName 
+    });
+  });
+
   // Listar mensagens (publicas + privadas) com cache
   app.get("/livechat/chats/:id/messages", requireAuth, async (req, res) => {
     const { id } = req.params as { id: string };

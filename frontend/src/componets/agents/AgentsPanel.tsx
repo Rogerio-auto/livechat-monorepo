@@ -6,6 +6,9 @@ import type {
   AutomationAgentPayload,
   AgentStatus,
   OpenAIIntegration,
+  AgentTemplate,
+  AgentTemplateQuestion,
+  AgentTemplatePreview,
 } from "../../types/types";
 import { OPENAI_MODEL_OPTIONS } from "../integrations/OpenAIIntegrationForm";
 
@@ -804,6 +807,8 @@ export default function AgentsPanel() {
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const [deleteTarget, setDeleteTarget] = useState<AutomationAgent | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
@@ -894,7 +899,7 @@ export default function AgentsPanel() {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      await fetchJson<{ ok: true }>(`${API}/agents/${deleteTarget.id}`, { method: "DELETE" });
+      await fetchJson<{ ok: true }>(`${API}/api/agents/${deleteTarget.id}`, { method: "DELETE" });
       setAgents((prev) => prev.filter((agent) => agent.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch (err) {
@@ -931,6 +936,13 @@ export default function AgentsPanel() {
             onClick={() => setFormContext({ mode: "create" })}
           >
             Novo agente
+          </button>
+          <button
+            type="button"
+            className={PRIMARY_BTN}
+            onClick={() => setWizardOpen(true)}
+          >
+            Novo agente (assistido)
           </button>
         </div>
       </div>
@@ -1063,6 +1075,323 @@ export default function AgentsPanel() {
           </div>
         </div>
       )}
+
+      {wizardOpen && (
+        <AgentWizardModal
+          open
+          integrations={activeIntegrations}
+          onClose={() => setWizardOpen(false)}
+          onCreated={(created) => {
+            setAgents((prev) => [created, ...prev]);
+            setWizardOpen(false);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+type WizardProps = {
+  open: boolean;
+  integrations: OpenAIIntegration[];
+  onClose: () => void;
+  onCreated: (agent: AutomationAgent) => void;
+};
+
+function AgentWizardModal({ open, integrations, onClose, onCreated }: WizardProps) {
+  const [templates, setTemplates] = useState<AgentTemplate[]>([]);
+  const [tplLoading, setTplLoading] = useState(false);
+  const [tplError, setTplError] = useState<string | null>(null);
+  const [selectedTplId, setSelectedTplId] = useState<string>("");
+  const [selectedTpl, setSelectedTpl] = useState<AgentTemplate | null>(null);
+  const [questions, setQuestions] = useState<AgentTemplateQuestion[]>([]);
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [preview, setPreview] = useState<AgentTemplatePreview | null>(null);
+  const [name, setName] = useState("");
+  const [integrationId, setIntegrationId] = useState("");
+  const [modelOverride, setModelOverride] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const load = async () => {
+      setTplLoading(true);
+      setTplError(null);
+      try {
+        const list = await fetchJson<AgentTemplate[]>(`${API}/agent-templates`);
+        setTemplates(list);
+      } catch (err) {
+        setTplError(err instanceof Error ? err.message : "Falha ao carregar templates");
+      } finally {
+        setTplLoading(false);
+      }
+    };
+    load();
+  }, [open]);
+
+  useEffect(() => {
+    if (!selectedTplId) {
+      setSelectedTpl(null);
+      setQuestions([]);
+      return;
+    }
+    const loadDetail = async () => {
+      try {
+        const detail = await fetchJson<AgentTemplate & { questions: AgentTemplateQuestion[] }>(
+          `${API}/agent-templates/${selectedTplId}`,
+        );
+        setSelectedTpl(detail);
+        setQuestions(detail.questions || []);
+        // reset answers
+        const initial: Record<string, unknown> = {};
+        (detail.questions || []).forEach((q) => {
+          initial[q.key] = q.type === "boolean" ? false : "";
+        });
+        setAnswers(initial);
+        setPreview(null);
+      } catch (err) {
+        setTplError(err instanceof Error ? err.message : "Falha ao carregar template");
+      }
+    };
+    loadDetail();
+  }, [selectedTplId]);
+
+  const doPreview = useCallback(async () => {
+    if (!selectedTplId) return;
+    try {
+      const resp = await fetchJson<AgentTemplatePreview>(
+        `${API}/agent-templates/${selectedTplId}/preview`,
+        { method: "POST", body: JSON.stringify({ answers }) },
+      );
+      setPreview(resp);
+      if (resp.model && !modelOverride) setModelOverride(resp.model);
+    } catch (err) {
+      setTplError(err instanceof Error ? err.message : "Falha ao gerar prévia");
+    }
+  }, [answers, modelOverride, selectedTplId]);
+
+  const renderQuestion = (q: AgentTemplateQuestion) => {
+    const key = q.key;
+    const value = answers[key];
+    const set = (val: unknown) => setAnswers((prev) => ({ ...prev, [key]: val }));
+    const base = "config-input w-full rounded-xl px-3 py-2 disabled:opacity-70";
+    switch (q.type) {
+      case "text":
+        return (
+          <input
+            className={base}
+            value={String(value ?? "")}
+            onChange={(e) => set(e.target.value)}
+            placeholder={q.help || q.label}
+          />
+        );
+      case "textarea":
+        return (
+          <textarea
+            className={base}
+            value={String(value ?? "")}
+            onChange={(e) => set(e.target.value)}
+            placeholder={q.help || q.label}
+          />
+        );
+      case "select": {
+        const options = Array.isArray(q.options) ? (q.options as string[]) : [];
+        return (
+          <select className={base} value={String(value ?? "")} onChange={(e) => set(e.target.value)}>
+            <option value="">Selecione</option>
+            {options.map((op) => (
+              <option key={op} value={op}>{op}</option>
+            ))}
+          </select>
+        );
+      }
+      case "number":
+        return (
+          <input
+            type="number"
+            className={base}
+            value={String(value ?? "")}
+            onChange={(e) => set(e.target.value === "" ? "" : Number(e.target.value))}
+            placeholder={q.help || q.label}
+          />
+        );
+      case "boolean":
+        return (
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(value)}
+              onChange={(e) => set(e.target.checked)}
+            />
+            {q.label}
+          </label>
+        );
+      case "multiselect": {
+        const options = Array.isArray(q.options) ? (q.options as string[]) : [];
+        const arr = Array.isArray(value) ? (value as string[]) : [];
+        const toggle = (op: string) => {
+          const next = arr.includes(op) ? arr.filter((v) => v !== op) : [...arr, op];
+          set(next);
+        };
+        return (
+          <div className="flex flex-wrap gap-2">
+            {options.map((op) => (
+              <button
+                type="button"
+                key={op}
+                className={`px-3 py-1.5 rounded-lg text-xs transition ${
+                  arr.includes(op) ? "bg-[#1D4ED8] text-white" : "bg-white/5 text-[#94A3B8]"
+                }`}
+                onClick={() => toggle(op)}
+              >
+                {op}
+              </button>
+            ))}
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
+
+  const createAgent = useCallback(async () => {
+    if (!name.trim()) { setTplError("Informe o nome do agente"); return; }
+    if (!selectedTpl) { setTplError("Selecione um template"); return; }
+    setSubmitting(true);
+    setTplError(null);
+    try {
+      if (!preview) await doPreview();
+      const payload: AutomationAgentPayload = {
+        name: name.trim(),
+        description: (preview?.prompt || "").trim(),
+        integration_openai_id: integrationId || null,
+        model: (modelOverride || preview?.model || "").trim() || undefined,
+        model_params: preview?.model_params || {},
+        aggregation_enabled: true,
+        aggregation_window_sec: 20,
+        max_batch_messages: 20,
+        allow_handoff: true,
+        tools_policy: {},
+        media_config: {},
+      };
+      const created = await fetchJson<AutomationAgent>(`${API}/agents`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      onCreated(created);
+    } catch (err) {
+      setTplError(err instanceof Error ? err.message : "Falha ao criar agente");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [API, doPreview, integrationId, modelOverride, name, onCreated, preview, selectedTpl]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#0F172A] text-[#94A3B8] shadow-lg">
+        <div className="flex items-start justify-between gap-4 border-b border-white/5 p-6">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Novo agente (assistido)</h2>
+            <p className="text-sm">Selecione um template, responda às perguntas e gere o prompt automaticamente.</p>
+          </div>
+          <button type="button" className="text-[#94A3B8] hover:text-white" onClick={onClose}>
+            &times;
+          </button>
+        </div>
+
+        <div className="max-h-[75vh] overflow-y-auto p-6 space-y-5">
+          {tplError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+              {tplError}
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className={LABEL}>Nome do agente *</label>
+              <input className={INPUT_BASE} value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Vendedor WhatsApp" />
+            </div>
+            <div>
+              <label className={LABEL}>Integração OpenAI</label>
+              <select className={INPUT_BASE} value={integrationId} onChange={(e) => setIntegrationId(e.target.value)}>
+                <option value="">Sem integração</option>
+                {integrations.map((i) => (
+                  <option key={i.id} value={i.id}>{i.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className={LABEL}>Template</label>
+              <select
+                className={INPUT_BASE}
+                value={selectedTplId}
+                onChange={(e) => setSelectedTplId(e.target.value)}
+                disabled={tplLoading}
+              >
+                <option value="">Selecione um template</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.category ? `${t.category} — ${t.name}` : t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={LABEL}>Modelo (sugerido pelo template)</label>
+              <input
+                className={INPUT_BASE}
+                value={modelOverride}
+                onChange={(e) => setModelOverride(e.target.value)}
+                placeholder={preview?.model || selectedTpl?.default_model || "Ex.: gpt-4o-mini"}
+              />
+            </div>
+          </div>
+
+          {selectedTpl && questions.length > 0 && (
+            <div className="rounded-xl border border-white/10 bg-[#0B1324] p-4">
+              <h4 className="text-sm font-semibold text-white mb-3">Perguntas</h4>
+              <div className="grid gap-4 md:grid-cols-2">
+                {questions.map((q) => (
+                  <div key={q.id}>
+                    {q.type !== "boolean" && <label className={LABEL}>{q.label}</label>}
+                    {renderQuestion(q)}
+                    {q.help && q.type !== "boolean" && (
+                      <p className="mt-1 text-xs text-[#64748B]">{q.help}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <button type="button" className={SOFT_BTN} onClick={doPreview}>Pré-visualizar</button>
+              </div>
+            </div>
+          )}
+
+          {preview && (
+            <div className="rounded-xl border border-white/10 bg-[#0B1324] p-4">
+              <h4 className="text-sm font-semibold text-white mb-3">Pré-visualização do prompt</h4>
+              <pre className="whitespace-pre-wrap text-sm text-[#CBD5E1]">{preview.prompt}</pre>
+              <div className="mt-3 text-xs text-[#94A3B8]">
+                <div>Modelo sugerido: <span className="text-white/80">{preview.model || "(nenhum)"}</span></div>
+                <div>Params: <span className="text-white/80">{JSON.stringify(preview.model_params)}</span></div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-3 border-t border-white/5 p-6">
+          <button type="button" className={SOFT_BTN} onClick={onClose} disabled={submitting}>Cancelar</button>
+          <button type="button" className={PRIMARY_BTN} onClick={createAgent} disabled={submitting}>
+            {submitting ? "Criando..." : "Criar agente"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

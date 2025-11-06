@@ -90,18 +90,18 @@ export function AudioPlayerWhatsApp({ src, caption }: AudioPlayerProps) {
   }, [duration, currentTime]);
 
   return (
-    <div className="flex w-full flex-col gap-2 text-zinc-800">
-      <div className="flex items-center gap-3 rounded-2xl   bg-white px-3 py-2 shadow-sm">
+    <div className="flex w-full flex-col gap-2 text-(--color-text)">
+      <div className="flex items-center gap-3 rounded-2xl bg-(--color-surface) px-3 py-2 shadow-sm">
         <button
           type="button"
           onClick={togglePlayback}
           aria-label={isPlaying ? "Pausar áudio" : "Reproduzir áudio"}
-          className="flex h-10 w-10 items-center justify-center rounded-full  bg-white text-zinc-700 hover:bg-zinc-100 transition"
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-(--color-surface) text-(--color-text) hover:bg-[color-mix(in_srgb,var(--color-text)_8%,var(--color-surface))] transition"
         >
           {isPlaying ? (
             <span className="text-lg font-bold">❚❚</span>
           ) : (
-            <span className="translate-x-[1px] text-lg font-semibold">▶</span>
+            <span className="translate-x-px text-lg font-semibold">▶</span>
           )}
         </button>
         <div className="flex flex-1 flex-col gap-1">
@@ -115,7 +115,7 @@ export function AudioPlayerWhatsApp({ src, caption }: AudioPlayerProps) {
             onInput={handleRangeChange}
             className="w-44 appearance-none rounded-full accent-emerald-600 md:w-56"
           />
-          <div className="flex items-center justify-between text-[11px] text-zinc-500">
+          <div className="flex items-center justify-between text-[11px] text-(--color-text-muted)">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
@@ -123,7 +123,7 @@ export function AudioPlayerWhatsApp({ src, caption }: AudioPlayerProps) {
         <audio ref={audioRef} src={src} preload="metadata" />
       </div>
       {caption ? (
-        <p className="text-xs text-zinc-600">{caption}</p>
+        <p className="text-xs text-(--color-text-muted)">{caption}</p>
       ) : null}
     </div>
   );

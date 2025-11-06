@@ -8,6 +8,7 @@ const isDev = process.env.NODE_ENV !== "production";
 type UserCompanyRow = {
   company_id?: string | null;
   email?: string | null;
+  role?: string | null;
 };
 
 function isIgnorableLookupError(error: PostgrestError | null, column: string): boolean {
@@ -31,7 +32,7 @@ function isMissingColumn(error: PostgrestError | null, column: string): boolean 
 }
 
 async function selectUserRow(column: string, userId: string, includeEmail: boolean) {
-  const selectColumns = includeEmail ? "company_id, email" : "company_id";
+  const selectColumns = includeEmail ? "company_id, email, role" : "company_id, role";
   return supabaseAdmin
     .from("users")
     .select(selectColumns)
@@ -138,10 +139,23 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       company_id: companyId ?? null,
     };
     
+    // Adicionar profile com role para rotas admin
+    (req as any).profile = {
+      id: supaUser.id,
+      email:
+        profile?.email ??
+        (typeof meta.email === "string" ? meta.email : undefined) ??
+        (typeof appMeta.email === "string" ? appMeta.email : undefined) ??
+        supaUser.email,
+      company_id: companyId ?? null,
+      role: profile?.role ?? "USER", // Default USER se não encontrar
+    };
+    
     console.log("[requireAuth] 🔑 User authenticated:", {
       authUserId: supaUser.id,
       email: (req as any).user.email,
       company_id: companyId,
+      role: profile?.role,
     });
     
     next();

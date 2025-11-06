@@ -706,7 +706,7 @@ T${pad(date.getHours())}
       {" "}
       <button
         type="button"
-        className="w-full flex items-center justify-between px-3 py-2 text-sm bg-zinc-50 hover:bg-zinc-100"
+        className="w-full flex items-center justify-between px-3 py-2 text-sm bg-[color-mix(in_srgb,var(--color-text)_4%,var(--color-surface))] hover:bg-[color-mix(in_srgb,var(--color-text)_8%,var(--color-surface))]"
         onClick={() =>
           setOpenSections((prev) => ({
             ...prev,
@@ -715,17 +715,17 @@ T${pad(date.getHours())}
         }
       >
         {" "}
-        <span className="font-medium text-zinc-700">{title}</span>{" "}
-        <span className="text-zinc-500">
+        <span className="font-medium text-(--color-text)">{title}</span>{" "}
+        <span className="text-(--color-text-muted)">
           {openSections[id] ? "-" : "+"}
         </span>{" "}
       </button>{" "}
-      {openSections[id] && <div className="p-3 bg-white">{children}</div>}
+      {openSections[id] && <div className="p-3 bg-(--color-surface)">{children}</div>}
     </div>
   );
   const assignedSelectValue = currentAssigneeUserId ?? "";
   return (
-    <div className="bg-white rounded-2xl shadow p-3 flex flex-col gap-1">
+  <div className="bg-(--color-surface) rounded-2xl shadow p-3 flex flex-col gap-1">
       {" "}
       {chat ? (
         <div className="flex items-center gap-3 p-3 bg-emerald-50 border-b border-emerald-100">
@@ -738,19 +738,19 @@ T${pad(date.getHours())}
           </div>{" "}
           <div className="min-w-0">
             {" "}
-            <div className="text-sm font-semibold text-zinc-800 truncate">
+            <div className="text-sm font-semibold text-(--color-text) truncate">
               {" "}
               {chat.customer_name || "Desconhecido"}
             </div>{" "}
-            <div className="text-xs text-zinc-500 truncate">
+            <div className="text-xs text-(--color-text-muted) truncate">
               {chat.customer_phone || chat.customer_id.slice(0, 8)}
             </div>{" "}
           </div>{" "}
         </div>
       ) : (
-        <div className="text-sm text-zinc-600">Nenhum chat selecionado</div>
+        <div className="text-sm text-(--color-text-muted)">Nenhum chat selecionado</div>
       )}
-      <div className="flex-1 overflow-y-auto p-2 space-y-3 bg-white">
+      <div className="flex-1 overflow-y-auto p-2 space-y-3 bg-(--color-surface)">
         {" "}
         <Section id="actions" title="Acoes da conversa">
           {" "}
@@ -758,17 +758,17 @@ T${pad(date.getHours())}
             {" "}
             <div>
               {" "}
-              <label className="block text-xs text-zinc-500 mb-1">
+              <label className="block text-xs text-(--color-text-muted) mb-1">
                 {" "}
                 Agente atribuido{" "}
                 {currentAssigneeName && (
-                  <span className="text-zinc-700 font-medium">
+                  <span className="text-(--color-text) font-medium">
                     ({currentAssigneeName})
                   </span>
                 )}
               </label>{" "}
               <select
-                className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                 value={assignedSelectValue}
                 onChange={(e) =>
                   applyAssignee(e.target.value ? e.target.value : null)
@@ -787,7 +787,7 @@ T${pad(date.getHours())}
             </div>{" "}
             <div>
               {" "}
-              <label className="block text-xs text-zinc-500 mb-1">
+              <label className="block text-xs text-(--color-text-muted) mb-1">
                 Marcador da conversa
               </label>{" "}
               <div className="flex flex-wrap gap-2">
@@ -810,7 +810,7 @@ T${pad(date.getHours())}
                       key={tag.id}
                       type="button"
                       className={`px-2 py-1 rounded-full text-xs border ${
-                        selected ? "shadow-sm" : "bg-white"
+                        selected ? "shadow-sm" : "bg-(--color-surface)"
                       }
 `}
                       style={buttonStyle}
@@ -836,27 +836,27 @@ T${pad(date.getHours())}
         </Section>{" "}
         <Section id="macros" title="Macros">
           {" "}
-          <div className="text-xs text-zinc-500">
+          <div className="text-xs text-(--color-text-muted)">
             Sem macros configuradas.
           </div>{" "}
         </Section>{" "}
         <Section id="info" title="Informacoes da conversa">
           {" "}
           {chat ? (
-            <div className="text-sm text-zinc-700 space-y-1">
+            <div className="text-sm text-(--color-text) space-y-1">
               {" "}
               <div>
                 {" "}
-                <span className="text-zinc-500">Status:</span> {chat.status}
+                <span className="text-(--color-text-muted)">Status:</span> {chat.status}
               </div>{" "}
               <div>
                 {" "}
-                <span className="text-zinc-500">Ultima mensagem:</span>{" "}
-                {chat.last_message || "—"}
+                <span className="text-(--color-text-muted)">Ultima mensagem:</span>{" "}
+                {chat.last_message || "ï¿½"}
               </div>{" "}
             </div>
           ) : (
-            <div className="text-xs text-zinc-500">Selecione um chat.</div>
+            <div className="text-xs text-(--color-text-muted)">Selecione um chat.</div>
           )}
         </Section>{" "}
         <Section id="participants" title="Participantes da conversa">
@@ -864,7 +864,7 @@ T${pad(date.getHours())}
           <div className="space-y-1">
             {" "}
             {participants.length === 0 && (
-              <div className="text-xs text-zinc-500">Nenhum participante.</div>
+              <div className="text-xs text-(--color-text-muted)">Nenhum participante.</div>
             )}
             {participants.map((participant) => (
               <div
@@ -874,11 +874,11 @@ T${pad(date.getHours())}
                 {" "}
                 <div className="truncate">
                   {" "}
-                  <span className="font-medium text-zinc-800">
+                  <span className="font-medium text-(--color-text)">
                     {participant.name}
                   </span>{" "}
                   {participant.role && (
-                    <span className="ml-1 text-xs text-zinc-500">
+                    <span className="ml-1 text-xs text-(--color-text-muted)">
                       ({participant.role})
                     </span>
                   )}
@@ -900,11 +900,11 @@ T${pad(date.getHours())}
               {" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Coluna
                 </label>{" "}
                 <select
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={currentStageId || ""}
                   onChange={(e) => setCurrentStageId(e.target.value || null)}
                   disabled={movingStage || !columns.length}
@@ -924,11 +924,11 @@ T${pad(date.getHours())}
                   {" "}
                   <div>
                     {" "}
-                    <label className="block text-xs text-zinc-500 mb-1">
+                    <label className="block text-xs text-(--color-text-muted) mb-1">
                       Responsavel
                     </label>{" "}
                     <select
-                      className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                      className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                       value={cardOwnerId || ""}
                       onChange={(e) => setCardOwnerId(e.target.value || null)}
                     >
@@ -947,11 +947,11 @@ T${pad(date.getHours())}
                   </div>{" "}
                   <div>
                     {" "}
-                    <label className="block text-xs text-zinc-500 mb-1">
+                    <label className="block text-xs text-(--color-text-muted) mb-1">
                       Descricao
                     </label>{" "}
                     <textarea
-                      className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                      className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                       rows={3}
                       value={cardDescription}
                       onChange={(e) => setCardDescription(e.target.value)}
@@ -959,12 +959,12 @@ T${pad(date.getHours())}
                   </div>{" "}
                   <div>
                     {" "}
-                    <label className="block text-xs text-zinc-500 mb-1">
+                    <label className="block text-xs text-(--color-text-muted) mb-1">
                       Posicao na coluna
                     </label>{" "}
                     <input
                       type="number"
-                      className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                      className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                       value={cardPosition ?? ""}
                       onChange={(e) =>
                         setCardPosition(
@@ -972,7 +972,7 @@ T${pad(date.getHours())}
                         )
                       }
                     />{" "}
-                    <div className="text-[11px] text-zinc-500 mt-1">
+                    <div className="text-[11px] text-(--color-text-muted) mt-1">
                       {" "}
                       Posicoes iguais na mesma coluna nao sao permitidas.{" "}
                     </div>{" "}
@@ -1007,7 +1007,7 @@ T${pad(date.getHours())}
               )}
             </div>
           ) : (
-            <div className="text-xs text-zinc-500">
+            <div className="text-xs text-(--color-text-muted)">
               Lead nao identificado para este contato.
             </div>
           )}
@@ -1019,7 +1019,7 @@ T${pad(date.getHours())}
             {contactEvents.length > 0 ? (
               <div className="mb-2">
                 {" "}
-                <div className="text-xs text-zinc-500 mb-1">
+                <div className="text-xs text-(--color-text-muted) mb-1">
                   Eventos do contato
                 </div>{" "}
                 <div className="flex flex-wrap gap-2">
@@ -1031,7 +1031,7 @@ T${pad(date.getHours())}
                       className={`px-2 py-1 rounded-full text-xs border ${
                         expandedEventId === event.id
                           ? "bg-emerald-100 border-emerald-300 text-emerald-800"
-                          : "bg-white border-zinc-200 text-zinc-700"
+                          : "bg-(--color-surface) border-(--color-border) text-(--color-text)"
                       }
 `}
                       onClick={() => {
@@ -1063,7 +1063,7 @@ T${pad(date.getHours())}
                   ))}
                 </div>{" "}
                 {expandedEventId && (
-                  <div className="mt-2 p-2 border rounded-lg bg-zinc-50">
+                  <div className="mt-2 p-2 border rounded-lg bg-[color-mix(in_srgb,var(--color-text)_4%,var(--color-surface))]">
                     {" "}
                     {(() => {
                       const edit = eventEdit[expandedEventId] || {};
@@ -1072,11 +1072,11 @@ T${pad(date.getHours())}
                           {" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Titulo
                             </label>{" "}
                             <input
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.title || ""}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1091,11 +1091,11 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Local
                             </label>{" "}
                             <input
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.location || ""}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1110,12 +1110,12 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Inicio
                             </label>{" "}
                             <input
                               type="datetime-local"
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.start_time || ""}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1130,12 +1130,12 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Fim
                             </label>{" "}
                             <input
                               type="datetime-local"
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.end_time || ""}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1150,11 +1150,11 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Tipo
                             </label>{" "}
                             <select
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.event_type || "OTHER"}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1183,11 +1183,11 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div>
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Status
                             </label>{" "}
                             <select
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               value={edit.status || "SCHEDULED"}
                               onChange={(e) =>
                                 setEventEdit((prev) => ({
@@ -1212,11 +1212,11 @@ T${pad(date.getHours())}
                           </div>{" "}
                           <div className="col-span-2">
                             {" "}
-                            <label className="block text-xs text-zinc-500 mb-1">
+                            <label className="block text-xs text-(--color-text-muted) mb-1">
                               Descricao
                             </label>{" "}
                             <textarea
-                              className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-sm"
+                              className="w-full bg-(--color-surface) border border-(--color-border) rounded-lg px-3 py-2 text-sm text-(--color-text)"
                               rows={3}
                               value={edit.description || ""}
                               onChange={(e) =>
@@ -1234,7 +1234,7 @@ T${pad(date.getHours())}
                             {" "}
                             <button
                               type="button"
-                              className="px-3 py-2 rounded-lg bg-zinc-200 text-sm hover:bg-zinc-300"
+                              className="px-3 py-2 rounded-lg bg-(--color-surface-muted) text-(--color-text) text-sm hover:bg-[color-mix(in_srgb,var(--color-text)_8%,var(--color-surface-muted))]"
                               onClick={() => setExpandedEventId(null)}
                             >
                               {" "}
@@ -1297,7 +1297,7 @@ T${pad(date.getHours())}
                 )}
               </div>
             ) : (
-              <div className="text-xs text-zinc-500">
+              <div className="text-xs text-(--color-text-muted)">
                 {" "}
                 Nenhum evento para este contato no periodo selecionado.{" "}
               </div>
@@ -1306,11 +1306,11 @@ T${pad(date.getHours())}
               {" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Calendario
                 </label>{" "}
                 <select
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.calendar_id}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1331,11 +1331,11 @@ T${pad(date.getHours())}
               </div>{" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Tipo
                 </label>{" "}
                 <select
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.event_type}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1361,11 +1361,11 @@ T${pad(date.getHours())}
               </div>{" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Titulo
                 </label>{" "}
                 <input
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.title}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1377,11 +1377,11 @@ T${pad(date.getHours())}
               </div>{" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Local
                 </label>{" "}
                 <input
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.location}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1393,12 +1393,12 @@ T${pad(date.getHours())}
               </div>{" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Inicio
                 </label>{" "}
                 <input
                   type="datetime-local"
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.start_time}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1410,12 +1410,12 @@ T${pad(date.getHours())}
               </div>{" "}
               <div>
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Fim
                 </label>{" "}
                 <input
                   type="datetime-local"
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   value={eventForm.end_time}
                   onChange={(e) =>
                     setEventForm((prev) => ({
@@ -1427,11 +1427,11 @@ T${pad(date.getHours())}
               </div>{" "}
               <div className="col-span-2">
                 {" "}
-                <label className="block text-xs text-zinc-500 mb-1">
+                <label className="block text-xs text-(--color-text-muted) mb-1">
                   Descricao
                 </label>{" "}
                 <textarea
-                  className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm"
+                  className="w-full bg-(--color-surface-muted) rounded-lg px-3 py-2 text-sm text-(--color-text) border border-(--color-border)"
                   rows={3}
                   value={eventForm.description}
                   onChange={(e) =>
@@ -1458,7 +1458,7 @@ T${pad(date.getHours())}
                   {" "}
                   <button
                     type="button"
-                    className="px-3 py-2 rounded-lg bg-zinc-200 text-sm hover:bg-zinc-300"
+                    className="px-3 py-2 rounded-lg bg-(--color-surface-muted) text-(--color-text) text-sm hover:bg-[color-mix(in_srgb,var(--color-text)_8%,var(--color-surface-muted))]"
                     onClick={() =>
                       updateMeeting({
                         title: eventForm.title,
@@ -1473,7 +1473,7 @@ T${pad(date.getHours())}
                     {" "}
                     Atualizar{" "}
                   </button>{" "}
-                  <span className="text-xs text-zinc-500 self-center">
+                  <span className="text-xs text-(--color-text-muted) self-center">
                     {" "}
                     Evento criado: {lastCreatedEvent.title}
                   </span>{" "}

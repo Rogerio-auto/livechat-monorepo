@@ -27,6 +27,12 @@ import { registerSettingsUsersRoutes } from "./routes/settings.users.ts";
 import { registerSettingsInboxesRoutes } from "./routes/settings.inboxes.ts";
 import { registerOpenAIIntegrationRoutes } from "./routes/integrations.openai.ts";
 import { registerAgentsRoutes } from "./routes/agents.ts";
+import { registerAgentTemplatesRoutes } from "./routes/agents.templates.ts";
+import { registerAgentTemplatesAdminRoutes } from "./routes/agents.templates.admin.ts";
+import { registerCompanyRoutes } from "./routes/companies.ts";
+import { registerKnowledgeBaseRoutes } from "./routes/knowledge.base.ts";
+import templateToolsRouter from "./routes/agents.templates.tools.ts";
+import toolsAdminRouter from "./routes/tools.admin.ts";
 import filesRoute from "./server/files.route.ts";
 import { startSocketRelay } from "./socket.relay.ts";
 import { startLivechatSocketBridge } from "./socket/bridge.livechat.ts";
@@ -1456,6 +1462,88 @@ app.get("/leads", requireAuth, async (_req, res) => {
   }));
 
   return res.json(mapped);
+});
+
+// Statistics endpoint
+app.get("/api/leads/stats", requireAuth, async (_req, res) => {
+  try {
+    // Get all leads
+    const { data: allLeads, error: leadsError } = await supabaseAdmin
+      .from("leads")
+      .select("id, status_client, created_at, kanban_column_id, customer_id");
+    
+    if (leadsError) throw leadsError;
+
+    const leads = allLeads || [];
+    const now = new Date();
+    const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+
+    // Calculate basic metrics
+    const total = leads.length;
+    const active = leads.filter((l: any) => 
+      (l.status_client || "").toLowerCase() === "ativo"
+    ).length;
+    const inactive = total - active;
+
+    const newThisMonth = leads.filter((l: any) => 
+      new Date(l.created_at) >= firstDayThisMonth
+    ).length;
+    const newLastMonth = leads.filter((l: any) => {
+      const created = new Date(l.created_at);
+      return created >= firstDayLastMonth && created <= lastDayLastMonth;
+    }).length;
+
+    // Distribution by kanban stage
+    const byStage: Record<string, number> = {};
+    const stageIds = [...new Set(leads.map((l: any) => l.kanban_column_id).filter(Boolean))];
+    
+    // Get stage names
+    const { data: columns } = await supabaseAdmin
+      .from("kanban_columns")
+      .select("id, name, title")
+      .in("id", stageIds);
+
+    const stageMap = new Map((columns || []).map((c: any) => [c.id, c.name || c.title || "Sem título"]));
+
+    for (const lead of leads) {
+      if (lead.kanban_column_id) {
+        const stageName = stageMap.get(lead.kanban_column_id) || "Outros";
+        byStage[stageName] = (byStage[stageName] || 0) + 1;
+      } else {
+        byStage["Sem etapa"] = (byStage["Sem etapa"] || 0) + 1;
+      }
+    }
+
+    // Count leads with proposals
+    const leadIds = leads.map((l: any) => l.id);
+    const { data: proposals } = await supabaseAdmin
+      .from("proposals")
+      .select("lead_id, total_value")
+      .in("lead_id", leadIds);
+
+    const leadsWithProposals = new Set((proposals || []).map((p: any) => p.lead_id)).size;
+    const conversionRate = total > 0 ? leadsWithProposals / total : 0;
+    
+    const totalValue = (proposals || []).reduce((sum: number, p: any) => sum + (Number(p.total_value) || 0), 0);
+    const avgTicket = leadsWithProposals > 0 ? totalValue / leadsWithProposals : 0;
+
+    return res.json({
+      total,
+      active,
+      inactive,
+      newThisMonth,
+      newLastMonth,
+      byStage,
+      withProposals: leadsWithProposals,
+      conversionRate: Math.round(conversionRate * 100) / 100,
+      avgTicket: Math.round(avgTicket * 100) / 100,
+    });
+  } catch (error: any) {
+    console.error("[leads/stats] Error:", error);
+    return res.status(500).json({ error: error.message || "Failed to get stats" });
+  }
 });
 
 // Get lead by id (minimal fields needed for receipts)
@@ -3436,6 +3524,12 @@ startLivechatSocketBridge();
 registerLivechatContactsRoutes(app);
 registerOpenAIIntegrationRoutes(app);
 registerAgentsRoutes(app);
+registerAgentTemplatesRoutes(app);
+registerAgentTemplatesAdminRoutes(app);
+registerCompanyRoutes(app);
+registerKnowledgeBaseRoutes(app);
+app.use("/api", templateToolsRouter);
+app.use("/api", toolsAdminRouter);
 registerSettingsInboxesRoutes(app);
 registerSettingsUsersRoutes(app);
 registerSendMessageRoutes(app); // ajuste a assinatura p/ injetar o guard

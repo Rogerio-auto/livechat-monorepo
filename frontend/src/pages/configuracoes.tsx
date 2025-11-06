@@ -6,7 +6,8 @@ import EmpresaPanel, { type CompanyForm } from "../componets/company/EmpresaPane
 import PerfilPanel, { type ProfileForm } from "../componets/profile/PerfilPanel";
 import InboxesPanel from "../componets/inboxes/InboxesPanel";
 import IntegracoesPanel from "../componets/integrations/IntegracoesPanel";
-import AgentsPanel from "../componets/agents/AgentsPanel";
+import { SimplifiedAgentPanel } from "../componets/agents/SimplifiedAgentPanel";
+import { KnowledgeBasePanel } from "../componets/knowledge/KnowledgeBasePanel";
 import AgentesPanel from "../componets/users/AgentesPanel";
 import { API, fetchJson } from "../utils/api";
 import type {
@@ -35,6 +36,7 @@ type FetchProfileResponse = {
   companyName?: string | null;
   companyId?: string | null;
   avatarUrl?: string | null;
+  role?: string | null;
 };
 
 type FetchCompanyResponse = {
@@ -198,9 +200,31 @@ export default function ConfiguracoesPage() {
   const [createSaving, setCreateSaving] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [lastCreatedInboxId, setLastCreatedInboxId] = useState<string | null>(null);
+  const [profileRole, setProfileRole] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Inbox | null>(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
+
+  // Seções visíveis conforme role (IA apenas para ADMIN/MANAGER/SUPERVISOR)
+  const sections = useMemo(() => {
+    const allowedIA = ["ADMIN", "MANAGER", "SUPERVISOR"];
+    const role = String(profileRole || "").toUpperCase();
+    return SECTIONS.filter((s) => s.id !== "ia" || allowedIA.includes(role));
+  }, [profileRole]);
+
+
+  // If current tab becomes hidden for the user's role, redirect to first allowed
+  useEffect(() => {
+    const visibleIds = sections.map((s) => s.id);
+    if (!visibleIds.includes(tab)) {
+      const next = (sections[0]?.id ?? SECTIONS[0].id) as TabId;
+      if (next !== tab) {
+        const qs = new URLSearchParams(search);
+        qs.set("tab", next);
+        navigate({ search: `?${qs.toString()}` });
+      }
+    }
+  }, [sections, tab, navigate, search]);
 
   useEffect(() => {
     let active = true;
@@ -223,6 +247,7 @@ export default function ConfiguracoesPage() {
           }));
           setProfileBaseline({ nome: profileData.name || "", avatarUrl: profileData.avatarUrl || "" });
           setCompanyId(profileData.companyId || null);
+          setProfileRole(profileData.role || null);
         }
 
         if (companyData) {
@@ -590,90 +615,175 @@ export default function ConfiguracoesPage() {
   return (
     <>
       <Sidebar />
-      {/* Fundo com a nova paleta */}
-      <div className="config-page ml-16 min-h-screen">
-        <div className="grid grid-cols-12 gap-4 h-[calc(100vh-4rem)] p-6">
+      {/* Fundo com gradiente moderno - tema adaptativo */}
+  <div className="config-page ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
+        <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
+          {/* Sidebar de navegação */}
           <div className="col-span-12 md:col-span-2">
-            <SettingsNav sections={[...SECTIONS]} current={tab} onChange={(id) => goTab(id as TabId)} />
+            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-xl sticky top-6 transition-colors duration-300">
+              <SettingsNav sections={[...sections]} current={tab} onChange={(id) => goTab(id as TabId)} />
+            </div>
           </div>
 
-          <div className="col-span-12 md:col-span-10 overflow-y-auto pr-1">
-            <div className="space-y-4">
-              {tab === "empresa" && (
-                <div className={CARD}>
-                  <EmpresaPanel
-                    form={companyForm}
-                    baseline={companyBaseline}
-                    setForm={setCompanyForm}
-                    onSaved={(next) => {
-                      setCompanyForm(next);
-                      setCompanyBaseline(next);
-                    }}
-                    disabled={loading}
-                  />
+          {/* Conteúdo principal */}
+          <div className="col-span-12 md:col-span-10 overflow-y-auto pr-1 space-y-6">
+            {tab === "empresa" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-600/20 flex items-center justify-center transition-colors duration-300">
+                      <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                    </div>
+                    Empresa
+                  </h2>
+                  <p className="text-gray-400 mt-1">Gerencie dados da empresa e plano ativo</p>
                 </div>
-              )}
+                <EmpresaPanel
+                  form={companyForm}
+                  baseline={companyBaseline}
+                  setForm={setCompanyForm}
+                  onSaved={(next) => {
+                    setCompanyForm(next);
+                    setCompanyBaseline(next);
+                  }}
+                  disabled={loading}
+                />
+              </div>
+            )}
 
-              {tab === "perfil" && (
-                <div className={CARD}>
-                  <PerfilPanel
-                    form={profileForm}
-                    baseline={profileBaseline}
-                    setForm={setProfileForm}
-                    onSaved={(next) => {
-                      setProfileForm((prev) => ({ ...prev, ...next }));
-                      setProfileBaseline(next);
-                    }}
-                    disabled={loading}
-                  />
+            {tab === "perfil" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
+                      <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    Perfil
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Seu nome, avatar e senha</p>
                 </div>
-              )}
+                <PerfilPanel
+                  form={profileForm}
+                  baseline={profileBaseline}
+                  setForm={setProfileForm}
+                  onSaved={(next) => {
+                    setProfileForm((prev) => ({ ...prev, ...next }));
+                    setProfileBaseline(next);
+                  }}
+                  disabled={loading}
+                />
+              </div>
+            )}
 
-              {tab === "inboxes" && (
-                <div className={CARD}>
-                  <InboxesPanel
-                    companyInboxes={companyInboxes}
-                    forms={inboxForms}
-                    baseline={inboxBaseline}
-                    setCompanyInboxes={setCompanyInboxes}
-                    setForms={setInboxForms}
-                    setBaseline={setInboxBaseline}
-                    onSave={handleSaveInbox}
-                    onRequestCreate={openProviderPicker}
-                    onRequestDelete={requestDeleteInbox}
-                    metaWebhookUrl={META_WEBHOOK_URL}
-                    disabled={loading}
-                    initialExpandedId={lastCreatedInboxId}
-                    onExpandedChange={(id) =>
-                      setLastCreatedInboxId((prev) =>
-                        prev && (id === prev || id === null) ? null : prev
-                      )
-                    }
-                  />
+            {tab === "inboxes" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
+                      <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                      </svg>
+                    </div>
+                    Caixas de Entrada
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie seus canais conectados</p>
                 </div>
-              )}
+                <InboxesPanel
+                  companyInboxes={companyInboxes}
+                  forms={inboxForms}
+                  baseline={inboxBaseline}
+                  setCompanyInboxes={setCompanyInboxes}
+                  setForms={setInboxForms}
+                  setBaseline={setInboxBaseline}
+                  onSave={handleSaveInbox}
+                  onRequestCreate={openProviderPicker}
+                  onRequestDelete={requestDeleteInbox}
+                  metaWebhookUrl={META_WEBHOOK_URL}
+                  disabled={loading}
+                  initialExpandedId={lastCreatedInboxId}
+                  onExpandedChange={(id) =>
+                    setLastCreatedInboxId((prev) =>
+                      prev && (id === prev || id === null) ? null : prev
+                    )
+                  }
+                />
+              </div>
+            )}
 
-              {tab === "integracoes" && <IntegracoesPanel />}
-              {tab === "ia" && <AgentsPanel />}
-              {tab === "colaborador" && <div className={CARD}><AgentesPanel /></div>}
-            </div>
+            {tab === "integracoes" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-600/20 flex items-center justify-center transition-colors duration-300">
+                      <svg className="w-6 h-6 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+                      </svg>
+                    </div>
+                    Integrações
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Conecte ferramentas externas</p>
+                </div>
+                <IntegracoesPanel />
+              </div>
+            )}
+            
+            {tab === "ia" && (() => {
+              const role = String(profileRole || "").toUpperCase();
+              const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
+              if (!allowed) {
+                return (
+                  <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                    <div className="text-gray-900 dark:text-white">Você não tem permissão para configurar agentes.</div>
+                  </div>
+                );
+              }
+              return (
+                <>
+                  <SimplifiedAgentPanel />
+                  <div className="mt-6">
+                    <KnowledgeBasePanel />
+                  </div>
+                </>
+              );
+            })()}
+            
+            {tab === "colaborador" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-600/20 flex items-center justify-center transition-colors duration-300">
+                      <svg className="w-6 h-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                    </div>
+                    Colaboradores
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie usuários e permissões</p>
+                </div>
+                <AgentesPanel />
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* MODAL ESCOLHER TIPO DE CONEX?O */}
+      {/* MODAL ESCOLHER TIPO DE CONEXÃO */}
       {providerPickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)]">
-          <div className="config-modal w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0B1324] p-6 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-8 shadow-2xl space-y-6 animate-fade-in transition-colors duration-300">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-semibold text-white">Qual serviço você quer usar?</h3>
-                <p className="text-sm text-white/70 mt-1">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Qual serviço você quer usar?</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
                   Escolha entre o provedor oficial da Meta ou a integração não oficial WAHA.
                 </p>
               </div>
               <button
-                className={`${SOFT_BTN} text-sm border border-white/10 bg-[#111c36] text-white hover:border-white/30`}
+                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
                 type="button"
                 onClick={() => {
                   if (!createSaving) {
@@ -681,7 +791,9 @@ export default function ConfiguracoesPage() {
                   }
                 }}
               >
-                Cancelar
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
             </div>
 
@@ -689,39 +801,39 @@ export default function ConfiguracoesPage() {
               <button
                 type="button"
                 onClick={() => openCreateModalForProvider("META_CLOUD")}
-                className="rounded-2xl border border-white/10 bg-[#101b35] p-5 text-left transition hover:border-[#38BDF8] hover:shadow-lg focus-visible:outline-offset-2 focus-visible:outline-[#38BDF8]"
+                className="group rounded-2xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-6 text-left transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center text-xs font-semibold text-white">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-blue-200 dark:bg-blue-600/20 flex items-center justify-center text-sm font-bold text-blue-700 dark:text-blue-400 ring-2 ring-blue-300 dark:ring-blue-500/30">
                     META
                   </div>
                   <div>
-                    <div className="text-base font-semibold text-white">Oficial Meta Cloud</div>
-                    <div className="text-xs text-white/60">Requer conta do WhatsApp Business Platform.</div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-300 transition">Oficial Meta Cloud</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">WhatsApp Business Platform</div>
                   </div>
                 </div>
-                <p className="text-sm text-white/70">
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
                   Preencha os tokens oficiais (access token, phone_number_id, waba_id e verify token) para ativar a
-                  integra��o aprovada pela Meta.
+                  integração aprovada pela Meta.
                 </p>
               </button>
 
               <button
                 type="button"
                 onClick={() => openCreateModalForProvider("WAHA")}
-                className="rounded-2xl border border-[#2DD4BF]/40 bg-[#082126] p-5 text-left transition hover:border-[#38BDF8] hover:shadow-lg focus-visible:outline-offset-2 focus-visible:outline-[#38BDF8]"
+                className="group rounded-2xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-6 text-left transition-all hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
               >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-10 w-10 rounded-full bg-[#2DD4BF]/10 flex items-center justify-center text-xs font-semibold text-[#2DD4BF]">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-12 w-12 rounded-full bg-emerald-200 dark:bg-emerald-600/20 flex items-center justify-center text-sm font-bold text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-300 dark:ring-emerald-500/30">
                     WAHA
                   </div>
                   <div>
-                    <div className="text-base font-semibold text-white">WAHA</div>
-                    <div className="text-xs text-white/60">Pareamento via QR Code usando o WhatsApp Web.</div>
+                    <div className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition">WAHA</div>
+                    <div className="text-xs text-gray-600 dark:text-gray-400">Pareamento via QR Code</div>
                   </div>
                 </div>
-                <p className="text-sm text-white/70">
-                  Informe apenas o nome da conexao, gere o QR Code e conecte sua conta pelo navegador.
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  Informe apenas o nome da conexão, gere o QR Code e conecte sua conta pelo navegador usando WhatsApp Web.
                 </p>
               </button>
             </div>
@@ -731,11 +843,21 @@ export default function ConfiguracoesPage() {
 
       {/* MODAL CRIAR INBOX (com Meta) */}
       {createModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)]">
-          <div className="config-modal w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B1324] shadow-2xl">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold text-white mb-3">Nova caixa de entrada</h3>
-              <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl my-8 transition-colors duration-300">
+            <div className="p-8">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
+                    <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  Nova caixa de entrada
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">Configure uma nova conexão</p>
+              </div>
+              <div className="space-y-5">
                 <div>
                   <label className={LABEL}>Nome</label>
                   <input
@@ -950,11 +1072,19 @@ export default function ConfiguracoesPage() {
                 </label>
               </div>
 
-              <div className="mt-6 flex justify-end gap-2">
-                <button className={SOFT_BTN} onClick={closeCreateModal} disabled={createSaving}>
+              <div className="mt-6 flex justify-end gap-3">
+                <button 
+                  className="px-6 py-2.5 rounded-xl text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 transition font-medium" 
+                  onClick={closeCreateModal} 
+                  disabled={createSaving}
+                >
                   Cancelar
                 </button>
-                <button className={PRIMARY_BTN} onClick={submitCreateInbox} disabled={createSaving}>
+                <button 
+                  className="px-6 py-2.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold transition shadow-lg disabled:opacity-50" 
+                  onClick={submitCreateInbox} 
+                  disabled={createSaving}
+                >
                   {createSaving ? "Salvando..." : "Criar"}
                 </button>
               </div>
@@ -965,19 +1095,32 @@ export default function ConfiguracoesPage() {
 
       {/* MODAL EXCLUIR */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)]">
-          <div className="config-modal w-full max-w-sm rounded-2xl">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold config-heading mb-3">Excluir caixa de entrada</h3>
-              <p className="text-sm config-text-muted mb-4">
-                Confirmar exclusao da caixa "{deleteTarget.name || deleteTarget.phone_number}"?
-              </p>
-              <div className="flex justify-end gap-2">
-                <button className={SOFT_BTN} onClick={closeDeleteModal} disabled={deleteSaving}>
-                  Nao
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl transition-colors duration-300">
+            <div className="p-8">
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-600/20 flex items-center justify-center transition-colors duration-300">
+                    <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                  Excluir caixa de entrada
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">
+                  Confirmar exclusão da caixa "{deleteTarget.name || deleteTarget.phone_number}"?
+                </p>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button 
+                  className="px-6 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-700 transition font-medium" 
+                  onClick={closeDeleteModal} 
+                  disabled={deleteSaving}
+                >
+                  Cancelar
                 </button>
                 <button
-                  className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-60"
+                  className="px-6 py-2.5 rounded-xl bg-linear-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-bold transition shadow-lg disabled:opacity-50"
                   onClick={confirmDeleteInbox}
                   disabled={deleteSaving}
                 >

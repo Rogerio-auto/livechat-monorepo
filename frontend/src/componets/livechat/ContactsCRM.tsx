@@ -425,7 +425,7 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)]/80 backdrop-blur-sm">
           <div className="w-[min(720px,95vw)] rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 p-4 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] transition-colors duration-300">
             <div className="flex items-center justify-between mb-2">
-              <div className="font-semibold text-zinc-800">Novo contato</div>
+              <div className="font-semibold text-(--color-text)">Novo contato</div>
               <button onClick={() => setShowNewModal(false)} className="px-2 py-1 rounded text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55">✕</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

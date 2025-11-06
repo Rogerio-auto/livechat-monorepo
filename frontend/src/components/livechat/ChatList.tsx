@@ -162,7 +162,7 @@ export default function ChatList({
 
   if (!normalizedChats.length) {
     return (
-      <div className="p-3 text-sm text-[var(--color-text-muted)]">
+      <div className="p-3 text-sm text-(--color-text-muted)">
         {isGroupList ? "Nenhum grupo encontrado" : "Nenhum chat encontrado"}
       </div>
     );
@@ -189,8 +189,8 @@ export default function ChatList({
             onClick={() => onSelectChat(chat.id)}
             className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors duration-150 border ${
               active
-                ? "bg-[color:var(--color-primary)]/18 border-[color:var(--color-primary)]/35 text-[var(--color-heading)] shadow-[0_16px_36px_-30px_rgba(8,12,20,0.9)]"
-                : "border-transparent bg-[color:var(--color-surface-muted)]/70 hover:border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-muted)]/90"
+                ? "bg-(--color-primary)/18 border-(--color-primary)/35 text-(--color-heading) shadow-[0_12px_28px_-20px_color-mix(in_srgb,var(--color-text)_18%,transparent)]"
+                : "border-transparent bg-(--color-surface-muted)/70 hover:border-(--color-border) hover:bg-(--color-surface-muted)/90"
             }`}
           >
             {hasPhoto ? (
@@ -213,8 +213,8 @@ export default function ChatList({
                 aria-hidden
                 className={`w-10 h-10 flex items-center justify-center rounded-full text-sm font-semibold ${
                   chat.isGroup
-                    ? "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]"
-                    : "bg-[color:var(--color-border)]/60 text-[var(--color-text-muted)]"
+                    ? "bg-(--color-primary)/15 text-(--color-primary)"
+                    : "bg-(--color-border)/60 text-(--color-text-muted)"
                 }`}
               >
                 {initials}
@@ -222,21 +222,21 @@ export default function ChatList({
             )}
 
             <div className="flex-1 min-w-0 overflow-hidden">
-              <div className="font-medium truncate text-[var(--color-heading)]">
+              <div className="font-medium truncate text-(--color-heading)">
                 {chat.name}
                 {chat.isGroup && chat.groupSizeLabel ? (
-                  <span className="ml-2 text-xs font-normal text-[var(--color-text-muted)]">
+                  <span className="ml-2 text-xs font-normal text-(--color-text-muted)">
                     ({chat.groupSizeLabel})
                   </span>
                 ) : null}
               </div>
-              <div className="text-sm text-[var(--color-text-muted)] truncate">{subtitle}</div>
+              <div className="text-sm text-(--color-text-muted) truncate">{subtitle}</div>
             </div>
 
             <div className="flex flex-col items-end gap-1">
-              <div className="text-xs text-[var(--color-text-muted)]">{lastAt}</div>
+              <div className="text-xs text-(--color-text-muted)">{lastAt}</div>
               {chat.unread_count && chat.unread_count > 0 ? (
-                <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-[color:var(--color-primary)] text-white text-xs font-semibold">
+                <div className="flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-(--color-primary) text-white text-xs font-semibold">
                   {chat.unread_count > 99 ? "99+" : chat.unread_count}
                 </div>
               ) : null}

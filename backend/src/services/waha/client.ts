@@ -167,7 +167,12 @@ export async function fetchWahaChatDetails(
   }
   const encodedSession = encodeURIComponent(sessionName);
   const encodedChat = encodeURIComponent(remoteChatId);
-  return wahaFetch(`/api/${encodedSession}/chats/${encodedChat}`, { headers });
+  
+  // Groups end with @g.us and need the /groups/ endpoint instead of /chats/
+  const isGroup = remoteChatId.endsWith('@g.us');
+  const endpoint = isGroup ? 'groups' : 'chats';
+  
+  return wahaFetch(`/api/${encodedSession}/${endpoint}/${encodedChat}`, { headers });
 }
 
 export async function fetchWahaChatPicture(

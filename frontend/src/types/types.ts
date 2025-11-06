@@ -140,6 +140,128 @@ export type AutomationAgentPayload = {
   allow_handoff?: boolean;
 };
 
+// ===== Agent Templates (para wizard de criação de agente) =====
+export type AgentTemplate = {
+  id: string;
+  company_id: string | null;
+  key: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  prompt_template: string;
+  default_model?: string | null;
+  default_model_params?: Record<string, unknown>;
+  default_tools?: unknown[];
+  created_at: string;
+  updated_at?: string | null;
+};
+
+export type AgentTemplateQuestion = {
+  id: string;
+  template_id: string;
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "select" | "number" | "boolean" | "multiselect";
+  required: boolean;
+  help?: string | null;
+  options?: unknown[];
+  order_index: number;
+};
+
+export type AgentTemplateTool = {
+  id: string;
+  template_id: string;
+  tool_id: string;
+  required: boolean;
+  overrides?: Record<string, unknown>;
+};
+
+export type AgentTemplatePreview = {
+  prompt: string;
+  model: string | null;
+  model_params: Record<string, unknown>;
+  tools: unknown[];
+};
+
+// ====== TOOLS TYPES ======
+export type ToolHandlerType = "INTERNAL_DB" | "HTTP" | "WORKFLOW" | "SOCKET";
+
+export type ToolSchema = {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: "object";
+      properties: Record<string, unknown>;
+      required?: string[];
+    };
+  };
+};
+
+export type ToolHandlerConfig = {
+  table?: string;
+  action?: "select" | "insert" | "update" | "upsert" | "delete";
+  allowed_columns?: {
+    read?: string[];
+    write?: string[];
+  };
+  restricted_columns?: string[];
+  required_columns?: string[];
+  default_values?: Record<string, unknown>;
+  post_insert_action?: string;
+  // HTTP handler
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  // Workflow handler
+  emit_event?: string;
+  target_queue?: string;
+  // Search
+  search_column?: string;
+  max_results?: number;
+};
+
+export type Tool = {
+  id: string;
+  key: string;
+  name: string;
+  category: string | null;
+  description: string | null;
+  schema: ToolSchema;
+  handler_type: ToolHandlerType;
+  handler_config: ToolHandlerConfig;
+  is_active: boolean;
+  company_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+};
+
+export type AgentTool = {
+  id: string;
+  agent_id: string;
+  tool_id: string;
+  is_enabled: boolean;
+  overrides: Record<string, unknown>;
+  created_at: string;
+  tool?: Tool; // populated via join
+};
+
+export type ToolLog = {
+  id: string;
+  agent_id: string;
+  tool_id: string;
+  chat_id: string | null;
+  contact_id: string | null;
+  action: string;
+  table_name: string | null;
+  columns_accessed: string[];
+  params: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  executed_at: string;
+};
+
 
 export type CampaignStatus = "DRAFT"|"SCHEDULED"|"RUNNING"|"PAUSED"|"COMPLETED"|"CANCELLED";
 

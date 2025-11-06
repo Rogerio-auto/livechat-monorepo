@@ -57,11 +57,11 @@ export function MessageBubble({
     "relative inline-block w-auto max-w-[85%] sm:max-w-[75%] md:max-w-[65%] px-3 py-2 rounded-2xl shadow-md leading-snug whitespace-pre-wrap break-words text-[13px] transition-colors duration-200 backdrop-blur-[2px]";
   const isPrivate = !!m.is_private || m.type === "PRIVATE";
   const agentBubble =
-    "rounded-br-none bg-[color:color-mix(in srgb,var(--color-primary) 45%,var(--color-background))] text-[var(--color-heading)]";
+    "rounded-br-none bg-[color:color-mix(in srgb,var(--color-primary) 52%,var(--color-bg))] text-(--color-on-primary)";
   const customerBubble =
-    "rounded-bl-none bg-[color:color-mix(in srgb,var(--color-surface) 35%,var(--color-background))] text-[var(--color-text)]";
+    "rounded-bl-none bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-bg))] text-(--color-text)";
   const privateBubble =
-    "bg-[color:color-mix(in srgb,var(--color-highlight) 40%,var(--color-background))] text-[var(--color-heading)]";
+    "bg-[color:color-mix(in srgb,var(--color-highlight) 40%,var(--color-bg))] text-(--color-heading)";
   const bubbleSide = isPrivate
     ? privateBubble
     : isAgent
@@ -166,24 +166,24 @@ export function MessageBubble({
   let bubbleContent: ReactNode;
   if (isDeleted) {
     bubbleContent = (
-      <span className="italic text-[var(--color-text-muted)]">Mensagem apagada</span>
+  <span className="italic text-(--color-text-muted)">Mensagem apagada</span>
     );
   } else if (mediaUrl && messageType === "IMAGE") {
     bubbleContent = (
-      <div className="overflow-hidden rounded-2xl bg-black/20 p-2 shadow-inner">
+      <div className="overflow-hidden rounded-2xl bg-(--color-surface-muted)/40 p-2 shadow-inner">
         <img
           src={mediaUrl}
           alt={textBody || "Imagem"}
           className="max-h-72 w-full rounded-xl object-contain"
         />
         {textBody ? (
-          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+          <p className="mt-1 text-xs opacity-80">{textBody}</p>
         ) : null}
       </div>
     );
   } else if (mediaUrl && messageType === "VIDEO") {
     bubbleContent = (
-      <div className="relative overflow-hidden rounded-2xl bg-black/80 p-2 shadow-inner">
+      <div className="relative overflow-hidden rounded-2xl bg-(--color-surface)/90 p-2 shadow-inner">
         <video
           src={mediaUrl}
           className="max-h-72 w-full rounded-xl object-contain"
@@ -192,7 +192,7 @@ export function MessageBubble({
           controls
         />
         {textBody ? (
-          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+          <p className="mt-1 text-xs opacity-80">{textBody}</p>
         ) : null}
       </div>
     );
@@ -202,16 +202,16 @@ export function MessageBubble({
     );
   } else if (mediaUrl && (messageType === "DOCUMENT" || messageType === "FILE")) {
     bubbleContent = (
-      <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-background))] px-4 py-3 shadow-inner">
-        <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+      <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-bg))] px-4 py-3 shadow-inner">
+        <div className="flex items-center gap-2 text-sm font-medium">
           <span className="text-lg font-semibold">DOC</span>
           <span>Documento</span>
         </div>
-        <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[var(--color-text-muted)] underline">
+  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-90">
           Baixar documento
         </a>
         {textBody ? (
-          <p className="mt-1 text-xs text-[var(--color-text)] opacity-80">{textBody}</p>
+          <p className="mt-1 text-xs opacity-80">{textBody}</p>
         ) : null}
       </div>
     );
@@ -224,13 +224,13 @@ export function MessageBubble({
     switch (deliveryStatus) {
       case "sending":
       case "pending":
-        return <FiClock className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />;
+  return <FiClock className="w-3.5 h-3.5 text-(--color-text-muted)" />;
       case "sent":
-        return <FiCheck className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />;
+  return <FiCheck className="w-3.5 h-3.5 text-(--color-text-muted)" />;
       case "delivered":
-        return <BiCheckDouble className="h-4 w-4 text-[var(--color-text-muted)]" />;
+  return <BiCheckDouble className="h-4 w-4 text-(--color-text-muted)" />;
       case "read":
-        return <BiCheckDouble className="h-4 w-4 text-[var(--color-primary)]" />;
+  return <BiCheckDouble className="h-4 w-4 text-(--color-primary)" />;
       case "error":
         return <FiAlertTriangle className="w-3.5 h-3.5 text-red-400" />;
       default:
@@ -254,21 +254,21 @@ export function MessageBubble({
                   }}
                 />
               ) : (
-                <div className="h-6 w-6 rounded-full bg-[color:var(--color-bg)]/60 flex items-center justify-center text-[10px] font-semibold text-[var(--color-text-muted)]">
+                <div className="h-6 w-6 rounded-full bg-(--color-bg)/60 flex items-center justify-center text-[10px] font-semibold text-(--color-text-muted)">
                   {remoteInitials}
                 </div>
               )}
-              <span className="text-xs font-semibold text-[var(--color-heading)] truncate">
+              <span className="text-xs font-semibold text-(--color-heading) truncate">
                 {resolvedRemoteName}
               </span>
             </div>
           )}
           {isPrivate && (
-            <div className="mb-1 flex items-center gap-1 text-[11px] text-[var(--color-highlight)]">
+            <div className="mb-1 flex items-center gap-1 text-[11px] text-(--color-highlight)">
               <FiLock className="w-3.5 h-3.5" />
               <span className="opacity-90">Privado</span>
               {m.sender_name && (
-                <span className="max-w-[12rem] truncate font-medium text-[var(--color-highlight)]">- {m.sender_name}</span>
+                <span className="max-w-48 truncate font-medium text-(--color-highlight)">- {m.sender_name}</span>
               )}
             </div>
           )}
@@ -283,29 +283,29 @@ export function MessageBubble({
                     onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")}
                   />
                 ) : (
-                  <div className="h-5 w-5 rounded-full bg-[color:var(--color-border)]/60 flex items-center justify-center text-[9px] font-semibold text-[var(--color-text-muted)]">
+                  <div className="h-5 w-5 rounded-full bg-(--color-border)/60 flex items-center justify-center text-[9px] font-semibold text-(--color-text-muted)">
                     {(m.sender_name || "A").slice(0, 1).toUpperCase()}
                   </div>
                 )
               ) : (
-                <div className="h-5 w-5 rounded-full bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] flex items-center justify-center">
+                <div className="h-5 w-5 rounded-full bg-(--color-primary)/15 text-(--color-primary) flex items-center justify-center">
                   <FiCpu className="h-3.5 w-3.5" />
                 </div>
               )}
               {m.sender_name ? (
-                <span className="text-[10px] font-semibold text-[var(--color-text-muted)] opacity-80 truncate">
+                <span className="text-[10px] font-semibold text-(--color-text-muted) opacity-80 truncate">
                   {m.sender_name}
                 </span>
               ) : null}
             </div>
           )}
           {quotedMessage && (
-            <div className="mb-2 border-l-4 border-[var(--color-primary)] bg-black/10 px-3 py-2 rounded-r-lg">
-              <div className="text-[10px] font-semibold text-[var(--color-primary)] mb-1">
+            <div className="mb-2 border-l-4 border-(--color-primary) bg-(--color-surface-muted)/60 px-3 py-2 rounded-r-lg">
+              <div className="text-[10px] font-semibold text-(--color-primary) mb-1">
                 {quotedMessage.sender_name || 
                  (quotedMessage.sender_type === "CUSTOMER" ? (customerName || "Cliente") : "Agente")}
               </div>
-              <div className="text-[11px] text-[var(--color-text-muted)] line-clamp-2">
+              <div className="text-[11px] text-(--color-text-muted) line-clamp-2">
                 {quotedMessage.type === "IMAGE" && "📷 Imagem"}
                 {quotedMessage.type === "VIDEO" && "🎥 Vídeo"}
                 {quotedMessage.type === "AUDIO" && "🎤 Áudio"}
@@ -316,16 +316,16 @@ export function MessageBubble({
             </div>
           )}
           {!isEditing ? (
-            <div className="text-[var(--color-text)]">{bubbleContent}</div>
+            <div>{bubbleContent}</div>
           ) : (
             <div className="space-y-2">
               <textarea
-                className="w-full rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-2 py-1 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                className="w-full rounded-md border border-(--color-border) bg-(--color-bg)/70 px-2 py-1 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
                 rows={2}
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
               />
-              <div className="flex items-center gap-3 text-[11px] text-[var(--color-text)]">
+              <div className="flex items-center gap-3 text-[11px] text-(--color-text)">
                 <label className="inline-flex items-center gap-1">
                   <input type="checkbox" checked={useLinkPreview} onChange={(e) => setUseLinkPreview(e.target.checked)} />
                   <span>Link preview</span>
@@ -343,7 +343,7 @@ export function MessageBubble({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="rounded px-2 py-1 text-[12px] bg-[color:var(--color-primary)]/20 text-[color:var(--color-primary)] border border-[color:var(--color-primary)]/40 hover:bg-[color:var(--color-primary)]/30"
+                  className="rounded px-2 py-1 text-[12px] bg-(--color-primary)/20 text-(--color-primary) border border-(--color-primary)/40 hover:bg-(--color-primary)/30"
                   onClick={() => {
                     if (onEdit) onEdit(m, { text: editText, linkPreview: useLinkPreview, linkPreviewHighQuality: useLinkPreviewHQ });
                     setIsEditing(false);
@@ -353,7 +353,7 @@ export function MessageBubble({
                 </button>
                 <button
                   type="button"
-                  className="rounded px-2 py-1 text-[12px] bg-[color:var(--color-surface-muted)]/60 text-[var(--color-text)] border border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-muted)]/80"
+                  className="rounded px-2 py-1 text-[12px] bg-(--color-surface-muted)/60 text-(--color-text) border border-(--color-border) hover:bg-(--color-surface-muted)/80"
                   onClick={() => {
                     setIsEditing(false);
                     setEditText(m.body || m.content || "");
@@ -369,23 +369,23 @@ export function MessageBubble({
               {/* Left side empty to align */}
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[10px] text-[var(--color-text-muted)]">{time}</span>
+              <span className="text-[10px] text-(--color-text-muted)">{time}</span>
               {renderStatusIcon()}
               {(onReply || (isAgent && (onEdit || onDelete))) && (
                 <div className="relative z-50">
                   <button
                     type="button"
-                    className="p-1 rounded hover:bg-black/10"
+                    className="p-1 rounded hover:bg-(--color-surface-muted)/60"
                     onClick={() => setShowMenu((v) => !v)}
                     title="Ações"
                   >
-                    <FiMoreVertical className="h-4 w-4 text-[var(--color-text-muted)]" />
+                    <FiMoreVertical className="h-4 w-4 text-(--color-text-muted)" />
                   </button>
                   {showMenu && (
-                    <div className="absolute right-0 bottom-full z-50 mb-1 w-40 rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface)] shadow-[0_8px_24px_rgba(0,0,0,0.35)] overflow-hidden">
+                    <div className="absolute right-0 bottom-full z-50 mb-1 w-40 rounded-md border border-(--color-border) bg-(--color-surface) shadow-[0_8px_24px_rgba(0,0,0,0.35)] overflow-hidden">
                       {onReply && (
                         <button
-                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-(--color-text) hover:bg-(--color-surface-muted)/60"
                           onClick={() => {
                             setShowMenu(false);
                             onReply();
@@ -396,7 +396,7 @@ export function MessageBubble({
                       )}
                       {isAgent && onEdit && !isPrivate && (
                         <button
-                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+                          className="flex w-full items-center gap-2 px-2 py-1.5 text-[12px] text-(--color-text) hover:bg-(--color-surface-muted)/60"
                           onClick={() => {
                             setShowMenu(false);
                             setIsEditing(true);
@@ -425,13 +425,13 @@ export function MessageBubble({
           {/* Upload progress indicator for optimistic media/audio sends */}
           {isAgent && (deliveryStatus === "sending" || deliveryStatus === "pending") && typeof m.upload_progress === "number" && (
             <div className="mt-2">
-              <div className="h-1.5 w-full rounded bg-[color:var(--color-border)]/40 overflow-hidden">
+              <div className="h-1.5 w-full rounded bg-(--color-border)/40 overflow-hidden">
                 <div
-                  className="h-1.5 bg-[color:var(--color-primary)]/70 transition-[width] duration-100"
+                  className="h-1.5 bg-(--color-primary)/70 transition-[width] duration-100"
                   style={{ width: `${Math.max(0, Math.min(100, Math.round(m.upload_progress || 0)))}%` }}
                 />
               </div>
-              <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+              <div className="mt-1 text-[10px] text-(--color-text-muted)">
                 Enviando {Math.max(0, Math.min(100, Math.round(m.upload_progress || 0)))}%
               </div>
             </div>

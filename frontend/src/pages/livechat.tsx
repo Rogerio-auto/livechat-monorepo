@@ -15,6 +15,7 @@ import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/t
 import { FiPaperclip, FiMic, FiSmile, FiX } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
+import { Button, Card } from "../components/ui";
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
   "http://localhost:5000";
@@ -945,12 +946,25 @@ const bumpChatToTop = useCallback((update: {
     s.on("message:outbound", handleMessageActivity);
     s.on("message:status", handleMessageStatus);
 
+    // Listener para mudança de agente de IA
+    const handleAgentChanged = (payload: any) => {
+      if (payload.chatId) {
+        bumpChatToTop({
+          chatId: payload.chatId,
+          ai_agent_id: payload.ai_agent_id,
+          ai_agent_name: payload.ai_agent_name,
+        } as any);
+      }
+    };
+    s.on("chat:agent-changed", handleAgentChanged);
+
     return () => {
       s.off("chat:updated", handleChatUpdated);
       s.off("message:new", handleMessageActivity);
       s.off("message:inbound", handleMessageActivity);
       s.off("message:outbound", handleMessageActivity);
       s.off("message:status", handleMessageStatus);
+      s.off("chat:agent-changed", handleAgentChanged);
     };
   }, [selectedChat?.id, setMessageStatuses]);
 
@@ -2546,20 +2560,20 @@ const scrollToBottom = useCallback(
   return (
     <>
       <Sidebar />
-      <div className="ml-16 min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] transition-colors duration-300">
+  <div className="ml-16 min-h-screen bg-(--color-bg) text-(--color-text) transition-colors duration-300">
         <div className="grid grid-cols-12 gap-4 h-[calc(100vh-4rem)]">
           <div className="col-span-2">
             <LivechatMenu section={section} onChange={setSection} />
           </div>
 
           {(section === "all" || section === "unanswered") && (
-            <div className="col-span-4 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-4 flex flex-col max-h-screen min-h-0 transition-colors duration-300">
+            <Card padding="md" className="col-span-4 flex flex-col max-h-screen min-h-0">
               {/* Header (filtros) */}
               <div className="shrink-0">
                 <div className="mb-3">
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">Caixa</label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">Caixa</label>
                   <select
-                    className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                    className="w-full rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
                     value={inboxId}
                     onChange={(e) => setInboxId(e.target.value)}
                   >
@@ -2582,13 +2596,13 @@ const scrollToBottom = useCallback(
 
                 <div className="flex gap-2 mb-3">
                   <input
-                    className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                    className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
                     placeholder="Buscar..."
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                   />
                   <select
-                    className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-2 py-2 text-sm text-[var(--color-text)] transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                    className="rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-2 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                   >
@@ -2605,8 +2619,8 @@ const scrollToBottom = useCallback(
                     type="button"
                     onClick={() => setChatScope("conversations")}
                     className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "conversations"
-                      ? "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] border-[color:var(--color-primary)]/50"
-                      : "bg-[color:var(--color-surface-muted)] text-[var(--color-text)] border-transparent hover:bg-[color:var(--color-surface-muted)]/80"}
+                      ? "bg-(--color-primary)/15 text-(--color-primary) border-(--color-primary)/50"
+                      : "bg-(--color-surface-muted) text-(--color-text) border-transparent hover:bg-(--color-surface-muted)/80"}
                     `}
                   >
                     Conversas
@@ -2615,8 +2629,8 @@ const scrollToBottom = useCallback(
                     type="button"
                     onClick={() => setChatScope("groups")}
                     className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "groups"
-                      ? "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)] border-[color:var(--color-primary)]/50"
-                      : "bg-[color:var(--color-surface-muted)] text-[var(--color-text)] border-transparent hover:bg-[color:var(--color-surface-muted)]/80"}
+                      ? "bg-(--color-primary)/15 text-(--color-primary) border-(--color-primary)/50"
+                      : "bg-(--color-surface-muted) text-(--color-text) border-transparent hover:bg-(--color-surface-muted)/80"}
                     `}
                   >
                     Grupos
@@ -2629,16 +2643,15 @@ const scrollToBottom = useCallback(
                 onScroll={handleChatsScroll}
                 className="
               flex-1 min-h-0 overflow-y-auto divide-y-0
-              scrollbar-thin scrollbar-thumb-[#1E293B] scrollbar-track-transparent
-              hover:scrollbar-thumb-[#334155]
+              scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
-              [&::-webkit-scrollbar-thumb]:bg-[#1E293B]
-              hover:[&::-webkit-scrollbar-thumb]:bg-[#334155]
+              [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
+              hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_22%,var(--color-bg))]
             "
               >
                 {chatListItems.length === 0 ? (
-                  <div className="p-3 text-sm text-[var(--color-text-muted)]">
+                  <div className="p-3 text-sm text-(--color-text-muted)">
                     {isChatsLoading
                       ? "Carregando chats..."
                       : chatScope === "groups"
@@ -2655,20 +2668,20 @@ const scrollToBottom = useCallback(
                 )}
 
                 {chatListItems.length > 0 && isChatsLoading && (
-                  <div className="p-3 text-xs text-[var(--color-text-muted)] text-center">Carregando chats...</div>
+                  <div className="p-3 text-xs text-(--color-text-muted) text-center">Carregando chats...</div>
                 )}
                 {chatListItems.length > 0 && !hasMoreChats && !isChatsLoading && (
-                  <div className="p-3 text-xs text-[var(--color-text-muted)] opacity-60 text-center">
+                  <div className="p-3 text-xs text-(--color-text-muted) opacity-60 text-center">
                     {chatScope === "groups" ? "N�o h� mais grupos." : "N�o h� mais conversas."}
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           )}
 
 
           {section === "all" || section === "unanswered" ? (
-            <div className="col-span-6 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-4 flex flex-col relative min-h-screen max-h-screen transition-colors dura??o-300">
+            <Card padding="md" className="col-span-6 flex flex-col relative min-h-screen max-h-screen">
               <ChatHeader
                 apiBase={API}
                 chat={currentChat}
@@ -2695,24 +2708,25 @@ const scrollToBottom = useCallback(
                 ref={messagesContainerRef}
                 onScroll={handleMessagesScroll}
                 className="flex-1 overflow-auto space-y-1.5 pr-1
-              scrollbar-thin scrollbar-thumb-[#1E293B] scrollbar-track-transparent
-              hover:scrollbar-thumb-[#334155]
+              scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
+              [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
+              hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_22%,var(--color-bg))]
             "
               >
                 {isFetchingOlderMessages && (
-                  <div className="py-2 text-center text-xs text-[var(--color-text-muted)]">
+                  <div className="py-2 text-center text-xs text-(--color-text-muted)">
                     Carregando mensagens anteriores...
                   </div>
                 )}
                 {!isFetchingOlderMessages && !messagesHasMore && messages.length > 0 && (
-                  <div className="py-2 text-center text-xs text-[var(--color-text-muted)] opacity-70">
+                  <div className="py-2 text-center text-xs text-(--color-text-muted) opacity-70">
                     N?o h? mais mensagens no hist?rico.
                   </div>
                 )}
                 {messagesLoading && (
-                  <div className="py-4 text-center text-sm text-[var(--color-text-muted)]">Carregando mensagens...</div>
+                  <div className="py-4 text-center text-sm text-(--color-text-muted)">Carregando mensagens...</div>
                 )}
 
                 {messages.map((m) => (
@@ -2733,7 +2747,7 @@ const scrollToBottom = useCallback(
                 ))}
 
                 {!messagesLoading && messages.length === 0 && (
-                  <div className="py-4 text-center text-sm text-[var(--color-text-muted)]">Nenhuma mensagem.</div>
+                  <div className="py-4 text-center text-sm text-(--color-text-muted)">Nenhuma mensagem.</div>
                 )}
                 <div ref={bottomRef} />
               </div>
@@ -2741,43 +2755,47 @@ const scrollToBottom = useCallback(
               {/* Composer */}
               <div className="mt-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <button
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => setIsPrivateOpen(true)}
-                    className="rounded border border-[color:var(--color-primary)]/45 bg-[color:var(--color-primary)]/15 px-2.5 py-1.5 text-xs font-medium text-[var(--color-highlight)] transition-colors dura??o-150 hover:bg-[color:var(--color-primary)]/25"
                   >
                     Mensagem privada
-                  </button>
+                  </Button>
 
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={handlePickFile}
-                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura??o-150 hover:bg-[color:var(--color-surface-muted)]/85"
                     title="Enviar anexo"
+                    aria-label="Enviar anexo"
                   >
-                    <FiPaperclip className="h-5 w-5 text-[var(--color-highlight)]" />
-                  </button>
+                    <FiPaperclip className="h-5 w-5" />
+                  </Button>
 
-                  <button
+                  <Button
+                    size="sm"
+                    variant={isRecording ? "danger" : "ghost"}
                     onClick={toggleRecording}
-                    className={`rounded border p-2 transition-colors dura??o-150 ${isRecording
-                      ? "bg-red-900/40 border-red-700 text-red-300"
-                      : "border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 text-[var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/85"
-                      }`}
-                    title="Gravar ?udio"
+                    title="Gravar áudio"
+                    aria-label="Gravar áudio"
                   >
-                    <FiMic className={`w-5 h-5 ${isRecording ? "text-red-300" : "text-[var(--color-highlight)]"}`} />
-                  </button>
+                    <FiMic className="w-5 h-5" />
+                  </Button>
 
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => setShowEmoji((v) => !v)}
-                    className="rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/60 p-2 transition-colors dura??o-150 hover:bg-[color:var(--color-surface-muted)]/85"
                     title="Emoji"
+                    aria-label="Emoji"
                   >
-                    <FiSmile className="h-5 w-5 text-[var(--color-highlight)]" />
-                  </button>
+                    <FiSmile className="h-5 w-5" />
+                  </Button>
                 </div>
 
                 {showEmoji && (
-                  <div className="grid grid-cols-8 gap-1 p-2 bg-[color:var(--color-surface-muted)]/70 border border-[color:var(--color-border)] rounded-lg shadow mb-2 w-fit text-xl">
+                  <div className="grid grid-cols-8 gap-1 p-2 bg-(--color-surface-muted)/70 border border-(--color-border) rounded-lg shadow mb-2 w-fit text-xl">
                     {"????????????????"
                       .split("")
                       .map((e, i) => (
@@ -2808,8 +2826,8 @@ const scrollToBottom = useCallback(
 
                 <div className="flex gap-2">
                   <input
-                    className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors dura??o-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
-                    placeholder={isRecording ? "Gravando ?udio..." : "Digite sua mensagem..."}
+                    className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
+                    placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
@@ -2820,13 +2838,14 @@ const scrollToBottom = useCallback(
                     }}
                     disabled={isRecording}
                   />
-                  <button
-                    className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-colors dura??o-150 hover:bg-[var(--color-primary-strong)]"
+                  <Button
+                    variant="gradient"
+                    size="md"
                     onClick={send}
                     disabled={isRecording}
                   >
                     Enviar
-                  </button>
+                  </Button>
                 </div>
 
                 <input
@@ -2836,19 +2855,19 @@ const scrollToBottom = useCallback(
                   className="hidden"
                 />
               </div>
-            </div>
+            </Card>
           ) : section === "labels" ? (
-            <div className="col-span-10 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-6 transition-colors duration-300">
+            <Card padding="lg" className="col-span-10">
               <LabelsManager apiBase={API} />
-            </div>
+            </Card>
           ) : section === "contacts" ? (
             <div className="col-span-10">
               <ContactsCRM apiBase={API} socket={socketRef.current} />
             </div>
           ) :  section === "campaigns" && (
-            <div className="col-span-10 rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] p-4 flex flex-col min-h-screen max-h-screen transition-colors duration-300">
+            <Card padding="md" className="col-span-10 flex flex-col min-h-screen max-h-screen">
               <CampaignsPanel apiBase={API} />
-            </div>
+            </Card>
           )}
         </div>
       </div>
@@ -2856,37 +2875,38 @@ const scrollToBottom = useCallback(
       {/* Modal de privado */}
       <div>
         {isPrivateOpen && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/98 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] w-[min(640px,95vw)] p-4 flex flex-col max-h-[80vh] transition-colors duration-300">
+          <div className="fixed inset-0 bg-(--color-overlay) backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="rounded-2xl border border-(--color-border) bg-(--color-surface)/98 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] w-[min(640px,95vw)] p-4 flex flex-col max-h-[80vh] transition-colors duration-300">
               <div className="flex items-center justify-between mb-2">
-                <div className="font-semibold text-[var(--color-heading)]">Conversa privada</div>
+                <div className="font-semibold text-(--color-heading)">Conversa privada</div>
                 <button
                   onClick={() => setIsPrivateOpen(false)}
-                  className="p-2 rounded hover:bg-[color:var(--color-surface-muted)]/75"
+                  className="p-2 rounded hover:bg-(--color-surface-muted)/75"
                 >
-                  <FiX className="h-5 w-5 text-[var(--color-text-muted)]" />
+                  <FiX className="h-5 w-5 text-(--color-text-muted)" />
                 </button>
               </div>
 
               {currentChat && (
-                <div className="text-sm text-[var(--color-text-muted)] mb-2">
+                <div className="text-sm text-(--color-text-muted) mb-2">
                   Agente atribu?do:{" "}
-                  <span className="font-medium text-[var(--color-heading)]">
+                  <span className="font-medium text-(--color-heading)">
                     {currentChat.assigned_agent_name || "?"}
                   </span>
                 </div>
               )}
 
-              <div className="text-xs text-[var(--color-text-muted)] mb-3">
+              <div className="text-xs text-(--color-text-muted) mb-3">
                 Somente sua equipe v? estas mensagens. Elas tamb?m aparecem no hist?rico do chat, destacadas como privadas.
               </div>
 
               <div
-                className="flex-1 overflow-auto space-y-1.5 pr-1 rounded-lg p-2 border border-[color:var(--color-border)] bg-[color:var(--color-bg)]
-              scrollbar-thin scrollbar-thumb-[#1E293B] scrollbar-track-transparent
-              hover:scrollbar-thumb-[#334155]
+                className="flex-1 overflow-auto space-y-1.5 pr-1 rounded-lg p-2 border border-(--color-border) bg-(--color-bg)
+              scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
+              [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
+              hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_22%,var(--color-bg))]
             "
               >
                 {messages
@@ -2907,7 +2927,7 @@ const scrollToBottom = useCallback(
 
               <div className="mt-3 flex gap-2">
                 <input
-                  className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/70 px-3 py-2 text-sm text-[var(--color-text)] transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/45"
+                  className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
                   placeholder="Mensagem privada..."
                   value={privateText}
                   onChange={(e) => setPrivateText(e.target.value)}
@@ -2918,12 +2938,13 @@ const scrollToBottom = useCallback(
                     }
                   }}
                 />
-                <button
+                <Button
+                  variant="gradient"
+                  size="md"
                   onClick={sendPrivate}
-                  className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-colors duration-150 hover:bg-[var(--color-primary-strong)]"
                 >
                   Enviar
-                </button>
+                </Button>
               </div>
             </div>
           </div>

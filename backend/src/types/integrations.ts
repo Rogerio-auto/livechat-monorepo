@@ -38,6 +38,8 @@ export const AgentSchema = z
     media_config: JsonRecordSchema.optional(),
     tools_policy: JsonRecordSchema.optional(),
     allow_handoff: z.boolean().optional(),
+    ignore_group_messages: z.boolean().optional(),
+    enabled_inbox_ids: z.array(z.string().uuid()).optional(),
   })
   .strict();
 

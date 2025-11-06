@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { createHash } from "node:crypto";
-import { encryptMediaUrl, decryptMediaUrl } from "../src/lib/crypto.ts";
+import { encryptMediaUrl, decryptMediaUrl, decryptSecret } from "../src/lib/crypto.ts";
 import {
   publish,
   publishApp,
@@ -41,6 +41,7 @@ import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from ".
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey } from "./services/buffer.ts";
 import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer } from "../src/lib/storage.ts";
+import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -93,108 +94,181 @@ type InboundMediaJobPayload = {
 const CACHE_TTL_MSGS = Math.max(30, Number(process.env.CACHE_TTL_MSGS ?? 60));
 const PAGE_LIMIT_PREWARM = 30;
 const MAX_ATTEMPTS = Number(process.env.JOB_MAX_ATTEMPTS || 3);
-const SOCKET_RETRY_ATTEMPTS = 3;
-const SOCKET_RETRY_BASE_DELAY = 5000; // 5s
-const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || `http://localhost:${process.env.PORT_BACKEND || 5000}`;
 
-/**
- * Converts an encrypted media URL token to a proxy URL
- * This allows the frontend to fetch media through our backend proxy
- */
-function buildProxyUrl(encryptedToken: string | null | undefined): string | null {
-  if (!encryptedToken) return null;
-  
-  // If already a full URL (not encrypted), return as-is
-  if (encryptedToken.startsWith("http://") || encryptedToken.startsWith("https://")) {
-    return encryptedToken;
-  }
-  
-  return `${BACKEND_BASE_URL}/media/proxy?token=${encodeURIComponent(encryptedToken)}`;
-}
+// Meta Graph version used for Graph API requests
+const META_GRAPH_VERSION = (process.env.META_GRAPH_VERSION || "v20.0").replace(/^v?/, "v");
 
-function parsePositiveInt(raw: string | undefined, fallback: number): number {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.floor(parsed);
-}
+// Local media directories and public bases
+const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
+const MEDIA_PUBLIC_BASE = (process.env.MEDIA_PUBLIC_BASE || "").replace(/\/+$/, "");
+const FILES_PUBLIC_BASE = (process.env.FILES_PUBLIC_BASE || "http://localhost:5000").replace(/\/+$/, "");
 
-/**
- * Emit socket event with automatic retry and exponential backoff
- * @param event - Event name to publish
- * @param data - Event payload
- * @param maxAttempts - Maximum retry attempts (default: 3)
- * @returns true if succeeded, false if all retries failed
- */
-async function emitSocketWithRetry(
-  event: string,
-  data: any,
-  maxAttempts: number = SOCKET_RETRY_ATTEMPTS
-): Promise<boolean> {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+// Worker pool configuration
+const INBOUND_WORKERS = Number(process.env.INBOUND_WORKERS ?? 2);
+const INBOUND_PREFETCH = Number(process.env.INBOUND_PREFETCH ?? 5);
+const INBOUND_MEDIA_WORKERS = Number(process.env.INBOUND_MEDIA_WORKERS ?? 2);
+const INBOUND_MEDIA_PREFETCH = Number(process.env.INBOUND_MEDIA_PREFETCH ?? 5);
+const OUTBOUND_WORKERS = Number(process.env.OUTBOUND_WORKERS ?? 2);
+const OUTBOUND_PREFETCH = Number(process.env.OUTBOUND_PREFETCH ?? 5);
+
+// Socket emit helper with small retry
+async function emitSocketWithRetry(event: string, payload: any, attempts = 2): Promise<boolean> {
+  for (let i = 0; i < attempts; i++) {
     try {
-      await publishApp(event, data);
-      
-      if (attempt > 1) {
-        console.log(`[Socket] ✅ Success on attempt ${attempt}/${maxAttempts}:`, {
-          event,
-          chatId: data?.chatId,
-          messageId: data?.message?.id
-        });
-      }
-      
+      await publish(EX_APP, event, payload);
       return true;
     } catch (err) {
-      const isLastAttempt = attempt === maxAttempts;
-      
-      console.warn(`[Socket] ⚠️ Attempt ${attempt}/${maxAttempts} failed:`, {
-        event,
-        chatId: data?.chatId,
-        messageId: data?.message?.id,
-        error: err instanceof Error ? err.message : String(err),
-        willRetry: !isLastAttempt
+      await new Promise((r) => setTimeout(r, 150 * (i + 1)));
+    }
+  }
+  return false;
+}
+
+
+// === Agent reply parsing helpers (multi-bubble + media) ===
+type MediaKind = "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT";
+type ParsedItem =
+  | { kind: "text"; content: string }
+  | { kind: "media"; mediaUrl: string; mediaKind: MediaKind; filename?: string | null; mimeType?: string | null; caption?: string | null };
+
+function guessMediaFromUrl(url: string): { mediaKind: MediaKind; filename: string | null; mimeType: string | null } {
+  try {
+    const u = new URL(url);
+    const filename = u.pathname.split("/").pop() || null;
+    const lower = (filename || "").toLowerCase();
+    const byExt: Record<string, { k: MediaKind; m: string }> = {
+      ".png": { k: "IMAGE", m: "image/png" },
+      ".jpg": { k: "IMAGE", m: "image/jpeg" },
+      ".jpeg": { k: "IMAGE", m: "image/jpeg" },
+      ".gif": { k: "IMAGE", m: "image/gif" },
+      ".webp": { k: "IMAGE", m: "image/webp" },
+      ".heic": { k: "IMAGE", m: "image/heic" },
+      ".mp4": { k: "VIDEO", m: "video/mp4" },
+      ".mov": { k: "VIDEO", m: "video/quicktime" },
+      ".3gp": { k: "VIDEO", m: "video/3gpp" },
+      ".mp3": { k: "AUDIO", m: "audio/mpeg" },
+      ".ogg": { k: "AUDIO", m: "audio/ogg" },
+      ".opus": { k: "AUDIO", m: "audio/opus" },
+      ".m4a": { k: "AUDIO", m: "audio/mp4" },
+      ".pdf": { k: "DOCUMENT", m: "application/pdf" },
+      ".doc": { k: "DOCUMENT", m: "application/msword" },
+      ".docx": { k: "DOCUMENT", m: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      ".xls": { k: "DOCUMENT", m: "application/vnd.ms-excel" },
+      ".xlsx": { k: "DOCUMENT", m: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      ".ppt": { k: "DOCUMENT", m: "application/vnd.ms-powerpoint" },
+      ".pptx": { k: "DOCUMENT", m: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+      ".zip": { k: "DOCUMENT", m: "application/zip" },
+      ".rar": { k: "DOCUMENT", m: "application/vnd.rar" },
+    };
+    const ext = Object.keys(byExt).find((e) => lower.endsWith(e)) || null;
+    if (ext) return { mediaKind: byExt[ext].k, filename, mimeType: byExt[ext].m };
+    return { mediaKind: "DOCUMENT", filename, mimeType: null };
+  } catch {
+    return { mediaKind: "DOCUMENT", filename: null, mimeType: null };
+  }
+}
+
+function extractFirstUrlAndCaption(text: string): { url: string | null; caption: string | null } {
+  const urlRe = /(https?:\/\/\S+)/i;
+  const m = text.match(urlRe);
+  if (!m) return { url: null, caption: null };
+  const url = m[1];
+  const before = text.slice(0, m.index ?? 0).trim();
+  const after = text.slice((m.index ?? 0) + url.length).trim();
+  const caption = [before, after].filter(Boolean).join(" ").trim() || null;
+  return { url, caption };
+}
+
+function parseAgentReplyToItems(raw: string): ParsedItem[] {
+  const items: ParsedItem[] = [];
+  const trimmed = (raw || "").trim();
+  if (!trimmed) return items;
+
+  // Try JSON of shape { message: ["..."] }
+  try {
+    const obj = JSON.parse(trimmed);
+    const arr = Array.isArray(obj?.message) ? obj.message : null;
+    if (arr && arr.length) {
+      for (const entry of arr) {
+        const s = typeof entry === "string" ? entry.trim() : "";
+        if (!s) continue;
+        const { url, caption } = extractFirstUrlAndCaption(s);
+        if (url) {
+          const g = guessMediaFromUrl(url);
+          items.push({ kind: "media", mediaUrl: url, mediaKind: g.mediaKind, filename: g.filename, mimeType: g.mimeType, caption });
+        } else {
+          items.push({ kind: "text", content: s });
+        }
+      }
+      return items;
+    }
+  } catch {
+    // not JSON; continue fallback
+  }
+
+  // Fallback: treat as a single text bubble or media if it's a plain URL
+  const { url, caption } = extractFirstUrlAndCaption(trimmed);
+  if (url && (!caption || !caption.trim())) {
+    const g = guessMediaFromUrl(url);
+    items.push({ kind: "media", mediaUrl: url, mediaKind: g.mediaKind, filename: g.filename, mimeType: g.mimeType, caption: null });
+  } else {
+    items.push({ kind: "text", content: trimmed });
+  }
+  return items;
+}
+
+async function publishParsedItems(args: { provider: "META" | typeof WAHA_PROVIDER; inboxId: string | null | undefined; chatId: string; items: ParsedItem[] }): Promise<void> {
+  const provider = args.provider;
+  const inboxId = args.inboxId || undefined;
+  for (const it of args.items) {
+    if (it.kind === "text") {
+      await publish(EX_APP, "outbound.request", {
+        provider,
+        inboxId,
+        chatId: args.chatId,
+        payload: { content: it.content },
+        attempt: 0,
+        kind: "message.send",
       });
-      
-      if (!isLastAttempt) {
-        // Exponential backoff: 5s, 10s, 20s
-        const delay = SOCKET_RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
-        console.log(`[Socket] ⏳ Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+    } else {
+      // media
+      if (provider === WAHA_PROVIDER) {
+        await publish(EX_APP, "outbound.request", {
+          provider,
+          inboxId,
+          chatId: args.chatId,
+          payload: {
+            type: "media",
+            kind: it.mediaKind.toLowerCase(),
+            mediaUrl: it.mediaUrl,
+            filename: it.filename ?? undefined,
+            mimeType: it.mimeType ?? undefined,
+            caption: it.caption ?? undefined,
+          },
+          attempt: 0,
+          kind: "message.send",
+        });
       } else {
-        // Final failure - log as metric
-        console.error(`[Socket] ❌ METRIC: All ${maxAttempts} attempts failed:`, {
-          event,
-          chatId: data?.chatId,
-          messageId: data?.message?.id,
-          inboxId: data?.inboxId,
-          totalRetryTime: `${(SOCKET_RETRY_BASE_DELAY * (Math.pow(2, maxAttempts) - 1)) / 1000}s`
+        // META: let outbound worker convert to meta.sendMedia
+        await publish(EX_APP, "outbound.request", {
+          provider: "META",
+          inboxId,
+          chatId: args.chatId,
+          payload: {
+            type: "media",
+            kind: it.mediaKind.toLowerCase(),
+            mediaUrl: it.mediaUrl,
+            filename: it.filename ?? undefined,
+            mimeType: it.mimeType ?? undefined,
+            caption: it.caption ?? undefined,
+          },
+          attempt: 0,
+          kind: "message.send",
         });
       }
     }
   }
-  
-  return false;
 }
-
-const INBOUND_WORKERS = parsePositiveInt(process.env.INBOUND_WORKERS, 1);
-const INBOUND_PREFETCH = parsePositiveInt(process.env.INBOUND_PREFETCH, 1);
-const INBOUND_MEDIA_WORKERS = parsePositiveInt(process.env.INBOUND_MEDIA_WORKERS, 1);
-const INBOUND_MEDIA_PREFETCH = parsePositiveInt(process.env.INBOUND_MEDIA_PREFETCH, 2);
-const OUTBOUND_WORKERS = parsePositiveInt(process.env.OUTBOUND_WORKERS, 2);
-const OUTBOUND_PREFETCH = parsePositiveInt(process.env.OUTBOUND_PREFETCH, 5);
-
-// === M??dia local / Graph ===
-const MEDIA_DIR =
-  process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
-const MEDIA_PUBLIC_BASE =
-  (process.env.MEDIA_PUBLIC_BASE || "").replace(/\/+$/, "");
-const FILES_PUBLIC_BASE = (
-  process.env.FILES_PUBLIC_BASE || "http://localhost:5000"
-).replace(/\/+$/, "");
-const META_GRAPH_VERSION = (process.env.META_GRAPH_VERSION || "v20.0").replace(
-  /^v?/,
-  "v",
-);
-
 let chatAttachmentsSupportsChatId = true;
 let wahaGroupSyncRunning = false;
 
@@ -283,9 +357,9 @@ async function flushDueBuffers(): Promise<void> {
       const meta = bufferParseListKey(listKey);
       const last = items[items.length - 1];
       if (!meta || !last) continue;
-      // Re-check chat status
-      const statusRow = await db.oneOrNone<{ status: string | null }>(
-        `select status from public.chats where id = $1`,
+      // Re-check chat status and get ai_agent_id
+      const statusRow = await db.oneOrNone<{ status: string | null; ai_agent_id: string | null }>(
+        `select status, ai_agent_id from public.chats where id = $1`,
         [meta.chatId],
       );
       const chatStatus = (statusRow?.status || "").toUpperCase();
@@ -293,6 +367,8 @@ async function flushDueBuffers(): Promise<void> {
         // drop silently
         continue;
       }
+
+      const chatAgentId = statusRow?.ai_agent_id ?? null;
 
       // Aggregate user messages into a single prompt
       const lines = items
@@ -305,8 +381,9 @@ async function flushDueBuffers(): Promise<void> {
         const ai = await runAgentReply({
           companyId: last.companyId,
           inboxId: last.inboxId,
+          agentId: chatAgentId,
           userMessage: aggregated,
-          chatHistory: [],
+          chatId: meta.chatId,
         });
         const reply = (ai.reply || "").trim();
         if (reply) {
@@ -320,14 +397,8 @@ async function flushDueBuffers(): Promise<void> {
               console.warn("[buffer][flush] failed to set ai_agent_id", err instanceof Error ? err.message : err);
             }
           }
-          await publish(EX_APP, "outbound.request", {
-            provider: last.provider,
-            inboxId: last.inboxId,
-            chatId: meta.chatId,
-            payload: { content: reply },
-            attempt: 0,
-            kind: "message.send",
-          });
+          const items = parseAgentReplyToItems(reply);
+          await publishParsedItems({ provider: last.provider, inboxId: last.inboxId || undefined, chatId: meta.chatId, items });
         }
       } catch (err) {
         console.warn("[buffer][flush] agent reply failed", {
@@ -1287,13 +1358,14 @@ async function handleMetaInboundMessages(args: {
     try {
       const bodyText = typeof content === "string" ? content.trim() : "";
       if (bodyText) {
-        const row = await db.oneOrNone<{ status: string | null }>(
-          `select status from public.chats where id = $1`,
+        const row = await db.oneOrNone<{ status: string | null; ai_agent_id: string | null }>(
+          `select status, ai_agent_id from public.chats where id = $1`,
           [chatId],
         );
         const chatStatus = (row?.status || "").toUpperCase();
         if (chatStatus === "AI") {
-          const agent = await getRuntimeAgent(companyId, null);
+          const chatAgentId = row?.ai_agent_id ?? null;
+          const agent = await getRuntimeAgent(companyId, chatAgentId);
           const windowSec = Number(agent?.aggregation_window_sec || 0);
           const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
           const maxBatch = agent?.max_batch_messages ?? null;
@@ -1310,29 +1382,30 @@ async function handleMetaInboundMessages(args: {
             const ai = await runAgentReply({
               companyId,
               inboxId,
+              agentId: chatAgentId,
               userMessage: bodyText,
-              chatHistory: [],
+              chatId,
             });
-            const reply = (ai.reply || "").trim();
-            if (reply) {
-              if (ai.agentId) {
-                try {
-                  await db.none(
-                    `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
-                    [chatId, ai.agentId],
-                  );
-                } catch (err) {
-                  console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+
+            // Verificar se agente pulou a resposta
+            if (ai.skipped) {
+              console.log(`[agents][auto-reply][META] skipped: ${ai.reason}`);
+            } else {
+              const reply = (ai.reply || "").trim();
+              if (reply) {
+                if (ai.agentId) {
+                  try {
+                    await db.none(
+                      `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                      [chatId, ai.agentId],
+                    );
+                  } catch (err) {
+                    console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+                  }
                 }
+                const items = parseAgentReplyToItems(reply);
+                await publishParsedItems({ provider: "META", inboxId, chatId, items });
               }
-              await publish(EX_APP, "outbound.request", {
-                provider: "META",
-                inboxId,
-                chatId,
-                payload: { content: reply },
-                attempt: 0,
-                kind: "message.send",
-              });
             }
           }
         }
@@ -1370,7 +1443,7 @@ async function handleMetaInboundMessages(args: {
       [inserted.id],
     );
 
-    const mappedMessage = {
+  const mappedMessage = {
       id: msgRow.id,
       chat_id: msgRow.chat_id,
       body: msgRow.content,
@@ -1391,7 +1464,6 @@ async function handleMetaInboundMessages(args: {
       remote_sender_is_admin: msgRow.remote_sender_is_admin ?? null,
       replied_message_id: msgRow.replied_message_id ?? null,
     };
-
     // Fetch chat summary for socket
     let inboxIdForSocket: string | null = null;
     try {
@@ -1403,7 +1475,6 @@ async function handleMetaInboundMessages(args: {
     } catch (e) {
       console.warn("[META][inbound] failed to load chat inbox for socket:", (e as any)?.message || e);
     }
-
     try {
       const chatSummary = await fetchChatUpdateForSocket(chatId);
       const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
@@ -2218,13 +2289,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // ====== Auto-reply / Buffer (Agents) — WAHA inbound (from customer only, and chat status == 'AI') ======
   try {
     if (isFromCustomer && body && body.trim()) {
-      const row = await db.oneOrNone<{ status: string | null }>(
-        `select status from public.chats where id = $1`,
+      const row = await db.oneOrNone<{ status: string | null; ai_agent_id: string | null }>(
+        `select status, ai_agent_id from public.chats where id = $1`,
         [chatId],
       );
       const chatStatus = (row?.status || "").toUpperCase();
       if (chatStatus === "AI") {
-        const agent = await getRuntimeAgent(job.companyId, null);
+        const chatAgentId = row?.ai_agent_id ?? null;
+        const agent = await getRuntimeAgent(job.companyId, chatAgentId);
         const windowSec = Number(agent?.aggregation_window_sec || 0);
         const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
         const maxBatch = agent?.max_batch_messages ?? null;
@@ -2241,30 +2313,32 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           const ai = await runAgentReply({
             companyId: job.companyId,
             inboxId: job.inboxId,
+            agentId: chatAgentId,
             userMessage: body,
-            chatHistory: [],
+            chatId,
           });
-          const reply = (ai.reply || "").trim();
-          if (reply) {
-            if (ai.agentId) {
-              try {
-                await db.none(
-                  `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
-                  [chatId, ai.agentId],
-                );
-              } catch (err) {
-                console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+
+            // Verificar se agente pulou a resposta
+            if (ai.skipped) {
+              console.log(`[agents][auto-reply][WAHA] skipped: ${ai.reason}`);
+            } else {
+              const reply = (ai.reply || "").trim();
+              if (reply) {
+                if (ai.agentId) {
+                  try {
+                    await db.none(
+                      `update public.chats set ai_agent_id = $2, updated_at = now() where id = $1`,
+                      [chatId, ai.agentId],
+                    );
+                  } catch (err) {
+                    console.warn("[agents] failed to set ai_agent_id", err instanceof Error ? err.message : err);
+                  }
+                }
+                // Parse e envia múltiplas bolhas (texto + mídia)
+                const items = parseAgentReplyToItems(reply);
+                await publishParsedItems({ provider: WAHA_PROVIDER, inboxId: job.inboxId, chatId, items });
               }
             }
-            await publish(EX_APP, "outbound.request", {
-              provider: WAHA_PROVIDER,
-              inboxId: job.inboxId,
-              chatId,
-              payload: { content: reply },
-              attempt: 0,
-              kind: "message.send",
-            });
-          }
         }
       }
     }
@@ -3076,6 +3150,64 @@ async function sendMetaText(args: {
   return { wamid };
 }
 
+async function sendWahaText(args: {
+  inboxId: string;
+  chatJid: string;
+  content: string;
+}): Promise<{ messageId: string | null }> {
+  // Buscar inbox completa e credenciais
+  const inbox = await db.oneOrNone<{ 
+    base_url: string | null; 
+    instance_id: string | null;
+    provider: string | null;
+  }>(
+    `SELECT base_url, instance_id, provider FROM inboxes WHERE id = $1`,
+    [args.inboxId]
+  );
+
+  if (!inbox) {
+    throw new Error(`Inbox ${args.inboxId} not found`);
+  }
+
+  // Buscar API key do inbox_secrets
+  const secret = await db.oneOrNone<{ provider_api_key: string | null }>(
+    `SELECT provider_api_key FROM inbox_secrets WHERE inbox_id = $1`,
+    [args.inboxId]
+  );
+
+  const baseUrl = inbox.base_url || process.env.WAHA_BASE_URL || "http://localhost:3000";
+  const session = inbox.instance_id || "default";
+  const apiKey = secret?.provider_api_key ? decryptSecret(secret.provider_api_key) : "";
+
+  const url = `${baseUrl}/api/sendText`;
+  const body = {
+    session,
+    chatId: args.chatJid,
+    text: args.content,
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      "X-Api-Key": apiKey || "",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await response.json().catch(() => ({}));
+  
+  if (!response.ok) {
+    const message = (json as any)?.message || response.statusText;
+    const err = new Error(`WAHA sendText failed: ${message}`);
+    (err as any).retryable = response.status >= 500 || response.status === 429;
+    throw err;
+  }
+
+  const messageId = (json as any)?.id || null;
+  return { messageId };
+}
+
 async function startOutboundWorkerInstance(index: number, prefetch: number): Promise<void> {
   const label = `[worker][outbound#${index}]`;
   console.log(`${label} starting (prefetch=${prefetch})`);
@@ -3124,10 +3256,26 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
             return;
           }
           if (!provider || provider === "META" || provider === "META_CLOUD") {
-            jobKind = "message.send";
-            meta.jobType = jobKind;
-            provider = provider || "META";
-            meta.provider = provider;
+            // If payload is media, convert to meta.sendMedia job
+            const p = job?.payload || {};
+            if (String(p?.type || "").toLowerCase() === "media" && p?.mediaUrl) {
+              jobKind = "meta.sendMedia";
+              meta.jobType = jobKind;
+              provider = provider || "META";
+              meta.provider = provider;
+              // Normalize fields used by meta.sendMedia handler
+              job.chatId = job.chatId || job?.payload?.chatId || job?.chat_id || null;
+              job.inboxId = job.inboxId || job?.payload?.inboxId || null;
+              job.public_url = p.mediaUrl;
+              job.mime_type = p.mimeType || "";
+              job.filename = p.filename || null;
+              job.caption = p.caption || null;
+            } else {
+              jobKind = "message.send";
+              meta.jobType = jobKind;
+              provider = provider || "META";
+              meta.provider = provider;
+            }
           } else {
             throw new Error(`unknown provider ${provider} for outbound.request`);
           }
@@ -3152,14 +3300,12 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         if (jobKind === "meta.sendMedia") {
           meta.jobType = jobKind;
           const chatId = String(job.chatId || "");
-          const messageId = String(job.messageId || "");
+          const messageId = job.messageId ? String(job.messageId) : "";
           const storageKey = String(job.storage_key || "");
           let mimeType = String(job.mime_type || "");
           meta.chatId = chatId || meta.chatId || null;
           meta.provider = provider || meta.provider || "META";
-          if (!chatId || !messageId || !storageKey || !mimeType) {
-            throw new Error("meta.sendMedia missing fields");
-          }
+          if (!chatId) throw new Error("meta.sendMedia missing chatId");
 
         const { chat_id, customer_phone, inbox_id } =
           await getChatWithCustomerPhone(chatId);
@@ -3174,6 +3320,9 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
 
         // Permite enviar via arquivo local (storage_key) OU via URL pública (public_url)
         const publicUrl = typeof job.public_url === "string" && job.public_url ? String(job.public_url) : "";
+        if (!storageKey && !publicUrl) {
+          throw new Error("meta.sendMedia requires storage_key or public_url");
+        }
         const absFromKey = storageKey ? path.join(MEDIA_DIR, storageKey) : "";
         let abs = absFromKey;
         let createdTmp = false;
@@ -3248,27 +3397,29 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         );
         console.log("[outbound] graphSendMedia ok", { wamid });
 
-        // garante persist??ncia do status, com ou sem wamid
-        if (!wamid) {
-          console.error("[outbound] graphSendMedia retornou 200 mas sem wamid");
-          await db.none(
-            `update public.chat_messages
-       set view_status = 'Sent'
-     where id = $1`,
-            [messageId]
-          );
-        } else {
-          await db.none(
-            `update public.chat_messages
-       set external_id = $2,
-           view_status = 'Sent'
-     where id = $1`,
-            [messageId, wamid]
-          );
+        // garante persist??ncia do status, com ou sem wamid (se houver messageId fornecido)
+        if (messageId) {
+          if (!wamid) {
+            console.error("[outbound] graphSendMedia retornou 200 mas sem wamid");
+            await db.none(
+              `update public.chat_messages
+         set view_status = 'Sent'
+       where id = $1`,
+              [messageId]
+            );
+          } else {
+            await db.none(
+              `update public.chat_messages
+         set external_id = $2,
+             view_status = 'Sent'
+       where id = $1`,
+              [messageId, wamid]
+            );
+          }
         }
 
         // (opcional) se ainda quiser manter seu helper que upserta logs/etc:
-        await insertOutboundMessage({
+        const upsert = await insertOutboundMessage({
           chatId: chat_id,
           inboxId,
           customerId: String(job.customerId || ""),
@@ -3284,7 +3435,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         await publishApp("socket.livechat.status", {
           kind: "livechat.message.status",
           chatId,
-          messageId,
+          messageId: messageId || (upsert?.message?.id || null),
           externalId: wamid || null,
           view_status: "Sent",
           raw_status: "sent",

@@ -2,7 +2,7 @@
 import type { AgentInput } from "../types/integrations.ts";
 
 const TABLE = "agents";
-const SELECT_COLUMNS = "id, company_id, name, description, status, integration_openai_id, model, model_params, aggregation_enabled, aggregation_window_sec, max_batch_messages, reply_if_idle_sec, media_config, tools_policy, allow_handoff, created_at, updated_at";
+const SELECT_COLUMNS = "id, company_id, name, description, status, integration_openai_id, model, model_params, aggregation_enabled, aggregation_window_sec, max_batch_messages, reply_if_idle_sec, media_config, tools_policy, allow_handoff, ignore_group_messages, enabled_inbox_ids, transcription_model, vision_model, created_at, updated_at";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -22,6 +22,10 @@ type AgentRowInternal = {
   media_config: JsonRecord | null;
   tools_policy: JsonRecord | null;
   allow_handoff: boolean | null;
+  ignore_group_messages: boolean | null;
+  enabled_inbox_ids: string[] | null;
+  transcription_model?: string | null;
+  vision_model?: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -42,6 +46,10 @@ export type AgentRow = {
   media_config: JsonRecord | null;
   tools_policy: JsonRecord | null;
   allow_handoff: boolean;
+  ignore_group_messages: boolean;
+  enabled_inbox_ids: string[];
+  transcription_model?: string | null;
+  vision_model?: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -63,6 +71,10 @@ function mapAgent(row: AgentRowInternal): AgentRow {
     media_config: row.media_config ?? null,
     tools_policy: row.tools_policy ?? null,
     allow_handoff: Boolean(row.allow_handoff),
+    ignore_group_messages: Boolean(row.ignore_group_messages ?? true),
+    enabled_inbox_ids: Array.isArray(row.enabled_inbox_ids) ? row.enabled_inbox_ids : [],
+    transcription_model: row.transcription_model ?? null,
+    vision_model: row.vision_model ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at ?? null,
   };
@@ -81,13 +93,15 @@ export async function createAgent(companyId: string, input: AgentInput): Promise
     integration_openai_id: nullable(input.integration_openai_id ?? null),
     model: input.model ?? null,
     model_params: input.model_params ?? null,
-    aggregation_enabled: input.aggregation_enabled ?? false,
-    aggregation_window_sec: input.aggregation_window_sec ?? null,
-    max_batch_messages: input.max_batch_messages ?? null,
+    aggregation_enabled: input.aggregation_enabled ?? true,
+    aggregation_window_sec: input.aggregation_window_sec ?? 20,
+    max_batch_messages: input.max_batch_messages ?? 20,
     reply_if_idle_sec: input.reply_if_idle_sec ?? null,
     media_config: input.media_config ?? null,
     tools_policy: input.tools_policy ?? null,
     allow_handoff: input.allow_handoff ?? false,
+    ignore_group_messages: input.ignore_group_messages ?? true,
+    enabled_inbox_ids: input.enabled_inbox_ids ?? [],
   };
 
   const { data, error } = await supabaseAdmin
@@ -192,6 +206,8 @@ export async function updateAgent(
   if (patch.media_config !== undefined) update.media_config = patch.media_config ?? null;
   if (patch.tools_policy !== undefined) update.tools_policy = patch.tools_policy ?? null;
   if (patch.allow_handoff !== undefined) update.allow_handoff = patch.allow_handoff;
+  if (patch.ignore_group_messages !== undefined) update.ignore_group_messages = patch.ignore_group_messages;
+  if (patch.enabled_inbox_ids !== undefined) update.enabled_inbox_ids = patch.enabled_inbox_ids ?? [];
 
   if (Object.keys(update).length === 0) {
     throw new Error("No fields provided to update agent");

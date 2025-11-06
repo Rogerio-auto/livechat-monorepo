@@ -7,15 +7,11 @@ import type {
 } from "../../types/types";
 import MetaConfig from "../settings/inboxes/MetaConfig";
 import WahaConfig from "../settings/inboxes/WahaConfig";
+import { Card, Input, Button } from "../../components/ui";
 
-// ===== Paleta solicitada =====
-const PALETTE = {
-  primary: "#1D4ED8",     // Azul Principal
-  secondaryBg: "#0F172A", // Azul quase grafite
-  textMetal: "#94A3B8",   // Cinza metalico
-  accent: "#38BDF8",      // Realce
-  pageBg: "#0A0F1C",      // Fundo geral (usado no container pai)
-};
+// Estilos utilitários (para elementos que ainda não possuem componente no design system, como <select>)
+const selectBaseClasses =
+  "w-full rounded-xl px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60 transition-colors duration-200";
 
 type InboxFormExtended = InboxForm &
   Pick<Inbox, "base_url" | "api_version" | "instance_id" | "phone_number_id"> & {
@@ -30,12 +26,9 @@ type WahaSessionInfo = {
 };
 
 // ====== UI helpers ======
-const inputClasses =
-  "w-full rounded-xl px-3 py-2 bg-[#0B1324] border border-white/10 text-white placeholder:text-[#94A3B8] focus:outline-none focus:ring-2 focus:ring-[#38BDF8] disabled:opacity-60";
-
 const Field = ({ label, children }: { label: string; children: ReactNode }) => (
-  <label className="block">
-    <div className="text-sm mb-1" style={{ color: PALETTE.textMetal }}>{label}</div>
+  <label className="block space-y-2">
+    <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</div>
     {children}
   </label>
 );
@@ -326,28 +319,17 @@ export default function InboxesPanel({
   };
 
   return (
-    <section
-      className="rounded-2xl p-6 shadow-sm"
-      style={{ backgroundColor: PALETTE.secondaryBg, border: "1px solid rgba(255,255,255,0.08)" }}
-    >
-      <h3 className="text-lg font-semibold text-white mb-2">Caixas de entrada</h3>
-      <p className="text-sm mb-4" style={{ color: PALETTE.textMetal }}>
-        Gerencie suas caixas de atendimento integradas.
-      </p>
-
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-sm" style={{ color: PALETTE.textMetal }}>Total: {totalInboxes}</div>
-        <button
-          className="px-3 py-2 rounded-lg text-white"
-          style={{ backgroundColor: "#1f2937" }}
-          onClick={onRequestCreate}
-          disabled={disabled}
-        >
+    <section className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <span className="px-3 py-1 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+          Total: {totalInboxes}
+        </span>
+        <Button onClick={onRequestCreate} disabled={disabled} variant="primary" size="sm">
           + Nova caixa
-        </button>
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {companyInboxes.map((inbox) => {
           const form = ensureSeed(inbox.id);
           const expanded = expandedId === inbox.id;
@@ -364,83 +346,77 @@ export default function InboxesPanel({
             "";
 
           return (
-            <div
-              key={inbox.id}
-              className="rounded-xl p-4"
-              style={{ backgroundColor: "#0B1324", border: "1px solid rgba(255,255,255,0.06)" }}
-            >
+            <Card key={inbox.id} padding="md">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-medium text-white">
+                  <div className="font-semibold text-gray-900 dark:text-white">
                     {form.name || inbox.name || `Inbox ${inbox.id.slice(0, 6)}`}
                   </div>
-                  <div className="text-sm" style={{ color: PALETTE.textMetal }}>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">
                     {form.phone_number || inbox.phone_number}
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2">
                   <span
-                    className="px-2 py-0.5 rounded"
-                    style={{
-                      backgroundColor: form.is_active ? "rgba(56,189,248,0.15)" : "rgba(148,163,184,0.12)",
-                      color: form.is_active ? PALETTE.accent : PALETTE.textMetal,
-                    }}
+                    className={`px-2.5 py-1 rounded-md text-xs border ${form.is_active
+                      ? "bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                      }`}
                   >
                     {form.is_active ? "Ativa" : "Inativa"}
                   </span>
-                  <button
-                    className="px-2 py-0.5 rounded"
-                    style={{ backgroundColor: "rgba(255,255,255,0.04)", color: PALETTE.textMetal }}
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setExpandedId(expanded ? null : inbox.id)}
                   >
                     {expanded ? "Fechar" : "Configurar"}
-                  </button>
+                  </Button>
                 </div>
               </div>
 
               {expanded && (
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Field label="Nome">
-                      <input
-                        className={inputClasses}
-                        value={form.name}
-                        onChange={(e) => handleChange(inbox.id, "name", e.target.value)}
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input
+                      label="Nome"
+                      placeholder="Identificação da caixa"
+                      value={form.name}
+                      onChange={(e) => handleChange(inbox.id, "name", e.target.value)}
+                      autoComplete="off"
+                      disabled={disabled}
+                    />
+                    {!isWaha && (
+                      <Input
+                        label="Telefone"
+                        placeholder="Número com DDD"
+                        value={form.phone_number}
+                        onChange={(e) => handleChange(inbox.id, "phone_number", e.target.value)}
                         autoComplete="off"
+                        inputMode="tel"
                         disabled={disabled}
                       />
-                    </Field>
-                    {!isWaha && (
-                      <Field label="Telefone">
-                        <input
-                          className={inputClasses}
-                          value={form.phone_number}
-                          onChange={(e) => handleChange(inbox.id, "phone_number", e.target.value)}
-                          autoComplete="off"
-                          inputMode="tel"
-                          disabled={disabled}
-                        />
-                      </Field>
                     )}
                   </div>
 
                   {!isWaha && (
-                    <Field label="Webhook URL">
-                      <input
-                        className={inputClasses}
-                        value={webhookValue}
-                        onChange={(e) => handleChange(inbox.id, "webhook_url", e.target.value)}
-                        autoComplete="off"
-                        disabled={disabled}
-                      />
-                    </Field>
+                    <Input
+                      label="Webhook URL"
+                      placeholder="https://..."
+                      value={webhookValue}
+                      onChange={(e) => handleChange(inbox.id, "webhook_url", e.target.value)}
+                      autoComplete="off"
+                      readOnly={isMeta}
+                      helperText={isMeta ? "Definido automaticamente para Meta Cloud" : undefined}
+                      disabled={disabled}
+                    />
                   )}
 
                   {!isWaha ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Field label="Provider">
                         <select
-                          className={inputClasses}
+                          className={selectBaseClasses}
                           value={form.provider}
                           onChange={(e) => handleChange(inbox.id, "provider", e.target.value)}
                           disabled={disabled}
@@ -453,7 +429,7 @@ export default function InboxesPanel({
 
                       <Field label="Canal">
                         <select
-                          className={inputClasses}
+                          className={selectBaseClasses}
                           value={form.channel}
                           onChange={(e) => handleChange(inbox.id, "channel", e.target.value)}
                           disabled={disabled}
@@ -464,7 +440,7 @@ export default function InboxesPanel({
                       </Field>
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-white/10 p-3 text-sm text-white/80 bg-[#0B1324]">
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-sm text-gray-700 dark:text-gray-300 bg-white/60 dark:bg-gray-800/60">
                       Conexão WAHA (não oficial)
                     </div>
                   )}
@@ -484,7 +460,7 @@ export default function InboxesPanel({
                       disabled={disabled}
                     />
                   )}
-                  <label className="inline-flex items-center gap-2 text-sm" style={{ color: PALETTE.textMetal }}>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <input
                       type="checkbox"
                       checked={!!form.is_active}
@@ -494,42 +470,40 @@ export default function InboxesPanel({
                     Ativa
                   </label>
 
-                  <div className="flex gap-2">
-                    <button
+                  <div className="flex flex-wrap gap-2">
+                    <Button
                       onClick={() => handleSave(inbox.id)}
                       disabled={disabled || !isDirty(inbox.id)}
-                      className="px-3 py-2 rounded-lg text-white disabled:opacity-60"
-                      style={{
-                        backgroundColor: isDirty(inbox.id) && !disabled ? PALETTE.primary : "rgba(148,163,184,0.35)",
-                      }}
+                      variant="primary"
+                      size="sm"
                     >
                       Salvar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => handleCancel(inbox.id)}
                       disabled={disabled || !isDirty(inbox.id)}
-                      className="px-3 py-2 rounded-lg disabled:opacity-60"
-                      style={{ backgroundColor: "rgba(255,255,255,0.06)", color: PALETTE.textMetal }}
+                      variant="ghost"
+                      size="sm"
                     >
                       Cancelar
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => onRequestDelete(inbox.id)}
                       disabled={disabled}
-                      className="px-3 py-2 rounded-lg text-red-400 disabled:opacity-60"
-                      style={{ backgroundColor: "rgba(244,63,94,0.12)" }}
+                      variant="danger"
+                      size="sm"
                     >
                       Excluir
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
 
         {companyInboxes.length === 0 && (
-          <div className="text-sm" style={{ color: PALETTE.textMetal }}>
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             Nenhuma caixa de entrada cadastrada.
           </div>
         )}

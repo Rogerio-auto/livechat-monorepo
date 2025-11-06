@@ -9,13 +9,7 @@ import type {
 import OpenAIIntegrationForm, {
   type OpenAIIntegrationFormSubmit,
 } from "./OpenAIIntegrationForm";
-
-const CARD_CLASS = "config-card rounded-2xl shadow-sm p-6 config-text-muted";
-const TITLE_CLASS = "text-xl font-semibold config-heading";
-const PRIMARY_BTN =
-  "config-btn-primary px-3 py-2 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition";
-const SOFT_BTN = "config-btn px-3 py-2 rounded-lg disabled:opacity-60";
-const BADGE_BASE = "config-badge inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold";
+import { Button } from "../../components/ui";
 
 type FormContext =
   | { mode: "create" }
@@ -151,42 +145,42 @@ export default function OpenAIIntegrationCard() {
   }
 
   return (
-    <section className={CARD_CLASS}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg transition-colors duration-300">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h2 className={TITLE_CLASS}>OpenAI</h2>
-          <p className="text-sm config-text-muted">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">OpenAI</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
             Gerencie tokens e modelos permitidos para os agentes inteligentes.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={SOFT_BTN}
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => fetchIntegrations()}
             disabled={loading}
           >
             {loading ? "Atualizando..." : "Recarregar"}
-          </button>
-          <button
-            type="button"
-            className={PRIMARY_BTN}
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setFormContext({ mode: "create" })}
           >
             Nova integração
-          </button>
+          </Button>
         </div>
       </div>
 
       {error && (
-        <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <div className="mb-4 rounded-xl border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">
           {error}
         </div>
       )}
 
-      <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+      <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
         <table className="w-full border-collapse text-sm">
-        <thead className="text-xs uppercase tracking-wide config-text-muted">
+        <thead className="bg-gray-100 dark:bg-gray-800/50 text-xs uppercase tracking-wide text-gray-600 dark:text-gray-400">
             <tr>
               <th className="px-4 py-3 text-left font-semibold">Nome</th>
               <th className="px-4 py-3 text-left font-semibold">Modelo padrão</th>
@@ -200,7 +194,7 @@ export default function OpenAIIntegrationCard() {
           <tbody>
             {loading && sortedItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center config-text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-600 dark:text-gray-400">
                   Carregando integrações...
                 </td>
               </tr>
@@ -208,7 +202,7 @@ export default function OpenAIIntegrationCard() {
 
             {!loading && sortedItems.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center config-text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-gray-600 dark:text-gray-400">
                   Nenhuma integração configurada ainda.
                 </td>
               </tr>
@@ -217,16 +211,16 @@ export default function OpenAIIntegrationCard() {
             {sortedItems.map((integration) => (
             <tr
               key={integration.id}
-              className="border-t theme-border transition-colors hover:bg-[var(--color-surface-muted)]"
+              className="border-t border-gray-200 dark:border-gray-700 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800/50"
             >
                 <td className="px-4 py-3">
-                  <div className="font-medium config-heading">{integration.name}</div>
-                  <div className="text-xs config-text-muted">
+                  <div className="font-medium text-gray-900 dark:text-white">{integration.name}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">
                     {integration.org_id ? `Org: ${integration.org_id}` : "—"}
                     {integration.project_id ? ` • Projeto: ${integration.project_id}` : ""}
                   </div>
                 </td>
-                <td className="px-4 py-3 config-text-muted">
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                   {integration.default_model || "—"}
                 </td>
                 <td className="px-4 py-3">
@@ -235,26 +229,26 @@ export default function OpenAIIntegrationCard() {
                       (integration.models_allowed ?? []).map((model) => (
                         <span
                           key={model}
-                          className="config-chip config-chip--muted inline-flex items-center rounded-full px-2 py-0.5 text-xs"
+                          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
                         >
                           {model}
                         </span>
                       ))
                     ) : (
-                      <span className="config-text-muted">—</span>
+                      <span className="text-gray-600 dark:text-gray-400">—</span>
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3 config-text-muted">
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
                   {describeUsage(integration.usage_limits)}
                 </td>
-                <td className="px-4 py-3 config-text-muted">{formatDate(integration.updated_at)}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{formatDate(integration.updated_at)}</td>
                 <td className="px-4 py-3">
                   <span
-                    className={`${BADGE_BASE} ${
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
                       integration.is_active
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : "bg-zinc-500/15 text-zinc-300"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-gray-700"
                     }`}
                   >
                     {integration.is_active ? "Ativa" : "Desativada"}
@@ -262,21 +256,21 @@ export default function OpenAIIntegrationCard() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className={SOFT_BTN}
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setFormContext({ mode: "edit", integration })}
                     >
                       Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="px-3 py-2 rounded-lg bg-red-500/15 text-red-300 hover:bg-red-500/25 disabled:opacity-60"
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => setDeleteContext({ integration })}
                       disabled={deleteLoading && deleteContext?.integration.id === integration.id}
                     >
                       Excluir
-                    </button>
+                    </Button>
                   </div>
                 </td>
               </tr>
@@ -303,31 +297,31 @@ export default function OpenAIIntegrationCard() {
       )}
 
       {deleteContext && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-[var(--color-overlay)] px-4">
-          <div className="config-modal w-full max-w-md rounded-2xl p-6 config-text-muted">
-            <h3 className="text-lg font-semibold config-heading mb-2">Remover integração</h3>
-            <p className="text-sm config-text-muted mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6 shadow-2xl transition-colors duration-300">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Remover integração</h3>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">
               Tem certeza que deseja excluir a integração{" "}
-              <span className="config-heading font-medium">{deleteContext.integration.name}</span>?
+              <span className="font-medium text-gray-900 dark:text-white">{deleteContext.integration.name}</span>?
               Esta ação não pode ser desfeita.
             </p>
             <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className={SOFT_BTN}
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setDeleteContext(null)}
                 disabled={deleteLoading}
               >
                 Cancelar
-              </button>
-              <button
-                type="button"
-                className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 disabled:opacity-60"
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={confirmDelete}
                 disabled={deleteLoading}
               >
                 {deleteLoading ? "Excluindo..." : "Excluir"}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

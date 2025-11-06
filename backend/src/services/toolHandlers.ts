@@ -106,6 +106,24 @@ async function handleInternalDB(
   const requiredCols = (required_columns as string[]) || [];
   const defaults = (default_values as Record<string, any>) || {};
 
+  // Auto-preencher identificadores ausentes vindos do contexto
+  // Ex.: ferramentas que exigem customer_id, mas o LLM não passou (ou passou 'undefined')
+  if ((requiredCols.includes("customer_id") || table === "customers") && (params.customer_id === undefined || params.customer_id === null || params.customer_id === "undefined" || params.customer_id === "")) {
+    if (context.contactId) {
+      params.customer_id = context.contactId;
+    }
+  }
+  if ((requiredCols.includes("chat_id") || table === "chats") && (params.chat_id === undefined || params.chat_id === null || params.chat_id === "undefined" || params.chat_id === "")) {
+    if (context.chatId) {
+      params.chat_id = context.chatId;
+    }
+  }
+  if ((requiredCols.includes("agent_id") || table === "agents") && (params.agent_id === undefined || params.agent_id === null || params.agent_id === "undefined" || params.agent_id === "")) {
+    if (context.agentId) {
+      params.agent_id = context.agentId;
+    }
+  }
+
   // ====== SPECIAL CASE: Knowledge Base Search with Full-Text ======
   if (table === "knowledge_base" && action === "select" && params.query_text) {
     const query_text = params.query_text;

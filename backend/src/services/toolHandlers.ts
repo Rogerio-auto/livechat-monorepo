@@ -221,18 +221,55 @@ async function handleInternalDB(
       delete finalParams[idKey];
 
       // Map common alias parameters to the real primary key column when needed
-      // Example: tools may require "contact_id" but the table column is "id"
+      // Example: tools may require "customer_id" but the table column is "id"
       let filterColumn = idKey;
-      if (table === "contacts" && idKey === "contact_id") {
+      if (table === "customers" && idKey === "customer_id") {
         filterColumn = "id";
       }
 
+      // Execute the main update
       const { data, error } = await supabaseAdmin
         .from(table)
         .update(finalParams)
         .eq(filterColumn, idValue)
         .select();
       if (error) throw new Error(`DB update error: ${error.message}`);
+
+      // ====== SYNC LOGIC: customers <-> leads ======
+      // If sync_to_leads is enabled and we're updating customers, sync to related lead
+      if (table === "customers" && config.sync_to_leads === true && data && data.length > 0) {
+        const customer = data[0];
+        try {
+          // Find lead related to this customer (via lead.customer_id or matching phone)
+          const { data: relatedLeads } = await supabaseAdmin
+            .from("leads")
+            .select("id")
+            .or(`customer_id.eq.${customer.id},phone.eq.${customer.phone}`)
+            .limit(1);
+
+          if (relatedLeads && relatedLeads.length > 0) {
+            const leadId = relatedLeads[0].id;
+            const leadUpdates: Record<string, any> = {};
+            
+            // Sync common fields
+            if (finalParams.name !== undefined) leadUpdates.name = finalParams.name;
+            if (finalParams.phone !== undefined) leadUpdates.phone = finalParams.phone;
+            
+            if (Object.keys(leadUpdates).length > 0) {
+              await supabaseAdmin
+                .from("leads")
+                .update(leadUpdates)
+                .eq("id", leadId);
+              
+              console.log(`[toolHandlers] Synced customer ${customer.id} to lead ${leadId}`, leadUpdates);
+            }
+          }
+        } catch (syncError) {
+          console.warn("[toolHandlers] Failed to sync customer to lead:", syncError);
+          // Don't fail the whole operation if sync fails
+        }
+      }
+
       return { success: true, data };
     }
 
@@ -254,11 +291,18 @@ async function handleInternalDB(
       }
     }
 
+    // Map alias parameters to real columns for customers table
+    const queryParams = { ...params };
+    if (table === "customers" && "customer_id" in queryParams) {
+      queryParams.id = queryParams.customer_id;
+      delete queryParams.customer_id;
+    }
+
     const selectCols = readColumns.join(",");
     let query = supabaseAdmin.from(table).select(selectCols);
 
     // Apply filters from params
-    for (const [key, value] of Object.entries(params)) {
+    for (const [key, value] of Object.entries(queryParams)) {
       if (value !== undefined && value !== null) {
         query = query.eq(key, value);
       }
@@ -270,6 +314,46 @@ async function handleInternalDB(
 
     const { data, error } = await query;
     if (error) throw new Error(`DB select error: ${error.message}`);
+
+    // ====== MERGE LOGIC: customers + leads ======
+    // If querying customers, try to enrich with lead data
+    if (table === "customers" && data && data.length > 0) {
+      try {
+        const enrichedData = await Promise.all(
+          data.map(async (customer: any) => {
+            // Try to find related lead
+            const { data: relatedLeads } = await supabaseAdmin
+              .from("leads")
+              .select("id, name, email, phone, cpf, city, state, status_client, observacao")
+              .or(`customer_id.eq.${customer.id},phone.eq.${customer.phone}`)
+              .limit(1);
+
+            if (relatedLeads && relatedLeads.length > 0) {
+              const lead = relatedLeads[0];
+              return {
+                ...customer,
+                // Prefer lead data if available, fallback to customer
+                name: lead.name || customer.name,
+                email: lead.email || null,
+                cpf: lead.cpf || null,
+                city: lead.city || null,
+                state: lead.state || null,
+                status_client: lead.status_client || null,
+                lead_id: lead.id,
+                lead_observacao: lead.observacao,
+              };
+            }
+            return customer;
+          })
+        );
+        return { success: true, data: enrichedData };
+      } catch (mergeError) {
+        console.warn("[toolHandlers] Failed to merge customer with lead data:", mergeError);
+        // Return customer data only if merge fails
+        return { success: true, data };
+      }
+    }
+
     return { success: true, data };
   }
 

@@ -12,7 +12,9 @@
     "worker:outbound": "tsx src/worker.ts outbound",
     "worker:campaigns": "tsx src/worker.campaigns.ts",
     "worker:watch": "tsx watch src/worker.ts",
-    "test:waha": "tsx scripts/wahaOutboundSmoke.ts"
+    "test:waha": "tsx scripts/wahaOutboundSmoke.ts",
+    "test:tool:name": "tsx scripts/testUpdateCustomerName.ts",
+    "test:tool": "tsx scripts/testTool.ts"
   },
   "keywords": [],
   "author": "",

@@ -297,7 +297,17 @@ export async function runAgentReply(opts: {
 
   // 3. Buscar ferramentas habilitadas do agente
   const agentTools = await listAgentTools({ agent_id: agent.id, is_enabled: true });
-  const tools: any[] | undefined = agentTools.length > 0 ? agentTools.map(at => at.tool.schema) : undefined;
+  // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
+  const tools: any[] | undefined = agentTools.length > 0
+    ? agentTools.map(at => ({
+        type: "function",
+        function: {
+          name: at.tool.key,
+          description: at.tool.description || at.tool.name || undefined,
+          parameters: at.tool.schema,
+        }
+      }))
+    : undefined;
 
   // 4. Context para toolHandlers
   const toolContext: ToolExecutionContext = {

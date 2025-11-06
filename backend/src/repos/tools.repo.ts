@@ -226,9 +226,11 @@ export async function removeToolFromAgent(agentId: string, toolId: string) {
 // ====== tool logs ======
 
 export async function logToolExecution(log: Omit<ToolLog, "id" | "executed_at">) {
+  const paramsJson = JSON.stringify(log.params ?? {});
+  const resultJson = log.result != null ? JSON.stringify(log.result) : null;
   return await db.one<ToolLog>(
     `INSERT INTO public.agent_tool_logs(agent_id, tool_id, chat_id, contact_id, action, table_name, columns_accessed, params, result, error)
-     VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     VALUES($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10)
      RETURNING *`,
     [
       log.agent_id,
@@ -238,8 +240,8 @@ export async function logToolExecution(log: Omit<ToolLog, "id" | "executed_at">)
       log.action,
       log.table_name,
       log.columns_accessed,
-      log.params,
-      log.result,
+      paramsJson,
+      resultJson,
       log.error,
     ]
   );

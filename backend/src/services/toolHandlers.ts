@@ -157,8 +157,9 @@ async function handleInternalDB(
       if (restrictedCols.includes(col)) {
         throw new Error(`Access to column '${col}' is restricted.`);
       }
-      // 2. Check allowed write columns (skip ID fields)
-      if (!writeColumns.includes(col) && !["id", "contact_id", "agent_id", "chat_id"].includes(col)) {
+      // 2. Check allowed write columns (skip ID fields and identifier aliases)
+      const idAliases = ["id", "contact_id", "agent_id", "chat_id", ...requiredCols];
+      if (!writeColumns.includes(col) && !idAliases.includes(col)) {
         throw new Error(`Column '${col}' is not allowed for write in table '${table}'.`);
       }
     }

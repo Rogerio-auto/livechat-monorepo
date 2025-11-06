@@ -327,9 +327,29 @@ export async function runAgentReply(opts: {
     }
   }
 
+  function stripCustomerIdIfCustomersUpdate(parameters: any, at: any): any {
+    try {
+      const isCustomersUpdate = at?.tool?.handler_type === "INTERNAL_DB"
+        && at?.tool?.handler_config?.table === "customers"
+        && at?.tool?.handler_config?.action === "update";
+      if (!isCustomersUpdate || !parameters || typeof parameters !== "object") return parameters;
+      const p = { ...parameters };
+      if (p.properties && typeof p.properties === "object") {
+        p.properties = { ...p.properties };
+        delete p.properties.customer_id;
+      }
+      if (Array.isArray(p.required)) {
+        p.required = p.required.filter((r: any) => r !== "customer_id");
+      }
+      if (!p.type) p.type = "object";
+      return p;
+    } catch { return parameters; }
+  }
+
   const tools: any[] | undefined = agentTools.length > 0
     ? agentTools.map(at => {
-        const parameters = normalizeParametersSchema(at.tool.schema);
+        const base = normalizeParametersSchema(at.tool.schema);
+        const parameters = stripCustomerIdIfCustomersUpdate(base, at);
         return {
           type: "function",
           function: {

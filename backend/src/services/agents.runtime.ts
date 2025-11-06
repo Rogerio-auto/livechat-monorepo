@@ -225,12 +225,32 @@ export async function runAgentReply(opts: {
   userId?: string;
 }): Promise<{ reply: string; usage?: any; agentId?: string | null; model?: string; skipped?: boolean; reason?: string }>
 {
+  const callId = `${opts.chatId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  console.log("[AGENT][RUNTIME] 🚀 runAgentReply called", {
+    callId,
+    chatId: opts.chatId,
+    companyId: opts.companyId,
+    agentId: opts.agentId,
+    inboxId: opts.inboxId,
+    messageLength: opts.userMessage?.length || 0,
+  });
+
   const agent = await getAgent(opts.companyId, opts.agentId);
-  if (!agent) throw new Error("Nenhum agente ativo/configurado para esta empresa/inbox");
+  if (!agent) {
+    console.warn("[AGENT][RUNTIME] ❌ No active agent found", { callId, companyId: opts.companyId });
+    throw new Error("Nenhum agente ativo/configurado para esta empresa/inbox");
+  }
+
+  console.log("[AGENT][RUNTIME] ✅ Agent loaded", {
+    callId,
+    agentId: agent.id,
+    agentName: agent.name,
+    hasOpenAIIntegration: !!agent.integration_openai_id,
+  });
 
   // VALIDAÇÃO: Verificar se há integração OpenAI configurada
   if (!agent.integration_openai_id) {
-    console.log(`[agent] Agente ${agent.id} sem integration_openai_id configurada`);
+    console.log(`[AGENT][RUNTIME] ⏭️  Agent ${agent.id} without OpenAI integration`, { callId });
     return {
       reply: "",
       skipped: true,
@@ -243,7 +263,7 @@ export async function runAgentReply(opts: {
   if (opts.inboxId && opts.chatId) {
     const validation = await shouldAgentRespond(agent, opts.inboxId, opts.chatId);
     if (!validation.allowed) {
-      console.log(`[agent] Not responding in chat ${opts.chatId}: ${validation.reason}`);
+      console.log(`[AGENT][RUNTIME] ⏭️  Not responding in chat ${opts.chatId}: ${validation.reason}`, { callId });
       return { 
         reply: "", 
         skipped: true, 
@@ -356,6 +376,15 @@ export async function runAgentReply(opts: {
   }
 
   const reply = resp.choices[0]?.message?.content || '';
+
+  console.log("[AGENT][RUNTIME] 💬 Reply generated", {
+    callId,
+    chatId: opts.chatId,
+    agentId: agent.id,
+    replyLength: reply.length,
+    tokensUsed: resp.usage?.total_tokens || 0,
+    model,
+  });
 
   // 6. Salvar contexto atualizado no Redis
   const newTurns: ChatTurn[] = [

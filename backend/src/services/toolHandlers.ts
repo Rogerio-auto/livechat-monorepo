@@ -212,12 +212,26 @@ async function handleInternalDB(
     }
 
     if (action === "update") {
-      const idKey = requiredCols[0] || "id";
+      // Identify the identifier key coming from the tool schema
+      let idKey = requiredCols[0] || "id";
       const idValue = finalParams[idKey];
       if (!idValue) throw new Error(`Missing ${idKey} for update`);
-      delete finalParams[idKey]; // don't update the ID itself
 
-      const { data, error } = await supabaseAdmin.from(table).update(finalParams).eq(idKey, idValue).select();
+      // Do not update the identifier column itself
+      delete finalParams[idKey];
+
+      // Map common alias parameters to the real primary key column when needed
+      // Example: tools may require "contact_id" but the table column is "id"
+      let filterColumn = idKey;
+      if (table === "contacts" && idKey === "contact_id") {
+        filterColumn = "id";
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(table)
+        .update(finalParams)
+        .eq(filterColumn, idValue)
+        .select();
       if (error) throw new Error(`DB update error: ${error.message}`);
       return { success: true, data };
     }

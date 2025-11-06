@@ -405,12 +405,22 @@ async function flushDueBuffers(): Promise<void> {
 
       const aggregated = lines.join("\n");
       try {
+        // Pass contactId (customer_id) for tool auto-fill
+        let chatCustomerId: string | undefined;
+        try {
+          const row = await db.oneOrNone<{ customer_id: string | null }>(
+            `select customer_id from public.chats where id = $1`,
+            [meta.chatId],
+          );
+          chatCustomerId = row?.customer_id || undefined;
+        } catch {}
         const ai = await runAgentReply({
           companyId: last.companyId,
           inboxId: last.inboxId,
           agentId: chatAgentId,
           userMessage: aggregated,
           chatId: meta.chatId,
+          contactId: chatCustomerId,
         });
         const reply = (ai.reply || "").trim();
         if (reply) {
@@ -1421,12 +1431,21 @@ async function handleMetaInboundMessages(args: {
             });
           } else {
             console.log("[AGENT][AUTO-REPLY][META] ⚡ Immediate reply (no buffer)", { chatId });
+            let chatCustomerId2: string | undefined;
+            try {
+              const row2 = await db.oneOrNone<{ customer_id: string | null }>(
+                `select customer_id from public.chats where id = $1`,
+                [chatId],
+              );
+              chatCustomerId2 = row2?.customer_id || undefined;
+            } catch {}
             const ai = await runAgentReply({
               companyId,
               inboxId,
               agentId: chatAgentId,
               userMessage: bodyText,
               chatId,
+              contactId: chatCustomerId2,
             });
 
             // Verificar se agente pulou a resposta
@@ -2370,12 +2389,22 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           });
         } else {
           console.log("[AGENT][AUTO-REPLY][WAHA] ⚡ Immediate reply (no buffer)", { chatId });
+          // Passar contactId (customer_id) para evitar falta na ferramenta
+          let chatCustomerId3: string | undefined;
+          try {
+            const rowCust = await db.oneOrNone<{ customer_id: string | null }>(
+              `select customer_id from public.chats where id = $1`,
+              [chatId]
+            );
+            chatCustomerId3 = rowCust?.customer_id || undefined;
+          } catch {}
           const ai = await runAgentReply({
             companyId: job.companyId,
             inboxId: job.inboxId,
             agentId: chatAgentId,
             userMessage: body,
             chatId,
+            contactId: chatCustomerId3,
           });
 
             // Verificar se agente pulou a resposta

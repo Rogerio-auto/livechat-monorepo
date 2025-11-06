@@ -112,6 +112,19 @@ async function handleInternalDB(
     if (context.contactId) {
       params.customer_id = context.contactId;
     }
+    // Fallback: tentar buscar customer_id via chat se ainda não definido
+    if (!params.customer_id && context.chatId) {
+      try {
+        const { data: chatRow, error: chatErr } = await supabaseAdmin
+          .from("chats")
+          .select("customer_id")
+          .eq("id", context.chatId)
+          .maybeSingle();
+        if (!chatErr && chatRow?.customer_id) {
+          params.customer_id = chatRow.customer_id;
+        }
+      } catch {}
+    }
   }
   if ((requiredCols.includes("chat_id") || table === "chats") && (params.chat_id === undefined || params.chat_id === null || params.chat_id === "undefined" || params.chat_id === "")) {
     if (context.chatId) {

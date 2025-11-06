@@ -298,15 +298,47 @@ export async function runAgentReply(opts: {
   // 3. Buscar ferramentas habilitadas do agente
   const agentTools = await listAgentTools({ agent_id: agent.id, is_enabled: true });
   // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
-  const tools: any[] | undefined = agentTools.length > 0
-    ? agentTools.map(at => ({
-        type: "function",
-        function: {
-          name: at.tool.key,
-          description: at.tool.description || at.tool.name || undefined,
-          parameters: at.tool.schema,
+  function normalizeParametersSchema(raw: any): any | undefined {
+    try {
+      // Already a valid JSON Schema object
+      if (raw && typeof raw === "object") {
+        // Case: mistakenly stored full OpenAI tool object
+        if (raw.type === "function" && raw.function && typeof raw.function === "object") {
+          const p = (raw.function as any).parameters;
+          return p && typeof p === "object" ? p : { type: "object", properties: {} };
         }
-      }))
+        // Case: mistakenly stored { parameters: {...} }
+        if (raw.parameters && typeof raw.parameters === "object" && !raw.type) {
+          return raw.parameters;
+        }
+        // If it has a top-level 'function' field by mistake
+        if (raw.function && typeof raw.function === "object" && raw.function.parameters) {
+          return raw.function.parameters;
+        }
+        // Ensure it is an object schema
+        if (raw.type === "object" || raw.properties || raw.required) {
+          return { type: "object", additionalProperties: true, ...raw };
+        }
+      }
+      // Fallback: allow any object
+      return { type: "object", additionalProperties: true };
+    } catch {
+      return { type: "object", additionalProperties: true };
+    }
+  }
+
+  const tools: any[] | undefined = agentTools.length > 0
+    ? agentTools.map(at => {
+        const parameters = normalizeParametersSchema(at.tool.schema);
+        return {
+          type: "function",
+          function: {
+            name: at.tool.key,
+            description: at.tool.description || at.tool.name || undefined,
+            parameters,
+          }
+        };
+      })
     : undefined;
 
   // 4. Context para toolHandlers

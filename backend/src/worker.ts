@@ -220,7 +220,18 @@ function parseAgentReplyToItems(raw: string): ParsedItem[] {
 async function publishParsedItems(args: { provider: "META" | typeof WAHA_PROVIDER; inboxId: string | null | undefined; chatId: string; items: ParsedItem[] }): Promise<void> {
   const provider = args.provider;
   const inboxId = args.inboxId || undefined;
-  for (const it of args.items) {
+  
+  // Enviar mensagens SEQUENCIALMENTE com delay (como loop do n8n)
+  // Isso garante que as mensagens chegam na ordem correta
+  for (let i = 0; i < args.items.length; i++) {
+    const it = args.items[i];
+    
+    // Adicionar delay entre mensagens (exceto na primeira)
+    if (i > 0) {
+      const delayMs = Number(process.env.MESSAGE_SEQUENCE_DELAY_MS || 800);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    
     if (it.kind === "text") {
       await publish(EX_APP, "outbound.request", {
         provider,

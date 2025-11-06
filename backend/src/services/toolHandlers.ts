@@ -204,6 +204,11 @@ async function handleInternalDB(
       }
     }
 
+    // Adicionar company_id automaticamente se a tabela requer e não foi fornecido
+    if (table === "customers" && !finalParams.company_id && context.companyId) {
+      finalParams.company_id = context.companyId;
+    }
+
     // 6. Execute operation
     if (action === "insert") {
       const { data, error } = await supabaseAdmin.from(table).insert(finalParams).select();
@@ -251,9 +256,24 @@ async function handleInternalDB(
             const leadId = relatedLeads[0].id;
             const leadUpdates: Record<string, any> = {};
             
-            // Sync common fields
-            if (finalParams.name !== undefined) leadUpdates.name = finalParams.name;
-            if (finalParams.phone !== undefined) leadUpdates.phone = finalParams.phone;
+            // Use custom lead_mapping if provided, otherwise default mapping
+            const leadMapping = config.lead_mapping || {
+              name: "name",
+              phone: "phone",
+              email: "email",
+              address: "street",
+              city: "city",
+              state: "state",
+              zip_code: "cep",
+              birth_date: "birthDate"
+            };
+
+            // Apply mapping: customers.field_name → leads.mapped_field_name
+            for (const [customerField, leadField] of Object.entries(leadMapping)) {
+              if (finalParams[customerField] !== undefined) {
+                leadUpdates[leadField as string] = finalParams[customerField];
+              }
+            }
             
             if (Object.keys(leadUpdates).length > 0) {
               await supabaseAdmin
@@ -278,6 +298,11 @@ async function handleInternalDB(
       if (table === "customers" && "customer_id" in finalParams) {
         finalParams.id = finalParams.customer_id;
         delete finalParams.customer_id;
+      }
+
+      // Adicionar company_id automaticamente se não foi fornecido
+      if (table === "customers" && !finalParams.company_id && context.companyId) {
+        finalParams.company_id = context.companyId;
       }
 
       // Use conflict_target from handler_config, or default to 'phone' for customers

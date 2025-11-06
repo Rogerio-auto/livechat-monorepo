@@ -67,6 +67,21 @@ export function ToolsAdminPanel() {
     }
   }
 
+  async function handleDuplicate(tool: Tool) {
+    if (!confirm(`Duplicar ferramenta "${tool.name}"?`)) return;
+    try {
+      const duplicated = await fetchJson<Tool>(`${API}/api/tools/${tool.id}/duplicate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: `${tool.name} (cópia)` }),
+      });
+      alert(`Ferramenta duplicada: ${duplicated.name}`);
+      loadTools();
+    } catch (err: any) {
+      alert(err.message || "Erro ao duplicar ferramenta");
+    }
+  }
+
   async function handleToggleActive(tool: Tool) {
     try {
       await fetchJson(`${API}/api/tools/${tool.id}`, {
@@ -113,6 +128,7 @@ export function ToolsAdminPanel() {
                   tool={tool}
                   isReadOnly
                   onToggleActive={handleToggleActive}
+                  onDuplicate={handleDuplicate}
                 />
               ))}
             </div>
@@ -134,6 +150,7 @@ export function ToolsAdminPanel() {
                     onEdit={() => setEditingTool(tool)}
                     onDelete={() => handleDelete(tool.id)}
                     onToggleActive={handleToggleActive}
+                    onDuplicate={handleDuplicate}
                   />
                 ))
               )}
@@ -164,12 +181,14 @@ function ToolCard({
   onEdit,
   onDelete,
   onToggleActive,
+  onDuplicate,
 }: {
   tool: Tool;
   isReadOnly?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
   onToggleActive?: (tool: Tool) => void;
+  onDuplicate?: (tool: Tool) => void;
 }) {
   return (
   <div className="border rounded-lg p-4 bg-(--color-surface) text-(--color-text) shadow-sm hover:shadow-md border-(--color-border) transition">
@@ -205,6 +224,15 @@ function ToolCard({
               }`}
             >
               {tool.is_active ? "Desativar" : "Ativar"}
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              onClick={() => onDuplicate(tool)}
+              className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+              title="Duplicar ferramenta"
+            >
+              📋 Duplicar
             </button>
           )}
           {!isReadOnly && onEdit && (

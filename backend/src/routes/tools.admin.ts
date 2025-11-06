@@ -151,6 +151,50 @@ router.put("/tools/:id", async (req: any, res: any) => {
   }
 });
 
+// POST /tools/:id/duplicate - duplicar ferramenta
+router.post("/tools/:id/duplicate", async (req: any, res: any) => {
+  try {
+    const companyId = req.profile.company_id;
+    const tool = await getToolById(req.params.id);
+    if (!tool) return res.status(404).json({ error: "Tool not found" });
+    
+    // Verificar se pertence à company ou é global
+    if (tool.company_id && tool.company_id !== companyId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    
+    // Gerar novo nome único
+    let newName = req.body.name || `${tool.name} (cópia)`;
+    let counter = 1;
+    let nameExists = await getToolByKey(newName);
+    while (nameExists) {
+      counter++;
+      newName = req.body.name ? `${req.body.name} ${counter}` : `${tool.name} (cópia ${counter})`;
+      nameExists = await getToolByKey(newName);
+    }
+    
+    // Criar cópia da ferramenta
+    const duplicatedTool = await createTool({
+      key: newName, // key também precisa ser único
+      name: newName,
+      category: tool.category,
+      description: tool.description || "",
+      schema: tool.schema || {},
+      handler_type: tool.handler_type,
+      handler_config: tool.handler_config || {},
+      is_active: false, // Criar desabilitada por segurança
+      company_id: companyId, // Sempre associar à company do usuário
+    });
+    
+    console.log(`[tools.admin] Tool ${tool.id} duplicated as ${duplicatedTool.id} by user ${req.profile.id}`);
+    
+    res.status(201).json(duplicatedTool);
+  } catch (err: any) {
+    console.error("[tools.admin] POST /tools/:id/duplicate error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /tools/:id - deletar ferramenta
 router.delete("/tools/:id", async (req: any, res: any) => {
   try {

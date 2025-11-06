@@ -11,9 +11,6 @@ SET
     'table', 'customers',
     'action', 'upsert',
     'conflict_target', 'phone',
-    'default_values', jsonb_build_object(
-      'created_by', 'ai_agent'
-    ),
     'allowed_columns', jsonb_build_object(
       'read', jsonb_build_array('id', 'name', 'phone', 'msisdn', 'avatar', 'created_at', 'updated_at'),
       'write', jsonb_build_array('name', 'phone')

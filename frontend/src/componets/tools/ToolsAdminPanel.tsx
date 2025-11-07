@@ -299,9 +299,16 @@ function ToolEditorModal({
       handler_type: "INTERNAL_DB",
       handler_config: {},
       schema: {
-        type: "object",
-        properties: {},
-        required: [],
+        type: "function",
+        function: {
+          name: "",
+          description: "",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: [],
+          },
+        },
       },
       is_active: true,
     }

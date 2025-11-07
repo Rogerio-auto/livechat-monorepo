@@ -2,11 +2,20 @@ import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { 
+  requireCalendarOwner, 
+  requireCalendarCreateEvent, 
+  requireEventOwner 
+} from "../middlewares/calendarPermissions.ts";
 
 const VIEW_USER_AGENDA = process.env.VIEW_USER_AGENDA || "user_agenda";
 const TABLE_CALENDARS = process.env.TABLE_CALENDARS || "calendars";
 const TABLE_EVENTS = process.env.TABLE_EVENTS || "events";
 const TABLE_EVENT_PARTICIPANTS = process.env.TABLE_EVENT_PARTICIPANTS || "event_participants";
+const TABLE_EVENT_REMINDERS = process.env.TABLE_EVENT_REMINDERS || "event_reminders";
+const TABLE_AVAILABILITY_RULES = process.env.TABLE_AVAILABILITY_RULES || "availability_rules";
+const TABLE_AVAILABILITY_EXCEPTIONS = process.env.TABLE_AVAILABILITY_EXCEPTIONS || "availability_exceptions";
+const TABLE_CALENDAR_PERMISSIONS = process.env.TABLE_CALENDAR_PERMISSIONS || "calendar_permissions";
 
 async function checkAvailability(userId: string, startISO: string, endISO: string) {
   const { data, error } = await (supabaseAdmin as any).rpc("is_user_available_simple", {
@@ -19,25 +28,35 @@ async function checkAvailability(userId: string, startISO: string, endISO: strin
 }
 
 export function registerCalendarRoutes(app: express.Application) {
-  // GET calendars of current user
+  // GET calendars of current user (ADMIN sees all calendars)
   app.get("/calendar/calendars", requireAuth, async (req: any, res) => {
     try {
       const authUserId = req.user.id as string;
       const { data: urow, error: uerr } = await supabaseAdmin
         .from("users")
-        .select("id")
+        .select("id, role")
         .eq("user_id", authUserId)
         .maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
+      
       const ownerId = (urow as any)?.id || null;
-      if (!ownerId) return res.json([]);
+      const userRole = (urow as any)?.role || null;
+      const isAdmin = userRole === "ADMIN";
 
-      const { data, error } = await supabaseAdmin
+      if (!ownerId && !isAdmin) return res.json([]);
+
+      let query = supabaseAdmin
         .from(TABLE_CALENDARS)
         .select("*")
-        .eq("owner_id", ownerId)
         .order("is_default", { ascending: false })
         .order("name", { ascending: true });
+      
+      // ADMIN sees all calendars, regular users see only their own
+      if (!isAdmin && ownerId) {
+        query = query.eq("owner_id", ownerId);
+      }
+
+      const { data, error } = await query;
       if (error) return res.status(500).json({ error: error.message });
       return res.json(data || []);
     } catch (e: any) {
@@ -48,23 +67,45 @@ export function registerCalendarRoutes(app: express.Application) {
   // GET events by range (intersection)
   app.get("/calendar/events", requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      const authUserId = req.user.id as string;
       const start = String(req.query.start || "").trim();
       const end = String(req.query.end || "").trim();
       if (!start || !end)
         return res.status(400).json({ error: "start e end obrigatórios (ISO)" });
 
+      // Map auth user -> local users.id and get role
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id, role")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      
+      const userId = (urow as any)?.id || null;
+      const userRole = (urow as any)?.role || null;
+      const isAdmin = userRole === "ADMIN";
+
       let items: any[] = [];
       let viewFailed = false;
+
+      // Try using the view first
       try {
-        const { data, error } = await supabaseAdmin
+        let query = supabaseAdmin
           .from(VIEW_USER_AGENDA)
           .select("*")
-          .eq("user_id", userId)
           .lt("start_time", end)
           .gt("end_time", start)
           .order("start_time", { ascending: true });
+        
+        // ADMIN sees all events, regular users see only their events
+        if (!isAdmin && userId) {
+          query = query.eq("user_id", userId);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
+        
         items = (data || []).map((e: any) => ({
           id: e.id,
           title: e.title,
@@ -80,7 +121,9 @@ export function registerCalendarRoutes(app: express.Application) {
             calendar_color: e.calendar_color,
             user_id: e.user_id,
             is_organizer: e.is_organizer,
+            customer_id: e.customer_id,
             customer_name: e.customer_name,
+            lead_id: e.lead_id,
             lead_name: e.lead_name,
           },
           raw: e,
@@ -89,17 +132,25 @@ export function registerCalendarRoutes(app: express.Application) {
         viewFailed = true;
       }
 
+      // Fallback to direct events query if view doesn't exist
       if (viewFailed) {
-        const { data: evs, error: errEv } = await supabaseAdmin
+        let evQuery = supabaseAdmin
           .from(TABLE_EVENTS)
           .select(
-            "id, title, description, location, event_type, status, start_time, end_time, calendar_id, customer_id"
+            "id, title, description, location, event_type, status, start_time, end_time, calendar_id, customer_id, lead_id, created_by_id"
           )
           .lt("start_time", end)
           .gt("end_time", start)
-          .eq("created_by_id", userId)
           .order("start_time", { ascending: true });
+        
+        // ADMIN sees all events, regular users see only events they created
+        if (!isAdmin && userId) {
+          evQuery = evQuery.eq("created_by_id", userId);
+        }
+
+        const { data: evs, error: errEv } = await evQuery;
         if (errEv) return res.status(500).json({ error: errEv.message });
+        
         const cids = Array.from(
           new Set(((evs as any[]) || []).map((r) => (r as any).calendar_id).filter(Boolean))
         );
@@ -131,7 +182,9 @@ export function registerCalendarRoutes(app: express.Application) {
               location: e.location,
               calendar_name: (cal as any).name || null,
               calendar_color: (cal as any).color || null,
-              user_id: userId,
+              customer_id: e.customer_id || null,
+              lead_id: e.lead_id || null,
+              user_id: (e as any).created_by_id,
               is_organizer: true,
             },
             raw: e,
@@ -146,7 +199,7 @@ export function registerCalendarRoutes(app: express.Application) {
   });
 
   // Create event with participants
-  app.post("/calendar/events", requireAuth, async (req: any, res) => {
+  app.post("/calendar/events", requireAuth, requireCalendarCreateEvent, async (req: any, res) => {
     try {
       const userId = req.user.id;
       const schema = z
@@ -155,9 +208,9 @@ export function registerCalendarRoutes(app: express.Application) {
           description: z.string().optional().nullable(),
           location: z.string().optional().nullable(),
           event_type: z
-            .enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "OTHER"])
+            .enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "PRESENTATION", "TRAINING", "OTHER"])
             .optional(),
-          status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+          status: z.enum(["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "RESCHEDULED"]).optional(),
           start_time: z.string().min(1),
           end_time: z.string().min(1),
           calendar_id: z.string().uuid(),
@@ -232,7 +285,7 @@ export function registerCalendarRoutes(app: express.Application) {
   });
 
   // Update event
-  app.put("/calendar/events/:id", requireAuth, async (req: any, res) => {
+  app.put("/calendar/events/:id", requireAuth, requireEventOwner, async (req: any, res) => {
     try {
       const { id } = req.params as { id: string };
       const schema = z
@@ -241,12 +294,16 @@ export function registerCalendarRoutes(app: express.Application) {
           description: z.string().optional().nullable(),
           location: z.string().optional().nullable(),
           event_type: z
-            .enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "OTHER"])
+            .enum(["MEETING", "CALL", "TECHNICAL_VISIT", "FOLLOW_UP", "PRESENTATION", "TRAINING", "OTHER", "DEMO"])
             .optional(),
-          status: z.enum(["SCHEDULED", "COMPLETED", "CANCELLED"]).optional(),
+          status: z.enum(["SCHEDULED", "CONFIRMED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "RESCHEDULED"]).optional(),
           start_time: z.string().optional(),
           end_time: z.string().optional(),
           is_all_day: z.boolean().optional(),
+          customer_id: z.string().uuid().optional().nullable(),
+          lead_id: z.string().uuid().optional().nullable(),
+          meeting_url: z.string().optional().nullable(),
+          calendar_id: z.string().uuid().optional(),
         })
         .passthrough();
       const parsed = schema.safeParse(req.body || {});
@@ -273,7 +330,7 @@ export function registerCalendarRoutes(app: express.Application) {
   });
 
   // Delete event
-  app.delete("/calendar/events/:id", requireAuth, async (req: any, res) => {
+  app.delete("/calendar/events/:id", requireAuth, requireEventOwner, async (req: any, res) => {
     try {
       const { id } = req.params as { id: string };
       const { error } = await supabaseAdmin.from(TABLE_EVENTS).delete().eq("id", id);
@@ -298,6 +355,1040 @@ export function registerCalendarRoutes(app: express.Application) {
       return res.json({ user_id: userId, available });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "Availability error" });
+    }
+  });
+
+  // ===== CALENDAR CRUD =====
+  
+  // POST /calendar/calendars - Create new calendar
+  app.post("/calendar/calendars", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const companyId = req.user.company_id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+      if (!ownerId) return res.status(400).json({ error: "User not found" });
+
+      const schema = z.object({
+        name: z.string().min(1),
+        description: z.string().optional().nullable(),
+        color: z.string().optional().default("#3B82F6"),
+        type: z.enum(["PERSONAL", "TEAM", "COMPANY", "CUSTOMER"]).optional().default("PERSONAL"),
+        is_public: z.boolean().optional().default(false),
+        is_default: z.boolean().optional().default(false),
+        timezone: z.string().optional().default("America/Sao_Paulo"),
+        team_id: z.string().uuid().optional().nullable(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // If setting as default, unset other defaults for this owner
+      if (payload.is_default) {
+        await supabaseAdmin
+          .from(TABLE_CALENDARS)
+          .update({ is_default: false })
+          .eq("owner_id", ownerId);
+      }
+
+      const calendarInsert: any = {
+        name: payload.name,
+        description: payload.description ?? null,
+        color: payload.color,
+        type: payload.type,
+        is_public: payload.is_public,
+        is_default: payload.is_default,
+        timezone: payload.timezone,
+        company_id: companyId,
+        owner_id: ownerId,
+        team_id: payload.team_id ?? null,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .insert(calendarInsert)
+        .select("*")
+        .single();
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Create calendar error" });
+    }
+  });
+
+  // PUT /calendar/calendars/:id - Update calendar
+  app.put("/calendar/calendars/:id", requireAuth, requireCalendarOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id (for is_default logic)
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        description: z.string().optional().nullable(),
+        color: z.string().optional(),
+        type: z.enum(["PERSONAL", "TEAM", "COMPANY", "CUSTOMER"]).optional(),
+        is_public: z.boolean().optional(),
+        is_default: z.boolean().optional(),
+        timezone: z.string().optional(),
+        team_id: z.string().uuid().optional().nullable(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // If setting as default, unset other defaults for this owner
+      if (payload.is_default && ownerId) {
+        await supabaseAdmin
+          .from(TABLE_CALENDARS)
+          .update({ is_default: false })
+          .eq("owner_id", ownerId)
+          .neq("id", id);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*")
+        .single();
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update calendar error" });
+    }
+  });
+
+  // DELETE /calendar/calendars/:id - Delete calendar
+  app.delete("/calendar/calendars/:id", requireAuth, requireCalendarOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      
+      // Calendar is already validated by middleware and attached to req.calendar
+      const calendar = (req as any).calendar;
+
+      // Prevent deleting default calendar
+      if (calendar?.is_default) {
+        return res.status(400).json({ error: "Cannot delete default calendar. Set another as default first." });
+      }
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .delete()
+        .eq("id", id);
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Delete calendar error" });
+    }
+  });
+
+  // GET /calendar/calendars/shared - Get calendars shared with user
+  app.get("/calendar/calendars/shared", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.json([]);
+
+      // Get calendars where user has permissions
+      const { data: permissions, error: permErr } = await supabaseAdmin
+        .from("calendar_permissions")
+        .select("calendar_id, can_view, can_edit, can_manage, can_create_events")
+        .eq("user_id", userId);
+      
+      if (permErr) return res.status(500).json({ error: permErr.message });
+      if (!permissions || permissions.length === 0) return res.json([]);
+
+      const calendarIds = permissions.map((p: any) => p.calendar_id);
+      const { data: calendars, error: calErr } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("*")
+        .in("id", calendarIds)
+        .order("name", { ascending: true });
+      
+      if (calErr) return res.status(500).json({ error: calErr.message });
+
+      // Merge permissions into calendar objects
+      const result = (calendars || []).map((cal: any) => {
+        const perm = permissions.find((p: any) => p.calendar_id === cal.id);
+        return {
+          ...cal,
+          permissions: {
+            can_view: perm?.can_view || false,
+            can_edit: perm?.can_edit || false,
+            can_manage: perm?.can_manage || false,
+            can_create_events: perm?.can_create_events || false,
+          },
+        };
+      });
+
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Shared calendars error" });
+    }
+  });
+
+  // ===== EVENT PARTICIPANTS MANAGEMENT =====
+
+  // GET /calendar/events/:eventId/participants - List participants
+  app.get("/calendar/events/:eventId/participants", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId } = req.params as { eventId: string };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_EVENT_PARTICIPANTS)
+        .select(`
+          *,
+          users:user_id (id, name, email),
+          customers:customer_id (id, name, email)
+        `)
+        .eq("event_id", eventId)
+        .order("is_organizer", { ascending: false });
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "List participants error" });
+    }
+  });
+
+  // POST /calendar/events/:eventId/participants - Add participant
+  app.post("/calendar/events/:eventId/participants", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId } = req.params as { eventId: string };
+
+      const schema = z.object({
+        user_id: z.string().uuid().optional(),
+        customer_id: z.string().uuid().optional(),
+        external_name: z.string().optional(),
+        external_email: z.string().email().optional(),
+        external_phone: z.string().optional(),
+        is_required: z.boolean().optional().default(true),
+        notes: z.string().optional().nullable(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // Validate at least one identifier
+      if (!payload.user_id && !payload.customer_id && !payload.external_name) {
+        return res.status(400).json({ error: "Must provide user_id, customer_id, or external_name" });
+      }
+
+      const participantInsert: any = {
+        event_id: eventId,
+        user_id: payload.user_id ?? null,
+        customer_id: payload.customer_id ?? null,
+        external_name: payload.external_name ?? null,
+        external_email: payload.external_email ?? null,
+        external_phone: payload.external_phone ?? null,
+        is_organizer: false,
+        is_required: payload.is_required,
+        status: "PENDING",
+        notes: payload.notes ?? null,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_EVENT_PARTICIPANTS)
+        .insert(participantInsert)
+        .select("*")
+        .single();
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Add participant error" });
+    }
+  });
+
+  // PUT /calendar/events/:eventId/participants/:participantId - Update participant status
+  app.put("/calendar/events/:eventId/participants/:participantId", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId, participantId } = req.params as { eventId: string; participantId: string };
+
+      const schema = z.object({
+        status: z.enum(["PENDING", "ACCEPTED", "DECLINED", "TENTATIVE"]).optional(),
+        notes: z.string().optional().nullable(),
+        is_required: z.boolean().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data as any;
+
+      // If status is being updated, set response_time
+      if (payload.status) {
+        payload.response_time = new Date().toISOString();
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_EVENT_PARTICIPANTS)
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", participantId)
+        .eq("event_id", eventId)
+        .select("*")
+        .single();
+      
+      if (error) return res.status(500).json({ error: error.message });
+      if (!data) return res.status(404).json({ error: "Participant not found" });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update participant error" });
+    }
+  });
+
+  // DELETE /calendar/events/:eventId/participants/:participantId - Remove participant
+  app.delete("/calendar/events/:eventId/participants/:participantId", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId, participantId } = req.params as { eventId: string; participantId: string };
+
+      // Prevent removing organizer
+      const { data: participant, error: getErr } = await supabaseAdmin
+        .from(TABLE_EVENT_PARTICIPANTS)
+        .select("is_organizer")
+        .eq("id", participantId)
+        .eq("event_id", eventId)
+        .maybeSingle();
+      
+      if (getErr) return res.status(500).json({ error: getErr.message });
+      if (!participant) return res.status(404).json({ error: "Participant not found" });
+      if ((participant as any).is_organizer) {
+        return res.status(400).json({ error: "Cannot remove event organizer" });
+      }
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_EVENT_PARTICIPANTS)
+        .delete()
+        .eq("id", participantId)
+        .eq("event_id", eventId);
+      
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Remove participant error" });
+    }
+  });
+
+  // ===== AVAILABILITY RULES =====
+
+  // GET /calendar/availability/rules - List user's availability rules
+  app.get("/calendar/availability/rules", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.json([]);
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .select("*")
+        .eq("user_id", userId)
+        .order("day_of_week", { ascending: true })
+        .order("start_time", { ascending: true });
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "List availability rules error" });
+    }
+  });
+
+  // POST /calendar/availability/rules - Create availability rule
+  app.post("/calendar/availability/rules", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.status(400).json({ error: "User not found" });
+
+      const schema = z.object({
+        name: z.string().min(1),
+        day_of_week: z.number().int().min(0).max(6), // 0=Sunday, 6=Saturday
+        start_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/), // HH:MM:SS
+        end_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/),
+        is_available: z.boolean().optional().default(true),
+        is_active: z.boolean().optional().default(true),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // Validate time range
+      if (payload.start_time >= payload.end_time) {
+        return res.status(400).json({ error: "end_time must be after start_time" });
+      }
+
+      const ruleInsert: any = {
+        name: payload.name,
+        day_of_week: payload.day_of_week,
+        start_time: payload.start_time,
+        end_time: payload.end_time,
+        is_available: payload.is_available,
+        is_active: payload.is_active,
+        user_id: userId,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .insert(ruleInsert)
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Create availability rule error" });
+    }
+  });
+
+  // PUT /calendar/availability/rules/:id - Update availability rule
+  app.put("/calendar/availability/rules/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+
+      // Check ownership
+      const { data: existing, error: existErr } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .select("id")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existErr) return res.status(500).json({ error: existErr.message });
+      if (!existing) return res.status(404).json({ error: "Availability rule not found" });
+
+      const schema = z.object({
+        name: z.string().min(1).optional(),
+        day_of_week: z.number().int().min(0).max(6).optional(),
+        start_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/).optional(),
+        end_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/).optional(),
+        is_available: z.boolean().optional(),
+        is_active: z.boolean().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data as any;
+
+      // Validate time range if both provided
+      if (payload.start_time && payload.end_time && payload.start_time >= payload.end_time) {
+        return res.status(400).json({ error: "end_time must be after start_time" });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .update({ ...payload, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update availability rule error" });
+    }
+  });
+
+  // DELETE /calendar/availability/rules/:id - Delete availability rule
+  app.delete("/calendar/availability/rules/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+
+      // Check ownership
+      const { data: existing, error: existErr } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .select("id")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existErr) return res.status(500).json({ error: existErr.message });
+      if (!existing) return res.status(404).json({ error: "Availability rule not found" });
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_RULES)
+        .delete()
+        .eq("id", id);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Delete availability rule error" });
+    }
+  });
+
+  // ===== AVAILABILITY EXCEPTIONS =====
+
+  // GET /calendar/availability/exceptions - List user's availability exceptions
+  app.get("/calendar/availability/exceptions", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.json([]);
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_EXCEPTIONS)
+        .select("*")
+        .eq("user_id", userId)
+        .order("start_date", { ascending: true });
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "List availability exceptions error" });
+    }
+  });
+
+  // POST /calendar/availability/exceptions - Create availability exception
+  app.post("/calendar/availability/exceptions", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.status(400).json({ error: "User not found" });
+
+      const schema = z.object({
+        title: z.string().min(1),
+        start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
+        end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        start_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/).optional().nullable(),
+        end_time: z.string().regex(/^\d{2}:\d{2}:\d{2}$/).optional().nullable(),
+        is_all_day: z.boolean().optional().default(true),
+        is_available: z.boolean().optional().default(false), // Usually unavailable
+        notes: z.string().optional().nullable(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // Validate date range
+      if (payload.start_date > payload.end_date) {
+        return res.status(400).json({ error: "end_date must be after or equal to start_date" });
+      }
+
+      // Validate time range if not all day
+      if (!payload.is_all_day) {
+        if (!payload.start_time || !payload.end_time) {
+          return res.status(400).json({ error: "start_time and end_time required when is_all_day is false" });
+        }
+        if (payload.start_time >= payload.end_time) {
+          return res.status(400).json({ error: "end_time must be after start_time" });
+        }
+      }
+
+      const exceptionInsert: any = {
+        title: payload.title,
+        start_date: payload.start_date,
+        end_date: payload.end_date,
+        start_time: payload.is_all_day ? null : payload.start_time,
+        end_time: payload.is_all_day ? null : payload.end_time,
+        is_all_day: payload.is_all_day,
+        is_available: payload.is_available,
+        notes: payload.notes ?? null,
+        user_id: userId,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_EXCEPTIONS)
+        .insert(exceptionInsert)
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Create availability exception error" });
+    }
+  });
+
+  // DELETE /calendar/availability/exceptions/:id - Delete availability exception
+  app.delete("/calendar/availability/exceptions/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+
+      // Check ownership
+      const { data: existing, error: existErr } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_EXCEPTIONS)
+        .select("id")
+        .eq("id", id)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existErr) return res.status(500).json({ error: existErr.message });
+      if (!existing) return res.status(404).json({ error: "Availability exception not found" });
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_AVAILABILITY_EXCEPTIONS)
+        .delete()
+        .eq("id", id);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Delete availability exception error" });
+    }
+  });
+
+  // ===== EVENT REMINDERS =====
+
+  // GET /calendar/events/:eventId/reminders - List event reminders
+  app.get("/calendar/events/:eventId/reminders", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId } = req.params as { eventId: string };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_EVENT_REMINDERS)
+        .select("*")
+        .eq("event_id", eventId)
+        .order("minutes_before", { ascending: true });
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "List reminders error" });
+    }
+  });
+
+  // POST /calendar/events/:eventId/reminders - Create event reminder
+  app.post("/calendar/events/:eventId/reminders", requireAuth, async (req: any, res) => {
+    try {
+      const { eventId } = req.params as { eventId: string };
+
+      const schema = z.object({
+        type: z.enum(["POPUP", "EMAIL", "WHATSAPP", "SMS"]),
+        minutes_before: z.number().int().min(0),
+        custom_message: z.string().optional().nullable(),
+        participant_id: z.string().uuid().optional().nullable(), // NULL = all participants
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      const reminderInsert: any = {
+        event_id: eventId,
+        type: payload.type,
+        minutes_before: payload.minutes_before,
+        custom_message: payload.custom_message ?? null,
+        participant_id: payload.participant_id ?? null,
+        is_sent: false,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_EVENT_REMINDERS)
+        .insert(reminderInsert)
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Create reminder error" });
+    }
+  });
+
+  // DELETE /calendar/reminders/:id - Delete reminder
+  app.delete("/calendar/reminders/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_EVENT_REMINDERS)
+        .delete()
+        .eq("id", id);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Delete reminder error" });
+    }
+  });
+
+  // ===== NEXT AVAILABLE SLOT =====
+
+  // GET /calendar/availability/next-slot - Get next available time slot
+  app.get("/calendar/availability/next-slot", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const duration = Number(req.query.duration || 60); // Default 60 minutes
+      const startFrom = String(req.query.start_from || new Date().toISOString());
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const userId = (urow as any)?.id || null;
+      if (!userId) return res.status(400).json({ error: "User not found" });
+
+      // Call SQL function
+      const { data, error } = await (supabaseAdmin as any).rpc("get_next_available_slot", {
+        p_user_id: userId,
+        p_duration_minutes: duration,
+        p_start_from: startFrom,
+      });
+
+      if (error) return res.status(500).json({ error: error.message });
+      
+      if (!data) {
+        return res.status(404).json({ 
+          error: "No available slot found in the next 30 days",
+          user_id: userId,
+          duration_minutes: duration,
+        });
+      }
+
+      return res.json({
+        user_id: userId,
+        duration_minutes: duration,
+        next_available_slot: data,
+        searched_from: startFrom,
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Next available slot error" });
+    }
+  });
+
+  // ===== CALENDAR PERMISSIONS MANAGEMENT =====
+
+  // GET /calendar/:calendarId/permissions - List calendar permissions
+  app.get("/calendar/:calendarId/permissions", requireAuth, async (req: any, res) => {
+    try {
+      const { calendarId } = req.params as { calendarId: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+
+      // Check if user owns the calendar
+      const { data: calendar, error: calErr } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("id, owner_id")
+        .eq("id", calendarId)
+        .eq("owner_id", ownerId)
+        .maybeSingle();
+
+      if (calErr) return res.status(500).json({ error: calErr.message });
+      if (!calendar) return res.status(403).json({ error: "Calendar not found or access denied" });
+
+      // Get permissions with user info
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDAR_PERMISSIONS)
+        .select(`
+          *,
+          users:user_id (id, name, email)
+        `)
+        .eq("calendar_id", calendarId);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "List permissions error" });
+    }
+  });
+
+  // POST /calendar/:calendarId/permissions - Add user permission
+  app.post("/calendar/:calendarId/permissions", requireAuth, async (req: any, res) => {
+    try {
+      const { calendarId } = req.params as { calendarId: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+
+      // Check if user owns the calendar or has can_manage permission
+      const { data: calendar, error: calErr } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("id, owner_id")
+        .eq("id", calendarId)
+        .maybeSingle();
+
+      if (calErr) return res.status(500).json({ error: calErr.message });
+      if (!calendar) return res.status(404).json({ error: "Calendar not found" });
+
+      const isOwner = (calendar as any).owner_id === ownerId;
+
+      if (!isOwner) {
+        // Check if user has can_manage permission
+        const { data: perm, error: permErr } = await supabaseAdmin
+          .from(TABLE_CALENDAR_PERMISSIONS)
+          .select("can_manage")
+          .eq("calendar_id", calendarId)
+          .eq("user_id", ownerId)
+          .maybeSingle();
+
+        if (permErr || !perm || !(perm as any).can_manage) {
+          return res.status(403).json({ error: "Permission denied. Only owner or users with can_manage can add permissions." });
+        }
+      }
+
+      const schema = z.object({
+        user_id: z.string().uuid(),
+        can_view: z.boolean().optional().default(true),
+        can_edit: z.boolean().optional().default(false),
+        can_manage: z.boolean().optional().default(false),
+        can_create_events: z.boolean().optional().default(false),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      // Prevent adding permission to calendar owner
+      if (payload.user_id === (calendar as any).owner_id) {
+        return res.status(400).json({ error: "Cannot add permission for calendar owner" });
+      }
+
+      const permissionInsert: any = {
+        calendar_id: calendarId,
+        user_id: payload.user_id,
+        can_view: payload.can_view,
+        can_edit: payload.can_edit,
+        can_manage: payload.can_manage,
+        can_create_events: payload.can_create_events,
+      };
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDAR_PERMISSIONS)
+        .insert(permissionInsert)
+        .select("*")
+        .single();
+
+      if (error) {
+        // Handle unique constraint violation (user already has permission)
+        if (error.code === "23505") {
+          return res.status(409).json({ error: "Permission already exists for this user" });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Add permission error" });
+    }
+  });
+
+  // PUT /calendar/:calendarId/permissions/:userId - Update user permission
+  app.put("/calendar/:calendarId/permissions/:userId", requireAuth, async (req: any, res) => {
+    try {
+      const { calendarId, userId } = req.params as { calendarId: string; userId: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+
+      // Check ownership or can_manage
+      const { data: calendar, error: calErr } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("id, owner_id")
+        .eq("id", calendarId)
+        .maybeSingle();
+
+      if (calErr) return res.status(500).json({ error: calErr.message });
+      if (!calendar) return res.status(404).json({ error: "Calendar not found" });
+
+      const isOwner = (calendar as any).owner_id === ownerId;
+
+      if (!isOwner) {
+        const { data: perm, error: permErr } = await supabaseAdmin
+          .from(TABLE_CALENDAR_PERMISSIONS)
+          .select("can_manage")
+          .eq("calendar_id", calendarId)
+          .eq("user_id", ownerId)
+          .maybeSingle();
+
+        if (permErr || !perm || !(perm as any).can_manage) {
+          return res.status(403).json({ error: "Permission denied" });
+        }
+      }
+
+      const schema = z.object({
+        can_view: z.boolean().optional(),
+        can_edit: z.boolean().optional(),
+        can_manage: z.boolean().optional(),
+        can_create_events: z.boolean().optional(),
+      });
+
+      const parsed = schema.safeParse(req.body || {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+      const payload = parsed.data;
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDAR_PERMISSIONS)
+        .update(payload)
+        .eq("calendar_id", calendarId)
+        .eq("user_id", userId)
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      if (!data) return res.status(404).json({ error: "Permission not found" });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update permission error" });
+    }
+  });
+
+  // DELETE /calendar/:calendarId/permissions/:userId - Remove user permission
+  app.delete("/calendar/:calendarId/permissions/:userId", requireAuth, async (req: any, res) => {
+    try {
+      const { calendarId, userId } = req.params as { calendarId: string; userId: string };
+      const authUserId = req.user.id as string;
+
+      // Map auth user -> local users.id
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+
+      // Check ownership or can_manage
+      const { data: calendar, error: calErr } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("id, owner_id")
+        .eq("id", calendarId)
+        .maybeSingle();
+
+      if (calErr) return res.status(500).json({ error: calErr.message });
+      if (!calendar) return res.status(404).json({ error: "Calendar not found" });
+
+      const isOwner = (calendar as any).owner_id === ownerId;
+
+      if (!isOwner) {
+        const { data: perm, error: permErr } = await supabaseAdmin
+          .from(TABLE_CALENDAR_PERMISSIONS)
+          .select("can_manage")
+          .eq("calendar_id", calendarId)
+          .eq("user_id", ownerId)
+          .maybeSingle();
+
+        if (permErr || !perm || !(perm as any).can_manage) {
+          return res.status(403).json({ error: "Permission denied" });
+        }
+      }
+
+      const { error } = await supabaseAdmin
+        .from(TABLE_CALENDAR_PERMISSIONS)
+        .delete()
+        .eq("calendar_id", calendarId)
+        .eq("user_id", userId);
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Remove permission error" });
     }
   });
 }

@@ -178,7 +178,17 @@ export function registerLeadRoutes(app: express.Application) {
       const { id } = req.params as { id: string };
       const { data, error } = await supabaseAdmin
         .from("leads")
-        .select("id, name, email, phone, cpf, rg, city, state")
+        .select(`
+          id, name, email, phone, 
+          cpf, rg, rgOrgao, rgEmissao, mother, father, gender, birthPlace, birthDate,
+          maritalStatus, spouse, personType,
+          city, state, street, number, complement, neighborhood, cep,
+          cellphone, altCellphone, telephone, altTelephone,
+          facebook, instagram, twitter, website, site,
+          notes, observacao, source, priority, status_client, statusClient,
+          company_id, customer_id, assigned_to_id,
+          created_at, updated_at
+        `)
         .eq("id", id)
         .maybeSingle();
       if (error) return res.status(500).json({ error: error.message });
@@ -264,5 +274,45 @@ export function registerLeadRoutes(app: express.Application) {
     const { error } = await supabaseAdmin.from("leads").delete().eq("id", id);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(204).send();
+  });
+
+  // ==========================================
+  // CUSTOMERS ROUTES
+  // ==========================================
+
+  // Get customer by ID (busca na tabela leads pelo customer_id)
+  app.get("/customers/:id", requireAuth, async (req: any, res) => {
+    try {
+      const { id } = req.params as { id: string };
+      const { data, error } = await supabaseAdmin
+        .from("leads")
+        .select(`
+          id, name, email, phone, 
+          cpf, rg, rgOrgao, rgEmissao, mother, father, gender, birthPlace, birthDate,
+          maritalStatus, spouse, personType,
+          city, state, street, number, complement, neighborhood, cep,
+          cellphone, altCellphone, telephone, altTelephone,
+          facebook, instagram, twitter, website, site,
+          notes, observacao, source, priority, status_client, statusClient,
+          company_id, customer_id, assigned_to_id,
+          created_at, updated_at
+        `)
+        .eq("customer_id", id)
+        .limit(1);
+      
+      if (error) {
+        console.error("[customers/:id] Error:", error);
+        return res.status(500).json({ error: error.message });
+      }
+      
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: "Cliente não encontrado" });
+      }
+      
+      return res.json(data[0]);
+    } catch (e: any) {
+      console.error("[customers/:id] Exception:", e);
+      return res.status(500).json({ error: e?.message || "customers get error" });
+    }
   });
 }

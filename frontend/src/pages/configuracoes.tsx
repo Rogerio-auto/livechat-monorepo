@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { FaCalendar, FaPlus, FaTrash, FaEdit, FaLock, FaUsers, FaEye, FaCog, FaBan, FaCheck } from "react-icons/fa";
 import Sidebar from "../componets/Sidbars/sidebar";
 import SettingsNav from "../componets/settings/SettingsNav";
 import EmpresaPanel, { type CompanyForm } from "../componets/company/EmpresaPanel";
@@ -26,6 +27,8 @@ const SECTIONS = [
   { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes" },
   { id: "ia", title: "IA", subtitle: "Agentes e modelos" },
   { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes" },
+  { id: "calendarios", title: "Calendários", subtitle: "Gerenciar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
+  { id: "permissoes-calendario", title: "Permissões de Calendário", subtitle: "Compartilhar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
 ] as const;
 
 type TabId = typeof SECTIONS[number]["id"];
@@ -205,11 +208,41 @@ export default function ConfiguracoesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Inbox | null>(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
 
+  // ======= STATES PARA CALENDÁRIOS =======
+  const [calendars, setCalendars] = useState<any[]>([]);
+  const [newCalendar, setNewCalendar] = useState({
+    name: "",
+    type: "PERSONAL" as "PERSONAL" | "TEAM" | "COMPANY" | "PROJECT",
+    color: "#3B82F6",
+    description: "",
+  });
+
+  // ======= STATES PARA PERMISSÕES =======
+  const [selectedCalendarForPermissions, setSelectedCalendarForPermissions] = useState<string>("");
+  const [permissions, setPermissions] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [newPermission, setNewPermission] = useState({
+    user_id: "",
+    can_view: true,
+    can_edit: false,
+    can_create_events: false,
+    can_manage: false,
+  });
+
   // Seções visíveis conforme role (IA apenas para ADMIN/MANAGER/SUPERVISOR)
   const sections = useMemo(() => {
-    const allowedIA = ["ADMIN", "MANAGER", "SUPERVISOR"];
     const role = String(profileRole || "").toUpperCase();
-    return SECTIONS.filter((s) => s.id !== "ia" || allowedIA.includes(role));
+    return SECTIONS.filter((s) => {
+      // Se a seção tem restrição de role, verifica
+      if ('restrictTo' in s && Array.isArray(s.restrictTo)) {
+        return s.restrictTo.includes(role);
+      }
+      // Para IA, mantém a restrição antiga
+      if (s.id === "ia") {
+        return ["ADMIN", "MANAGER", "SUPERVISOR"].includes(role);
+      }
+      return true;
+    });
   }, [profileRole]);
 
 
@@ -612,6 +645,133 @@ export default function ConfiguracoesPage() {
     }
   };
 
+  // ======= FUNÇÕES PARA GERENCIAR CALENDÁRIOS =======
+  const loadCalendars = async () => {
+    try {
+      const data = await fetchJson<any[]>(`${API}/calendar/calendars`);
+      setCalendars(data || []);
+    } catch (e: any) {
+      console.error("Erro ao carregar calendários:", e);
+    }
+  };
+
+  const handleCreateCalendar = async () => {
+    if (!newCalendar.name.trim()) {
+      alert("Digite um nome para o calendário");
+      return;
+    }
+    try {
+      await fetchJson(`${API}/calendar/calendars`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: newCalendar.name,
+          type: newCalendar.type,
+          color: newCalendar.color,
+          description: newCalendar.description || null,
+        }),
+      });
+      setNewCalendar({ name: "", type: "PERSONAL", color: "#3B82F6", description: "" });
+      await loadCalendars();
+    } catch (e: any) {
+      console.error("Erro ao criar calendário:", e);
+      alert(e.message || "Erro ao criar calendário");
+    }
+  };
+
+  const handleDeleteCalendar = async (calendarId: string) => {
+    if (!confirm("Tem certeza que deseja deletar este calendário?")) return;
+    try {
+      await fetchJson(`${API}/calendar/calendars/${calendarId}`, { method: "DELETE" });
+      await loadCalendars();
+    } catch (e: any) {
+      console.error("Erro ao deletar calendário:", e);
+      alert(e.message || "Erro ao deletar calendário");
+    }
+  };
+
+  // ======= FUNÇÕES PARA GERENCIAR PERMISSÕES =======
+  const loadAllUsers = async () => {
+    try {
+      const data = await fetchJson<any[]>(`${API}/settings/users`);
+      setAllUsers(data || []);
+    } catch (e: any) {
+      console.error("Erro ao carregar usuários:", e);
+    }
+  };
+
+  const loadPermissions = async (calendarId: string) => {
+    if (!calendarId) {
+      setPermissions([]);
+      return;
+    }
+    try {
+      const data = await fetchJson<any[]>(`${API}/calendar/${calendarId}/permissions`);
+      setPermissions(data || []);
+    } catch (e: any) {
+      console.error("Erro ao carregar permissões:", e);
+      setPermissions([]);
+    }
+  };
+
+  const handleGrantAccess = async () => {
+    if (!selectedCalendarForPermissions || !newPermission.user_id) {
+      alert("Selecione um calendário e um usuário");
+      return;
+    }
+    try {
+      await fetchJson(`${API}/calendar/${selectedCalendarForPermissions}/permissions`, {
+        method: "POST",
+        body: JSON.stringify(newPermission),
+      });
+      setNewPermission({
+        user_id: "",
+        can_view: true,
+        can_edit: false,
+        can_create_events: false,
+        can_manage: false,
+      });
+      await loadPermissions(selectedCalendarForPermissions);
+    } catch (e: any) {
+      console.error("Erro ao conceder acesso:", e);
+      alert(e.message || "Erro ao conceder acesso");
+    }
+  };
+
+  const handleRevokeAccess = async (userId: string) => {
+    if (!confirm("Tem certeza que deseja revogar o acesso deste usuário?")) return;
+    try {
+      await fetchJson(`${API}/calendar/${selectedCalendarForPermissions}/permissions/${userId}`, {
+        method: "DELETE",
+      });
+      await loadPermissions(selectedCalendarForPermissions);
+    } catch (e: any) {
+      console.error("Erro ao revogar acesso:", e);
+      alert(e.message || "Erro ao revogar acesso");
+    }
+  };
+
+  // Carregar calendários quando a tab de calendários for aberta
+  useEffect(() => {
+    if (tab === "calendarios") {
+      loadCalendars();
+    }
+  }, [tab]);
+
+  // Carregar usuários quando a tab de permissões for aberta
+  useEffect(() => {
+    if (tab === "permissoes-calendario") {
+      loadCalendars();
+      loadAllUsers();
+    }
+  }, [tab]);
+
+  // Carregar permissões quando selecionar um calendário
+  useEffect(() => {
+    if (selectedCalendarForPermissions) {
+      loadPermissions(selectedCalendarForPermissions);
+    }
+  }, [selectedCalendarForPermissions]);
+
   return (
     <>
       <Sidebar />
@@ -765,6 +925,312 @@ export default function ConfiguracoesPage() {
                   <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie usuários e permissões</p>
                 </div>
                 <AgentesPanel />
+              </div>
+            )}
+
+            {/* TAB: CALENDÁRIOS */}
+            {tab === "calendarios" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
+                      <FaCalendar className="text-purple-600 dark:text-purple-400" />
+                    </div>
+                    Gerenciar Calendários
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Crie, edite ou delete calendários pessoais e da empresa</p>
+                </div>
+
+                {/* Lista de Calendários */}
+                <div className="space-y-4 mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Calendários Existentes</h3>
+                  <div className="grid gap-3">
+                    {calendars.map((cal) => (
+                      <div
+                        key={cal.id}
+                        className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 transition-colors duration-300"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-4 h-4 rounded-full"
+                            style={{ backgroundColor: cal.color }}
+                          />
+                          <div>
+                            <h4 className="font-semibold text-gray-900 dark:text-white">
+                              {cal.name}
+                            </h4>
+                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                              {cal.type || "COMPANY"} {cal.is_default && "• Padrão"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => alert("Função de editar calendário ainda não implementada")}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all flex items-center gap-1"
+                          >
+                            <FaEdit /> Editar
+                          </button>
+                          {!cal.is_default && (
+                            <button
+                              onClick={() => handleDeleteCalendar(cal.id)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center gap-1"
+                            >
+                              <FaTrash /> Deletar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Formulário Criar Calendário */}
+                <div className="p-6 rounded-xl border-2 border-dashed border-purple-300 dark:border-purple-700 bg-purple-50/50 dark:bg-purple-900/10 transition-colors duration-300">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                    <FaPlus /> Criar Novo Calendário
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Nome do Calendário
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Reuniões Comerciais"
+                        value={newCalendar.name}
+                        onChange={(e) => setNewCalendar({ ...newCalendar, name: e.target.value })}
+                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 transition-colors duration-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Tipo
+                      </label>
+                      <select
+                        value={newCalendar.type}
+                        onChange={(e) => setNewCalendar({ ...newCalendar, type: e.target.value as any })}
+                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 transition-colors duration-300"
+                      >
+                        <option value="COMPANY">Empresa</option>
+                        <option value="PERSONAL">Pessoal</option>
+                        <option value="TEAM">Equipe</option>
+                        <option value="PROJECT">Projeto</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Cor
+                      </label>
+                      <input
+                        type="color"
+                        value={newCalendar.color}
+                        onChange={(e) => setNewCalendar({ ...newCalendar, color: e.target.value })}
+                        className="w-full h-10 rounded-lg border border-gray-300 dark:border-gray-600"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={handleCreateCalendar}
+                        className="w-full px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-all flex items-center justify-center gap-2"
+                      >
+                        <FaPlus /> Criar Calendário
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: PERMISSÕES DE CALENDÁRIO */}
+            {tab === "permissoes-calendario" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-600/20 flex items-center justify-center transition-colors duration-300">
+                      <FaLock className="text-amber-600 dark:text-amber-400" />
+                    </div>
+                    Gerenciar Permissões
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Compartilhe calendários e gerencie permissões de acesso</p>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Seletor de Calendário */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Selecione o Calendário
+                    </label>
+                    <select
+                      value={selectedCalendarForPermissions}
+                      onChange={(e) => setSelectedCalendarForPermissions(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 transition-colors duration-300"
+                    >
+                      <option value="">Escolha um calendário...</option>
+                      {calendars.map((cal) => (
+                        <option key={cal.id} value={cal.id}>
+                          {cal.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Permissões Atuais */}
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                      <FaUsers /> Usuários com Acesso
+                    </h3>
+                    <div className="space-y-2">
+                      {!selectedCalendarForPermissions && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                          Selecione um calendário para ver as permissões
+                        </p>
+                      )}
+                      {selectedCalendarForPermissions && permissions.length === 0 && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-8">
+                          Nenhuma permissão concedida ainda
+                        </p>
+                      )}
+                      {permissions.map((perm) => (
+                        <div
+                          key={perm.user_id}
+                          className="flex items-center justify-between p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 transition-colors duration-300"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm">
+                              {perm.users?.name?.substring(0, 2).toUpperCase() || "??"}
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900 dark:text-white">
+                                {perm.users?.name || "Usuário desconhecido"}
+                              </h4>
+                              <p className="text-xs text-gray-600 dark:text-gray-400">
+                                {perm.users?.email || ""}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-2 text-xs flex-wrap">
+                              {perm.can_view && (
+                                <span className="px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 flex items-center gap-1">
+                                  <FaEye /> Ver
+                                </span>
+                              )}
+                              {perm.can_edit && (
+                                <span className="px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                                  <FaEdit /> Editar
+                                </span>
+                              )}
+                              {perm.can_create_events && (
+                                <span className="px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                                  <FaPlus /> Criar
+                                </span>
+                              )}
+                              {perm.can_manage && (
+                                <span className="px-2 py-1 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 flex items-center gap-1">
+                                  <FaCog /> Gerenciar
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => handleRevokeAccess(perm.user_id)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center gap-1"
+                            >
+                              <FaBan /> Revogar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Adicionar Novo Acesso */}
+                  {selectedCalendarForPermissions && (
+                    <div className="p-6 rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-900/10 transition-colors duration-300">
+                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                        <FaPlus /> Conceder Novo Acesso
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Usuário
+                          </label>
+                          <select
+                            value={newPermission.user_id}
+                            onChange={(e) => setNewPermission({ ...newPermission, user_id: e.target.value })}
+                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-amber-500 transition-colors duration-300"
+                          >
+                            <option value="">Selecione um usuário...</option>
+                            {allUsers.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.name || user.email}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                            Permissões
+                          </label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors duration-300">
+                              <input
+                                type="checkbox"
+                                checked={newPermission.can_view}
+                                onChange={(e) => setNewPermission({ ...newPermission, can_view: e.target.checked })}
+                                className="rounded"
+                              />
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <FaEye /> Visualizar
+                              </span>
+                            </label>
+                            <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors duration-300">
+                              <input
+                                type="checkbox"
+                                checked={newPermission.can_edit}
+                                onChange={(e) => setNewPermission({ ...newPermission, can_edit: e.target.checked })}
+                                className="rounded"
+                              />
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <FaEdit /> Editar
+                              </span>
+                            </label>
+                            <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors duration-300">
+                              <input
+                                type="checkbox"
+                                checked={newPermission.can_create_events}
+                                onChange={(e) => setNewPermission({ ...newPermission, can_create_events: e.target.checked })}
+                                className="rounded"
+                              />
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <FaPlus /> Criar Eventos
+                              </span>
+                            </label>
+                            <label className="flex items-center gap-2 p-3 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors duration-300">
+                              <input
+                                type="checkbox"
+                                checked={newPermission.can_manage}
+                                onChange={(e) => setNewPermission({ ...newPermission, can_manage: e.target.checked })}
+                                className="rounded"
+                              />
+                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <FaCog /> Gerenciar
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="col-span-2">
+                          <button
+                            onClick={handleGrantAccess}
+                            className="w-full px-4 py-2.5 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700 transition-all flex items-center justify-center gap-2"
+                          >
+                            <FaCheck /> Conceder Acesso
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

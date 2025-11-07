@@ -32,7 +32,7 @@ export function ToolsAdminPanel() {
   async function handleSave(tool: Partial<Tool>) {
     try {
       if (tool.id) {
-        // Update
+        // Update - edita ferramenta existente (global ou customizada)
         await fetchJson(`${API}/api/tools/${tool.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -40,11 +40,12 @@ export function ToolsAdminPanel() {
         });
         alert("Ferramenta atualizada!");
       } else {
-        // Create
+        // Create - nova ferramenta
+        const { id, company_id, created_at, updated_at, ...createData } = tool as any;
         await fetchJson(`${API}/api/tools`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(tool),
+          body: JSON.stringify(createData),
         });
         alert("Ferramenta criada!");
       }
@@ -129,6 +130,7 @@ export function ToolsAdminPanel() {
                   isReadOnly
                   onToggleActive={handleToggleActive}
                   onDuplicate={handleDuplicate}
+                  onEdit={() => setEditingTool(tool)}
                 />
               ))}
             </div>
@@ -232,15 +234,16 @@ function ToolCard({
               className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
               title="Duplicar ferramenta"
             >
-              📋 Duplicar
+              Duplicar
             </button>
           )}
-          {!isReadOnly && onEdit && (
+          {onEdit && (
             <button
               onClick={onEdit}
               className="px-3 py-1 text-sm bg-(--color-highlight) text-(--color-on-primary) rounded hover:bg-(--color-primary)"
+              title={isReadOnly ? "Visualizar/Editar (cria cópia)" : "Editar"}
             >
-              Editar
+              {isReadOnly ? "Ver" : "Editar"}
             </button>
           )}
           {!isReadOnly && onDelete && (
@@ -283,7 +286,12 @@ function ToolEditorModal({
   onClose: () => void;
 }) {
   const [formData, setFormData] = useState<Partial<Tool>>(
-    tool || {
+    tool ? {
+      ...tool,
+      // Se for global, criar nova key única para evitar conflito
+      key: tool.company_id ? tool.key : `${tool.key}_custom_${Date.now()}`,
+      name: tool.company_id ? tool.name : `${tool.name} (Customizado)`,
+    } : {
       key: "",
       name: "",
       category: "CUSTOM",
@@ -291,16 +299,9 @@ function ToolEditorModal({
       handler_type: "INTERNAL_DB",
       handler_config: {},
       schema: {
-        type: "function",
-        function: {
-          name: "",
-          description: "",
-          parameters: {
-            type: "object",
-            properties: {},
-            required: [],
-          },
-        },
+        type: "object",
+        properties: {},
+        required: [],
       },
       is_active: true,
     }
@@ -324,7 +325,13 @@ function ToolEditorModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-(--color-surface) text-(--color-text) rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-(--color-border)">
         <form onSubmit={handleSubmit} className="p-6">
-          <h2 className="text-2xl font-bold mb-6 text-(--color-heading)">{tool ? "Editar" : "Nova"} Ferramenta</h2>
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-(--color-heading)">
+                {tool?.id ? "Editar" : "Nova"} Ferramenta
+              </h2>
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>

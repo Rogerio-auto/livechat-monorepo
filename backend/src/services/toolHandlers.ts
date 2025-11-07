@@ -4,7 +4,7 @@
 import { supabaseAdmin } from "../lib/supabase";
 import type { Tool, AgentTool } from "../repos/tools.repo";
 import { logToolExecution } from "../repos/tools.repo";
-import { getIO } from "../lib/io";
+import { getIO, hasIO } from "../lib/io";
 
 export type ToolExecutionContext = {
   agentId: string;
@@ -207,30 +207,51 @@ async function handleInternalDB(
 
     // 5. Special handling for events: assign default calendar_id and created_by_id
     if (table === "events" && action === "insert") {
-      if (!finalParams.calendar_id && context.userId) {
-        // Buscar calendário padrão do usuário ou criar um default
-        const { data: cal } = await supabaseAdmin
-          .from("calendars")
-          .select("id")
-          .eq("owner_id", context.userId)
-          .eq("is_default", true)
-          .maybeSingle();
-        
-        if (cal) {
-          finalParams.calendar_id = cal.id;
-        } else {
-          // Se não tem calendário padrão, buscar o primeiro calendário do usuário
-          const { data: firstCal } = await supabaseAdmin
+      if (!finalParams.calendar_id) {
+        // Try user default calendar first
+        if (context.userId) {
+          const { data: cal } = await supabaseAdmin
             .from("calendars")
             .select("id")
             .eq("owner_id", context.userId)
-            .limit(1)
+            .eq("is_default", true)
             .maybeSingle();
-          
-          if (firstCal) finalParams.calendar_id = firstCal.id;
+          if (cal?.id) {
+            finalParams.calendar_id = cal.id;
+          } else {
+            const { data: firstCal } = await supabaseAdmin
+              .from("calendars")
+              .select("id")
+              .eq("owner_id", context.userId)
+              .limit(1)
+              .maybeSingle();
+            if (firstCal?.id) finalParams.calendar_id = firstCal.id;
+          }
+        }
+        // Fallback to company default calendar
+        if (!finalParams.calendar_id && context.companyId) {
+          const { data: companyDefault } = await supabaseAdmin
+            .from("calendars")
+            .select("id")
+            .eq("company_id", context.companyId)
+            .eq("is_default", true)
+            .maybeSingle();
+          if (companyDefault?.id) {
+            finalParams.calendar_id = companyDefault.id;
+          } else {
+            const { data: companyFirst } = await supabaseAdmin
+              .from("calendars")
+              .select("id")
+              .eq("company_id", context.companyId)
+              .limit(1)
+              .maybeSingle();
+            if (companyFirst?.id) finalParams.calendar_id = companyFirst.id;
+          }
+        }
+        if (!finalParams.calendar_id) {
+          throw new Error("No calendar available. Call list_calendars first to choose a calendar_id.");
         }
       }
-      
       if (!finalParams.created_by_id && context.userId) {
         finalParams.created_by_id = context.userId;
       }
@@ -412,6 +433,11 @@ async function handleInternalDB(
     const selectCols = readColumns.join(",");
     let query = supabaseAdmin.from(table).select(selectCols);
 
+    // Automatically scope calendars to company
+    if (table === "calendars" && context.companyId) {
+      query = query.eq("company_id", context.companyId);
+    }
+
     // Apply filters from params
     for (const [key, value] of Object.entries(queryParams)) {
       if (value !== undefined && value !== null) {
@@ -535,9 +561,9 @@ async function handleWorkflow(
           const { rDel, k } = await import("../lib/redis.ts");
           await rDel(k.chat(context.chatId));
 
-          // Emitir evento socket
-          const io = getIO();
-          if (io) {
+          // Emitir evento socket (se disponível)
+          if (hasIO()) {
+            const io = getIO();
             io.to(`chat:${context.chatId}`).emit("chat:agent-changed", {
               kind: "livechat.chat.agent-changed",
               chatId: context.chatId,
@@ -563,9 +589,31 @@ async function handleWorkflow(
       }
     }
 
-    // Fallback: handoff para humano/fila (comportamento antigo)
-    const io = getIO();
-    if (emit_event && io) {
+    // Fallback: handoff para humano/fila (atualizar status do chat)
+    try {
+      const { supabaseAdmin } = await import("../lib/supabase.ts");
+      
+      // Atualizar status do chat para OPEN (aguardando humano)
+      await supabaseAdmin
+        .from("chats")
+        .update({ 
+          status: "OPEN",
+          ai_agent_id: null // Remove o agente IA
+        })
+        .eq("id", context.chatId);
+
+      // Invalidar cache
+      const { rDel, k } = await import("../lib/redis.ts");
+      await rDel(k.chat(context.chatId));
+
+      console.log(`[handoff] Chat ${context.chatId} transferred to human support`);
+    } catch (error) {
+      console.error("[handoff] Failed to update chat status:", error);
+    }
+
+    // Emitir evento socket (se disponível)
+    if (hasIO() && emit_event) {
+      const io = getIO();
       io.to(`chat:${context.chatId}`).emit(emit_event, {
         agent_id: context.agentId,
         target_agent_id: targetAgentId,
@@ -574,7 +622,69 @@ async function handleWorkflow(
         target_queue: target_queue || "human_support",
       });
     }
-    return { success: true, data: { message: "Handoff requested", target_queue } };
+    
+    return { 
+      success: true, 
+      data: { 
+        message: "Chat transferido para atendimento humano", 
+        target_queue: target_queue || "human_support",
+        reason: params.reason,
+      } 
+    };
+  }
+
+  // ====== ACTION: availability ======
+  if (action === "availability") {
+    if (!context.companyId) {
+      throw new Error("companyId is required for availability check");
+    }
+
+    const {
+      date,
+      interval_minutes = 60,
+      turno = 'FULL',
+      owner_id = null,
+      calendar_id = null,
+      min_notice_minutes = 30,
+      max_slots = 10
+    } = params;
+
+    if (!date) {
+      throw new Error("Parameter 'date' is required for availability check");
+    }
+
+    // Chamar RPC compute_available_slots
+    const { data: slots, error } = await supabaseAdmin.rpc("compute_available_slots", {
+      p_company_id: context.companyId,
+      p_date: date,
+      p_interval_minutes: interval_minutes,
+      p_owner_id: owner_id,
+      p_calendar_id: calendar_id,
+      p_turno: turno,
+      p_min_notice_minutes: min_notice_minutes,
+      p_max_slots: max_slots
+    });
+
+    if (error) {
+      console.error("[availability] RPC error:", error);
+      throw new Error(`Availability check error: ${error.message}`);
+    }
+
+    // Formatar resposta
+    return {
+      success: true,
+      data: {
+        slots: slots || [],
+        meta: {
+          date,
+          interval_minutes,
+          turno,
+          total_slots: (slots || []).length,
+          calendar_id: calendar_id || 'auto-detected',
+          owner_id: owner_id || 'default'
+        }
+      }
+    };
   }
 
   throw new Error(`Unsupported workflow action: ${action}`);
@@ -591,10 +701,23 @@ async function handleSocket(
   if (!event) throw new Error("handler_config.event is required for SOCKET");
 
   const targetRoom = room || `chat:${context.chatId}`;
-  const io = getIO();
-  if (io) {
-    io.to(targetRoom).emit(event, params);
+  
+  // Se Socket.IO não estiver disponível (ex: no worker), retorna sucesso com aviso
+  if (!hasIO()) {
+    console.warn(`[SOCKET] Socket.IO not available, event '${event}' not emitted to '${targetRoom}'`);
+    return { 
+      success: true, 
+      data: { 
+        message: `Event '${event}' scheduled (Socket.IO unavailable in worker context)`,
+        event,
+        room: targetRoom,
+        params 
+      } 
+    };
   }
+
+  const io = getIO();
+  io.to(targetRoom).emit(event, params);
 
   return { success: true, data: { message: `Event '${event}' emitted to '${targetRoom}'` } };
 }

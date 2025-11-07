@@ -119,16 +119,17 @@ router.post("/tools", async (req: any, res: any) => {
 router.put("/tools/:id", async (req: any, res: any) => {
   try {
     const companyId = req.profile.company_id;
+    const isAdmin = req.profile.role === "ADMIN";
     const tool = await getToolById(req.params.id);
     if (!tool) return res.status(404).json({ error: "Tool not found" });
     
-    // Não pode editar ferramentas globais (company_id null)
-    if (!tool.company_id) {
-      return res.status(403).json({ error: "Cannot edit global tools" });
+    // Ferramentas globais: só ADMIN pode editar
+    if (!tool.company_id && !isAdmin) {
+      return res.status(403).json({ error: "Only admins can edit global tools" });
     }
     
-    // Verificar ownership
-    if (tool.company_id !== companyId) {
+    // Ferramentas customizadas: verificar ownership (ou ser ADMIN)
+    if (tool.company_id && tool.company_id !== companyId && !isAdmin) {
       return res.status(403).json({ error: "Forbidden" });
     }
     

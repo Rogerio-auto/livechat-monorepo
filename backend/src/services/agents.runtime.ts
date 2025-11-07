@@ -222,6 +222,7 @@ export async function runAgentReply(opts: {
   userMessage: string;
   chatId: string;
   contactId?: string;
+  leadId?: string;
   userId?: string;
 }): Promise<{ reply: string; usage?: any; agentId?: string | null; model?: string; skipped?: boolean; reason?: string }>
 {
@@ -366,6 +367,7 @@ export async function runAgentReply(opts: {
     agentId: agent.id,
     chatId: opts.chatId,
     contactId: opts.contactId,
+    leadId: opts.leadId,
     userId: opts.userId,
     companyId: opts.companyId, // Add companyId for knowledge base queries
   };

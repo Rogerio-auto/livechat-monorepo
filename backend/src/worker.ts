@@ -39,7 +39,7 @@ import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
-import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause } from "./services/buffer.ts";
+import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause, tryLock as bufferTryLock, releaseLock as bufferReleaseLock } from "./services/buffer.ts";
 import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer } from "../src/lib/storage.ts";
 import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 
@@ -362,12 +362,23 @@ async function flushDueBuffers(): Promise<void> {
     const slice = dueKeys.slice(0, BUFFER_MAX_FLUSH_PER_TICK);
     for (const listKey of slice) {
       // Remove from due set first to avoid double work
-      await bufferClearDue(listKey);
-      const items = await bufferPopBatch(listKey);
-      if (!items || items.length === 0) continue;
       const meta = bufferParseListKey(listKey);
-      const last = items[items.length - 1];
-      if (!meta || !last) continue;
+      if (!meta) continue;
+      // Acquire a short lock to prevent concurrent processing across workers
+      const locked = await bufferTryLock(meta.companyId, meta.chatId, 20);
+      if (!locked) {
+        // Another worker is processing this chat; skip
+        continue;
+      }
+      try {
+        // Once locked, remove from due set to avoid other scans picking it up
+        await bufferClearDue(listKey);
+        const items = await bufferPopBatch(listKey);
+        if (!items || items.length === 0) {
+          continue;
+        }
+        const last = items[items.length - 1];
+        if (!last) continue;
       console.log("[BUFFER][FLUSH] 🔄 Flushing buffer", {
         chatId: meta.chatId,
         companyId: meta.companyId,
@@ -405,14 +416,16 @@ async function flushDueBuffers(): Promise<void> {
 
       const aggregated = lines.join("\n");
       try {
-        // Pass contactId (customer_id) for tool auto-fill
+        // Pass contactId (customer_id) and leadId for tool auto-fill
         let chatCustomerId: string | undefined;
+        let chatLeadId: string | undefined;
         try {
-          const row = await db.oneOrNone<{ customer_id: string | null }>(
-            `select customer_id from public.chats where id = $1`,
+          const row = await db.oneOrNone<{ customer_id: string | null; lead_id: string | null }>(
+            `select customer_id, lead_id from public.chats where id = $1`,
             [meta.chatId],
           );
           chatCustomerId = row?.customer_id || undefined;
+          chatLeadId = row?.lead_id || undefined;
         } catch {}
         const ai = await runAgentReply({
           companyId: last.companyId,
@@ -421,6 +434,7 @@ async function flushDueBuffers(): Promise<void> {
           userMessage: aggregated,
           chatId: meta.chatId,
           contactId: chatCustomerId,
+          leadId: chatLeadId,
         });
         const reply = (ai.reply || "").trim();
         if (reply) {
@@ -449,6 +463,10 @@ async function flushDueBuffers(): Promise<void> {
           error: err instanceof Error ? err.message : err,
         });
       }
+    } finally {
+      // Always release lock for this chat
+      await bufferReleaseLock(meta.companyId, meta.chatId);
+    }
     }
   } catch (error) {
     console.warn("[buffer] flush tick failed", error instanceof Error ? error.message : error);
@@ -1432,12 +1450,14 @@ async function handleMetaInboundMessages(args: {
           } else {
             console.log("[AGENT][AUTO-REPLY][META] ⚡ Immediate reply (no buffer)", { chatId });
             let chatCustomerId2: string | undefined;
+            let chatLeadId2: string | undefined;
             try {
-              const row2 = await db.oneOrNone<{ customer_id: string | null }>(
-                `select customer_id from public.chats where id = $1`,
+              const row2 = await db.oneOrNone<{ customer_id: string | null; lead_id: string | null }>(
+                `select customer_id, lead_id from public.chats where id = $1`,
                 [chatId],
               );
               chatCustomerId2 = row2?.customer_id || undefined;
+              chatLeadId2 = row2?.lead_id || undefined;
             } catch {}
             const ai = await runAgentReply({
               companyId,
@@ -1446,6 +1466,7 @@ async function handleMetaInboundMessages(args: {
               userMessage: bodyText,
               chatId,
               contactId: chatCustomerId2,
+              leadId: chatLeadId2,
             });
 
             // Verificar se agente pulou a resposta
@@ -2389,14 +2410,16 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           });
         } else {
           console.log("[AGENT][AUTO-REPLY][WAHA] ⚡ Immediate reply (no buffer)", { chatId });
-          // Passar contactId (customer_id) para evitar falta na ferramenta
+          // Passar contactId (customer_id) e leadId para evitar falta na ferramenta
           let chatCustomerId3: string | undefined;
+          let chatLeadId3: string | undefined;
           try {
-            const rowCust = await db.oneOrNone<{ customer_id: string | null }>(
-              `select customer_id from public.chats where id = $1`,
+            const rowCust = await db.oneOrNone<{ customer_id: string | null; lead_id: string | null }>(
+              `select customer_id, lead_id from public.chats where id = $1`,
               [chatId]
             );
             chatCustomerId3 = rowCust?.customer_id || undefined;
+            chatLeadId3 = rowCust?.lead_id || undefined;
           } catch {}
           const ai = await runAgentReply({
             companyId: job.companyId,
@@ -2405,6 +2428,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
             userMessage: body,
             chatId,
             contactId: chatCustomerId3,
+            leadId: chatLeadId3,
           });
 
             // Verificar se agente pulou a resposta

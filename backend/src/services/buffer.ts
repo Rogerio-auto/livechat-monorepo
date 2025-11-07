@@ -121,3 +121,22 @@ export function parseListKey(listKey: string): { companyId: string; chatId: stri
   }
   return null;
 }
+
+/** Try to acquire a short-lived lock for a chat buffer processing. */
+export async function tryLock(companyId: string, chatId: string, ttlSec = 15): Promise<boolean> {
+  const lockKey = key.lock(companyId, chatId);
+  // SET NX EX implements a simple mutex with TTL to avoid deadlocks
+  const res = await redis.set(lockKey, "1", {
+    NX: true,
+    EX: Math.max(1, ttlSec),
+  } as any);
+  return res === "OK";
+}
+
+/** Release a previously acquired lock. */
+export async function releaseLock(companyId: string, chatId: string): Promise<void> {
+  const lockKey = key.lock(companyId, chatId);
+  try {
+    await redis.del(lockKey);
+  } catch {}
+}

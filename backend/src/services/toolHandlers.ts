@@ -10,6 +10,7 @@ export type ToolExecutionContext = {
   agentId: string;
   chatId: string;
   contactId?: string;
+  leadId?: string;
   userId?: string;
   companyId?: string; // Added for knowledge base queries
 };
@@ -205,7 +206,7 @@ async function handleInternalDB(
     // 4. Apply default values
     const finalParams = { ...defaults, ...params };
 
-    // 5. Special handling for events: assign default calendar_id and created_by_id
+    // 5. Special handling for events: assign default calendar_id, created_by_id, customer_id, lead_id
     if (table === "events" && action === "insert") {
       if (!finalParams.calendar_id) {
         // Try user default calendar first
@@ -254,6 +255,14 @@ async function handleInternalDB(
       }
       if (!finalParams.created_by_id && context.userId) {
         finalParams.created_by_id = context.userId;
+      }
+      // Auto-preencher customer_id do contexto (contactId)
+      if (!finalParams.customer_id && context.contactId) {
+        finalParams.customer_id = context.contactId;
+      }
+      // Auto-preencher lead_id se disponível no contexto
+      if (!finalParams.lead_id && context.leadId) {
+        finalParams.lead_id = context.leadId;
       }
     }
 

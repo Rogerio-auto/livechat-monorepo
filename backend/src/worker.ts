@@ -362,24 +362,25 @@ async function flushDueBuffers(): Promise<void> {
     if (!dueKeys || dueKeys.length === 0) return;
     const slice = dueKeys.slice(0, BUFFER_MAX_FLUSH_PER_TICK);
     for (const listKey of slice) {
-      // Remove from due set first to avoid double work
-      const meta = bufferParseListKey(listKey);
-      if (!meta) continue;
-      // Acquire a short lock to prevent concurrent processing across workers
-      const locked = await bufferTryLock(meta.companyId, meta.chatId, 20);
-      if (!locked) {
-        // Another worker is processing this chat; skip
-        continue;
-      }
       try {
-        // Once locked, remove from due set to avoid other scans picking it up
-        await bufferClearDue(listKey);
-        const items = await bufferPopBatch(listKey);
-        if (!items || items.length === 0) {
+        // Remove from due set first to avoid double work
+        const meta = bufferParseListKey(listKey);
+        if (!meta) continue;
+        // Acquire a short lock to prevent concurrent processing across workers
+        const locked = await bufferTryLock(meta.companyId, meta.chatId, 20);
+        if (!locked) {
+          // Another worker is processing this chat; skip
           continue;
         }
-        const last = items[items.length - 1];
-        if (!last) continue;
+        try {
+          // Once locked, remove from due set to avoid other scans picking it up
+          await bufferClearDue(listKey);
+          const items = await bufferPopBatch(listKey);
+          if (!items || items.length === 0) {
+            continue;
+          }
+          const last = items[items.length - 1];
+          if (!last) continue;
       console.log("[BUFFER][FLUSH] 🔄 Flushing buffer", {
         chatId: meta.chatId,
         companyId: meta.companyId,
@@ -468,6 +469,10 @@ async function flushDueBuffers(): Promise<void> {
       // Always release lock for this chat
       await bufferReleaseLock(meta.companyId, meta.chatId);
     }
+      } catch (innerError) {
+        console.warn("[buffer] inner flush error for chat", listKey, 
+          innerError instanceof Error ? innerError.message : innerError);
+      }
     }
   } catch (error) {
     console.warn("[buffer] flush tick failed", error instanceof Error ? error.message : error);

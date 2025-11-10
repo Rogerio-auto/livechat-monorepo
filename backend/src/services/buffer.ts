@@ -77,7 +77,7 @@ export async function pauseBuffer(companyId: string, chatId: string, ttlSec = 36
   pipeline.zrem(dueZ, listKey);
   pipeline.del(listKey);
   if (ttlSec > 0) {
-    pipeline.set(pausedKey, "1", { EX: ttlSec } as any);
+    pipeline.set(pausedKey, "1", "EX", ttlSec);
   } else {
     pipeline.set(pausedKey, "1");
   }
@@ -129,10 +129,7 @@ export function parseListKey(listKey: string): { companyId: string; chatId: stri
 export async function tryLock(companyId: string, chatId: string, ttlSec = 15): Promise<boolean> {
   const lockKey = key.lock(companyId, chatId);
   // SET NX EX implements a simple mutex with TTL to avoid deadlocks
-  const res = await redis.set(lockKey, "1", {
-    NX: true,
-    EX: Math.max(1, ttlSec),
-  } as any);
+  const res = await redis.set(lockKey, "1", "EX", Math.max(1, ttlSec), "NX");
   return res === "OK";
 }
 

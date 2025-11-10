@@ -745,7 +745,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
           )}
         </div>
 
-        <div className="overflow-y-auto max-h-[calc(100vh-20rem)] px-1">
+        <div className="overflow-y-auto max-h-[calc(93vh-20rem)] px-1 pb-4">
           {error && <div className="p-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl mb-3">Erro: {error}</div>}
           {items.length === 0 && !loading && !error && (
             <div className="p-8 text-center bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
@@ -765,7 +765,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
             </div>
           )}
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          {items.length > 0 && (
+            <>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
             {items.map((c) => (
             <div 
               key={c.id} 
@@ -920,12 +922,15 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
                 )}
               </div>
             </div>
-          ))}
-          </div>
-
-          <div ref={sentinelRef} className="h-10 w-full flex items-center justify-center col-span-full">
-            {loading && <span className="text-xs text-(--color-text-muted) py-2">Carregando…</span>}
-          </div>
+            ))}
+            
+            {/* Sentinel para infinite scroll - dentro do grid */}
+            <div ref={sentinelRef} className="h-4 w-full flex items-center justify-center col-span-full">
+              {loading && <span className="text-xs text-(--color-text-muted)">Carregando…</span>}
+            </div>
+            </div>
+            </>
+          )}
         </div>
 
         {editorOpen && (

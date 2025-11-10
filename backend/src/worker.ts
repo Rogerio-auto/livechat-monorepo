@@ -2115,18 +2115,26 @@ async function processMediaInBackground(args: {
     );
 
     // Emit socket update with media
-    const io = getIO();
-    if (io) {
-      io.to(`chat:${chatId}`).emit("message:media-ready", {
-        messageId,
-        media_url: buildProxyUrl(publicUrl),
-        media_storage_path: mediaInfo.storagePath,
-      });
-      
-      io.emit("chat:updated", {
-        chatId,
-        last_message_media_url: buildProxyUrl(publicUrl),
-      });
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`chat:${chatId}`).emit("message:media-ready", {
+          messageId,
+          media_url: buildProxyUrl(publicUrl),
+          media_storage_path: mediaInfo.storagePath,
+        });
+        
+        io.emit("chat:updated", {
+          chatId,
+          last_message_media_url: buildProxyUrl(publicUrl),
+        });
+        
+        console.log('[WAHA][background] 📡 Socket events emitted:', { messageId, chatId });
+      } else {
+        console.warn('[WAHA][background] ⚠️ Socket.IO not available, skipping real-time update');
+      }
+    } catch (ioError) {
+      console.warn('[WAHA][background] ⚠️ Failed to emit socket events:', ioError instanceof Error ? ioError.message : ioError);
     }
 
     console.log('[WAHA][background] 🎉 Media processing complete:', { messageId, chatId });

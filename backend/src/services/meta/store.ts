@@ -1033,14 +1033,32 @@ export async function ensureLeadCustomerChat(args: {
       })(),
     ]);
 
-    let chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null }>(
-      `select id, external_id, chat_type
+    // ========== FIX: Buscar chat usando external_id ou remote_id para evitar chat errado ==========
+    // Se customer tem múltiplos chats, precisamos filtrar pelo identificador único
+    let chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
+      `select id, external_id, chat_type, remote_id
          from public.chats
         where inbox_id = $1
           and customer_id = $2
+          and (
+            ($3::text is not null and (external_id = $3 or remote_id = $3))
+            or ($3::text is null and (external_id is null or external_id = ''))
+          )
         limit 1`,
-      [args.inboxId, customer!.id],
+      [args.inboxId, customer!.id, externalIdCandidate],
     );
+
+    // Se não encontrou com filtro, tenta sem (compatibilidade com chats antigos)
+    if (!chat) {
+      chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
+        `select id, external_id, chat_type, remote_id
+           from public.chats
+          where inbox_id = $1
+            and customer_id = $2
+          limit 1`,
+        [args.inboxId, customer!.id],
+      );
+    }
 
     console.log("[META][store] Chat lookup result", {
       inboxId: args.inboxId,
@@ -1049,28 +1067,46 @@ export async function ensureLeadCustomerChat(args: {
       chatFound: !!chat,
       chatId: chat?.id,
       externalId: chat?.external_id,
+      remoteId: chat?.remote_id,
       externalIdCandidate,
+      usedFallback: !chat,
     });
 
     if (!chat) {
       try {
-        chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
+        chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
             `insert into public.chats (inbox_id, customer_id, status, last_message_at, external_id, chat_type)
            values ($1, $2, 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
-           returning id, external_id, chat_type`,
+           returning id, external_id, chat_type, remote_id`,
           [args.inboxId, customer!.id, externalIdCandidate ?? null, "CONTACT"],
         );
-        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id });
+        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id, externalId: externalIdCandidate });
       } catch (error: any) {
         if (String(error?.code) === "23505") {
-          chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
-            `select id, external_id, chat_type
+          // Conflict: retry with external_id filter
+          chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
+            `select id, external_id, chat_type, remote_id
                from public.chats
               where inbox_id = $1
                 and customer_id = $2
+                and (
+                  ($3::text is not null and (external_id = $3 or remote_id = $3))
+                  or ($3::text is null and (external_id is null or external_id = ''))
+                )
               limit 1`,
-            [args.inboxId, customer!.id],
+            [args.inboxId, customer!.id, externalIdCandidate],
           );
+          if (!chat) {
+            // Fallback without filter
+            chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
+              `select id, external_id, chat_type, remote_id
+                 from public.chats
+                where inbox_id = $1
+                  and customer_id = $2
+                limit 1`,
+              [args.inboxId, customer!.id],
+            );
+          }
           console.log("[META][store] chat fetched after conflict", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id });
         } else {
           throw error;
@@ -1543,11 +1579,12 @@ export async function getChatWithCustomerPhone(chatId: string): Promise<{
   const cacheKey = chatPhoneCacheKey(chatId);
   const cached = await cacheReadNullable<{ chat_id: string; customer_phone: string; inbox_id: string }>(cacheKey);
   if (cached?.hit && cached.value) {
+    console.log("[META][getChatWithCustomerPhone] cache hit", { chatId, customerPhone: cached.value.customer_phone });
     return cached.value;
   }
 
-  const row = await db.one<{ phone: string; inbox_id: string | null }>(
-    `select c.phone, ch.inbox_id
+  const row = await db.one<{ phone: string; inbox_id: string | null; external_id: string | null; remote_id: string | null }>(
+    `select c.phone, ch.inbox_id, ch.external_id, ch.remote_id
        from public.chats ch
        join public.customers c on c.id = ch.customer_id
       where ch.id = $1`,
@@ -1555,11 +1592,20 @@ export async function getChatWithCustomerPhone(chatId: string): Promise<{
   );
 
   const phone = normalizeMsisdn(row.phone || "");
-  if (!phone) throw new Error("Telefone do cliente n?o encontrado");
+  if (!phone) throw new Error("Telefone do cliente não encontrado");
   const inboxId = row.inbox_id;
-  if (!inboxId) throw new Error("Inbox n?o encontrada para o chat");
+  if (!inboxId) throw new Error("Inbox não encontrada para o chat");
   const normalizedPhone = phone.startsWith("+") ? phone : `+${phone}`;
   const result = { chat_id: chatId, customer_phone: normalizedPhone, inbox_id: inboxId };
+  
+  console.log("[META][getChatWithCustomerPhone] resolved", { 
+    chatId, 
+    customerPhone: normalizedPhone,
+    inboxId,
+    externalId: row.external_id,
+    remoteId: row.remote_id,
+  });
+  
   await cacheWriteNullable(cacheKey, result, TTL_CHAT_PHONE_LOOKUP);
   return result;
 }

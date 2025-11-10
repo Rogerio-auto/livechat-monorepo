@@ -76,8 +76,11 @@ export async function pauseBuffer(companyId: string, chatId: string, ttlSec = 36
   const pipeline = redis.multi();
   pipeline.zrem(dueZ, listKey);
   pipeline.del(listKey);
-  if (ttlSec > 0) pipeline.set(pausedKey, "1", "EX", ttlSec);
-  else pipeline.set(pausedKey, "1");
+  if (ttlSec > 0) {
+    pipeline.set(pausedKey, "1", { EX: ttlSec } as any);
+  } else {
+    pipeline.set(pausedKey, "1");
+  }
   await pipeline.exec();
 }
 

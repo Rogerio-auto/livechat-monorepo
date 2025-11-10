@@ -1,6 +1,7 @@
 import express from "express";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { z } from "zod";
 import { publish, EX_APP } from "../queue/rabbit.ts";
 import { rGet, rSet, rDelMatch } from "../lib/redis.ts";
 import { bumpScopeVersion } from "../lib/cache.ts";
@@ -46,7 +47,7 @@ async function resolveCompanyId(req: any): Promise<string> {
       const { data, error, count } = await supabaseAdmin
         .from("campaigns")
         .select(
-          "id, name, status, type, inbox_id, start_at, rate_limit_per_minute, auto_handoff, created_at",
+          "id, name, status, type, inbox_id, start_at, end_at, rate_limit_per_minute, auto_handoff, created_at, send_windows, timezone, segment_id",
           { count: "exact" }
         )
         .eq("company_id", companyId)
@@ -91,19 +92,25 @@ app.post("/livechat/campaigns", requireAuth, async (req: any, res) => {
 
 const insert = {
   company_id: companyId,
-  inbox_id: b.inbox_id || null,
+  inbox_id: inboxId,
   name: String(b.name || "Campanha"),
   type: String(b.type || "BROADCAST"),
   status: "DRAFT",
   rate_limit_per_minute: Number(b.rate_limit_per_minute || 30),
   auto_handoff: !!b.auto_handoff,
+  // scheduling (opcional). Se vier string de data, normaliza para ISO; caso contrário, mantém null
+  start_at: b.start_at ? new Date(b.start_at).toISOString() : null,
+  end_at: b.end_at ? new Date(b.end_at).toISOString() : null,
+  // janela diária opcional
+  send_windows: b.send_windows ?? { enabled: false },
+  timezone: b.timezone || "America/Sao_Paulo",
   // use a PK real da tabela users. Se o seu FK apontar para users.user_id, troque para user_uid.
   created_by: req.user.db_user_id ?? req.user.user_uid,
 };
     const { data, error } = await supabaseAdmin
       .from("campaigns")
       .insert([insert])
-      .select("id, name, status, type, inbox_id, rate_limit_per_minute, auto_handoff")
+      .select("id, name, status, type, inbox_id, rate_limit_per_minute, auto_handoff, start_at, end_at, send_windows, timezone")
       .single();
 
     if (error) throw new Error(error.message);
@@ -127,17 +134,24 @@ const insert = {
       const { id } = req.params;
       const b = req.body || {};
 
+      // Permite atualizar status opcionalmente
+      const patch: any = {};
+      if (b.name !== undefined) patch.name = b.name;
+      if (b.inbox_id !== undefined) patch.inbox_id = b.inbox_id ?? null;
+      if (b.rate_limit_per_minute !== undefined) patch.rate_limit_per_minute = b.rate_limit_per_minute ?? 30;
+      if (b.auto_handoff !== undefined) patch.auto_handoff = !!b.auto_handoff;
+  if (b.status !== undefined) patch.status = b.status; // EXPECT: DRAFT|RUNNING|PAUSED|SCHEDULED|COMPLETED|CANCELLED
+  if (b.start_at !== undefined) patch.start_at = b.start_at ? new Date(b.start_at).toISOString() : null;
+  if (b.end_at !== undefined) patch.end_at = b.end_at ? new Date(b.end_at).toISOString() : null;
+  if (b.send_windows !== undefined) patch.send_windows = b.send_windows;
+  if (b.timezone !== undefined) patch.timezone = b.timezone;
+
       const { data, error } = await supabaseAdmin
         .from("campaigns")
-        .update({
-          name: b.name,
-          inbox_id: b.inbox_id ?? null,
-          rate_limit_per_minute: b.rate_limit_per_minute ?? 30,
-          auto_handoff: !!b.auto_handoff,
-        })
+        .update(patch)
         .eq("id", id)
         .eq("company_id", companyId)
-        .select()
+  .select("id, name, status, type, inbox_id, rate_limit_per_minute, auto_handoff, start_at, end_at, send_windows, timezone")
         .single();
 
       if (error) throw new Error(error.message);
@@ -157,15 +171,674 @@ const insert = {
   app.get("/livechat/campaigns/templates", requireAuth, async (req: any, res) => {
     try {
       const companyId = await resolveCompanyId(req);
+      const syncMeta = req.query.syncMeta === "true";
+      
+      // Busca templates locais
       const { data, error } = await supabaseAdmin
         .from("message_templates")
-        .select("id, name, kind")
+        .select("id, name, kind, payload, inbox_id")
         .eq("company_id", companyId)
         .order("updated_at", { ascending: false });
       if (error) throw new Error(error.message);
-      return res.json(data || []);
+      
+      // Se syncMeta=true, busca templates da Meta e sincroniza status
+      if (syncMeta) {
+        // Busca inboxes META_CLOUD da empresa
+        const { data: inboxes } = await supabaseAdmin
+          .from("inboxes")
+          .select("id, provider, waba_id")
+          .eq("company_id", companyId)
+          .eq("provider", "META_CLOUD");
+        
+        if (inboxes && inboxes.length > 0) {
+          const { listWhatsAppTemplates } = await import("../services/meta/templates.js");
+          
+          for (const inbox of inboxes) {
+            if (!inbox.waba_id) continue;
+            
+            try {
+              // Busca templates da Meta para esta inbox
+              const metaTemplates = await listWhatsAppTemplates(inbox.id);
+              
+              // Atualiza status dos templates locais que têm meta_template_id
+              for (const tpl of data || []) {
+                if (tpl.inbox_id !== inbox.id) continue;
+                if (!tpl.payload?.meta_template_id) continue;
+                
+                // Encontra template correspondente na Meta
+                const metaTemplate = metaTemplates.find((mt: any) => 
+                  mt.id === tpl.payload.meta_template_id || 
+                  mt.name === tpl.payload.meta_template_name
+                );
+                
+                if (metaTemplate && metaTemplate.status !== tpl.payload?.status) {
+                  // Atualiza status no banco
+                  await supabaseAdmin
+                    .from("message_templates")
+                    .update({
+                      payload: {
+                        ...tpl.payload,
+                        status: metaTemplate.status,
+                        meta_template_id: metaTemplate.id,
+                        meta_template_name: metaTemplate.name,
+                        language: metaTemplate.language,
+                        category: metaTemplate.category,
+                        synced_at: new Date().toISOString(),
+                      }
+                    })
+                    .eq("id", tpl.id);
+                  
+                  // Atualiza no array também
+                  tpl.payload.status = metaTemplate.status;
+                  console.log(`[campaigns] ✅ synced template ${tpl.name} → status: ${metaTemplate.status}`);
+                }
+              }
+            } catch (err) {
+              console.warn(`[campaigns] ⚠️  falha ao sincronizar templates da inbox ${inbox.id}:`, err);
+            }
+          }
+        }
+      }
+      
+      // Adiciona meta_status extraído do payload para facilitar o frontend
+      const templates = (data || []).map((tpl: any) => ({
+        id: tpl.id,
+        name: tpl.name,
+        kind: tpl.kind,
+        meta_status: tpl.payload?.status || null,
+        meta_template_id: tpl.payload?.meta_template_id || null,
+        meta_template_name: tpl.payload?.meta_template_name || null,
+      }));
+      
+      return res.json(templates);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "Erro ao listar templates" });
+    }
+  });
+
+  // -------------------------------
+  // IMPORTAR TEMPLATES DA META
+  // -------------------------------
+  app.post("/livechat/campaigns/templates/import-from-meta", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      const allowed = ["ADMIN","MANAGER"].includes(role);
+      if (!allowed) return res.status(403).json({ error: "Sem permissão para importar templates" });
+      
+      const companyId = await resolveCompanyId(req);
+      const bodySchema = z.object({
+        inboxId: z.string().uuid(),
+        status: z.enum(["APPROVED", "PENDING", "REJECTED"]).optional(),
+      }).strict();
+      const parsed = bodySchema.parse(req.body || {});
+
+      // Valida inbox
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider, waba_id")
+        .eq("id", parsed.inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      }
+      if (!inbox.waba_id) {
+        return res.status(400).json({ error: "Inbox não possui waba_id configurado" });
+      }
+
+      // Busca templates da Meta
+      const { listWhatsAppTemplates } = await import("../services/meta/templates.js");
+      const metaTemplates = await listWhatsAppTemplates(parsed.inboxId, { 
+        status: parsed.status,
+        limit: 100 
+      });
+
+      // Busca templates locais existentes para esta inbox
+      const { data: existingTemplates } = await supabaseAdmin
+        .from("message_templates")
+        .select("id, name, payload")
+        .eq("company_id", companyId)
+        .eq("inbox_id", parsed.inboxId);
+
+      const existingMetaIds = new Set(
+        (existingTemplates || [])
+          .map((t: any) => t.payload?.meta_template_id)
+          .filter(Boolean)
+      );
+
+      // Importa apenas templates que não existem localmente
+      const imported = [];
+      for (const metaTemplate of metaTemplates) {
+        if (existingMetaIds.has(metaTemplate.id)) {
+          continue; // Já existe localmente
+        }
+
+        // Determina kind baseado nos componentes
+        let kind = "TEXT";
+        const components = (metaTemplate as any).components || [];
+        const hasHeader = components.find((c: any) => c.type === "HEADER");
+        const hasButtons = components.find((c: any) => c.type === "BUTTONS");
+        
+        if (hasButtons) {
+          kind = "BUTTONS";
+        } else if (hasHeader?.format === "IMAGE") {
+          kind = "IMAGE";
+        } else if (hasHeader?.format === "VIDEO") {
+          kind = "VIDEO";
+        } else if (hasHeader?.format === "DOCUMENT") {
+          kind = "DOCUMENT";
+        }
+
+        // Extrai texto do BODY
+        const bodyComponent = components.find((c: any) => c.type === "BODY");
+        const text = bodyComponent?.text || "";
+
+        const payload = {
+          text,
+          meta_template_id: metaTemplate.id,
+          meta_template_name: metaTemplate.name,
+          status: metaTemplate.status,
+          language: metaTemplate.language,
+          category: metaTemplate.category,
+          components,
+          imported_at: new Date().toISOString(),
+        };
+
+        const { data: created, error: createErr } = await supabaseAdmin
+          .from("message_templates")
+          .insert({
+            company_id: companyId,
+            inbox_id: parsed.inboxId,
+            name: metaTemplate.name,
+            kind,
+            payload,
+          })
+          .select("id, name")
+          .single();
+
+        if (!createErr && created) {
+          imported.push(created);
+          console.log(`[campaigns] ✅ imported template: ${metaTemplate.name} (${metaTemplate.status})`);
+        }
+      }
+
+      return res.json({
+        success: true,
+        imported: imported.length,
+        total: metaTemplates.length,
+        templates: imported,
+      });
+    } catch (e: any) {
+      console.error("[campaigns] erro ao importar templates da Meta:", e);
+      return res.status(500).json({ error: e?.message || "Erro ao importar templates" });
+    }
+  });
+
+  // -------------------------------
+  // CRIAR TEMPLATE (rascunho)
+  // -------------------------------
+  app.post("/livechat/campaigns/templates", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      const allowed = ["ADMIN","MANAGER","SUPERVISOR"].includes(role);
+      if (!allowed) return res.status(403).json({ error: "Sem permissão para criar template" });
+      const companyId = await resolveCompanyId(req);
+      const bodySchema = z.object({
+        name: z.string().trim().min(1),
+        kind: z.enum(["TEXT","IMAGE","VIDEO","DOCUMENT","BUTTONS","PAYMENT","MEDIA_TEXT"]),
+        payload: z.any().optional().default({}),
+        inboxId: z.string().uuid().optional().nullable(),
+      }).strict();
+      const parsed = bodySchema.parse(req.body || {});
+      // Mapeia corretamente tipos de mídia e texto
+      const mapKind = (k: string, payload: any) => {
+        switch (k) {
+          case "MEDIA_TEXT":
+            // Se tem mediaUrl, é texto + mídia
+            return { kind: "MEDIA_TEXT", payload: { text: payload.text || "", mediaUrl: payload.mediaUrl || "", _meta: { original_kind: k } } };
+          case "IMAGE":
+          case "VIDEO":
+          case "DOCUMENT":
+            // Só mídia
+            return { kind: k, payload: { mediaUrl: payload.mediaUrl || "", _meta: { original_kind: k } } };
+          case "BUTTONS":
+          case "PAYMENT":
+            // usa TEMPLATE para armazenar estruturas mais complexas
+            return { kind: "TEMPLATE", payload: { ...payload, _meta: { original_kind: k } } };
+          default:
+            // TEXT puro
+            return { kind: k, payload: { text: payload.text || "", _meta: { original_kind: k } } };
+        }
+      };
+      const mapped = mapKind(parsed.kind, parsed.payload ?? {});
+
+      // Valida inbox para tipos que exigem API oficial
+      if (["BUTTONS","PAYMENT"].includes(parsed.kind) || (parsed.kind === "MEDIA_TEXT" && mapped.payload.mediaUrl)) {
+        if (parsed.inboxId) {
+          const { data: inboxRow, error: inboxErr } = await supabaseAdmin
+            .from("inboxes")
+            .select("id, provider")
+            .eq("id", parsed.inboxId)
+            .maybeSingle();
+          if (inboxErr) throw new Error(inboxErr.message);
+          if (!inboxRow) return res.status(400).json({ error: "Inbox inválida para a empresa" });
+          if (!["META_CLOUD","WAHA"].includes(inboxRow.provider)) {
+            return res.status(400).json({ error: "Esta campanha contém botões ou mídia, mas a inbox selecionada não é API oficial." });
+          }
+        }
+      }
+      // valida inbox (se enviada)
+      let inboxId: string | null = null;
+      if (parsed.inboxId) {
+        const { data: inboxRow, error: inboxErr } = await supabaseAdmin
+          .from("inboxes")
+          .select("id, company_id")
+          .eq("id", parsed.inboxId)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        if (inboxErr) throw new Error(inboxErr.message);
+        if (!inboxRow) return res.status(400).json({ error: "Inbox inválida para a empresa" });
+        inboxId = inboxRow.id as string;
+      }
+      // Buscar users.id local a partir do auth user_id
+      let createdBy: string | null = null;
+      if (req.user?.id) {
+        const { data: userRow } = await supabaseAdmin
+          .from("users")
+          .select("id")
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+        createdBy = userRow?.id || null;
+      }
+      const insert = {
+        company_id: companyId,
+        name: parsed.name,
+        kind: mapped.kind,
+        payload: mapped.payload,
+        created_by: createdBy,
+        inbox_id: inboxId,
+      } as any;
+      const { data, error } = await supabaseAdmin
+        .from("message_templates")
+        .insert([insert])
+        .select("id, name, kind, payload, company_id, created_at, updated_at, created_by, inbox_id")
+        .single();
+      if (error) throw new Error(error.message);
+      await bumpScopeVersion(`templates:${companyId}`);
+      return res.status(201).json(data);
+    } catch (e: any) {
+  const isZod = e instanceof z.ZodError;
+  return res.status(isZod ? 400 : 500).json({ error: isZod ? (e as any).issues.map((i: any)=>i.message).join("; ") : (e?.message || "Erro ao criar template") });
+    }
+  });
+
+  // -------------------------------
+  // ATUALIZAR TEMPLATE
+  // -------------------------------
+  app.put("/livechat/campaigns/templates/:id", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      const allowed = ["ADMIN","MANAGER","SUPERVISOR"].includes(role);
+      if (!allowed) return res.status(403).json({ error: "Sem permissão para atualizar template" });
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ error: "ID obrigatório" });
+      const bodySchema = z.object({
+        name: z.string().trim().min(1).optional(),
+        kind: z.enum(["TEXT","IMAGE","VIDEO","DOCUMENT","BUTTONS","PAYMENT","MEDIA_TEXT"]).optional(),
+        payload: z.any().optional(),
+        inboxId: z.string().uuid().optional().nullable(),
+      }).strict();
+      const patch = bodySchema.parse(req.body || {});
+      const mapKind = (k: string | undefined, payload: any) => {
+        if (!k) return { kind: undefined, payload };
+        switch (k) {
+          case "MEDIA_TEXT":
+            return { kind: "TEXT", payload: { ...payload, _meta: { original_kind: k } } };
+          case "BUTTONS":
+          case "PAYMENT":
+            return { kind: "TEMPLATE", payload: { ...payload, _meta: { original_kind: k } } };
+          default:
+            return { kind: k, payload };
+        }
+      };
+      const mapped = mapKind(patch.kind, patch.payload ?? undefined);
+      // valida inbox (se enviada)
+      let inboxId: string | undefined = undefined;
+      if (patch.inboxId !== undefined) {
+        if (patch.inboxId === null) {
+          inboxId = null as any; // explicit clear
+        } else {
+          const { data: inboxRow, error: inboxErr } = await supabaseAdmin
+            .from("inboxes")
+            .select("id, company_id")
+            .eq("id", patch.inboxId)
+            .eq("company_id", companyId)
+            .maybeSingle();
+          if (inboxErr) throw new Error(inboxErr.message);
+          if (!inboxRow) return res.status(400).json({ error: "Inbox inválida para a empresa" });
+          inboxId = inboxRow.id as string;
+        }
+      }
+      const update = {
+        name: patch.name ?? undefined,
+        kind: mapped.kind ?? undefined,
+        payload: mapped.payload ?? undefined,
+        updated_at: new Date().toISOString(),
+        inbox_id: inboxId,
+      } as any;
+      const { data, error } = await supabaseAdmin
+        .from("message_templates")
+        .update(update)
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .select("id, name, kind, payload, company_id, created_at, updated_at, inbox_id")
+        .single();
+      if (error) throw new Error(error.message);
+      await bumpScopeVersion(`templates:${companyId}`);
+      return res.json(data);
+    } catch (e: any) {
+  const isZod = e instanceof z.ZodError;
+  return res.status(isZod ? 400 : 500).json({ error: isZod ? (e as any).issues.map((i: any)=>i.message).join("; ") : (e?.message || "Erro ao atualizar template") });
+    }
+  });
+
+  // -------------------------------
+  // PREVIEW TEMPLATE
+  // -------------------------------
+  app.get("/livechat/campaigns/templates/:id/preview", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      
+      const { data, error } = await supabaseAdmin
+        .from("message_templates")
+        .select("id, company_id, name, kind, payload, variables, created_at, updated_at, inbox_id")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (error) throw new Error(error.message);
+      if (!data) return res.status(404).json({ error: "Template não encontrado" });
+      
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao visualizar template" });
+    }
+  });
+
+    // -------------------------------
+    // DETALHES TEMPLATE (enriquecido)
+    // -------------------------------
+    app.get("/livechat/campaigns/templates/:id/details", requireAuth, async (req: any, res) => {
+      try {
+        const companyId = await resolveCompanyId(req);
+        const { id } = req.params;
+        const userId = req.user?.id;
+      
+        // 1. Buscar template
+        const { data: template, error: tplError } = await supabaseAdmin
+          .from("message_templates")
+          .select("id, company_id, name, kind, payload, variables, created_at, updated_at, created_by, inbox_id")
+          .eq("id", id)
+          .eq("company_id", companyId)
+          .maybeSingle();
+      
+        if (tplError) throw new Error(tplError.message);
+        if (!template) return res.status(404).json({ error: "Template não encontrado" });
+      
+        // 2. Buscar criador
+        let creator = null;
+        if (template.created_by) {
+          const { data: user } = await supabaseAdmin
+            .from("users")
+            .select("id, name, email")
+            .eq("id", template.created_by)
+            .maybeSingle();
+          if (user) creator = user;
+        }
+      
+  // Inbox derivada e campanhas
+  let inbox: any = null;
+  
+  // Prioridade 1: Buscar inbox diretamente do template.inbox_id
+  if (template.inbox_id) {
+    const { data: inboxData } = await supabaseAdmin
+      .from("inboxes")
+      .select("id, name, provider, is_official_api")
+      .eq("id", template.inbox_id)
+      .eq("company_id", companyId)
+      .maybeSingle();
+    if (inboxData) inbox = inboxData;
+  }
+  
+  // 3. Buscar campanhas que usam este template (via campaign_steps)
+        const { data: steps } = await supabaseAdmin
+          .from("campaign_steps")
+          .select("campaign_id")
+          .eq("template_id", id)
+          .limit(100);
+        let campaigns: any[] = [];
+        if (steps && steps.length > 0) {
+          const campaignIds = Array.from(new Set(steps.map((s: any) => s.campaign_id).filter(Boolean)));
+          if (campaignIds.length > 0) {
+            const { data: camps } = await supabaseAdmin
+              .from("campaigns")
+              .select("id, name, status, inbox_id")
+              .in("id", campaignIds)
+              .eq("company_id", companyId)
+              .order("created_at", { ascending: false })
+              .limit(10);
+            campaigns = camps || [];
+            // Prioridade 2: Se inbox ainda não definida, tenta derivar da 1a campanha
+            if (!inbox && campaigns[0]?.inbox_id) {
+              const { data: inboxData } = await supabaseAdmin
+                .from("inboxes")
+                .select("id, name, provider, is_official_api")
+                .eq("id", campaigns[0].inbox_id)
+                .eq("company_id", companyId)
+                .maybeSingle();
+              if (inboxData) inbox = inboxData;
+            }
+          }
+        }
+      
+        // 4. Buscar estatísticas de mensagens enviadas (tabela chat_messages)
+        // Observação: usamos view_status (Pending, Sent, Delivered, Read)
+        // e contamos por template_id quando disponível.
+        const { count: totalSent } = await supabaseAdmin
+          .from("chat_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("template_id", id);
+
+        const { count: delivered } = await supabaseAdmin
+          .from("chat_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("template_id", id)
+          .eq("view_status", "Delivered");
+
+        const { count: read } = await supabaseAdmin
+          .from("chat_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("template_id", id)
+          .eq("view_status", "Read");
+
+        const { count: sent } = await supabaseAdmin
+          .from("chat_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("company_id", companyId)
+          .eq("template_id", id)
+          .eq("view_status", "Sent");
+      
+        // Falhas nem sempre são registradas. Mantemos 0 por padrão.
+        const failed = 0;
+
+        // 5. Inbox pela coluna direta (preferível) ou payload legacy
+        if (!inbox) {
+          const inboxId = (template as any).inbox_id || template.payload?.inbox_id || null;
+          if (inboxId) {
+            const { data: inboxData } = await supabaseAdmin
+              .from("inboxes")
+              .select("id, name, provider, is_official_api")
+              .eq("id", inboxId)
+              .eq("company_id", companyId)
+              .maybeSingle();
+            if (inboxData) {
+              inbox = inboxData;
+            }
+          }
+        }
+      
+        return res.json({
+          ...template,
+          creator,
+          inbox: inbox ? {
+            id: inbox.id,
+            name: inbox.name,
+            provider: inbox.provider,
+            is_official_api: inbox.is_official_api,
+          } : null,
+          campaigns: campaigns || [],
+          stats: {
+            total_sent: totalSent || 0,
+            delivered: delivered || 0,
+            read: read || 0,
+            sent: sent || 0,
+            failed: failed || 0,
+          },
+        });
+      } catch (e: any) {
+        return res.status(500).json({ error: e?.message || "Erro ao buscar detalhes do template" });
+      }
+    });
+
+  // -------------------------------
+  // CLONAR TEMPLATE
+  // -------------------------------
+  app.post("/livechat/campaigns/templates/:id/clone", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      
+      // Load original template
+      const { data: original, error: loadError } = await supabaseAdmin
+        .from("message_templates")
+        .select("*")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (loadError) throw new Error(loadError.message);
+      if (!original) return res.status(404).json({ error: "Template não encontrado" });
+      
+      // Buscar users.id local para created_by
+      let createdBy: string | null = null;
+      if (req.user?.id) {
+        const { data: userRow } = await supabaseAdmin
+          .from("users")
+          .select("id")
+          .eq("user_id", req.user.id)
+          .maybeSingle();
+        createdBy = userRow?.id || null;
+      }
+      
+      // Create clone with new name
+      const cloneName = `${original.name} (cópia)`;
+      const { data: clone, error: cloneError } = await supabaseAdmin
+        .from("message_templates")
+        .insert([{
+          company_id: companyId,
+          name: cloneName,
+          kind: original.kind,
+          payload: original.payload,
+          created_by: createdBy,
+          inbox_id: (original as any).inbox_id || null,
+        }])
+        .select()
+        .single();
+      
+      if (cloneError) throw new Error(cloneError.message);
+      
+      // Clear cache
+      await rDelMatch(`livechat:campaigns:${companyId}:*`);
+      await bumpScopeVersion(`templates:${companyId}`);
+      
+      return res.status(201).json(clone);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao clonar template" });
+    }
+  });
+
+  // -------------------------------
+  // DELETAR TEMPLATE
+  // -------------------------------
+  app.delete("/livechat/campaigns/templates/:id", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      
+      // Check if template is being used in any campaign steps
+      const { data: usages } = await supabaseAdmin
+        .from("campaign_steps")
+        .select("id, campaign_id")
+        .eq("template_id", id)
+        .limit(1);
+      
+      if (usages && usages.length > 0) {
+        return res.status(400).json({ 
+          error: "Template está sendo usado em campanhas. Remova-o das campanhas antes de excluir." 
+        });
+      }
+      
+      const { error } = await supabaseAdmin
+        .from("message_templates")
+        .delete()
+        .eq("id", id)
+        .eq("company_id", companyId);
+      
+      if (error) throw new Error(error.message);
+      
+      // Clear cache
+      await rDelMatch(`livechat:campaigns:${companyId}:*`);
+      await bumpScopeVersion(`templates:${companyId}`);
+      
+      return res.json({ ok: true, deleted: id });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao deletar template" });
+    }
+  });
+
+  // -------------------------------
+  // LISTAR STEPS DA CAMPANHA
+  // -------------------------------
+  app.get("/livechat/campaigns/:id/steps", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      // Valida campanha pertence à empresa
+      const { data: camp } = await supabaseAdmin
+        .from("campaigns")
+        .select("id")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (!camp?.id) return res.status(404).json({ error: "Campanha não encontrada" });
+
+      const { data, error } = await supabaseAdmin
+        .from("campaign_steps")
+        .select("id, position, template_id, delay_sec, stop_on_reply")
+        .eq("campaign_id", id)
+        .order("position", { ascending: true });
+      if (error) throw new Error(error.message);
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao listar steps" });
     }
   });
 
@@ -180,7 +853,6 @@ const insert = {
 
       const insert = {
         campaign_id: id,
-        company_id: companyId,
         position: Number(b.position ?? 1),
         template_id: b.template_id,
         delay_sec: Number(b.delay_sec ?? 0),
@@ -203,22 +875,314 @@ const insert = {
   });
 
   // -------------------------------
-  // PREVIEW (RPC)
+  // PREVIEW (RPC) LEGACY + SEGMENT INFO
   // -------------------------------
   app.get("/livechat/campaigns/:id/preview", requireAuth, async (req: any, res) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;
 
-      const { data, error } = await supabaseAdmin.rpc("campaign_preview", {
-        p_campaign_id: id,
-        p_company_id: companyId,
+      const { data, error } = await supabaseAdmin.rpc("campaign_preview", { p_campaign_id: id, p_company_id: companyId });
+      if (error) throw new Error(error.message);
+
+      // Inclui info de segment ligado (se houver)
+      const { data: link } = await supabaseAdmin
+        .from('campaign_segment_links')
+        .select('segment_id')
+        .eq('campaign_id', id)
+        .limit(1)
+        .maybeSingle();
+      let segment: any = null;
+      if (link?.segment_id) {
+        const { data: segRow } = await supabaseAdmin
+          .from('campaign_segments')
+          .select('id, name, definition')
+          .eq('id', link.segment_id)
+          .maybeSingle();
+        if (segRow) segment = segRow;
+      }
+
+      return res.json({ items: data || [], segment });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao gerar preview (legacy)" });
+    }
+  });
+
+  // -------------------------------
+  // SEGMENTATION PREVIEW (dinâmico com filtros) - POST para aceitar body
+  // -------------------------------
+  app.post("/livechat/campaigns/:id/segmentation/preview", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      const b = req.body || {};
+
+      // Filtros suportados (todos opcionais)
+      // age_min, age_max -> calculado via birth_date ou birthDate
+      // states[], cities[] -> leads.state / leads.city ou customers.state / customers.city
+      // funnel_columns[] -> kanban_columns.id ou nome
+      // tags[] -> tags associadas ao chat (requer join chat_tags -> tags)
+      // lead_status[] -> leads.status_client / leads."statusClient"
+      // created_after, created_before -> leads.created_at / customers.created_at
+      const schema = z.object({
+        age_min: z.number().int().min(0).optional(),
+        age_max: z.number().int().min(0).optional(),
+        states: z.array(z.string().min(1)).optional(),
+        cities: z.array(z.string().min(1)).optional(),
+        funnel_columns: z.array(z.string().min(1)).optional(),
+        tags: z.array(z.string().min(1)).optional(),
+        lead_status: z.array(z.string().min(1)).optional(),
+        created_after: z.string().datetime().optional(),
+        created_before: z.string().datetime().optional(),
+        limit: z.number().int().min(1).max(500).optional().default(200),
+      }).strict();
+
+      let filters: any;
+      try { filters = schema.parse(b); } catch (err: any) {
+        return res.status(400).json({ error: "Filtros inválidos", issues: err?.issues || [] });
+      }
+
+      // Montagem dinâmica de SQL (somente parâmetros, evitando injeção)
+      // Busca direta na tabela customers, valida phone e lead_id, depois verifica etapa no leads
+      const conditions: string[] = []; // Não precisa de company filter aqui pois já está no WHERE principal
+      const params: any[] = [companyId]; // companyId será $1
+
+      // Idade calculada (usa birthDate ou birth_date) -> DATE_PART('year', age(now(), birth))
+      if (filters.age_min !== undefined) {
+        conditions.push("DATE_PART('year', age(now(), COALESCE(l.\"birthDate\", c.birth_date))) >= $" + (params.length + 1));
+        params.push(filters.age_min);
+      }
+      if (filters.age_max !== undefined) {
+        conditions.push("DATE_PART('year', age(now(), COALESCE(l.\"birthDate\", c.birth_date))) <= $" + (params.length + 1));
+        params.push(filters.age_max);
+      }
+      if (filters.states?.length) {
+        conditions.push("COALESCE(c.state, l.state) = ANY($" + (params.length + 1) + ")");
+        params.push(filters.states);
+      }
+      if (filters.cities?.length) {
+        conditions.push("COALESCE(c.city, l.city) = ANY($" + (params.length + 1) + ")");
+        params.push(filters.cities);
+      }
+      if (filters.lead_status?.length) {
+        conditions.push("COALESCE(l.status_client, l.\"statusClient\") = ANY($" + (params.length + 1) + ")");
+        params.push(filters.lead_status);
+      }
+      if (filters.created_after) {
+        conditions.push("c.created_at >= $" + (params.length + 1));
+        params.push(filters.created_after);
+      }
+      if (filters.created_before) {
+        conditions.push("c.created_at <= $" + (params.length + 1));
+        params.push(filters.created_before);
+      }
+
+      // Funnel columns -> match column id (uuid) OR name (text)
+      if (filters.funnel_columns?.length) {
+        const fc = filters.funnel_columns as string[];
+        const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+        const ids = fc.filter((v) => isUuid(v));
+        const names = fc.filter((v) => !isUuid(v));
+        if (ids.length && names.length) {
+          const p1 = params.length + 1;
+          const p2 = params.length + 2;
+          conditions.push(`(l.kanban_column_id = ANY($${p1}::uuid[]) OR kc.name = ANY($${p2}))`);
+          params.push(ids, names);
+        } else if (ids.length) {
+          const p1 = params.length + 1;
+          conditions.push(`l.kanban_column_id = ANY($${p1}::uuid[])`);
+          params.push(ids);
+        } else if (names.length) {
+          const p1 = params.length + 1;
+          conditions.push(`kc.name = ANY($${p1})`);
+          params.push(names);
+        }
+      }
+
+      // Tags: need EXISTS against chat_tags + chats linking lead->customer->chat
+      if (filters.tags?.length) {
+        conditions.push(`EXISTS (
+          SELECT 1 FROM chats ch
+          JOIN chat_tags ct ON ct.chat_id = ch.id
+          JOIN tags tg ON tg.id = ct.tag_id
+          WHERE ch.customer_id = c.id AND tg.name = ANY($${params.length + 1})
+        )`);
+        params.push(filters.tags);
+      }
+
+      const where = conditions.length ? conditions.join(" AND ") : "TRUE";
+
+      const sql = `
+        SELECT DISTINCT
+          c.phone AS phone,
+          c.name AS name,
+          c.lead_id AS lead_id,
+          c.id AS customer_id,
+          l.kanban_column_id,
+          DATE_PART('year', age(now(), COALESCE(l."birthDate", c.birth_date))) AS idade,
+          c.created_at AS created_at
+        FROM customers c
+        INNER JOIN leads l ON l.id = c.lead_id
+        LEFT JOIN kanban_columns kc ON kc.id = l.kanban_column_id
+        WHERE c.company_id = $1
+        AND c.phone IS NOT NULL
+        AND c.lead_id IS NOT NULL
+        AND (${where})
+        ORDER BY c.created_at DESC
+        LIMIT $${params.length + 1};
+      `;
+      params.push(filters.limit);
+
+      // Usa conexão direta PG para melhor flexibilidade
+      const { db } = await import("../pg.ts");
+      const rows = await db.any(sql, params);
+      return res.json({ items: rows, count: rows.length });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro na segmentação preview" });
+    }
+  });
+
+  // -------------------------------
+  // SEGMENTATION COMMIT (gera recipients e PERSISTE definição) - POST
+  // -------------------------------
+  app.post("/livechat/campaigns/:id/segmentation/commit", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      const b = req.body || {};
+
+      const schema = z.object({
+        filters: z.any(), // reuse same shape; already validated at preview typically
+        dry_run: z.boolean().optional().default(false),
+        limit: z.number().int().min(1).max(100000).optional().default(10000),
+        segment_name: z.string().min(1).optional(),
+      }).strict();
+      const parsed = schema.parse(b);
+
+      // Reutiliza preview endpoint internamente para obter lista (avoid duplication)
+      const previewReq = { ...parsed.filters, limit: parsed.limit };
+      req.body = previewReq; // hacky reuse; would be cleaner factoring into helper
+      let previewResp: any;
+      const fakeRes = { json: (out: any) => (previewResp = out) } as any;
+      await new Promise((resolve) => {
+        // direct function call reuse by constructing expected context
+        (async () => {
+          try {
+            // Call preview logic by simulating request (copy filters)
+            const companyId2 = companyId; // local alias
+            const b2 = previewReq;
+            const conditions: string[] = [];
+            const params: any[] = [companyId2];
+            if (b2.age_min !== undefined) { conditions.push("DATE_PART('year', age(now(), COALESCE(l.\"birthDate\", c.birth_date))) >= $" + (params.length + 1)); params.push(b2.age_min); }
+            if (b2.age_max !== undefined) { conditions.push("DATE_PART('year', age(now(), COALESCE(l.\"birthDate\", c.birth_date))) <= $" + (params.length + 1)); params.push(b2.age_max); }
+            if (b2.states?.length) { conditions.push("COALESCE(c.state, l.state) = ANY($" + (params.length + 1) + ")"); params.push(b2.states); }
+            if (b2.cities?.length) { conditions.push("COALESCE(c.city, l.city) = ANY($" + (params.length + 1) + ")"); params.push(b2.cities); }
+            if (b2.lead_status?.length) { conditions.push("COALESCE(l.status_client, l.\"statusClient\") = ANY($" + (params.length + 1) + ")"); params.push(b2.lead_status); }
+            if (b2.created_after) { conditions.push("c.created_at >= $" + (params.length + 1)); params.push(b2.created_after); }
+            if (b2.created_before) { conditions.push("c.created_at <= $" + (params.length + 1)); params.push(b2.created_before); }
+            if (b2.funnel_columns?.length) {
+              const fc = b2.funnel_columns as string[];
+              const isUuid = (s: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+              const ids = fc.filter((v) => isUuid(v));
+              const names = fc.filter((v) => !isUuid(v));
+              if (ids.length && names.length) {
+                const p1 = params.length + 1;
+                const p2 = params.length + 2;
+                conditions.push(`(l.kanban_column_id = ANY($${p1}::uuid[]) OR kc.name = ANY($${p2}))`);
+                params.push(ids, names);
+              } else if (ids.length) {
+                const p1 = params.length + 1;
+                conditions.push(`l.kanban_column_id = ANY($${p1}::uuid[])`);
+                params.push(ids);
+              } else if (names.length) {
+                const p1 = params.length + 1;
+                conditions.push(`kc.name = ANY($${p1})`);
+                params.push(names);
+              }
+            }
+            if (b2.tags?.length) { conditions.push(`EXISTS (SELECT 1 FROM chats ch JOIN chat_tags ct ON ct.chat_id = ch.id JOIN tags tg ON tg.id = ct.tag_id WHERE ch.customer_id = c.id AND tg.name = ANY($${params.length + 1}))`); params.push(b2.tags); }
+            const where = conditions.length ? conditions.join(" AND ") : "TRUE";
+            const sql = `SELECT DISTINCT c.phone AS phone, c.name AS name, c.lead_id AS lead_id, c.id AS customer_id, c.created_at AS created_at FROM customers c INNER JOIN leads l ON l.id = c.lead_id LEFT JOIN kanban_columns kc ON kc.id = l.kanban_column_id WHERE c.company_id = $1 AND c.phone IS NOT NULL AND c.lead_id IS NOT NULL AND (${where}) ORDER BY c.created_at DESC LIMIT $${params.length + 1}`;
+            params.push(previewReq.limit);
+            const { db } = await import("../pg.ts");
+            const rows = await db.any(sql, params);
+            previewResp = { items: rows, count: rows.length };
+          } catch (err) {
+            previewResp = { error: (err as any)?.message || 'Erro interno preview commit' };
+          } finally { resolve(null); }
+        })();
       });
 
-      if (error) throw new Error(error.message);
-      return res.json(data || []);
+      if (!previewResp || previewResp.error) {
+        return res.status(500).json({ error: previewResp?.error || "Falha ao gerar preview interno" });
+      }
+
+      if (parsed.dry_run) {
+        return res.json({ ok: true, dry_run: true, count: previewResp.count });
+      }
+
+      // Persistir definição de segmentação usando campaign_segments + campaign_segment_links
+      let segmentId: string | null = null;
+      const segmentName = parsed.segment_name || `Segmento da campanha ${id}`;
+      // 1) cria ou atualiza campaign_segments
+      const { data: existingLink } = await supabaseAdmin
+        .from('campaign_segment_links')
+        .select('segment_id')
+        .eq('campaign_id', id)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingLink?.segment_id) {
+        segmentId = existingLink.segment_id as any;
+        await supabaseAdmin
+          .from('campaign_segments')
+          .update({ definition: parsed.filters, name: segmentName })
+          .eq('id', segmentId);
+      } else {
+        const { data: segRow, error: segErr } = await supabaseAdmin
+          .from('campaign_segments')
+          .insert([{ company_id: companyId, name: segmentName, definition: parsed.filters }])
+          .select('id')
+          .single();
+        if (segErr) console.error('[segmentation] create segment error', segErr.message);
+        segmentId = (segRow as any)?.id || null;
+        if (segmentId) {
+          await supabaseAdmin.from('campaign_segment_links').insert([{ campaign_id: id, segment_id: segmentId }]);
+        }
+      }
+      if (segmentId) {
+        await supabaseAdmin.from('campaigns').update({ segment_id: segmentId }).eq('id', id).eq('company_id', companyId);
+      }
+
+      // Inserir recipients evitando duplicados de phone
+      const rows: any[] = previewResp.items || [];
+      if (!rows.length) return res.json({ ok: true, inserted: 0, segment_id: segmentId });
+      // Normaliza telefone (apenas dígitos)
+      const normPhone = (s: string) => (s || '').replace(/\D/g, '').replace(/^00/, '');
+      const toInsert = rows.map(r => ({
+        campaign_id: id,
+        phone: normPhone(r.phone),
+        name: r.name || null,
+        lead_id: r.lead_id || null,
+        customer_id: r.customer_id || null,
+        segment_source: 'dynamic',
+      }));
+
+      // Batch insert em chunks (Supabase limite ~1000)
+      const CHUNK = 1000;
+      let inserted = 0;
+      for (let i = 0; i < toInsert.length; i += CHUNK) {
+        const slice = toInsert.slice(i, i + CHUNK);
+        const { error: insErr } = await supabaseAdmin.from('campaign_recipients').insert(slice);
+        if (insErr) console.error('[segmentation/commit] insert error', insErr.message);
+        else inserted += slice.length;
+      }
+
+      // Limpa cache de campanhas para refletir novos recipients
+      await rDelMatch(`livechat:campaigns:${companyId}:*`);
+      return res.json({ ok: true, inserted, total_candidates: rows.length, segment_id: segmentId });
     } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "Erro ao gerar preview" });
+      return res.status(500).json({ error: e?.message || "Erro ao commitar segmentação" });
     }
   });
 
@@ -239,6 +1203,23 @@ const insert = {
       return res.json({ ok: true, ...(data || {}) });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "Erro ao commitar audiência" });
+    }
+  });
+
+  // -------------------------------
+  // DELETAR CAMPANHA
+  // -------------------------------
+  app.delete('/livechat/campaigns/:id', requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+      // remove e cascades apagam steps/recipients/deliveries pelo FK CASCADE
+      const { error } = await supabaseAdmin.from('campaigns').delete().eq('id', id).eq('company_id', companyId);
+      if (error) throw new Error(error.message);
+      await rDelMatch(`livechat:campaigns:${companyId}:*`);
+      return res.json({ ok: true, deleted: id });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'Erro ao deletar campanha' });
     }
   });
 
@@ -295,6 +1276,8 @@ const insert = {
             chatId: null,
             customerId: null,
             customerPhone: r.phone,
+            templateId: tpl.id,
+            campaignId: id,
           });
           enqueued++;
         } else {
@@ -303,6 +1286,8 @@ const insert = {
             inboxId: camp.inbox_id,
             media: payload,
             customerPhone: r.phone,
+            templateId: tpl.id,
+            campaignId: id,
           });
           enqueued++;
         }
@@ -311,6 +1296,51 @@ const insert = {
       return res.json({ ok: true, enqueued });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "Erro ao disparar campanha" });
+    }
+  });
+
+  // -------------------------------
+  // ESTATÍSTICAS DA CAMPANHA
+  // -------------------------------
+  app.get("/livechat/campaigns/:id/stats", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+
+      // Contagem de recipients
+      const { count: totalRecipients } = await supabaseAdmin
+        .from("campaign_recipients")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id);
+
+      // Contagem de deliveries por status
+      const { data: deliveries } = await supabaseAdmin
+        .from("campaign_deliveries")
+        .select("status")
+        .eq("campaign_id", id);
+
+      const stats = {
+        total_recipients: totalRecipients || 0,
+        sent: 0,
+        delivered: 0,
+        read: 0,
+        failed: 0,
+        pending: 0,
+      };
+
+      if (deliveries) {
+        deliveries.forEach((d: any) => {
+          if (d.status === "SENT") stats.sent++;
+          else if (d.status === "DELIVERED") stats.delivered++;
+          else if (d.status === "READ") stats.read++;
+          else if (d.status === "FAILED") stats.failed++;
+          else if (d.status === "PENDING") stats.pending++;
+        });
+      }
+
+      return res.json(stats);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao buscar estatísticas" });
     }
   });
 

@@ -637,7 +637,8 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
             try {
                 const linkedLeadId = (updatedCard as any).lead_id as string | null;
                 if (linkedLeadId) {
-                    await supabaseAdmin
+                    console.log(`[kanban] 🔄 sincronizando lead: leadId=${linkedLeadId} columnId=${(updatedCard as any).kanban_column_id} ownerId=${(updatedCard as any).owner_user_id || null}`);
+                    const { error: leadUpdateError } = await supabaseAdmin
                         .from("leads")
                         .update({
                             kanban_board_id: (updatedCard as any).kanban_board_id,
@@ -645,6 +646,11 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                             assigned_to_id: (updatedCard as any).owner_user_id || null,
                         })
                         .eq("id", linkedLeadId);
+                    if (leadUpdateError) {
+                        console.error(`[kanban] ❌ erro ao atualizar lead: leadId=${linkedLeadId}`, leadUpdateError);
+                    } else {
+                        console.log(`[kanban] ✅ lead atualizado: leadId=${linkedLeadId} columnId=${(updatedCard as any).kanban_column_id}`);
+                    }
                     // Best-effort: sync customers/customers.assigned_agent if customer is linked to this lead
                     try {
                         // Emit update for any chats tied to this customer/lead and set contact assignment if allowed in inbox
@@ -1063,14 +1069,109 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                 return res.status(403).json({ error: "Sem permissão para este board" });
             }
 
-            // 1) Tenta localizar card existente
-            const candidateLeadId = explicitLeadId || leadId || null;
+            // 1) Valida/busca/cria lead se necessário
+            let candidateLeadId = explicitLeadId || leadId || null;
+            
+            console.log(`[ENSURE] boardId=${boardId} columnId=${columnId} candidateLeadId=${candidateLeadId} phone=${phone} email=${email}`);
+
+            // PRIORIDADE 1: Se tem phone, busca lead existente por telefone
+            if (phone) {
+                const { data: leadByPhone, error: errLeadByPhone } = await supabaseAdmin
+                    .from("leads")
+                    .select("id, customer_id, kanban_column_id")
+                    .eq("company_id", companyId)
+                    .eq("phone", phone)
+                    .maybeSingle();
+                
+                if (errLeadByPhone) {
+                    console.error(`[ENSURE] ❌ Erro ao buscar lead por telefone:`, errLeadByPhone);
+                    return res.status(500).json({ error: errLeadByPhone.message });
+                }
+
+                if (leadByPhone) {
+                    console.log(`[ENSURE] ✅ Lead encontrado por telefone: ${leadByPhone.id}`);
+                    candidateLeadId = leadByPhone.id;
+                    
+                    // Atualiza o lead com customer_id e kanban_column_id
+                    const updateLead: any = {
+                        kanban_board_id: boardId,
+                        kanban_column_id: columnId,
+                    };
+                    if (candidateLeadId !== leadByPhone.customer_id && candidateLeadId) {
+                        updateLead.customer_id = candidateLeadId;
+                    }
+                    
+                    await supabaseAdmin
+                        .from("leads")
+                        .update(updateLead)
+                        .eq("id", leadByPhone.id);
+                    
+                    console.log(`[ENSURE] ✅ Lead ${leadByPhone.id} atualizado: customer_id e kanban_column_id`);
+                }
+            }
+
+            // PRIORIDADE 2: Se forneceu leadId mas ainda não encontrou, verifica se existe
+            if (candidateLeadId && !phone) {
+                const { data: existingLead, error: errLeadCheck } = await supabaseAdmin
+                    .from("leads")
+                    .select("id")
+                    .eq("id", candidateLeadId)
+                    .maybeSingle();
+                
+                if (errLeadCheck) {
+                    console.error(`[ENSURE] ❌ Erro ao verificar lead ${candidateLeadId}:`, errLeadCheck);
+                    return res.status(500).json({ error: errLeadCheck.message });
+                }
+
+                // Se o lead não existe, tenta criar
+                if (!existingLead) {
+                    console.log(`[ENSURE] ⚠️ Lead ${candidateLeadId} não existe, criando...`);
+                    
+                    const leadInsert: any = {
+                        id: candidateLeadId,
+                        company_id: companyId,
+                        customer_id: candidateLeadId,
+                        kanban_board_id: boardId,
+                        kanban_column_id: columnId,
+                    };
+                    if (phone) leadInsert.phone = phone;
+                    if (email) leadInsert.email = email;
+                    if (title) leadInsert.name = title;
+
+                    const { data: createdLead, error: errLeadCreate } = await supabaseAdmin
+                        .from("leads")
+                        .insert([leadInsert])
+                        .select("id")
+                        .maybeSingle();
+                    
+                    if (errLeadCreate) {
+                        console.error(`[ENSURE] ❌ Erro ao criar lead:`, errLeadCreate);
+                        // Se falhar ao criar, não usa leadId no card
+                        candidateLeadId = null;
+                    } else {
+                        console.log(`[ENSURE] ✅ Lead ${candidateLeadId} criado com sucesso`);
+                    }
+                } else {
+                    // Lead existe, atualiza kanban_column_id e customer_id
+                    await supabaseAdmin
+                        .from("leads")
+                        .update({
+                            customer_id: candidateLeadId,
+                            kanban_board_id: boardId,
+                            kanban_column_id: columnId,
+                        })
+                        .eq("id", candidateLeadId);
+                    console.log(`[ENSURE] ✅ Lead ${candidateLeadId} atualizado`);
+                }
+            }
+
+            // 2) Tenta localizar card existente
             let card: any = null;
 
             if (candidateLeadId) {
                 const { data: byLead, error: e1 } = await supabaseAdmin
                     .from("kanban_cards")
-                    .select("id, kanban_board_id, kanban_column_id, position")
+                    .select("id, kanban_board_id, kanban_column_id, position, lead_id")
                     .eq("kanban_board_id", boardId)
                     .eq("lead_id", candidateLeadId)
                     .limit(1)
@@ -1083,7 +1184,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                 // busca por email/phone no mesmo board
                 let q = supabaseAdmin
                     .from("kanban_cards")
-                    .select("id, kanban_board_id, kanban_column_id, position")
+                    .select("id, kanban_board_id, kanban_column_id, position, lead_id")
                     .eq("kanban_board_id", boardId)
                     .limit(1);
                 if (email && phone) {
@@ -1124,6 +1225,26 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                     if (errUp) return res.status(500).json({ error: errUp.message });
                 }
 
+                // sincroniza lead (se houver)
+                try {
+                    if (card.lead_id || candidateLeadId) {
+                        const linkedLeadId = card.lead_id || candidateLeadId;
+                        console.log(`[ENSURE] Atualizando card - sincronizando lead ${linkedLeadId} para board=${boardId} column=${columnId}`);
+                        await supabaseAdmin
+                            .from("leads")
+                            .update({
+                                kanban_board_id: boardId,
+                                kanban_column_id: columnId,
+                            })
+                            .eq("id", linkedLeadId);
+                        console.log(`[ENSURE] ✅ Lead ${linkedLeadId} sincronizado com sucesso`);
+                    } else {
+                        console.log(`[ENSURE] ⚠️ Card sem lead_id e sem candidateLeadId, não será sincronizado`);
+                    }
+                } catch (e) {
+                    console.error("[ENSURE] ❌ Erro ao sincronizar lead:", e);
+                }
+
                 try {
                     io.emit("kanban:card:updated", { id: card.id, stage: columnId });
                 } catch { }
@@ -1161,6 +1282,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
             // sincroniza lead (se houver)
             try {
                 if (candidateLeadId) {
+                    console.log(`[ENSURE] Criando card - sincronizando lead ${candidateLeadId} para board=${boardId} column=${columnId}`);
                     await supabaseAdmin
                         .from("leads")
                         .update({
@@ -1168,8 +1290,13 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                             kanban_column_id: columnId,
                         })
                         .eq("id", candidateLeadId);
+                    console.log(`[ENSURE] ✅ Lead ${candidateLeadId} sincronizado com sucesso`);
+                } else {
+                    console.log(`[ENSURE] ⚠️ candidateLeadId não fornecido, lead não será sincronizado`);
                 }
-            } catch { }
+            } catch (e) {
+                console.error("[ENSURE] ❌ Erro ao sincronizar lead:", e);
+            }
 
             try {
                 io.emit("kanban:card:updated", { id: created?.id, stage: columnId, created: true });

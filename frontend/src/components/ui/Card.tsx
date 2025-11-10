@@ -1,6 +1,6 @@
-import { ReactNode } from 'react';
+import { ReactNode, HTMLAttributes } from 'react';
 
-export interface CardProps {
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
   className?: string;
   gradient?: boolean;
@@ -13,7 +13,8 @@ export function Card({
   className = '', 
   gradient = true, 
   hover = false,
-  padding = 'lg'
+  padding = 'lg',
+  ...rest
 }: CardProps) {
   
   const baseClasses = 
@@ -47,6 +48,7 @@ export function Card({
         ${paddingClasses[padding]}
         ${className}
       `}
+      {...rest}
     >
       {children}
     </div>

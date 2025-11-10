@@ -1,5 +1,6 @@
-import { useEffect } from "react";
-import type { Chat as LivechatChat } from "../../componets/livechat/types";
+import { useEffect, useMemo } from "react";
+import { FiCpu, FiUser } from "react-icons/fi";
+import type { Chat as LivechatChat, Tag } from "../../componets/livechat/types";
 
 type BaseChat = Partial<LivechatChat> & {
   id: string;
@@ -17,15 +18,31 @@ type BaseChat = Partial<LivechatChat> & {
   customer_avatar_url?: string | null;
   remote_id?: string | null;
   unread_count?: number | null;
+  inbox_id?: string | null;
+  assigned_agent_name?: string | null;
+  ai_agent_id?: string | null;
+  ai_agent_name?: string | null;
+  ai_mode?: string | null;
+  status?: string | null;
+  tag_ids?: string[];
 };
 
 export type Chat = BaseChat;
+
+export interface Inbox {
+  id: string;
+  name: string;
+  phone_number?: string | null;
+  provider?: string | null;
+}
 
 export interface ChatListProps {
   chats: Chat[];
   activeChatId?: string;
   onSelectChat: (chatId: string) => void;
   isGroupList?: boolean;
+  inboxes?: Inbox[];
+  tags?: Tag[];
 }
 
 const DEFAULT_AVATAR = "/default-avatar.png";
@@ -84,7 +101,14 @@ export default function ChatList({
   activeChatId,
   onSelectChat,
   isGroupList = false,
+  inboxes = [],
+  tags = [],
 }: ChatListProps) {
+  // Create a map of tags for quick lookup
+  const tagsMap = useMemo(() => {
+    return new Map(tags.map((tag) => [tag.id, tag]));
+  }, [tags]);
+
   const normalizedChats = chats.map((chat) => {
     const explicitGroupFlag =
       typeof chat.is_group === "boolean"
@@ -183,6 +207,11 @@ export default function ChatList({
         const hasPhoto = Boolean(chat.photo_url);
         const subtitle = chat.secondaryLine ?? chat.last_message;
 
+        // Find inbox info
+        const inbox = inboxes.find((i) => i.id === chat.inbox_id);
+        const inboxLabel = inbox?.name || inbox?.phone_number || null;
+        const inboxProvider = inbox?.provider || null;
+
         return (
           <div
             key={chat.id}
@@ -222,14 +251,84 @@ export default function ChatList({
             )}
 
             <div className="flex-1 min-w-0 overflow-hidden">
-              <div className="font-medium truncate text-(--color-heading)">
-                {chat.name}
-                {chat.isGroup && chat.groupSizeLabel ? (
-                  <span className="ml-2 text-xs font-normal text-(--color-text-muted)">
-                    ({chat.groupSizeLabel})
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-medium truncate text-(--color-heading)">
+                  {chat.name}
+                  {chat.isGroup && chat.groupSizeLabel ? (
+                    <span className="ml-2 text-xs font-normal text-(--color-text-muted)">
+                      ({chat.groupSizeLabel})
+                    </span>
+                  ) : null}
+                </div>
+                {inboxLabel && (
+                  <span
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap ${
+                      inboxProvider === "META" || inboxProvider === "META_CLOUD"
+                        ? "bg-blue-500/15 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400"
+                        : inboxProvider === "WAHA"
+                          ? "bg-green-500/15 text-green-600 dark:bg-green-500/20 dark:text-green-400"
+                          : "bg-gray-500/15 text-gray-600 dark:bg-gray-500/20 dark:text-gray-400"
+                    }`}
+                    title={`Inbox: ${inboxLabel}${inboxProvider ? ` (${inboxProvider})` : ""}`}
+                  >
+                    {inboxLabel.length > 15 ? `${inboxLabel.slice(0, 15)}...` : inboxLabel}
                   </span>
-                ) : null}
+                )}
+                
+                {/* Tags indicators */}
+                {chat.tag_ids && chat.tag_ids.length > 0 && (
+                  <div className="flex items-center gap-1">
+                    {chat.tag_ids.slice(0, 3).map((tagId) => {
+                      const tag = tagsMap.get(tagId);
+                      if (!tag) return null;
+                      return (
+                        <span
+                          key={tagId}
+                          className="h-5 w-1 rounded-full"
+                          style={{ backgroundColor: tag.color || "#6B7280" }}
+                          title={tag.name}
+                        />
+                      );
+                    })}
+                    {chat.tag_ids.length > 3 && (
+                      <span className="text-[9px] text-(--color-text-muted)" title={`+${chat.tag_ids.length - 3} tags`}>
+                        +{chat.tag_ids.length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
+              
+              {/* Agent Assignment Info */}
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {/* Human Agent - Always show when assigned */}
+                {chat.assigned_agent_name && (
+                  <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400" title={`Agente atribuído: ${chat.assigned_agent_name}`}>
+                    <FiUser className="w-3 h-3" />
+                    <span className="font-medium">{chat.assigned_agent_name}</span>
+                  </div>
+                )}
+                
+                {/* AI Agent - Show with active color if status=AI, opaque otherwise */}
+                {chat.ai_agent_id && chat.ai_agent_name && (
+                  <div 
+                    className={`flex items-center gap-1 text-[10px] ${
+                      chat.status === "AI" 
+                        ? "text-purple-600 dark:text-purple-400" 
+                        : "text-purple-600/40 dark:text-purple-400/40"
+                    }`}
+                    title={
+                      chat.status === "AI" 
+                        ? `Atendimento ativo por IA: ${chat.ai_agent_name}` 
+                        : `IA disponível: ${chat.ai_agent_name} (inativo)`
+                    }
+                  >
+                    <FiCpu className="w-3 h-3" />
+                    <span className="font-medium">{chat.ai_agent_name}</span>
+                  </div>
+                )}
+              </div>
+              
               <div className="text-sm text-(--color-text-muted) truncate">{subtitle}</div>
             </div>
 

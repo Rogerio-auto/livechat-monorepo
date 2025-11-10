@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -68,8 +68,11 @@ export function MessageBubble({
       ? agentBubble
       : customerBubble;
   const messageType = (m.type || "TEXT").toUpperCase();
-  const mediaUrl = m.media_url ?? null;
+  
+  // Fallback para URLs de mídia
+  const mediaUrl = m.media_public_url || m.media_url || null;
   const textBody = m.body ?? m.content ?? "";
+  const caption = m.caption ?? null;
   const remoteDisplayName = useMemo(() => {
     return (
       m.remote_sender_name ||
@@ -166,24 +169,35 @@ export function MessageBubble({
   let bubbleContent: ReactNode;
   if (isDeleted) {
     bubbleContent = (
-  <span className="italic text-(--color-text-muted)">Mensagem apagada</span>
+      <span className="italic text-(--color-text-muted)">Mensagem apagada</span>
     );
   } else if (mediaUrl && messageType === "IMAGE") {
     bubbleContent = (
       <div className="overflow-hidden rounded-2xl bg-(--color-surface-muted)/40 p-2 shadow-inner">
+        {m.is_media_sensitive && (
+          <div className="flex items-center gap-1 text-xs text-yellow-500 mb-2">
+            <FiAlertTriangle className="w-3.5 h-3.5" /> Conteúdo sensível
+          </div>
+        )}
         <img
           src={mediaUrl}
-          alt={textBody || "Imagem"}
-          className="max-h-72 w-full rounded-xl object-contain"
+          alt={caption || textBody || "Imagem"}
+          className="max-h-72 w-full rounded-xl object-contain cursor-pointer"
+          onClick={openLightbox}
         />
-        {textBody ? (
-          <p className="mt-1 text-xs opacity-80">{textBody}</p>
-        ) : null}
+        {caption && (
+          <p className="mt-2 text-xs opacity-90">{caption}</p>
+        )}
       </div>
     );
   } else if (mediaUrl && messageType === "VIDEO") {
     bubbleContent = (
       <div className="relative overflow-hidden rounded-2xl bg-(--color-surface)/90 p-2 shadow-inner">
+        {m.is_media_sensitive && (
+          <div className="flex items-center gap-1 text-xs text-yellow-500 mb-2">
+            <FiAlertTriangle className="w-3.5 h-3.5" /> Conteúdo sensível
+          </div>
+        )}
         <video
           src={mediaUrl}
           className="max-h-72 w-full rounded-xl object-contain"
@@ -191,28 +205,92 @@ export function MessageBubble({
           playsInline
           controls
         />
-        {textBody ? (
-          <p className="mt-1 text-xs opacity-80">{textBody}</p>
-        ) : null}
+        {caption && (
+          <p className="mt-2 text-xs opacity-90">{caption}</p>
+        )}
       </div>
     );
   } else if (mediaUrl && messageType === "AUDIO") {
     bubbleContent = (
-      <AudioPlayerWhatsApp src={mediaUrl} caption={textBody || null} />
+      <AudioPlayerWhatsApp src={mediaUrl} caption={caption || textBody || null} />
+    );
+  } else if (mediaUrl && messageType === "STICKER") {
+    bubbleContent = (
+      <div className="overflow-hidden rounded-2xl p-1">
+        <img
+          src={mediaUrl}
+          alt="Sticker"
+          className="h-32 w-32 object-contain cursor-pointer"
+          style={{ imageRendering: 'crisp-edges' }}
+          onClick={openLightbox}
+        />
+      </div>
+    );
+  } else if (messageType === "LOCATION") {
+    // Tentar extrair coordenadas do body (JSON)
+    let locationData: { latitude?: number; longitude?: number; name?: string; address?: string } | null = null;
+    try {
+      if (textBody) {
+        locationData = JSON.parse(textBody);
+      }
+    } catch {}
+    
+    bubbleContent = (
+      <div className="flex flex-col gap-2 rounded-2xl bg-(--color-surface-muted)/40 p-3 shadow-inner">
+        <div className="flex items-center gap-2">
+          <FiMapPin className="w-5 h-5 text-red-500" />
+          <span className="text-sm font-medium">Localização</span>
+        </div>
+        {locationData?.name && (
+          <div className="text-sm font-semibold">{locationData.name}</div>
+        )}
+        {locationData?.address && (
+          <div className="text-xs opacity-80">{locationData.address}</div>
+        )}
+        {locationData?.latitude && locationData?.longitude && (
+          <a 
+            href={`https://www.google.com/maps?q=${locationData.latitude},${locationData.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-400 hover:text-blue-300 underline"
+          >
+            Ver no Google Maps
+          </a>
+        )}
+      </div>
     );
   } else if (mediaUrl && (messageType === "DOCUMENT" || messageType === "FILE")) {
     bubbleContent = (
       <div className="flex flex-col gap-2 rounded-2xl bg-[color:color-mix(in srgb,var(--color-surface) 45%,var(--color-bg))] px-4 py-3 shadow-inner">
+        {m.is_media_sensitive && (
+          <div className="flex items-center gap-1 text-xs text-yellow-500 mb-1">
+            <FiAlertTriangle className="w-3.5 h-3.5" /> Conteúdo sensível
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm font-medium">
-          <span className="text-lg font-semibold">DOC</span>
+          <span className="text-lg font-semibold">📄</span>
           <span>Documento</span>
+          {m.media_size && (
+            <span className="text-[10px] opacity-60">
+              ({(m.media_size / 1024 / 1024).toFixed(2)} MB)
+            </span>
+          )}
         </div>
-  <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-90">
+        <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-90 hover:opacity-100">
           Baixar documento
         </a>
-        {textBody ? (
-          <p className="mt-1 text-xs opacity-80">{textBody}</p>
-        ) : null}
+        {caption && (
+          <p className="mt-1 text-xs opacity-80">{caption}</p>
+        )}
+      </div>
+    );
+  } else if (messageType === "TEMPLATE") {
+    bubbleContent = (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1 text-xs text-purple-400 mb-1">
+          <FiLayers className="w-3.5 h-3.5" /> Template
+        </div>
+        <div>{textBody || "[Template]"}</div>
       </div>
     );
   } else {

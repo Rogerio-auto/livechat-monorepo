@@ -18,6 +18,7 @@ import {
 } from "../src/queue/rabbit.ts";
 import db from "../src/pg.ts";
 import { normalizeMsisdn } from "../src/util.ts";
+import { getIO } from "./lib/io.ts";
 import {
   saveWebhookEvent,
   updateMessageStatusByExternalId,
@@ -40,7 +41,7 @@ import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause, tryLock as bufferTryLock, releaseLock as bufferReleaseLock } from "./services/buffer.ts";
-import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer } from "../src/lib/storage.ts";
+import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer, getMediaBucket } from "../src/lib/storage.ts";
 import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
@@ -1310,12 +1311,29 @@ async function handleMetaInboundMessages(args: {
     }
 
     const { content, type } = extractContentAndType(m);
-    const createdAt =
-      typeof m?.timestamp === "number"
-        ? new Date(m.timestamp * 1000)
-        : m?.timestamp
-          ? new Date(m.timestamp)
-          : null;
+    
+    // Parse timestamp corretamente (pode vir como number ou string)
+    let createdAt: Date | null = null;
+    if (m?.timestamp) {
+      if (typeof m.timestamp === "number") {
+        createdAt = new Date(m.timestamp * 1000);
+      } else if (typeof m.timestamp === "string") {
+        const timestampNum = parseInt(m.timestamp, 10);
+        if (!isNaN(timestampNum)) {
+          createdAt = new Date(timestampNum * 1000);
+        }
+      }
+    }
+    
+    // Log para debug de timestamp inválido
+    if (m?.timestamp && (!createdAt || isNaN(createdAt.getTime()))) {
+      console.warn("[META][inbound] timestamp inválido detectado", {
+        wamid,
+        rawTimestamp: m?.timestamp,
+        timestampType: typeof m?.timestamp,
+        parsedTimestamp: createdAt,
+      });
+    }
 
     // Upsert remote participant for group messages
     let remoteParticipantId: string | null = null;
@@ -1663,31 +1681,48 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
         phone_number_id: creds.phone_number_id ?? undefined,
       };
       const info = await getMediaInfo(graphCreds, mediaId);
-      if (!info?.url) throw new Error("Meta n??o retornou URL da m??dia");
+      if (!info?.url) throw new Error("Meta não retornou URL da mídia");
+
+      console.log("[META][inbound.media] 📥 Downloading media from Meta", {
+        mediaId,
+        mimeType: info.mime_type,
+        size: info.file_size,
+      });
 
       const bin = await downloadMedia(graphCreds, info.url);
       const buf = Buffer.from(bin);
 
-      const ymd = new Date().toISOString().slice(0, 10);
-      const safeBase = job.media.filename
+      const safeFilename = job.media.filename
         ? sanitizeFilename(job.media.filename)
         : `${mediaId}.${extFromMime(info.mime_type) || "bin"}`;
-      const ownerSegment = companyKey || "unknown";
-      const keyBase = (externalId && externalId.trim()) || messageId;
-      const relativeKey = `${ownerSegment}/${chatId}/${ymd}/${keyBase}-${safeBase}`;
-      const absFilePath = path.join(MEDIA_DIR, relativeKey);
 
-      await ensureDir(path.dirname(absFilePath));
-      await fs.writeFile(absFilePath, buf);
+      // Upload para Supabase Storage ao invés de salvar no disco
+      console.log("[META][inbound.media] ☁️  Uploading to Supabase Storage", {
+        filename: safeFilename,
+        size: buf.length,
+      });
 
-      const publicUrl = MEDIA_PUBLIC_BASE
-        ? `${MEDIA_PUBLIC_BASE}/${relativeKey}`
-        : `${FILES_PUBLIC_BASE}/files/${messageId}`;
+      const uploadResult = await uploadBufferToStorage({
+        buffer: buf,
+        contentType: info.mime_type || "application/octet-stream",
+        path: buildStoragePath({
+          companyId: companyKey || "unknown",
+          chatId: chatId || "unknown",
+          filename: safeFilename,
+          prefix: "meta-inbound",
+        }),
+      });
+
+      console.log("[META][inbound.media] ✅ Upload successful", {
+        storagePath: uploadResult.path,
+        publicUrl: uploadResult.publicUrl,
+        sha256: uploadResult.sha256,
+      });
 
       await db.none(
         `insert into public.chat_attachments
             (message_id, provider, provider_media_id, kind, mime_type, filename, bytes, sha256, storage_bucket, storage_key, public_url)
-         values ($1,'META',$2,$3,$4,$5,$6,$7,'local',$8,$9)`,
+         values ($1,'META',$2,$3,$4,$5,$6,$7,'supabase',$8,$9)`,
         [
           messageId,
           mediaId,
@@ -1695,19 +1730,20 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
           info.mime_type ?? null,
           job.media.filename ?? null,
           buf.length,
-          info.sha256 ?? null,
-          relativeKey,
-          publicUrl,
+          uploadResult.sha256,
+          uploadResult.path,
+          uploadResult.publicUrl,
         ],
       );
 
-      // Encrypt the public URL before storing in database
-      const encryptedUrl = encryptMediaUrl(publicUrl);
-
+      // Store public URL directly (no encryption needed - it's already public)
+      // media_url = public_url for direct access, media_storage_path for proxy fallback
       await db.none(
-        `update public.chat_messages set media_url = $2 where id = $1`,
-        [messageId, encryptedUrl],
+        `update public.chat_messages set media_url = $2, media_storage_path = $3, media_public_url = $4, media_source = $5 where id = $1`,
+        [messageId, uploadResult.publicUrl, uploadResult.path, uploadResult.publicUrl, "META"],
       );
+
+      console.log("[META][inbound.media] 💾 Database updated", { messageId });
     } catch (err) {
       console.error("[inbound.media] media handling error:", (err as any)?.message || err);
       throw err;
@@ -1871,6 +1907,24 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   let groupMeta: { name: string | null; avatarUrl: string | null } | null = null;
 
+  // Extrair lid do webhook (disponível no campo 'me' da WAHA)
+  const rawLid = 
+    (job.raw as any)?.me?.lid ?? 
+    (payload as any)?.me?.lid ?? 
+    msg?.me?.lid ?? 
+    null;
+  const lid = rawLid && typeof rawLid === "string" && rawLid.trim() ? rawLid.trim() : null;
+  
+  console.log('[WAHA][worker] Extracted lid from webhook', { 
+    lid, 
+    rawLid,
+    hasJobRaw: !!(job.raw as any)?.me,
+    hasPayloadMe: !!(payload as any)?.me,
+    hasMsgMe: !!msg?.me,
+    chatJid,
+    messageId 
+  });
+
   if (isGroupChat) {
     groupMeta = extractWahaGroupMetadata(payload);
     rememberAvatar(job.companyId, chatJid, groupMeta?.avatarUrl ?? null);
@@ -1889,6 +1943,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       phone: phoneForLead,
       name: name ?? phoneForLead,
       rawPhone: chatJid,
+      lid: lid,
     });
     chatId = ensured.chatId;
   }
@@ -2771,7 +2826,26 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   let response: any;
 
   if (messageType === "media") {
-    const kind = String(payload?.kind || "document").toLowerCase();
+    // Detecta o tipo correto da mídia baseado em mediaType ou mimeType do payload
+    let kind = String(payload?.kind || "document").toLowerCase();
+    
+    // Se tiver mediaType no payload (vindo do template), usa ele
+    if (payload?.mediaType) {
+      const mt = String(payload.mediaType).toUpperCase();
+      if (mt === "IMAGE") kind = "image";
+      else if (mt === "VIDEO") kind = "video";
+      else if (mt === "AUDIO") kind = "audio";
+      else kind = "document";
+    }
+    // Senão, tenta detectar pelo mimeType
+    else if (payload?.mimeType) {
+      const mime = String(payload.mimeType).toLowerCase();
+      if (mime.startsWith("image/")) kind = "image";
+      else if (mime.startsWith("video/")) kind = "video";
+      else if (mime.startsWith("audio/")) kind = "audio";
+      else kind = "document";
+    }
+    
     if (!payload?.mediaUrl) {
       throw new Error("WAHA media requer mediaUrl");
     }
@@ -2797,8 +2871,8 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       file: {
         url: payload.mediaUrl,
         filename: payload?.filename ?? undefined,
-        // Use the actual recorded mime when available; WAHA will convert
-        mimetype: rawMime || "audio/ogg; codecs=opus",
+        // Use the actual mime type from payload, fallback to default based on kind
+        mimetype: rawMime || (kind === "audio" ? "audio/ogg; codecs=opus" : normalizedMime || "application/octet-stream"),
       },
     };
 
@@ -2807,9 +2881,11 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       body.convert = true;
     }
 
-    console.log("[WAHA OUTBOUND][AUDIO]", {
+    console.log("[WAHA OUTBOUND][MEDIA]", {
       endpoint,
       remoteChatId,
+      kind,
+      mediaType: payload?.mediaType,
       mimetype: body?.file?.mimetype,
       filename: body?.file?.filename,
       hasUrl: !!body?.file?.url,
@@ -3057,6 +3133,39 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       draftId: job?.draftId ?? payload?.draftId ?? null,
       reason: null,
     });
+  }
+
+  // Se vier metadados de campanha, atualiza status do delivery
+  if (job.campaignId && job.campaignRecipientId && job.campaignStepId) {
+    console.log(`[campaigns][WAHA] 🔍 tentando atualizar delivery: campaign=${job.campaignId} recipient=${job.campaignRecipientId} step=${job.campaignStepId} externalId=${externalId || "null"}`);
+    try {
+      const { data: updated, error } = await supabaseAdmin
+        .from("campaign_deliveries")
+        .update({
+          status: "SENT",
+          sent_at: new Date().toISOString(),
+          external_id: externalId || null,
+          chat_message_id: messageIdForStatus || null,
+        })
+        .eq("campaign_id", job.campaignId)
+        .eq("recipient_id", job.campaignRecipientId)
+        .eq("step_id", job.campaignStepId)
+        .eq("status", "PENDING")
+        .select("id");
+      if (error) {
+        console.error(`[campaigns] ❌ erro update delivery SENT (WAHA): campaign=${job.campaignId} recipient=${job.campaignRecipientId}`, error);
+      } else if (updated && updated.length > 0) {
+        console.log(`[campaigns] 🟢 DELIVERY SENT (WAHA): campaign=${job.campaignId} recipient=${job.campaignRecipientId} delivery=${updated[0].id} externalId=${externalId || "null"}`);
+        // Emite estatísticas atualizadas via socket
+        await emitCampaignStats(job.campaignId, job.companyId);
+      } else {
+        console.warn(`[campaigns] ⚠️  nenhum delivery atualizado (WAHA): campaign=${job.campaignId} recipient=${job.campaignRecipientId} - delivery não estava PENDING?`);
+      }
+    } catch (err) {
+      console.warn("[campaigns] falha update delivery SENT (WAHA)", (err as any)?.message || err);
+    }
+  } else if (job.campaignId) {
+    console.warn(`[campaigns][WAHA] ⚠️  job tem campaignId mas faltam metadados: campaignId=${job.campaignId} recipientId=${job.campaignRecipientId || "MISSING"} stepId=${job.campaignStepId || "MISSING"}`);
   }
 
   console.log("[worker][outbound][WAHA] message sent", {
@@ -3439,75 +3548,100 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           throw new Error("missing_meta_credentials");
         }
 
-        // Permite enviar via arquivo local (storage_key) OU via URL pública (public_url)
+        // Permite enviar via arquivo Supabase Storage (storage_key) OU via URL pública (public_url)
         const publicUrl = typeof job.public_url === "string" && job.public_url ? String(job.public_url) : "";
         if (!storageKey && !publicUrl) {
           throw new Error("meta.sendMedia requires storage_key or public_url");
         }
-        const absFromKey = storageKey ? path.join(MEDIA_DIR, storageKey) : "";
-        let abs = absFromKey;
-        let createdTmp = false;
-        let cleanupTmp: string | null = null;
 
-        if (abs) {
-          try {
-            await fs.access(abs);
-          } catch {
-            abs = ""; // arquivo não existe, tentaremos baixar da URL pública
+        console.log("[meta.sendMedia] 📦 Processing media", {
+          chatId,
+          storageKey: storageKey || "(none)",
+          publicUrl: publicUrl ? publicUrl.slice(0, 80) + "..." : "(none)",
+        });
+
+        // Download da mídia - de Supabase Storage ou URL pública
+        let mediaBuffer: Buffer;
+        let effectiveMime = mimeType || "application/octet-stream";
+
+        if (storageKey) {
+          // Download do Supabase Storage
+          console.log("[meta.sendMedia] ☁️  Downloading from Supabase Storage", { storageKey });
+          const bucket = getMediaBucket();
+          const { data, error } = await supabaseAdmin.storage.from(bucket).download(storageKey);
+          
+          if (error || !data) {
+            throw new Error(`Failed to download from Supabase Storage: ${error?.message || "no data"}`);
           }
-        }
-
-        if (!abs && publicUrl) {
+          
+          mediaBuffer = Buffer.from(await data.arrayBuffer());
+          // Se não temos mimeType, tentar obter do arquivo
+          if (!mimeType) {
+            effectiveMime = data.type || "application/octet-stream";
+          }
+        } else if (publicUrl) {
+          // Download de URL pública
+          console.log("[meta.sendMedia] 🌐 Downloading from public URL");
           const res = await fetch(publicUrl);
           if (!res.ok) {
             throw new Error(`download_public_url ${res.status}`);
           }
-          const arr = new Uint8Array(await res.arrayBuffer());
-          const mimeFromUrl = res.headers.get("content-type") || mimeType;
-          const tmpDir = path.join(MEDIA_DIR, "tmp");
-          await fs.mkdir(tmpDir, { recursive: true });
-          const ext = extFromMime(mimeFromUrl) || extFromMime(mimeType) || "bin";
-          const tmpPath = path.join(tmpDir, `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
-          await fs.writeFile(tmpPath, arr);
-          abs = tmpPath;
-          createdTmp = true;
-          cleanupTmp = tmpPath;
-          // Use o mimeType detectado se o job não trouxer
-          // Se job não informou mime, usamos o do download
-          const effectiveMime = (mimeType && String(mimeType)) || mimeFromUrl || "application/octet-stream";
-          mimeType = effectiveMime;
+          mediaBuffer = Buffer.from(await res.arrayBuffer());
+          const mimeFromUrl = res.headers.get("content-type");
+          if (!mimeType && mimeFromUrl) {
+            effectiveMime = mimeFromUrl;
+          }
+        } else {
+          throw new Error("media_source_missing");
         }
 
-        if (!abs) {
-          throw new Error("media_file_missing");
-        }
+        // Salvar temporariamente no disco para upload ao Meta (Meta API exige arquivo)
+        const tmpDir = path.join(MEDIA_DIR, "tmp");
+        await fs.mkdir(tmpDir, { recursive: true });
+        const ext = extFromMime(effectiveMime) || "bin";
+        const tmpPath = path.join(tmpDir, `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`);
+        await fs.writeFile(tmpPath, mediaBuffer);
+        
+        console.log("[meta.sendMedia] 💾 Temporary file created", {
+          path: tmpPath,
+          size: mediaBuffer.length,
+          mime: effectiveMime,
+        });
 
-        const filename = String(job.filename || path.basename(abs));
-        const mediaType = mimeType.startsWith("image/")
+        const filename = String(job.filename || `media.${ext}`);
+        const mediaType = effectiveMime.startsWith("image/")
           ? "IMAGE"
-          : mimeType.startsWith("video/")
+          : effectiveMime.startsWith("video/")
             ? "VIDEO"
-            : mimeType.startsWith("audio/")
+            : effectiveMime.startsWith("audio/")
               ? "AUDIO"
               : "DOCUMENT";
 
-        // upload
+        // upload para Meta
         const mediaId = await graphUploadMedia(
           { access_token: creds.access_token, phone_number_id: creds.phone_number_id },
-          abs,
-          mimeType,
+          tmpPath,
+          effectiveMime,
           filename,
         );
-        console.log("[outbound] graphUploadMedia ok", { mediaId, mimeType });
+        
+        console.log("[meta.sendMedia] ✅ Uploaded to Meta", { mediaId, mimeType: effectiveMime });
 
-        // normaliza n??mero para E.164 sem '+'
+        // Limpar arquivo temporário
+        try {
+          await fs.unlink(tmpPath);
+        } catch (e) {
+          console.warn("[meta.sendMedia] Failed to cleanup temp file:", tmpPath);
+        }
+
+        // normaliza número para E.164 sem '+'
         function toE164(n: string): string {
           const only = String(n || "").replace(/\D+/g, "");
           return only.replace(/^00/, ""); // ex: 0055... -> 55...
         }
         const to = toE164(customer_phone);
 
-        // envia m??dia
+        // envia mídia
         const wamid = await graphSendMedia(
           { access_token: creds.access_token, phone_number_id: creds.phone_number_id },
           to,                   // <<< usa o n??mero normalizado
@@ -3565,10 +3699,40 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           reason: null,
         });
 
-        console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
-        if (createdTmp && cleanupTmp) {
-          try { await fs.unlink(cleanupTmp); } catch {}
+        // Se vier metadados de campanha, atualiza status do delivery
+        if (job.campaignId && job.campaignRecipientId && job.campaignStepId) {
+          console.log(`[campaigns][META][MEDIA] 🔍 tentando atualizar delivery: campaign=${job.campaignId} recipient=${job.campaignRecipientId} step=${job.campaignStepId} wamid=${wamid || "null"}`);
+          try {
+            const { data: updated, error } = await supabaseAdmin
+              .from("campaign_deliveries")
+              .update({
+                status: "SENT",
+                sent_at: new Date().toISOString(),
+                external_id: wamid || null,
+                chat_message_id: messageId || (upsert?.message?.id || null) || null,
+              })
+              .eq("campaign_id", job.campaignId)
+              .eq("recipient_id", job.campaignRecipientId)
+              .eq("step_id", job.campaignStepId)
+              .eq("status", "PENDING")
+              .select("id");
+            if (error) {
+              console.error(`[campaigns] ❌ erro update delivery SENT (media): campaign=${job.campaignId} recipient=${job.campaignRecipientId}`, error);
+            } else if (updated && updated.length > 0) {
+              console.log(`[campaigns] 🟢 DELIVERY SENT (MEDIA): campaign=${job.campaignId} recipient=${job.campaignRecipientId} delivery=${updated[0].id} wamid=${wamid || "null"}`);
+              // Emite estatísticas atualizadas via socket
+              await emitCampaignStats(job.campaignId, job.companyId);
+            } else {
+              console.warn(`[campaigns] ⚠️  nenhum delivery atualizado (media): campaign=${job.campaignId} recipient=${job.campaignRecipientId} - delivery não estava PENDING?`);
+            }
+          } catch (err) {
+            console.warn("[campaigns] falha update delivery SENT (media)", (err as any)?.message || err);
+          }
+        } else if (job.campaignId) {
+          console.warn(`[campaigns][META][MEDIA] ⚠️  job tem campaignId mas faltam metadados: campaignId=${job.campaignId} recipientId=${job.campaignRecipientId || "MISSING"} stepId=${job.campaignStepId || "MISSING"}`);
         }
+
+        console.log("[worker][outbound] media sent", { chatId, inboxId, messageId, wamid });
         meta.chatId = chat_id ?? chatId;
 
         setTimeout(() => {
@@ -3581,7 +3745,6 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
             });
           });
         }, 0);
-
 
         ch.ack(msg);
         return;
@@ -3656,6 +3819,38 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         messageId: job.messageId || null,
         viewStatus: "Sent",
       });
+
+      if (job.campaignId && job.campaignRecipientId && job.campaignStepId) {
+        console.log(`[campaigns][META][TEXT] 🔍 tentando atualizar delivery: campaign=${job.campaignId} recipient=${job.campaignRecipientId} step=${job.campaignStepId} wamid=${wamid || "null"}`);
+        try {
+          const { data: updated, error } = await supabaseAdmin
+            .from("campaign_deliveries")
+            .update({
+              status: "SENT",
+              sent_at: new Date().toISOString(),
+              external_id: wamid || null,
+              chat_message_id: job.messageId || (upsert?.message?.id || null) || null,
+            })
+            .eq("campaign_id", job.campaignId)
+            .eq("recipient_id", job.campaignRecipientId)
+            .eq("step_id", job.campaignStepId)
+            .eq("status", "PENDING")
+            .select("id");
+          if (error) {
+            console.error(`[campaigns] ❌ erro update delivery SENT (text): campaign=${job.campaignId} recipient=${job.campaignRecipientId}`, error);
+          } else if (updated && updated.length > 0) {
+            console.log(`[campaigns] 🟢 DELIVERY SENT (TEXT): campaign=${job.campaignId} recipient=${job.campaignRecipientId} delivery=${updated[0].id} wamid=${wamid || "null"}`);
+            // Emite estatísticas atualizadas via socket
+            await emitCampaignStats(job.campaignId, job.companyId);
+          } else {
+            console.warn(`[campaigns] ⚠️  nenhum delivery atualizado (text): campaign=${job.campaignId} recipient=${job.campaignRecipientId} - delivery não estava PENDING?`);
+          }
+        } catch (err) {
+          console.warn("[campaigns] falha update delivery SENT (text)", (err as any)?.message || err);
+        }
+      } else if (job.campaignId) {
+        console.warn(`[campaigns][META][TEXT] ⚠️  job tem campaignId mas faltam metadados: campaignId=${job.campaignId} recipientId=${job.campaignRecipientId || "MISSING"} stepId=${job.campaignStepId || "MISSING"}`);
+      }
 
       try {
         await publishApp("socket.livechat.status", {
@@ -3962,20 +4157,171 @@ async function syncWahaGroupMetadata(): Promise<void> {
   }
 }
 
+// Helper para emitir estatísticas de campanha via socket.io
+async function emitCampaignStats(campaignId: string, companyId?: string | null) {
+  try {
+    // Busca estatísticas atualizadas
+    const { count: totalRecipients } = await supabaseAdmin
+      .from("campaign_recipients")
+      .select("*", { count: "exact", head: true })
+      .eq("campaign_id", campaignId);
+
+    const { data: deliveries } = await supabaseAdmin
+      .from("campaign_deliveries")
+      .select("status")
+      .eq("campaign_id", campaignId);
+
+    const stats = {
+      campaign_id: campaignId,
+      total_recipients: totalRecipients || 0,
+      sent: 0,
+      delivered: 0,
+      read: 0,
+      failed: 0,
+      pending: 0,
+    };
+
+    if (deliveries) {
+      deliveries.forEach((d: any) => {
+        if (d.status === "SENT") stats.sent++;
+        else if (d.status === "DELIVERED") stats.delivered++;
+        else if (d.status === "READ") stats.read++;
+        else if (d.status === "FAILED") stats.failed++;
+        else if (d.status === "PENDING") stats.pending++;
+      });
+    }
+
+    let io: any = null;
+    try {
+      io = getIO();
+    } catch (e) {
+      // Ambiente sem Socket.IO inicializado (ex: worker isolado); apenas log leve
+      console.log(`[campaigns] (stats) socket indisponível, pulando emissão campaign=${campaignId}`);
+    }
+    if (io) {
+      io.to(`campaign:${campaignId}`).emit("campaign:stats", stats);
+      if (companyId) io.to(`company:${companyId}`).emit("campaign:stats", stats);
+      console.log(`[campaigns] 📡 socket emitido: campaign=${campaignId} stats=${JSON.stringify(stats)}`);
+    }
+  } catch (error) {
+    console.warn(`[campaigns] falha ao emitir stats via socket: campaign=${campaignId}`, error);
+  }
+}
+
 async function tickCampaigns() {
   try {
     const now = new Date().toISOString();
+    console.log(`[campaigns] ping ${now}`);
     // campanhas ativas
     const { data: camps } = await supabaseAdmin
-      .from("campaigns")
-      .select("id, inbox_id, rate_limit_per_minute, start_at, end_at, status")
-      .in("status", ["SCHEDULED","RUNNING"]);
+  .from("campaigns")
+	.select("id, name, company_id, inbox_id, rate_limit_per_minute, start_at, end_at, status, send_windows, timezone")
+  .in("status", ["SCHEDULED","RUNNING"]);
 
     for (const c of camps || []) {
       if (!c.inbox_id) continue;
+      
+      // Busca provider da inbox para enviar corretamente
+      let inboxProvider: string = "META"; // fallback
+      try {
+        const { data: inboxData } = await supabaseAdmin
+          .from("inboxes")
+          .select("provider")
+          .eq("id", c.inbox_id)
+          .maybeSingle();
+        inboxProvider = (inboxData?.provider || "META").toUpperCase();
+      } catch (e: any) {
+        console.warn(`[campaigns] falha ao buscar inbox provider: campaign=${c.id} inbox=${c.inbox_id}`, e?.message);
+      }
+      
+      // respeita janela de agendamento absoluto (start_at/end_at)
+      const nowDt = new Date(now).getTime();
+      const startOk = c.start_at ? nowDt >= new Date(c.start_at as any).getTime() : true;
+      const notEnded = c.end_at ? nowDt <= new Date(c.end_at as any).getTime() : true;
+      if (!startOk || !notEnded) {
+        // se ainda não começou, mantém SCHEDULED; se passou do fim, só completa se houve envios
+        if (!notEnded) {
+          try {
+            // Primeiro verifica se existe algum recipient cadastrado para esta campanha
+            const { count: totalCount } = await supabaseAdmin
+              .from("campaign_recipients")
+              .select("id", { count: "exact", head: true })
+              .eq("campaign_id", c.id);
 
-      // pega at?? N recipients ainda sem envio (last_step_sent is null)
-      const limit = Math.max(1, Number(c.rate_limit_per_minute || 30));
+            if ((totalCount ?? 0) === 0) {
+              console.log(`[campaigns] ⏸️ janela encerrada, sem recipients: id=${c.id} (${c.name || ""}) mantendo status=${c.status}`);
+            } else {
+              // Verifica deliveries: só completa se não houver PENDING e houver entregas suficientes
+              const { count: pendDel } = await supabaseAdmin
+                .from("campaign_deliveries")
+                .select("id", { count: "exact", head: true })
+                .eq("campaign_id", c.id)
+                .eq("status", "PENDING");
+              const { count: doneDel } = await supabaseAdmin
+                .from("campaign_deliveries")
+                .select("id", { count: "exact", head: true })
+                .eq("campaign_id", c.id)
+                .in("status", ["SENT","DELIVERED","READ","FAILED"] as any);
+
+              if ((pendDel ?? 0) === 0 && (doneDel ?? 0) >= (totalCount ?? 0)) {
+                if (c.status !== "COMPLETED") {
+                  await supabaseAdmin.from("campaigns").update({ status: "COMPLETED" }).eq("id", c.id);
+                }
+                console.log(`[campaigns] status COMPLETED: id=${c.id} (${c.name || ""}) [fim da janela; deliveries=${doneDel}/${totalCount}]`);
+              } else {
+                console.log(`[campaigns] ⏳ fim da janela, aguardando deliveries: id=${c.id} (${c.name || ""}) PENDING=${pendDel ?? 0} DONE=${doneDel ?? 0} TOTAL=${totalCount}`);
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[campaigns] erro ao avaliar fim de janela para completar campaign=${c.id}:`, e?.message || e);
+          }
+        }
+        continue;
+      }
+
+      // se estava SCHEDULED e já passou da data de início -> RUNNING
+      if (c.status === "SCHEDULED") {
+        await supabaseAdmin.from("campaigns").update({ status: "RUNNING" }).eq("id", c.id);
+        console.log(`[campaigns] status RUNNING: id=${c.id} (${c.name || ""})`);
+      }
+
+      // janela diária (send_windows)
+      const sw: any = c.send_windows;
+      if (sw?.enabled) {
+        const tz = sw.timezone || c.timezone || "UTC";
+        // extrai HH:mm e weekday no timezone usando Intl
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz,
+          hour: "2-digit",
+          minute: "2-digit",
+          weekday: "short",
+          hour12: false,
+        });
+        const parts = fmt.formatToParts(new Date());
+        const hh = parts.find(p => p.type === "hour")?.value || "00";
+        const mm = parts.find(p => p.type === "minute")?.value || "00";
+        const wd = parts.find(p => p.type === "weekday")?.value || "Mon";
+        const weekdayMap: Record<string, number> = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+        const weekday = weekdayMap[wd] ?? 0;
+        const hhmm = `${hh}:${mm}`;
+        const ranges: string[] = (sw.weekdays?.[String(weekday)] || []).filter((r: string) => /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(r));
+        const inWindow = ranges.some(r => {
+          const [a,b] = r.split("-");
+          return hhmm >= a && hhmm <= b;
+        });
+        if (!inWindow) {
+          // fora da janela diária, pula envio dessa campanha (mantém status)
+          console.log(`[campaigns] fora da janela diária: id=${c.id} (${c.name || ""}) tz=${tz} weekday=${weekday} hhmm=${hhmm}`);
+          continue;
+        }
+      }
+
+      // Rate limiting controlado: 3-4 mensagens por minuto (randomizado)
+      // Como o tick roda a cada 60s, enviamos 3-4 mensagens por execução
+      const batchSize = Math.floor(Math.random() * 2) + 3; // Random entre 3 e 4
+      const limit = batchSize;
+      console.log(`[campaigns] 📊 rate limit: campaign=${c.id} (${c.name || ""}) batchSize=${batchSize} mensagens neste ciclo`);
+      
       const { data: step } = await supabaseAdmin
         .from("campaign_steps").select("id, template_id, delay_sec")
         .eq("campaign_id", c.id).order("position", { ascending: true }).limit(1).maybeSingle();
@@ -3986,37 +4332,351 @@ async function tickCampaigns() {
         .eq("id", step.template_id).maybeSingle();
       if (!tpl?.id) continue;
 
-      const { data: recipients } = await supabaseAdmin
+      let { data: recipients } = await supabaseAdmin
         .from("campaign_recipients")
         .select("id, phone, last_step_sent")
         .eq("campaign_id", c.id)
         .is("last_step_sent", null)
         .limit(limit);
+      console.log(`[campaigns] 🔍 processando: campaign=${c.id} (${c.name || ""}) recipients pendentes=${recipients?.length || 0}`);
 
+      if ((recipients?.length || 0) === 0) {
+        try {
+          // Se não há recipients novos e também não há deliveries, tenta recuperar
+          const { count: deliveriesCount } = await supabaseAdmin
+            .from("campaign_deliveries")
+            .select("id", { count: "exact", head: true })
+            .eq("campaign_id", c.id);
+          if ((deliveriesCount ?? 0) === 0) {
+            const { data: allRecipients } = await supabaseAdmin
+              .from("campaign_recipients")
+              .select("id, phone, last_step_sent")
+              .eq("campaign_id", c.id)
+              .limit(limit);
+            if ((allRecipients?.length || 0) > 0) {
+              recipients = allRecipients || [];
+              console.log(`[campaigns] 🩹 recuperação: reenfileirando recipients sem delivery campaign=${c.id} count=${recipients.length}`);
+            }
+          }
+        } catch (e:any) {
+          console.warn(`[campaigns] falha recuperação recipients sem delivery campaign=${c.id}`, e?.message || e);
+        }
+      }
+
+      let messagesSentThisCycle = 0;
       for (const r of recipients || []) {
-        if ((tpl.kind || "").toUpperCase() === "TEXT") {
-          const content = String((tpl.payload as any)?.text || "");
-          if (!content) continue;
-          await publish(EX_APP, "outbound", {
+        console.log(`[campaigns] 🔄 iniciando recipient: campaign=${c.id} recipient=${r.id} phone=${r.phone}`);
+        
+        // Delay entre mensagens para distribuir ao longo do minuto
+        // Com 3-4 mensagens por minuto, dá ~15-20s entre cada
+        if (messagesSentThisCycle > 0) {
+          const delayMs = 15000 + Math.floor(Math.random() * 5000); // 15-20s randomizado
+          console.log(`[campaigns] ⏱️  aguardando ${delayMs}ms antes do próximo envio...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+        
+        const payloadObj: any = tpl.payload || {};
+        const isMetaTemplate = inboxProvider.includes("META") && !!payloadObj.meta_template_name;
+        const isText = (tpl.kind || "").toUpperCase() === "TEXT";
+        const content = isText ? String(payloadObj?.text || "") : null;
+        
+        // Detecta mídia embutida em payload mesmo com kind=TEXT
+        const hasInlineMedia = !!payloadObj.mediaUrl || !!payloadObj.storage_key || !!payloadObj.public_url;
+        const treatAsMedia = hasInlineMedia && !!payloadObj.mediaUrl;
+        
+        console.log(`[campaigns] 📋 template info: campaign=${c.id} kind=${tpl.kind} isMetaTemplate=${isMetaTemplate} treatAsMedia=${treatAsMedia} hasContent=${!!content}`);
+
+        // Garante existência do chat (necessário para outbound worker)
+        let chatId: string | null = null;
+        try {
+          if (c.company_id) {
+            console.log(`[campaigns] 🔗 criando/buscando chat: campaign=${c.id} phone=${r.phone}`);
+            const ensured = await ensureLeadCustomerChat({
+              inboxId: c.inbox_id,
+              companyId: c.company_id,
+              phone: r.phone,
+              name: null,
+              rawPhone: r.phone,
+            });
+            chatId = ensured.chatId;
+            console.log(`[campaigns] ✅ chat resolvido: campaign=${c.id} chatId=${chatId}`);
+          } else {
+            console.warn(`[campaigns] ⚠️  company_id ausente: campaign=${c.id}`);
+          }
+        } catch (e: any) {
+          console.error(`[campaigns] ❌ erro ensureLeadCustomerChat phone=${r.phone} campaign=${c.id}:`, e?.message || e);
+        }
+        if (!chatId) {
+          console.warn(`[campaigns] ⚠️  chatId não resolvido; pulando envio phone=${r.phone} campaign=${c.id}`);
+          continue;
+        }
+
+        // Cria registro de delivery PENDING antes de enfileirar para poder aparecer nas estatísticas imediatamente
+        let createdDeliveryId: string | null = null;
+        try {
+          const insertDelivery = await supabaseAdmin
+            .from("campaign_deliveries")
+            .insert({
+              campaign_id: c.id,
+              recipient_id: r.id,
+              step_id: step.id,
+              inbox_id: c.inbox_id,
+              status: "PENDING",
+              queued_at: new Date().toISOString(),
+            })
+            .select("id")
+            .maybeSingle();
+          const insertedId = (insertDelivery as any)?.data?.id;
+          if (!insertedId) {
+            console.warn(`[campaigns] falha ao inserir delivery (sem id retornado) campaign=${c.id} recipient=${r.id}`);
+          } else {
+            console.log(`[campaigns] 🟡 DELIVERY PENDING: campaign=${c.id} (${c.name || ""}) recipient=${r.id} phone=${r.phone} delivery=${insertedId}`);
+            createdDeliveryId = insertedId;
+            // Emite estatísticas atualizadas via socket
+            await emitCampaignStats(c.id, c.company_id);
+          }
+        } catch (e: any) {
+          console.error(`[campaigns] erro insert campaign_deliveries: campaign=${c.id} recipient=${r.id} err=${e?.message || e}`);
+        }
+
+        // Se for Meta Template, envia diretamente usando sendTemplateMessage
+        if (isMetaTemplate) {
+          console.log(`[campaigns] 📨 enviando META TEMPLATE: campaign=${c.id} (${c.name || ""}) templateName=${payloadObj.meta_template_name} phone=${r.phone}`);
+          try {
+            const { sendTemplateMessage } = await import("./services/meta/templates.ts");
+            
+            // Para templates sem variáveis, não enviar components
+            // Se tiver send_components (estrutura de envio), usa ela; senão, deixa undefined
+            const sendComponents = payloadObj.send_components || undefined;
+            
+            const { wamid } = await sendTemplateMessage({
+              inboxId: c.inbox_id,
+              customerPhone: r.phone,
+              templateName: payloadObj.meta_template_name,
+              languageCode: payloadObj.language_code || payloadObj.language?.code || "pt_BR",
+              components: sendComponents,
+            });
+            
+            console.log(`[campaigns] ✅ META TEMPLATE enviado: campaign=${c.id} wamid=${wamid}`);
+            
+            // Detecta tipo de mídia do template baseado nos componentes
+            let messageType = "TEMPLATE";
+            const components = payloadObj.components || [];
+            const headerComp = components.find((c: any) => c.type === "HEADER");
+            if (headerComp?.format === "IMAGE") messageType = "IMAGE";
+            else if (headerComp?.format === "VIDEO") messageType = "VIDEO";
+            else if (headerComp?.format === "DOCUMENT") messageType = "DOCUMENT";
+            
+            // Insere mensagem no chat_messages com template_id
+            const messageRow = await db.oneOrNone<{ id: string; chat_id: string }>(
+              `insert into public.chat_messages
+                 (chat_id, is_from_customer, external_id, content, type, view_status, template_id)
+               values ($1, false, $2, $3, $4, 'Sent', $5)
+               on conflict (chat_id, external_id) do update
+                 set view_status = excluded.view_status,
+                     content = excluded.content,
+                     type = excluded.type,
+                     template_id = excluded.template_id,
+                     updated_at = now()
+               returning id, chat_id`,
+              [
+                chatId,
+                wamid,
+                payloadObj.text || payloadObj.meta_template_name,
+                messageType,
+                tpl.id, // template_id from message_templates
+              ]
+            );
+            
+            const messageId = messageRow?.id || null;
+            console.log(`[campaigns] 💾 mensagem salva: campaign=${c.id} messageId=${messageId} type=${messageType}`);
+            
+            // Atualiza delivery para SENT
+            if (createdDeliveryId) {
+              const { error: updateErr } = await supabaseAdmin
+                .from("campaign_deliveries")
+                .update({
+                  status: "SENT",
+                  sent_at: new Date().toISOString(),
+                  external_id: wamid,
+                  chat_message_id: messageId,
+                })
+                .eq("id", createdDeliveryId);
+              
+              if (updateErr) {
+                console.error(`[campaigns] ❌ erro update delivery SENT (meta template): campaign=${c.id} delivery=${createdDeliveryId}`, updateErr);
+              } else {
+                console.log(`[campaigns] 🟢 DELIVERY SENT (META TEMPLATE): campaign=${c.id} delivery=${createdDeliveryId} wamid=${wamid}`);
+                await emitCampaignStats(c.id, c.company_id);
+              }
+            }
+            
+            // Marca progresso local
+            await supabaseAdmin
+              .from("campaign_recipients")
+              .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
+              .eq("id", r.id);
+            
+            messagesSentThisCycle++;
+            
+            // Emite evento via socket para atualizar UI
+            try {
+              await publishApp("socket.livechat.status", {
+                kind: "livechat.message.status",
+                chatId,
+                messageId,
+                externalId: wamid,
+                view_status: "Sent",
+                raw_status: "sent",
+                status: "SENT",
+                draftId: null,
+                reason: null,
+              });
+              
+              // Emite mensagem completa para aparecer na interface
+              if (messageId) {
+                await publishApp("socket.livechat.outbound", {
+                  kind: "livechat.outbound.message",
+                  chatId,
+                  inboxId: c.inbox_id,
+                  message: {
+                    id: messageId,
+                    chat_id: chatId,
+                    body: payloadObj.text || payloadObj.meta_template_name,
+                    sender_type: "AGENT",
+                    sender_id: null,
+                    sender_name: null,
+                    sender_avatar_url: null,
+                    created_at: new Date().toISOString(),
+                    view_status: "Sent",
+                    type: messageType,
+                    is_private: false,
+                    media_url: null,
+                    template_id: tpl.id,
+                    client_draft_id: null,
+                  },
+                });
+              }
+            } catch (err) {
+              console.warn("[campaigns] falha ao publicar status via socket", (err as any)?.message || err);
+            }
+          } catch (e: any) {
+            console.error(`[campaigns] ❌ erro ao enviar META TEMPLATE: campaign=${c.id} recipient=${r.id}`, e?.message || e);
+            // Marca delivery como FAILED
+            if (createdDeliveryId) {
+              await supabaseAdmin
+                .from("campaign_deliveries")
+                .update({
+                  status: "FAILED",
+                  error_message: e?.message || "Erro ao enviar template",
+                })
+                .eq("id", createdDeliveryId);
+              await emitCampaignStats(c.id, c.company_id);
+            }
+          }
+        }
+        // Enfileira mensagem TEXT simples
+        else if (!treatAsMedia) {
+          if (!content) {
+            console.warn(`[campaigns] ⚠️  template vazio não enviado: campaign=${c.id} recipient=${r.id}`);
+            continue;
+          }
+          console.log(`[campaigns] 📤 enfileirando TEXT: campaign=${c.id} (${c.name || ""}) provider=${inboxProvider} phone=${r.phone}`);
+          await publish(EX_APP, "outbound.request", {
             jobType: "message.send",
+            provider: inboxProvider,
             inboxId: c.inbox_id,
+            chatId,
             content,
             customerPhone: r.phone,
+            campaignId: c.id,
+            campaignRecipientId: r.id,
+            campaignStepId: step.id,
+            companyId: c.company_id,
           });
-        } else {
-          await publish(EX_APP, "outbound", {
-            jobType: "meta.sendMedia",
+        }
+        // Enfileira mensagem com MEDIA
+        else {
+          const mediaPayload = {
+            type: "media",
+            mediaUrl: payloadObj.mediaUrl,
+            filename: payloadObj.filename || null,
+            mimeType: payloadObj.mimeType || null,
+            mediaType: payloadObj.mediaType || null,
+            caption: content || payloadObj.caption || null,
+          };
+          console.log(`[campaigns] 📤 enfileirando MEDIA: campaign=${c.id} (${c.name || ""}) provider=${inboxProvider} phone=${r.phone} mediaUrl=${payloadObj.mediaUrl} mediaType=${payloadObj.mediaType}`);
+          await publish(EX_APP, "outbound.request", {
+            jobType: "outbound.request", // será normalizado para meta.sendMedia ou waha
+            provider: inboxProvider,
             inboxId: c.inbox_id,
-            media: (tpl.payload as any),
-            customerPhone: r.phone,
+            chatId,
+            campaignId: c.id,
+            campaignRecipientId: r.id,
+            campaignStepId: step.id,
+            companyId: c.company_id,
+            payload: mediaPayload,
+            attempt: 0,
           });
         }
 
-        // opcional: j?? marca progresso local (o evento real pode atualizar depois)
-        await supabaseAdmin
-          .from("campaign_recipients")
-          .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
-          .eq("id", r.id);
+        // Marca progresso local (step 1 enviado) somente se delivery criado
+        if (createdDeliveryId) {
+          await supabaseAdmin
+            .from("campaign_recipients")
+            .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
+            .eq("id", r.id);
+          messagesSentThisCycle++; // Incrementa contador de mensagens enviadas
+        } else {
+          console.warn(`[campaigns] não atualizou last_step_sent (delivery ausente) campaign=${c.id} recipient=${r.id}`);
+        }
+      }
+
+      console.log(`[campaigns] 📊 ciclo finalizado: campaign=${c.id} (${c.name || ""}) mensagens enviadas=${messagesSentThisCycle}`);
+
+      // Verifica status da campanha SEMPRE após processar recipients
+      // Primeiro verifica se existe algum recipient cadastrado para esta campanha
+      const { count: totalCount } = await supabaseAdmin
+        .from("campaign_recipients")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", c.id);
+      
+      // Se não tem nenhum recipient, não marca como COMPLETED (campanha ainda não foi populada)
+      if ((totalCount ?? 0) === 0) {
+        console.log(`[campaigns] ⏸️  aguardando recipients: id=${c.id} (${c.name || ""}) - nenhum destinatário cadastrado ainda`);
+        continue;
+      }
+      
+      // Verifica deliveries: não completa enquanto houver PENDING
+      const { count: pendDel } = await supabaseAdmin
+        .from("campaign_deliveries")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", c.id)
+        .eq("status", "PENDING");
+      const { count: doneDel } = await supabaseAdmin
+        .from("campaign_deliveries")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", c.id)
+        .in("status", ["SENT","DELIVERED","READ","FAILED"] as any);
+      
+      // Verifica quantos recipients ainda não foram processados
+      const { count: remainingRecipients } = await supabaseAdmin
+        .from("campaign_recipients")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", c.id)
+        .is("last_step_sent", null);
+      
+      console.log(`[campaigns] 📊 status atual: campaign=${c.id} (${c.name || ""}) totalRecipients=${totalCount} remaining=${remainingRecipients ?? 0} pendingDeliveries=${pendDel ?? 0} doneDeliveries=${doneDel ?? 0}`);
+      
+      // Só marca COMPLETED se:
+      // 1. Não há recipients pendentes (last_step_sent = null)
+      // 2. Não há deliveries PENDING
+      // 3. Número de deliveries finalizados >= número de recipients
+      if ((remainingRecipients ?? 0) === 0 && (pendDel ?? 0) === 0 && (doneDel ?? 0) >= (totalCount ?? 0)) {
+        await supabaseAdmin.from("campaigns").update({ status: "COMPLETED" }).eq("id", c.id);
+        console.log(`[campaigns] ✅ status COMPLETED: id=${c.id} (${c.name || ""}) [deliveries finalizados: ${doneDel} de ${totalCount}]`);
+      } else {
+        console.log(`[campaigns] ⏳ aguardando processamento: campaign=${c.id} (${c.name || ""}) REMAINING=${remainingRecipients ?? 0} PENDING=${pendDel ?? 0} DONE=${doneDel ?? 0} TOTAL=${totalCount}`);
       }
     }
   } catch (err) {

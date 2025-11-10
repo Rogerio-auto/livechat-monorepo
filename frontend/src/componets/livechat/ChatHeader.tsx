@@ -691,11 +691,24 @@ export function ChatHeader({
     if (!chat) throw new Error("Chat não selecionado");
     if (!propKanbanBoardId) throw new Error("kanbanBoardId ausente");
 
+    // Tenta extrair lead_id de várias fontes
+    const chatLeadIdFromChat = (chat as any).lead_id || (chat as any).leadId;
+    const leadIdToUse = chatLeadId || chatLeadIdFromChat || chat.customer_id;
+
+    console.log('[ChatHeader] ensureCardAndMoveStage', {
+      stageId,
+      chatLeadId,
+      chatLeadIdFromChat,
+      customer_id: chat.customer_id,
+      leadIdToUse,
+      customerPhone,
+    });
+
     const payload = {
       boardId: propKanbanBoardId,
       columnId: stageId,
       // fontes para identificar ou criar card:
-      leadId: (typeof (chat as any).lead_id === "string" ? (chat as any).lead_id : undefined) || undefined,
+      leadId: leadIdToUse,
       // props explícitas têm prioridade
       explicitLeadId: undefined as string | undefined,
       phone: (typeof customerPhone === "string" ? customerPhone : (chat as any)?.customer_phone) || undefined,
@@ -711,15 +724,15 @@ export function ChatHeader({
     };
 
     // se o prop chatLeadId veio, usa como preferencial
-    if (typeof (chat as any)?.leadId === "string") payload.explicitLeadId = (chat as any).leadId;
-    if (typeof (chat as any)?.lead_id === "string") payload.explicitLeadId = (chat as any).lead_id;
-    if (typeof (chatLeadId) === "string") payload.explicitLeadId = chatLeadId!;
+    if (typeof chatLeadId === "string") payload.explicitLeadId = chatLeadId;
 
     // tira undefineds do payload pra não sujar o backend
     const clean: any = {};
     Object.entries(payload).forEach(([k, v]) => {
       if (v !== undefined && v !== null && v !== "") clean[k] = v;
     });
+
+    console.log('[ChatHeader] Payload enviado:', clean);
 
     const res = await fetch(`${apiBase}/kanban/cards/ensure`, {
       method: "POST",

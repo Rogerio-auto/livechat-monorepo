@@ -1,0 +1,350 @@
+import type { Application } from "express";
+import { ZodError, z } from "zod";
+import { requireAuth } from "../middlewares/requireAuth.ts";
+import { supabaseAdmin } from "../lib/supabase.ts";
+import {
+  createWhatsAppTemplate,
+  listWhatsAppTemplates,
+  getWhatsAppTemplate,
+  deleteWhatsAppTemplate,
+  sendTemplateMessage,
+  uploadMediaToMeta,
+} from "../services/meta/templates.js";
+
+async function resolveCompanyId(req: any) {
+  const companyId = req?.user?.company_id || null;
+  if (!companyId) throw Object.assign(new Error("Missing company context"), { status: 400 });
+  return companyId as string;
+}
+
+function ensureRole(role: string | null, allowed: string[]) {
+  if (!allowed.includes(String(role || "").toUpperCase())) {
+    throw Object.assign(new Error("Sem permissão"), { status: 403 });
+  }
+}
+
+function formatRouteError(error: unknown) {
+  if (error instanceof ZodError) {
+    return { status: 400, payload: { error: error.issues.map(i=>i.message).join("; ") } };
+  }
+  const status = typeof (error as any)?.status === "number" ? Number((error as any).status) : 500;
+  const message = error instanceof Error ? error.message : String(error);
+  return { status, payload: { error: message } };
+}
+
+export function registerMetaTemplatesRoutes(app: Application) {
+  /**
+   * POST /api/meta/templates/create
+   * Cria um template diretamente na plataforma WhatsApp Business da Meta
+   */
+  app.post("/api/meta/templates/create", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER"]);
+      const companyId = await resolveCompanyId(req);
+
+      const schema = z.object({
+        inboxId: z.string().uuid(),
+        name: z.string().trim().min(1).regex(/^[a-z0-9_]+$/, "Nome deve conter apenas letras minúsculas, números e underscore"),
+        category: z.enum(["MARKETING", "UTILITY", "AUTHENTICATION"]),
+        language: z.string().trim().min(2), // ex: "pt_BR"
+        components: z.array(z.object({
+          type: z.enum(["header", "body", "footer", "buttons"]),
+          format: z.enum(["text", "image", "video", "document"]).optional(),
+          text: z.string().optional(),
+          example: z.object({
+            header_text: z.array(z.string()).optional(),
+            header_handle: z.array(z.string()).optional(), // Para mídia (IMAGE/VIDEO/DOCUMENT)
+            body_text: z.array(z.array(z.string())).optional(),
+          }).optional(),
+          buttons: z.array(z.object({
+            type: z.enum(["quick_reply", "phone_number", "url", "copy_code"]),
+            text: z.string().optional(),
+            phone_number: z.string().optional(),
+            url: z.string().optional(),
+            example: z.array(z.string()).optional(), // Para URL com variáveis
+          })).optional(),
+        })),
+      }).strict();
+
+      const body = schema.parse(req.body || {});
+
+      // Valida se inbox pertence à empresa
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider, waba_id")
+        .eq("id", body.inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      }
+      if (!inbox.waba_id) {
+        return res.status(400).json({ error: "Inbox não possui waba_id configurado" });
+      }
+
+      // Cria template na Meta
+      const result = await createWhatsAppTemplate({
+        inboxId: body.inboxId,
+        name: body.name,
+        category: body.category,
+        language: body.language,
+        components: body.components,
+      });
+
+      // Opcional: Salvar referência no banco local
+      await supabaseAdmin.from("message_templates").insert({
+        company_id: companyId,
+        inbox_id: body.inboxId,
+        name: body.name,
+        kind: "TEMPLATE",
+        payload: {
+          meta_template_id: result.id,
+          meta_template_name: result.name,
+          language: result.language,
+          category: result.category,
+          status: result.status,
+          components: body.components,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        template: result,
+        message: "Template criado na Meta. Status inicial: PENDING. Aguarde aprovação.",
+      });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * POST /api/meta/templates/upload-media
+   * Faz upload de uma mídia para a Meta e retorna o handle
+   */
+  app.post("/api/meta/templates/upload-media", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER"]);
+      const companyId = await resolveCompanyId(req);
+
+      const schema = z.object({
+        inboxId: z.string().uuid(),
+        mediaUrl: z.string().url(),
+      }).strict();
+
+      const body = schema.parse(req.body || {});
+
+      // Valida se inbox pertence à empresa
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider")
+        .eq("id", body.inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      }
+
+      // Faz upload da mídia usando Resumable Upload API e retorna o handle
+      const handle = await uploadMediaToMeta(body.inboxId, body.mediaUrl);
+
+      return res.status(200).json({
+        success: true,
+        handle,
+      });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * GET /api/meta/templates/list/:inboxId
+   * Lista templates da Meta para uma inbox
+   */
+  app.get("/api/meta/templates/list/:inboxId", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      const companyId = await resolveCompanyId(req);
+      const inboxId = req.params.inboxId;
+
+      // Valida inbox
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider")
+        .eq("id", inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      }
+
+      const status = req.query.status as string | undefined;
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
+      const templates = await listWhatsAppTemplates(inboxId, { status, limit });
+
+      return res.json({ templates });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * GET /api/meta/templates/:templateId
+   * Busca detalhes de um template específico
+   */
+  app.get("/api/meta/templates/:templateId", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      const companyId = await resolveCompanyId(req);
+      const templateId = req.params.templateId;
+      const inboxId = req.query.inboxId as string;
+
+      if (!inboxId) {
+        return res.status(400).json({ error: "inboxId é obrigatório" });
+      }
+
+      // Valida inbox
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id")
+        .eq("id", inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+
+      const template = await getWhatsAppTemplate(inboxId, templateId);
+
+      return res.json({ template });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * DELETE /api/meta/templates/:templateName
+   * Deleta um template da Meta
+   */
+  app.delete("/api/meta/templates/:templateName", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER"]);
+      const companyId = await resolveCompanyId(req);
+      const templateName = req.params.templateName;
+      const inboxId = req.query.inboxId as string;
+
+      if (!inboxId) {
+        return res.status(400).json({ error: "inboxId é obrigatório" });
+      }
+
+      // Valida inbox
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id")
+        .eq("id", inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+
+      const result = await deleteWhatsAppTemplate(inboxId, templateName);
+
+      // Opcional: Deletar do banco local também
+      await supabaseAdmin
+        .from("message_templates")
+        .delete()
+        .eq("company_id", companyId)
+        .eq("inbox_id", inboxId)
+        .eq("name", templateName);
+
+      return res.json({ success: result.success });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * POST /api/meta/templates/send
+   * Envia uma mensagem usando template aprovado da Meta
+   */
+  app.post("/api/meta/templates/send", requireAuth, async (req: any, res) => {
+    try {
+      const role = String(req?.profile?.role || "").toUpperCase();
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      const companyId = await resolveCompanyId(req);
+
+      const schema = z.object({
+        inboxId: z.string().uuid(),
+        customerPhone: z.string().trim().min(1),
+        templateName: z.string().trim().min(1),
+        languageCode: z.string().trim().min(2),
+        components: z.array(z.object({
+          type: z.enum(["header", "body", "button"]),
+          parameters: z.array(z.object({
+            type: z.enum(["text", "image", "video", "document"]),
+            text: z.string().optional(),
+            image: z.object({ link: z.string() }).optional(),
+            video: z.object({ link: z.string() }).optional(),
+            document: z.object({ 
+              link: z.string(),
+              filename: z.string().optional(),
+            }).optional(),
+          })),
+        })).optional(),
+      }).strict();
+
+      const body = schema.parse(req.body || {});
+
+      // Valida inbox
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider")
+        .eq("id", body.inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      }
+
+      const result = await sendTemplateMessage({
+        inboxId: body.inboxId,
+        customerPhone: body.customerPhone,
+        templateName: body.templateName,
+        languageCode: body.languageCode,
+        components: body.components,
+      });
+
+      return res.json({ 
+        success: true, 
+        wamid: result.wamid,
+        message: "Template enviado com sucesso",
+      });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+}

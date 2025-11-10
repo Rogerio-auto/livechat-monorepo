@@ -476,42 +476,45 @@ export function ConversationPanel({
   }, [apiBase, chat?.customer_id]);
   const moveLeadToStage = useCallback(
     async (stageId: string) => {
-      if (!leadId) return;
+      if (!leadId || !boardId) return;
       setMovingStage(true);
       try {
-        if (cardIdForLead) {
-          await requestJson(
-            `${apiBase}
-/kanban/cards/${cardIdForLead}
-`,
-            {
-              method: "PUT",
-              body: JSON.stringify({
-                stage: stageId,
-              }),
-            },
-          );
-        } else {
-          await requestJson(
-            `${apiBase}
-/leads/${leadId}
-`,
-            {
-              method: "PUT",
-              body: JSON.stringify({
-                kanban_column_id: stageId,
-              }),
-            },
-          );
+        // Sempre usa /kanban/cards/ensure para garantir que card seja criado/movido
+        // e que o lead seja sincronizado corretamente
+        const payload: any = {
+          boardId,
+          columnId: stageId,
+          leadId,
+        };
+
+        // Adiciona informações do chat para criar card se necessário
+        if (chat?.customer_phone) payload.phone = chat.customer_phone;
+        if (chat?.customer_name || chat?.customer_phone) {
+          payload.title = chat.customer_name || chat.customer_phone || "Oportunidade";
         }
+
+        const response = await requestJson<{ cardId: string; created: boolean; updated: boolean }>(
+          `${apiBase}/kanban/cards/ensure`,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
+
+        // Atualiza o cardId se foi criado agora
+        if (response?.cardId && !cardIdForLead) {
+          setCardIdForLead(response.cardId);
+        }
+
         setCurrentStageId(stageId);
-      } catch {
+      } catch (error) {
+        console.error("Falha ao mover lead de coluna:", error);
         alert("Falha ao mover lead de coluna");
       } finally {
         setMovingStage(false);
       }
     },
-    [apiBase, cardIdForLead, leadId],
+    [apiBase, boardId, cardIdForLead, chat?.customer_name, chat?.customer_phone, leadId],
   );
   const saveCardConfig = useCallback(async () => {
     if (!cardIdForLead) return;

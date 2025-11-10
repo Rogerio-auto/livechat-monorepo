@@ -867,6 +867,38 @@ export function registerLivechatChatRoutes(app: express.Application) {
         console.warn("[livechat/chats] get active agent failed", err instanceof Error ? err.message : err);
       }
 
+      // Load tags for all chats in batch (efficient query)
+      try {
+        const chatIds = items.map((c: any) => c.id);
+        if (chatIds.length > 0) {
+          const { data: chatTags } = await supabaseAdmin
+            .from('chat_tags')
+            .select('chat_id, tag_id')
+            .in('chat_id', chatIds);
+          
+          // Group tags by chat_id
+          const tagsByChat = new Map<string, string[]>();
+          if (chatTags) {
+            for (const ct of chatTags) {
+              const existing = tagsByChat.get(ct.chat_id) || [];
+              existing.push(ct.tag_id);
+              tagsByChat.set(ct.chat_id, existing);
+            }
+          }
+          
+          // Attach tags to chats
+          for (const chat of items as any[]) {
+            chat.tag_ids = tagsByChat.get(chat.id) || [];
+          }
+        }
+      } catch (err) {
+        console.warn("[livechat/chats] load tags failed", err instanceof Error ? err.message : err);
+        // Fallback to empty tags
+        for (const chat of items as any[]) {
+          chat.tag_ids = [];
+        }
+      }
+
       const payload = { items, total: listResp.count ?? items.length };
       const lastModifiedIso =
         items.length > 0

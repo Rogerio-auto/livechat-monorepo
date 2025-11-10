@@ -54,6 +54,53 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
     }
   });
 
+  // List all inboxes of current user's company with stats
+  app.get('/livechat/inboxes/stats', requireAuth, async (req: any, res) => {
+    try {
+      const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role').eq('user_id', req.user.id).maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const companyId = (urow as any)?.company_id;
+      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
+      
+      const { data: inboxes, error } = await supabaseAdmin
+        .from('inboxes')
+        .select('id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, created_at, updated_at, waha_db_name')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (error) return res.status(500).json({ error: error.message });
+      
+      // For each inbox, get contact stats
+      const inboxesWithStats = await Promise.all((inboxes || []).map(async (inbox: any) => {
+        // Count total customers linked to this inbox via chats
+        const { count: totalContacts } = await supabaseAdmin
+          .from('chats')
+          .select('customer_id', { count: 'exact', head: true })
+          .eq('inbox_id', inbox.id)
+          .not('customer_id', 'is', null);
+        
+        // Count active chats (status OPEN or null)
+        const { count: activeContacts } = await supabaseAdmin
+          .from('chats')
+          .select('customer_id', { count: 'exact', head: true })
+          .eq('inbox_id', inbox.id)
+          .not('customer_id', 'is', null)
+          .or('status.eq.OPEN,status.is.null');
+        
+        return {
+          ...inbox,
+          stats: {
+            total_contacts: totalContacts || 0,
+            active_contacts: activeContacts || 0,
+          }
+        };
+      }));
+      
+      return res.json(inboxesWithStats);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'inboxes stats error' });
+    }
+  });
+
   // List all inboxes of current user's company
   app.get('/livechat/inboxes', requireAuth, async (req: any, res) => {
     try {

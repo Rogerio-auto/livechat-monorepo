@@ -33,6 +33,7 @@ import { registerCompanyRoutes } from "./routes/companies.ts";
 import { registerKnowledgeBaseRoutes } from "./routes/knowledge.base.ts";
 import templateToolsRouter from "./routes/agents.templates.tools.ts";
 import toolsAdminRouter from "./routes/tools.admin.ts";
+import { registerMetaTemplatesRoutes } from "./routes/meta.templates.ts";
 import filesRoute from "./server/files.route.ts";
 import { startSocketRelay } from "./socket.relay.ts";
 import { startLivechatSocketBridge } from "./socket/bridge.livechat.ts";
@@ -40,6 +41,7 @@ import { registerCampaignRoutes } from "./routes/livechat.campaigns.ts";
 import { registerCampaignSegmentsRoutes } from "./routes/livechat.campaigns.segments.ts";
 import { registerCampaignFollowupsRoutes } from "./routes/livechat.campaigns.followups.ts";
 import { registerCampaignUploadsRoutes } from "./routes/livechat.campaigns.uploads.ts";
+import { registerMediaLibraryRoutes } from "./routes/livechat.mediaLibrary.ts";
 import { registerCampaignWorker } from "./worker.campaigns.ts";
 import { registerWAHARoutes } from "./routes/waha.ts";
 import mediaProxyRouter from "./routes/media.proxy.ts";
@@ -48,6 +50,8 @@ import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture
 import { normalizeMsisdn } from "./util.ts";
 import { registerCalendarRoutes } from "./routes/calendar.ts";
 import { registerLeadRoutes } from "./routes/leads.ts";
+import { registerAuthRoutes } from "./routes/auth.ts";
+import { registerLivechatTagsRoutes } from "./routes/livechat.tags.ts";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -543,6 +547,8 @@ async function requireAuth(req: any, res: any, next: any) {
 }
 
 // ===== Rotas de Auth =====
+// NOTA: Rotas antigas comentadas - usando registerAuthRoutes() de ./routes/auth.ts
+/*
 app.post("/signup", async (req, res) => {
   const { email, password } = req.body ?? {};
   if (!email || !password)
@@ -596,6 +602,10 @@ app.get("/auth/me", requireAuth, (req: any, res) => {
   // devolve o que as rotas /agents e /integrations usam: company_id no user
   res.json({ user: { id: req.user.id, email: req.user.email, company_id: req.user.company_id } });
 });
+*/
+
+// ✅ Register auth routes from modular file (VERSION 2.0 with role support)
+registerAuthRoutes(app);
 
 // ===== Queue test/example routes =====
 // Enfileira abertura de chat (worker processa)
@@ -882,6 +892,30 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", (reason) => {
     console.log("[RT] client disconnected:", socket.id, reason);
+  });
+
+  // Load tags for a chat
+  socket.on("livechat:chats:tags:get", async (payload: { chatId?: string }, callback) => {
+    try {
+      const chatId = payload?.chatId;
+      if (!chatId) {
+        return callback?.({ ok: false, error: 'chatId required' });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('chat_tags')
+        .select('tag_id')
+        .eq('chat_id', chatId);
+
+      if (error) {
+        return callback?.({ ok: false, error: error.message });
+      }
+
+      const tagIds = ((data as any[]) || []).map((r) => (r as any).tag_id);
+      callback?.({ ok: true, data: tagIds });
+    } catch (error: any) {
+      callback?.({ ok: false, error: error?.message || 'Unknown error' });
+    }
   });
 });
 
@@ -1720,6 +1754,60 @@ app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
   }
 });
 
+// List all inboxes with stats
+app.get("/livechat/inboxes/stats", requireAuth, async (req: any, res) => {
+  try {
+    const { data: urow, error: uerr } = await supabaseAdmin
+      .from("users")
+      .select("company_id, role")
+      .eq("user_id", req.user.id)
+      .maybeSingle();
+    if (uerr) return res.status(500).json({ error: uerr.message });
+    const companyId = (urow as any)?.company_id;
+    if (!companyId)
+      return res.status(404).json({ error: "Usuário sem company_id" });
+    
+    const { data: inboxes, error } = await supabaseAdmin
+      .from("inboxes")
+      .select(
+        "id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, created_at, updated_at, waha_db_name",
+      )
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    
+    // For each inbox, get contact stats
+    const inboxesWithStats = await Promise.all((inboxes || []).map(async (inbox: any) => {
+      // Count total unique customers linked to this inbox via chats
+      const { count: totalContacts } = await supabaseAdmin
+        .from("chats")
+        .select("customer_id", { count: "exact", head: true })
+        .eq("inbox_id", inbox.id)
+        .not("customer_id", "is", null);
+      
+      // Count active chats (status OPEN or null)
+      const { count: activeContacts } = await supabaseAdmin
+        .from("chats")
+        .select("customer_id", { count: "exact", head: true })
+        .eq("inbox_id", inbox.id)
+        .not("customer_id", "is", null)
+        .or("status.eq.OPEN,status.is.null");
+      
+      return {
+        ...inbox,
+        stats: {
+          total_contacts: totalContacts || 0,
+          active_contacts: activeContacts || 0,
+        }
+      };
+    }));
+    
+    return res.json(inboxesWithStats);
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "inboxes stats error" });
+  }
+});
+
 // List all inboxes of current user's company
 app.get("/livechat/inboxes", requireAuth, async (req: any, res) => {
   try {
@@ -2297,115 +2385,14 @@ app.get("/livechat/chats/:id/kanban", requireAuth, async (req: any, res) => {
 });
 
 
-// ===== Tags (labels) management =====
-// List tags of current user's company
-app.get("/livechat/tags", requireAuth, async (req: any, res) => {
-  try {
-    const authUserId = req.user.id as string;
-    const { data: urow, error: errU } = await supabaseAdmin
-      .from("users")
-      .select("company_id")
-      .eq("user_id", authUserId)
-      .maybeSingle();
-    if (errU) return res.status(500).json({ error: errU.message });
-    if (!urow?.company_id)
-      return res.status(404).json({ error: "Usu?rio sem company_id" });
-    const { data, error } = await supabaseAdmin
-      .from("tags")
-      .select("id, name, color, created_at, updated_at")
-      .eq("company_id", urow.company_id)
-      .order("name", { ascending: true });
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json(data || []);
-  } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "tags list error" });
-  }
-});
-
-// Create tag; optionally also create a kanban column in the company's default board
-app.post("/livechat/tags", requireAuth, async (req: any, res) => {
-  const authUserId = req.user.id as string;
-  const schema = z.object({
-    name: z.string().min(1),
-    color: z.string().min(1).optional(),
-    createColumn: z.boolean().optional(),
-  });
-  const parsed = schema.safeParse(req.body || {});
-  if (!parsed.success)
-    return res.status(400).json({ error: parsed.error.message });
-  const { name, color, createColumn = false } = parsed.data;
-
-  // Load current user company and role
-  const { data: urow, error: errU } = await supabaseAdmin
-    .from("users")
-    .select("company_id, role")
-    .eq("user_id", authUserId)
-    .maybeSingle();
-  if (errU) return res.status(500).json({ error: errU.message });
-  if (!urow?.company_id)
-    return res.status(404).json({ error: "Usu?rio sem company_id" });
-  const role = (urow as any).role as string | null;
-  const allowed =
-    role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
-  if (!allowed)
-    return res.status(403).json({ error: "Sem permiss?o para criar labels" });
-
-  // Create tag
-  const { data: tag, error: errTag } = await supabaseAdmin
-    .from("tags")
-    .insert([
-      { name, color: color || null, company_id: (urow as any).company_id },
-    ])
-    .select("id, name, color")
-    .single();
-  if (errTag) return res.status(400).json({ error: errTag.message });
-
-  let createdColumn: any = null;
-  if (createColumn) {
-    // Find default board for company
-    const { data: board } = await supabaseAdmin
-      .from("kanban_boards")
-      .select("id, is_default, created_at")
-      .eq("company_id", (urow as any).company_id)
-      .order("is_default", { ascending: false })
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (board?.id) {
-      // Determine next position
-      const { data: last } = await supabaseAdmin
-        .from("kanban_columns")
-        .select("position")
-        .eq("kanban_board_id", (board as any).id)
-        .order("position", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const nextPos = ((last as any)?.position || 0) + 1;
-      const { data: col } = await supabaseAdmin
-        .from("kanban_columns")
-        .insert([
-          {
-            name,
-            color: color || null,
-            position: nextPos,
-            kanban_board_id: (board as any).id,
-          },
-        ])
-        .select("id, name, color, position")
-        .single();
-      createdColumn = col || null;
-    }
-  }
-
-  return res.status(201).json({ tag, column: createdColumn });
-});
+// ===== Tags (labels) management moved to livechat.tags.ts =====
 
 
 // --------- REGISTRO DAS ROTAS DO KANBAN ----------
 registerKanbanRoutes(app, { requireAuth, supabaseAdmin, io });
 
-
 registerLivechatChatRoutes(app);
+registerLivechatTagsRoutes(app);
 
 async function socketAuthUserId(socket: any): Promise<string | null> {
   try {
@@ -3204,6 +3191,7 @@ registerCompanyRoutes(app);
 registerKnowledgeBaseRoutes(app);
 registerCalendarRoutes(app);
 registerLeadRoutes(app);
+registerMetaTemplatesRoutes(app);
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
 registerSettingsInboxesRoutes(app);
@@ -3214,6 +3202,7 @@ registerCampaignRoutes(app);
 registerCampaignSegmentsRoutes(app);
 registerCampaignFollowupsRoutes(app);
 registerCampaignUploadsRoutes(app);
+registerMediaLibraryRoutes(app);
 
 registerWAHARoutes(app);
 

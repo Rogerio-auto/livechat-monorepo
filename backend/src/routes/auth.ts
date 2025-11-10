@@ -6,6 +6,8 @@ import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE } from "../config/env.ts";
 import { getIO } from "../lib/io.ts";
 
 export function registerAuthRoutes(app: express.Application) {
+  console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');
+  
   // Sign up
   app.post("/signup", async (req, res) => {
     const { email, password } = req.body ?? {};
@@ -38,7 +40,25 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   app.get("/auth/me", requireAuth, (req: any, res) => {
-    return res.json({ user: req.user });
+    console.log('[/auth/me] 🎯 ENDPOINT CALLED - NEW VERSION');
+    console.log('[/auth/me] 📦 req.user:', req.user);
+    console.log('[/auth/me] 👤 req.profile:', req.profile);
+    
+    // Return user with role from profile if available
+    const user = req.user || {};
+    const profile = req.profile || {};
+    
+    const response = { 
+      id: user.id || profile.id,
+      email: user.email || profile.email,
+      role: profile.role || "USER",
+      company_id: user.company_id || profile.company_id,
+      name: profile.name || user.name || user.email,
+    };
+    
+    console.log('[/auth/me] 📤 Response:', response);
+    
+    return res.json(response);
   });
 
   // Profile of authenticated user + company basics

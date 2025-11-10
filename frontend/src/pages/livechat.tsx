@@ -118,6 +118,7 @@ export default function LiveChatPage() {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const tagOperationsRef = useRef<Set<string>>(new Set()); // Track ongoing tag operations
   const currentChatIdRef = useRef<string | null>(null);
   const chatsTotalRef = useRef(0);
   const hasMoreChatsRef = useRef(true);
@@ -619,7 +620,16 @@ export default function LiveChatPage() {
       const leadId =
         (selectedChat as any)?.lead_id ??
         (selectedChat as any)?.leadId ??
+        selectedChat.customer_id ?? // FALLBACK: usa customer_id se não tiver lead_id
         null;
+
+      console.log('[livechat] handleChangeStage', {
+        chatId,
+        stageId,
+        leadId,
+        customer_id: selectedChat.customer_id,
+        lead_id_from_chat: (selectedChat as any)?.lead_id,
+      });
 
       const email =
         (selectedChat as any)?.customer_email ??
@@ -640,20 +650,24 @@ export default function LiveChatPage() {
         `Chat ${String(chatId).slice(0, 8)}`;
 
       // 3) garante card e move etapa no Kanban
+      const payload = {
+        boardId,
+        columnId: stageId,
+        title,
+        leadId,
+        email,
+        phone,
+        // Opcional: manda observao do modal se voc tiver ela aqui
+        // note: noteDraft,
+      };
+
+      console.log('[livechat] Payload enviado para /kanban/cards/ensure:', payload);
+
       const res = await fetch(`${API}/kanban/cards/ensure`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          boardId,
-          columnId: stageId,
-          title,
-          leadId,
-          email,
-          phone,
-          // Opcional: manda observao do modal se voc tiver ela aqui
-          // note: noteDraft,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -1006,6 +1020,17 @@ const bumpChatToTop = useCallback((update: {
       if (cid && payload?.chatId === cid && Array.isArray(payload?.tags)) {
         setChatTags(payload.tags);
       }
+      
+      // Also update the chat in the list
+      if (payload?.chatId && Array.isArray(payload?.tags)) {
+        setChats((prev) =>
+          prev.map((c) =>
+            c.id === payload.chatId
+              ? { ...c, tag_ids: payload.tags }
+              : c
+          )
+        );
+      }
     };
     s.on("chat:tags", onTags);
     return () => {
@@ -1064,8 +1089,23 @@ const scrollToBottom = useCallback(
             ? raw.draft_id
             : null;
     
+    // Ensure sender_type is set correctly
+    // If missing or invalid, derive from is_from_customer
+    let senderType = raw.sender_type;
+    if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER")) {
+      // Map boolean is_from_customer to string sender_type
+      if (typeof raw.is_from_customer === "boolean") {
+        senderType = raw.is_from_customer ? "CUSTOMER" : "AGENT";
+      } else if (typeof raw.is_from_customer === "string") {
+        senderType = raw.is_from_customer;
+      } else {
+        senderType = "CUSTOMER"; // Default fallback
+      }
+    }
+    
     const normalized = {
       ...raw,
+      sender_type: senderType,
       media_url: raw.media_url ?? null,
       type: raw.type ?? "TEXT",
       remote_participant_id: raw.remote_participant_id ?? null,
@@ -1129,11 +1169,14 @@ const scrollToBottom = useCallback(
       if (index >= 0) {
         const previous = existing[index];
         // Preserve replied_message_id if normalized doesn't have it but previous does
+        // Also preserve sender_type if previous is a draft with correct sender_type
         const merged = { 
           ...previous, 
           ...normalized,
           // Don't overwrite replied_message_id with null/undefined if previous had a value
           replied_message_id: normalized.replied_message_id ?? previous.replied_message_id ?? null,
+          // Preserve sender_type from draft if normalized doesn't have it or if it's wrong
+          sender_type: normalized.sender_type || previous.sender_type || "CUSTOMER",
         };
         const clone = [...existing];
         clone[index] = merged;
@@ -1920,8 +1963,6 @@ const scrollToBottom = useCallback(
       return;
     }
 
-
-
     const s = socketRef.current;
     if (s?.connected) {
       s.emit(
@@ -1934,11 +1975,13 @@ const scrollToBottom = useCallback(
       return;
     }
 
-
-
     fetchJson<string[]>(`${API}/livechat/chats/${currentChat.id}/tags`)
-      .then((rows) => setChatTags(uniqueIds(rows)))
-      .catch(() => setChatTags([]));
+      .then((rows) => {
+        setChatTags(uniqueIds(rows));
+      })
+      .catch(() => {
+        setChatTags([]);
+      });
   }, [currentChat?.id]);
 
 
@@ -2426,40 +2469,65 @@ const scrollToBottom = useCallback(
   const addTag = useCallback(
     async (tagId: string) => {
       if (!currentChat?.id) return;
+      
+      // Prevent duplicate requests
+      const operationKey = `add-${currentChat.id}-${tagId}`;
+      if (tagOperationsRef.current.has(operationKey)) {
+        return;
+      }
+      
+      tagOperationsRef.current.add(operationKey);
+      
       try {
         await fetchJson(`${API}/livechat/chats/${currentChat.id}/tags`, {
           method: "POST",
           body: JSON.stringify({ tagId }),
         });
-      } catch (error) {
-
+      } catch (error: any) {
+        // If it's a 409 conflict, the tag already exists - no action needed
+        if (error?.status === 409 || error?.message?.includes('409')) {
+          return;
+        }
+        
         console.error("Falha ao adicionar tag", error);
-
+        // Revert optimistic update on error
+        setChatTags((prev) => prev.filter(id => id !== tagId));
+      } finally {
+        tagOperationsRef.current.delete(operationKey);
       }
     },
-
     [currentChat?.id],
-
   );
 
 
   const removeTag = useCallback(
     async (tagId: string) => {
       if (!currentChat?.id) return;
+      
+      // Prevent duplicate requests
+      const operationKey = `remove-${currentChat.id}-${tagId}`;
+      if (tagOperationsRef.current.has(operationKey)) {
+        return;
+      }
+      
+      tagOperationsRef.current.add(operationKey);
+      
       try {
         await fetchJson(`${API}/livechat/chats/${currentChat.id}/tags/${tagId}`, {
           method: "DELETE",
         });
       } catch (error) {
         console.error("Falha ao remover tag", error);
+        // Revert optimistic update on error
+        setChatTags((prev) => [...prev, tagId]);
+      } finally {
+        tagOperationsRef.current.delete(operationKey);
       }
-
     },
     [currentChat?.id],
   );
 
   const assignAgent = useCallback(
-
     async (userId: string | null) => {
       if (!currentChat?.id) return;
       const chatId = currentChat.id;
@@ -2516,22 +2584,21 @@ const scrollToBottom = useCallback(
   const toggleTag = useCallback(
     (tagId: string) => {
       if (!currentChat?.id) return;
-      setChatTags((prev) => {
-        const set = new Set(prev);
-        let next: string[];
-        if (set.has(tagId)) {
-          set.delete(tagId);
-          next = Array.from(set);
-          void removeTag(tagId);
-        } else {
-          set.add(tagId);
-          next = Array.from(set);
-          void addTag(tagId);
-        }
-        return next;
-      });
+      
+      // Check current state to decide action
+      const isCurrentlySelected = chatTags.includes(tagId);
+      
+      if (isCurrentlySelected) {
+        // Remove tag
+        setChatTags((prev) => prev.filter(id => id !== tagId));
+        void removeTag(tagId);
+      } else {
+        // Add tag
+        setChatTags((prev) => [...prev, tagId]);
+        void addTag(tagId);
+      }
     },
-    [currentChat?.id, addTag, removeTag],
+    [currentChat?.id, chatTags, addTag, removeTag],
   );
 
 
@@ -2664,6 +2731,8 @@ const scrollToBottom = useCallback(
                     activeChatId={currentChat?.id}
                     onSelectChat={handleSelectChat}
                     isGroupList={chatScope === "groups"}
+                    inboxes={inboxes}
+                    tags={allTags}
                   />
                 )}
 

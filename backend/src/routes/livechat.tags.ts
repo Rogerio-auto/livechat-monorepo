@@ -77,6 +77,98 @@ export function registerLivechatTagsRoutes(app: express.Application) {
     return res.status(201).json({ tag, column: createdColumn });
   });
 
+  // Adicionar uma tag individual a um chat (POST /livechat/chats/:id/tags)
+  app.post("/livechat/chats/:id/tags", requireAuth, async (req: any, res) => {
+    const { id } = req.params as { id: string };
+    const { tagId } = req.body || {};
+    
+    if (!tagId) {
+      return res.status(400).json({ error: 'tagId is required' });
+    }
+
+    try {
+      const authUserId = req.user.id as string;
+      const { data: urow } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
+      const companyId = (urow as any)?.company_id;
+
+      // Get tag info
+      const { data: tag } = await supabaseAdmin.from('tags').select('id, name, color').eq('id', tagId).maybeSingle();
+      if (!tag) {
+        return res.status(404).json({ error: 'Tag not found' });
+      }
+
+      // Try to find kanban board and column
+      let columnId: string | null = null;
+      let boardId: string | null = null;
+      
+      if (companyId) {
+        const { data: board } = await supabaseAdmin
+          .from('kanban_boards')
+          .select('id, is_default, created_at')
+          .eq('company_id', companyId)
+          .order('is_default', { ascending: false })
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        boardId = (board as any)?.id || null;
+
+        if (boardId) {
+          const { data: col } = await supabaseAdmin
+            .from('kanban_columns')
+            .select('id')
+            .eq('kanban_board_id', boardId)
+            .eq('name', (tag as any).name)
+            .maybeSingle();
+          columnId = (col as any)?.id || null;
+
+          // Create column if it doesn't exist
+          if (!columnId) {
+            const { data: last } = await supabaseAdmin
+              .from('kanban_columns')
+              .select('position')
+              .eq('kanban_board_id', boardId)
+              .order('position', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            const nextPos = ((last as any)?.position || 0) + 1;
+            const { data: created } = await supabaseAdmin
+              .from('kanban_columns')
+              .insert([{ name: (tag as any).name, color: (tag as any).color || null, position: nextPos, kanban_board_id: boardId }])
+              .select('id')
+              .single();
+            columnId = (created as any)?.id || null;
+          }
+        }
+      }
+
+      // Insert chat_tag (allow NULL kanban_colum_id)
+      const { data, error } = await supabaseAdmin
+        .from('chat_tags')
+        .insert([{ chat_id: id, tag_id: tagId, kanban_colum_id: columnId }])
+        .select('tag_id')
+        .single();
+
+      if (error) {
+        // Check if it's a duplicate key error
+        if (error.code === '23505') {
+          return res.status(409).json({ error: 'Tag already added to this chat' });
+        }
+        return res.status(500).json({ error: error.message });
+      }
+
+      // Emit socket event
+      try {
+        const { data: allTags } = await supabaseAdmin.from('chat_tags').select('tag_id').eq('chat_id', id);
+        const tagIds = ((allTags as any[]) || []).map((r) => (r as any).tag_id);
+        getIO()?.to(`chat:${id}`).emit('chat:tags', { chatId: id, tags: tagIds });
+      } catch {}
+
+      return res.status(201).json({ ok: true, tag_id: (data as any).tag_id });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'add tag error' });
+    }
+  });
+
   // Gerenciar tags do chat (set completo)
   app.put("/livechat/chats/:id/tags", requireAuth, async (req, res) => {
     const { id } = req.params as { id: string };
@@ -109,9 +201,11 @@ export function registerLivechatTagsRoutes(app: express.Application) {
       }
 
       const { data: tagRows } = await supabaseAdmin.from('tags').select('id, name, color').in('id', tagIds);
-      const rowsToInsert: { chat_id: string; tag_id: string; kanban_colum_id: string }[] = [];
+      const rowsToInsert: { chat_id: string; tag_id: string; kanban_colum_id: string | null }[] = [];
       for (const t of (tagRows as any[]) || []) {
         let columnId: string | null = null;
+        
+        // Try to find or create kanban column if board exists
         if (boardId) {
           const { data: col } = await supabaseAdmin
             .from('kanban_columns')
@@ -120,6 +214,8 @@ export function registerLivechatTagsRoutes(app: express.Application) {
             .eq('name', (t as any).name)
             .maybeSingle();
           columnId = (col as any)?.id || null;
+          
+          // Create column if it doesn't exist
           if (!columnId) {
             const { data: last } = await supabaseAdmin
               .from('kanban_columns')
@@ -137,7 +233,8 @@ export function registerLivechatTagsRoutes(app: express.Application) {
             columnId = (created as any)?.id || null;
           }
         }
-        if (!columnId) return res.status(400).json({ error: 'Nenhuma coluna/board disponível para vincular a tag' });
+        
+        // Allow NULL kanban_colum_id if no board is configured
         rowsToInsert.push({ chat_id: id, tag_id: (t as any).id, kanban_colum_id: columnId });
       }
 
@@ -160,6 +257,34 @@ export function registerLivechatTagsRoutes(app: express.Application) {
       return res.json(((data as any[]) || []).map((r) => (r as any).tag_id));
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'tags list error' });
+    }
+  });
+
+  // Remover uma tag individual de um chat (DELETE /livechat/chats/:id/tags/:tagId)
+  app.delete("/livechat/chats/:id/tags/:tagId", requireAuth, async (req, res) => {
+    const { id, tagId } = req.params as { id: string; tagId: string };
+    
+    try {
+      const { error } = await supabaseAdmin
+        .from('chat_tags')
+        .delete()
+        .eq('chat_id', id)
+        .eq('tag_id', tagId);
+
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+
+      // Emit socket event
+      try {
+        const { data: allTags } = await supabaseAdmin.from('chat_tags').select('tag_id').eq('chat_id', id);
+        const tagIds = ((allTags as any[]) || []).map((r) => (r as any).tag_id);
+        getIO()?.to(`chat:${id}`).emit('chat:tags', { chatId: id, tags: tagIds });
+      } catch {}
+
+      return res.json({ ok: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'remove tag error' });
     }
   });
 }

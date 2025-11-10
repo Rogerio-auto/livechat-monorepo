@@ -22,6 +22,9 @@ export type Chat = {
   assigned_agent_id?: string | null;
   assigned_agent_name?: string | null;
   assigned_agent_user_id?: string | null;
+  ai_agent_id?: string | null;
+  ai_agent_name?: string | null;
+  ai_mode?: string | null;
   display_name?: string | null;
   display_phone?: string | null;
   display_remote_id?: string | null;
@@ -31,6 +34,7 @@ export type Chat = {
   stage_name?: string | null;
   note?: string | null;
   unread_count?: number | null;
+  tag_ids?: string[];
 };
 
 export type Message = {
@@ -45,9 +49,19 @@ export type Message = {
   sender_avatar_url?: string | null;
   created_at: string;
   view_status?: string | null;
-  type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "FILE" | "PRIVATE" | string;
+  type?: "TEXT" | "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | "FILE" | "PRIVATE" | "STICKER" | "LOCATION" | "CONTACTS" | "POLL" | "BUTTONS" | "LIST" | "TEMPLATE" | "INTERACTIVE" | "REACTION" | string;
   is_private?: boolean | null;
   media_url?: string | null;
+  media_public_url?: string | null;
+  media_storage_path?: string | null;
+  caption?: string | null;
+  media_mime?: string | null;
+  media_size?: number | null;
+  media_sha256?: string | null;
+  media_source?: string | null;
+  is_media_sensitive?: boolean;
+  template_id?: string | null;
+  sent_from_device?: string | null;
   // UI-only fields (not persisted):
   upload_progress?: number | null;
   remote_participant_id?: string | null;

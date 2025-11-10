@@ -118,6 +118,8 @@ export const k = {
     return `lc:list:set:${c}:${i}:${s}:${kindSeg}`;
   },
   chat: (chatId: string) => `lc:chat:${chatId}`,
+  chatLookup: (inboxId: string, remoteId: string) => 
+    `lc:chat:lookup:${safeSegment(inboxId, "x")}:${encodeKeyValue(remoteId)}`,
   msgsKey: (chatId: string, before?: string, limit?: number) =>
     `lc:msgs:${chatId}:${encodeCursor(before)}:${Math.max(1, limit ?? 50)}`,
   msgsPrefix: (chatId: string) => `lc:msgs:${chatId}:*`,

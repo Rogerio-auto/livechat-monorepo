@@ -872,185 +872,166 @@ export async function ensureLeadCustomerChat(args: {
   const lid = args.lid && typeof args.lid === "string" && args.lid.trim() ? args.lid.trim() : null;
 
   return db.withTransaction(async (tx) => {
-    // Priorizar busca por lid se disponível
-    let lead = null;
-    if (lid) {
-      lead = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-        `select id, name, customer_id, lid
-           from public.leads
-          where company_id = $1
-            and lid = $2
-          limit 1`,
-        [args.companyId, lid],
-      );
-      console.log("[META][store] lead lookup by lid", { companyId: args.companyId, lid, found: !!lead });
-    }
-    
-    // Fallback para busca por telefone se lid não encontrou
-    if (!lead) {
-      lead = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-        `select id, name, customer_id, lid
-           from public.leads
-          where company_id = $1
-            and phone = $2
-          limit 1`,
-        [args.companyId, msisdn],
-      );
-      console.log("[META][store] lead lookup by phone", { companyId: args.companyId, msisdn, found: !!lead });
-    }
-
-    if (!lead) {
-      const boardId = await getBoardIdForCompany(args.companyId);
-      try {
-        lead = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-          `insert into public.leads (company_id, phone, name, kanban_board_id, lid)
-           values ($1, $2, $3, $4, $5)
-           returning id, name, customer_id, lid`,
-          [args.companyId, msisdn, fallbackName, boardId, lid],
+    // ========== OPTIMIZATION: Buscar lead e customer EM PARALELO ==========
+    const [leadResult, customerResult] = await Promise.all([
+      // Lead lookup (lid -> phone)
+      (async () => {
+        if (lid) {
+          const byLid = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+            `select id, name, customer_id, lid from public.leads where company_id = $1 and lid = $2 limit 1`,
+            [args.companyId, lid],
+          );
+          if (byLid) {
+            console.log("[META][store] lead lookup by lid", { companyId: args.companyId, lid, found: true });
+            return byLid;
+          }
+        }
+        
+        const byPhone = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+          `select id, name, customer_id, lid from public.leads where company_id = $1 and phone = $2 limit 1`,
+          [args.companyId, msisdn],
         );
-        console.log("[META][store] lead created", { leadId: lead.id, companyId: args.companyId, msisdn, lid });
-      } catch (error: any) {
-        if (String(error?.code) === "23505") {
-          // Conflict: re-fetch por phone ou lid
-          if (lid) {
-            lead = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-              `select id, name, customer_id, lid
-                 from public.leads
-                where company_id = $1
-                  and lid = $2
-                limit 1`,
-              [args.companyId, lid],
-            );
+        console.log("[META][store] lead lookup by phone", { companyId: args.companyId, msisdn, found: !!byPhone });
+        return byPhone;
+      })(),
+      
+      // Customer lookup (lid -> phone)
+      (async () => {
+        if (lid) {
+          const byLid = await tx.oneOrNone<{ id: string; name: string }>(
+            `select id, name from public.customers where lid = $1 limit 1`,
+            [lid],
+          );
+          if (byLid) {
+            console.log("[META][store] customer lookup by lid", { lid, found: true });
+            return byLid;
           }
-          if (!lead) {
-            lead = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-              `select id, name, customer_id, lid
-                 from public.leads
-                where company_id = $1
-                  and phone = $2
-                limit 1`,
-              [args.companyId, msisdn],
+        }
+        
+        const byPhone = await tx.oneOrNone<{ id: string; name: string }>(
+          `select id, name from public.customers where phone = $1 limit 1`,
+          [msisdn],
+        );
+        console.log("[META][store] customer lookup by phone", { msisdn, found: !!byPhone });
+        return byPhone;
+      })(),
+    ]);
+
+    let lead = leadResult;
+    let customer = customerResult;
+
+    // ========== OPTIMIZATION: Criar lead e customer EM PARALELO se necessário ==========
+    if (!lead || !customer) {
+      const boardId = !lead ? await getBoardIdForCompany(args.companyId) : null;
+      
+      const [createdLead, createdCustomer] = await Promise.all([
+        // Create lead if needed
+        !lead ? (async () => {
+          try {
+            const newLead = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+              `insert into public.leads (company_id, phone, name, kanban_board_id, lid)
+               values ($1, $2, $3, $4, $5) returning id, name, customer_id, lid`,
+              [args.companyId, msisdn, fallbackName, boardId, lid],
             );
+            console.log("[META][store] lead created", { leadId: newLead.id, companyId: args.companyId, msisdn, lid });
+            return newLead;
+          } catch (error: any) {
+            if (String(error?.code) === "23505") {
+              // Conflict: re-fetch
+              if (lid) {
+                const byLid = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+                  `select id, name, customer_id, lid from public.leads where company_id = $1 and lid = $2 limit 1`,
+                  [args.companyId, lid],
+                );
+                if (byLid) return byLid;
+              }
+              return await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+                `select id, name, customer_id, lid from public.leads where company_id = $1 and phone = $2 limit 1`,
+                [args.companyId, msisdn],
+              );
+            }
+            throw error;
           }
-        } else {
-          throw error;
+        })() : Promise.resolve(lead),
+        
+        // Create customer if needed (but need lead.id, so wait if lead was just created)
+        Promise.resolve(customer),
+      ]);
+      
+      lead = createdLead;
+      
+      // Now create customer with lead.id if needed
+      if (!createdCustomer) {
+        try {
+          customer = await tx.one<{ id: string; name: string }>(
+            `insert into public.customers (company_id, phone, name, lead_id, lid)
+             values ($1, $2, $3, $4, $5) returning id, name`,
+            [args.companyId, msisdn, fallbackName, lead!.id, lid],
+          );
+          console.log("[META][store] customer created", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
+        } catch (error: any) {
+          if (String(error?.code) === "23505") {
+            // Conflict: re-fetch
+            if (lid) {
+              customer = await tx.oneOrNone<{ id: string; name: string }>(
+                `select id, name from public.customers where lid = $1 limit 1`,
+                [lid],
+              );
+            }
+            if (!customer) {
+              customer = await tx.one<{ id: string; name: string }>(
+                `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
+                [args.companyId, msisdn],
+              );
+            }
+          } else {
+            throw error;
+          }
         }
       }
-    } else if (!isMeaningfulName(lead.name)) {
+    }
+
+    // Update names if needed
+    if (lead && !isMeaningfulName(lead.name)) {
       lead = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-        `update public.leads
-            set name = $1,
-                lid = coalesce(lid, $3)
-          where id = $2
-          returning id, name, customer_id, lid`,
+        `update public.leads set name = $1, lid = coalesce(lid, $3) where id = $2 returning id, name, customer_id, lid`,
         [fallbackName, lead.id, lid],
       );
-    } else if (lid && !lead.lid) {
-      // Atualizar lid se não existe mas temos um agora
-      await tx.none(
-        `update public.leads set lid = $2 where id = $1`,
-        [lead.id, lid],
-      );
+    } else if (lead && lid && !lead.lid) {
+      await tx.none(`update public.leads set lid = $2 where id = $1`, [lead.id, lid]);
     }
 
-    // Buscar customer por lid primeiro, depois por telefone
-    let customer = null;
-    if (lid) {
-      customer = await tx.oneOrNone<{ id: string; name: string }>(
-        `select id, name
-           from public.customers
-          where lid = $1
-          limit 1`,
-        [lid],
-      );
-      console.log("[META][store] customer lookup by lid", { lid, found: !!customer });
-    }
-    
-    if (!customer) {
-      customer = await tx.oneOrNone<{ id: string; name: string }>(
-        `select id, name
-           from public.customers
-          where phone = $1
-          limit 1`,
-        [msisdn],
-      );
-      console.log("[META][store] customer lookup by phone", { msisdn, found: !!customer });
-    }
-
-    if (!customer) {
-      try {
-        customer = await tx.one<{ id: string; name: string }>(
-          `insert into public.customers (company_id, phone, name, lead_id, lid)
-           values ($1, $2, $3, $4, $5)
-           returning id, name`,
-          [args.companyId, msisdn, fallbackName, lead!.id, lid],
-        );
-        console.log("[META][store] customer created", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
-      } catch (error: any) {
-        if (String(error?.code) === "23505") {
-          // Conflict: re-fetch por lid ou phone
-          if (lid) {
-            customer = await tx.oneOrNone<{ id: string; name: string }>(
-              `select id, name
-                 from public.customers
-                where lid = $1
-                limit 1`,
-              [lid],
-            );
-          }
-          if (!customer) {
-            customer = await tx.one<{ id: string; name: string }>(
-              `select id, name
-                 from public.customers
-                where company_id = $1
-                  and phone = $2
-                limit 1`,
-              [args.companyId, msisdn],
-            );
-          }
-        } else {
-          throw error;
-        }
-      }
-    } else if (!isMeaningfulName(customer.name)) {
+    if (customer && !isMeaningfulName(customer.name)) {
       customer = await tx.one<{ id: string; name: string }>(
-        `update public.customers
-            set name = $1,
-                lid = coalesce(lid, $3)
-          where id = $2
-          returning id, name`,
+        `update public.customers set name = $1, lid = coalesce(lid, $3) where id = $2 returning id, name`,
         [fallbackName, customer.id, lid],
       );
-    } else if (lid) {
-      // Atualizar lid se disponível e não está preenchido
-      await tx.none(
-        `update public.customers set lid = coalesce(lid, $2) where id = $1`,
-        [customer.id, lid],
-      );
+    } else if (customer && lid) {
+      await tx.none(`update public.customers set lid = coalesce(lid, $2) where id = $1`, [customer.id, lid]);
     }
 
-    // Garante vínculo lead_id no customer se ainda não existe
-    const customerNeedsLeadLink = await tx.oneOrNone<{ lead_id: string | null }>(
-      `select lead_id from public.customers where id = $1`,
-      [customer.id],
-    );
-    if (!customerNeedsLeadLink?.lead_id || customerNeedsLeadLink.lead_id !== lead!.id) {
-      await tx.none(
-        `update public.customers set lead_id = $2 where id = $1`,
-        [customer.id, lead!.id],
-      );
-      console.log("[META][store] customer linked to lead", { customerId: customer.id, leadId: lead!.id });
-    }
-
-    if (!lead?.customer_id || lead.customer_id !== customer.id) {
-      await tx.none(
-        `update public.leads
-            set customer_id = $2
-          where id = $1`,
-        [lead!.id, customer.id],
-      );
-      console.log("[META][store] lead linked to customer", { leadId: lead!.id, customerId: customer.id });
-    }
+    // ========== OPTIMIZATION: Link lead<->customer EM PARALELO ==========
+    await Promise.all([
+      // Ensure customer.lead_id links to lead
+      (async () => {
+        const needsLink = await tx.oneOrNone<{ lead_id: string | null }>(
+          `select lead_id from public.customers where id = $1`,
+          [customer!.id],
+        );
+        if (!needsLink?.lead_id || needsLink.lead_id !== lead!.id) {
+          await tx.none(`update public.customers set lead_id = $2 where id = $1`, [customer!.id, lead!.id]);
+          console.log("[META][store] customer linked to lead", { customerId: customer!.id, leadId: lead!.id });
+        }
+      })(),
+      
+      // Ensure lead.customer_id links to customer
+      (async () => {
+        if (!lead?.customer_id || lead.customer_id !== customer!.id) {
+          await tx.none(`update public.leads set customer_id = $2 where id = $1`, [lead!.id, customer!.id]);
+          console.log("[META][store] lead linked to customer", { leadId: lead!.id, customerId: customer!.id });
+        }
+      })(),
+    ]);
 
     let chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null }>(
       `select id, external_id, chat_type
@@ -1058,8 +1039,18 @@ export async function ensureLeadCustomerChat(args: {
         where inbox_id = $1
           and customer_id = $2
         limit 1`,
-      [args.inboxId, customer.id],
+      [args.inboxId, customer!.id],
     );
+
+    console.log("[META][store] Chat lookup result", {
+      inboxId: args.inboxId,
+      customerId: customer!.id,
+      customerPhone: msisdn,
+      chatFound: !!chat,
+      chatId: chat?.id,
+      externalId: chat?.external_id,
+      externalIdCandidate,
+    });
 
     if (!chat) {
       try {
@@ -1067,9 +1058,9 @@ export async function ensureLeadCustomerChat(args: {
             `insert into public.chats (inbox_id, customer_id, status, last_message_at, external_id, chat_type)
            values ($1, $2, 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
            returning id, external_id, chat_type`,
-          [args.inboxId, customer.id, externalIdCandidate ?? null, "CONTACT"],
+          [args.inboxId, customer!.id, externalIdCandidate ?? null, "CONTACT"],
         );
-        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
+        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id });
       } catch (error: any) {
         if (String(error?.code) === "23505") {
           chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null }>(
@@ -1078,9 +1069,9 @@ export async function ensureLeadCustomerChat(args: {
               where inbox_id = $1
                 and customer_id = $2
               limit 1`,
-            [args.inboxId, customer.id],
+            [args.inboxId, customer!.id],
           );
-          console.log("[META][store] chat fetched after conflict", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
+          console.log("[META][store] chat fetched after conflict", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id });
         } else {
           throw error;
         }
@@ -1113,18 +1104,18 @@ export async function ensureLeadCustomerChat(args: {
         updated = true;
       }
       if (!updated) {
-        console.log("[META][store] chat reused", { chatId: chat.id, inboxId: args.inboxId, customerId: customer.id });
+        console.log("[META][store] chat reused", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id });
       }
     }
 
     console.log("[META][store] ensureLeadCustomerChat result", {
       leadId: lead!.id,
-      customerId: customer.id,
+      customerId: customer!.id,
       chatId: chat!.id,
       externalId: chat.external_id ?? null,
       chatType: chat.chat_type ?? null,
     });
-    return { leadId: lead!.id, customerId: customer.id, chatId: chat!.id, externalId: chat.external_id ?? null };
+    return { leadId: lead!.id, customerId: customer!.id, chatId: chat!.id, externalId: chat.external_id ?? null };
   });
 }
 

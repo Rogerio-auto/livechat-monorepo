@@ -36,7 +36,7 @@ import {
   markChatRemoteParticipantLeft,
   findChatMessageIdByExternalId,
 } from "../src/services/meta/store.ts";
-import { redis, rDel, rSet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
+import { redis, rDel, rSet, rGet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
 import { supabaseAdmin } from "./lib/supabase.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "../src/services/waha/client.ts";
 import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
@@ -501,6 +501,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   remote_id?: string | null;
   ai_agent_id?: string | null;
   ai_agent_name?: string | null;
+  unread_count?: number | null;
 } | null> {
   const row = await db.oneOrNone<{
     chat_id: string;
@@ -517,6 +518,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     remote_id: string | null;
     ai_agent_id: string | null;
     ai_agent_name: string | null;
+    unread_count: number | null;
   }>(
     `select ch.id as chat_id,
             ch.inbox_id,
@@ -528,6 +530,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             ch.group_avatar_url,
             ch.remote_id,
             ch.ai_agent_id,
+            ch.unread_count,
             ag.name as ai_agent_name,
             cust.name as customer_name,
             cust.phone as customer_phone,
@@ -554,6 +557,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     remote_id: row.remote_id,
     ai_agent_id: row.ai_agent_id,
     ai_agent_name: row.ai_agent_name,
+    unread_count: row.unread_count,
   };
 }
 
@@ -650,6 +654,43 @@ async function getWahaInboxConfig(inboxId: string): Promise<{ session: string; a
   }
 
   return { session, apiKey };
+}
+
+/**
+ * Cache helper: get chat ID from cache or database
+ * TTL: 1 hour (chats don't change remote_id frequently)
+ */
+async function getCachedChatId(inboxId: string, remoteId: string): Promise<string | null> {
+  const cacheKey = k.chatLookup(inboxId, remoteId);
+  const cached = await rGet<string>(cacheKey);
+  if (cached) {
+    console.log('[worker][cache] Chat lookup HIT:', { inboxId, remoteId, chatId: cached });
+    return cached;
+  }
+
+  console.log('[worker][cache] Chat lookup MISS:', { inboxId, remoteId });
+  const row = await db.oneOrNone<{ id: string }>(
+    `SELECT id FROM public.chats WHERE inbox_id = $1 AND remote_id = $2 LIMIT 1`,
+    [inboxId, remoteId]
+  );
+
+  if (row?.id) {
+    // Cache for 1 hour
+    await rSet(cacheKey, row.id, 3600);
+    console.log('[worker][cache] Chat lookup cached:', { inboxId, remoteId, chatId: row.id });
+    return row.id;
+  }
+
+  return null;
+}
+
+/**
+ * Cache helper: save chat ID to cache after creation
+ */
+async function cacheChatLookup(inboxId: string, remoteId: string, chatId: string): Promise<void> {
+  const cacheKey = k.chatLookup(inboxId, remoteId);
+  await rSet(cacheKey, chatId, 3600); // 1 hour
+  console.log('[worker][cache] Chat lookup saved:', { inboxId, remoteId, chatId });
 }
 
 function ensureWahaChatId(to?: string | null, fallbackPhone?: string | null): string | null {
@@ -1293,6 +1334,16 @@ async function handleMetaInboundMessages(args: {
       continue;
     }
 
+    console.log("[META][inbound] Processing message", {
+      wamid,
+      participantWaId,
+      remotePhone,
+      pushname,
+      participantName: metaContext.participantName,
+      isGroupMessage,
+      inboxId,
+    });
+
     // Ensure chat (group or direct)
     let chatId: string;
     if (isGroupMessage && metaContext.groupId) {
@@ -1304,6 +1355,7 @@ async function handleMetaInboundMessages(args: {
         groupAvatarUrl: metaContext.groupAvatarUrl ?? null,
       });
       chatId = ensured.chatId;
+      console.log("[META][inbound] Group chat ensured", { chatId, groupId: metaContext.groupId });
     } else {
       const ensured = await ensureLeadCustomerChat({
         inboxId,
@@ -1313,6 +1365,13 @@ async function handleMetaInboundMessages(args: {
         rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
       });
       chatId = ensured.chatId;
+      console.log("[META][inbound] Direct chat ensured", {
+        chatId,
+        customerId: ensured.customerId,
+        leadId: ensured.leadId,
+        phone: remotePhone,
+        rawPhone: participantWaId,
+      });
     }
 
     const { content, type } = extractContentAndType(m);
@@ -1367,6 +1426,47 @@ async function handleMetaInboundMessages(args: {
         ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
         : null;
 
+    // ========== OPTIMIZATION: Emit draft message BEFORE database insert ==========
+    // This provides instant UI feedback (~200-300ms faster perception)
+    const draftTimestamp = new Date().toISOString();
+    try {
+      await emitSocketWithRetry("socket.livechat.inbound", {
+        kind: "livechat.inbound.message",
+        chatId,
+        message: {
+          id: `draft-${wamid}`, // Temporary ID
+          chat_id: chatId,
+          external_id: wamid,
+          body: content,
+          content,
+          type,
+          sender_type: "CUSTOMER",
+          sender_id: null,
+          sender_name: metaContext.participantName ?? pushname ?? null,
+          sender_avatar_url: metaContext.participantAvatarUrl ?? null,
+          created_at: createdAt?.toISOString() || draftTimestamp,
+          view_status: "DRAFT",
+          delivery_status: null,
+          is_private: false,
+          replied_message_id: repliedMessageId,
+          remote_participant_id: remoteParticipantId,
+          remote_sender_id: metaContext.participantId ?? participantWaId ?? null,
+          remote_sender_name: metaContext.participantName ?? pushname ?? null,
+          remote_sender_phone: remotePhone ?? null,
+        },
+        chatUpdate: {
+          chatId,
+          last_message: content || "[MEDIA]",
+          last_message_at: createdAt?.toISOString() || draftTimestamp,
+          last_message_from: "CUSTOMER",
+          last_message_type: type,
+        },
+      });
+      console.log("[META][inbound][DRAFT] Optimistic message emitted", { chatId, wamid });
+    } catch (err) {
+      console.error("[META][inbound][DRAFT] Failed to emit draft", { chatId, wamid, error: err });
+    }
+
     // Insert message
     const inserted = await insertInboundMessage({
       chatId,
@@ -1384,6 +1484,29 @@ async function handleMetaInboundMessages(args: {
     });
     if (!inserted) {
       continue;
+    }
+
+    // ========== OPTIMIZATION: Replace draft with confirmed message ==========
+    try {
+      await emitSocketWithRetry("socket.livechat.inbound", {
+        kind: "livechat.inbound.message",
+        chatId,
+        message: {
+          ...inserted,
+          view_status: "DELIVERED", // Update from DRAFT to DELIVERED
+        },
+      });
+      console.log("[META][inbound][CONFIRMED] Draft replaced with real message", {
+        chatId,
+        messageId: inserted.id,
+        draftId: `draft-${wamid}`,
+      });
+    } catch (err) {
+      console.error("[META][inbound][CONFIRMED] Failed to emit confirmed message", {
+        chatId,
+        messageId: inserted.id,
+        error: err,
+      });
     }
 
     // Increment unread_count (all META inbound messages are from customer)
@@ -1863,6 +1986,159 @@ async function checkIfInboxSensitive(inboxId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Processa mídia em background (não bloqueia a mensagem)
+ * Atualiza a mensagem quando o upload terminar
+ */
+async function processMediaInBackground(args: {
+  messageId: string;
+  chatId: string;
+  inboxId: string;
+  companyId: string;
+  mediaObj: any;
+  isSensitive: boolean;
+  payload: any;
+}): Promise<void> {
+  const { messageId, chatId, inboxId, companyId, mediaObj, isSensitive, payload } = args;
+  
+  console.log('[WAHA][background] 🎬 Starting media processing:', {
+    messageId,
+    chatId,
+    hasMediaObj: !!mediaObj,
+  });
+
+  const m = mediaObj || {};
+  let mediaSource: 'waha_file' | 'waha_url' | 'waha_base64' | null = null;
+  let mediaData: string | null = null;
+  let mimeType = m?.mimetype || 'application/octet-stream';
+
+  // Detect source and data
+  if (m.filePath) {
+    mediaSource = 'waha_file';
+    mediaData = m.filePath;
+  } else if (m.file) {
+    mediaSource = 'waha_file';
+    mediaData = m.file;
+  } else if (m.url) {
+    mediaSource = 'waha_url';
+    mediaData = m.url;
+  } else if (m.base64) {
+    mediaSource = 'waha_base64';
+    mediaData = m.base64;
+    mimeType = String(mimeType).split(";")[0].trim() || "application/octet-stream";
+  }
+  
+  if (!mediaSource || !mediaData) {
+    console.warn('[WAHA][background] No valid media source found');
+    return;
+  }
+
+  console.log('[WAHA][background] 🔍 Media source detection:', {
+    mediaSource,
+    mimeType,
+    dataLength: mediaData.length,
+  });
+
+  try {
+    // Download/read media to buffer
+    let extraHeaders: Record<string, string> | undefined;
+    if (mediaSource === 'waha_url' && typeof mediaData === 'string' && mediaData.startsWith(WAHA_BASE_URL)) {
+      try {
+        const { apiKey } = await getWahaInboxConfig(inboxId);
+        extraHeaders = {
+          Authorization: `Bearer ${apiKey}`,
+          "X-Api-Key": apiKey,
+        };
+      } catch (e) {
+        console.warn('[WAHA][background] could not resolve inbox apiKey', e);
+      }
+    }
+
+    const { buffer, mimeType: detectedMime } = await downloadMediaToBuffer({
+      source: mediaSource === 'waha_file' ? 'file' : 
+              mediaSource === 'waha_url' ? 'url' : 'base64',
+      data: mediaData,
+      mimeType,
+      headers: extraHeaders,
+    });
+
+    // Upload to storage
+    const filename = pickFilename(m?.filename, detectedMime);
+    const mediaInfo = await uploadWahaMedia({
+      buffer,
+      contentType: detectedMime,
+      filename,
+      companyId,
+      chatId,
+      source: mediaSource
+    });
+
+    console.log('[WAHA][background] ✅ Media uploaded:', {
+      messageId,
+      storagePath: mediaInfo.storagePath,
+      publicUrl: mediaInfo.publicUrl,
+      size: buffer.length,
+    });
+
+    // Update message with media
+    const publicUrl = isSensitive ? null : mediaInfo.publicUrl;
+    await db.none(
+      `UPDATE public.chat_messages
+       SET media_url = $2,
+           media_storage_path = $3,
+           media_sha256 = $4,
+           media_source = $5,
+           is_media_sensitive = $6,
+           updated_at = now()
+       WHERE id = $1`,
+      [messageId, mediaInfo.publicUrl, mediaInfo.storagePath, mediaInfo.sha256, mediaSource, isSensitive]
+    );
+
+    // Create attachment record
+    await upsertWahaAttachment({
+      messageId,
+      chatId,
+      inboxId,
+      companyId,
+      url: mediaInfo.publicUrl,
+      mimeType: payload?.media?.mimetype ?? detectedMime ?? null,
+      filename: payload?.media?.filename ?? filename ?? null,
+    });
+
+    // Update chat's last message media URL
+    await db.none(
+      `UPDATE public.chats
+       SET last_message_media_url = $2,
+           updated_at = now()
+       WHERE id = $1`,
+      [chatId, mediaInfo.publicUrl]
+    );
+
+    // Emit socket update with media
+    const io = getIO();
+    if (io) {
+      io.to(`chat:${chatId}`).emit("message:media-ready", {
+        messageId,
+        media_url: buildProxyUrl(publicUrl),
+        media_storage_path: mediaInfo.storagePath,
+      });
+      
+      io.emit("chat:updated", {
+        chatId,
+        last_message_media_url: buildProxyUrl(publicUrl),
+      });
+    }
+
+    console.log('[WAHA][background] 🎉 Media processing complete:', { messageId, chatId });
+  } catch (error) {
+    console.error('[WAHA][background] ❌ Media processing failed:', {
+      messageId,
+      chatId,
+      error: error instanceof Error ? error.message : error,
+    });
+  }
+}
+
 async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Unwrap common WAHA envelope shapes
   const msg = payload?.data ?? payload?.message ?? payload;
@@ -1913,16 +2189,28 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   let groupMeta: { name: string | null; avatarUrl: string | null } | null = null;
 
   // Extrair lid do webhook (disponível no campo 'me' da WAHA)
+  // IMPORTANTE: Para mensagens fromMe=true, o lid é do REMETENTE (você), não do destinatário
+  // Então NÃO devemos usar para identificar o chat/customer quando fromMe=true
   const rawLid = 
     (job.raw as any)?.me?.lid ?? 
     (payload as any)?.me?.lid ?? 
     msg?.me?.lid ?? 
     null;
-  const lid = rawLid && typeof rawLid === "string" && rawLid.trim() ? rawLid.trim() : null;
+  const meId = 
+    (job.raw as any)?.me?.id ?? 
+    (payload as any)?.me?.id ?? 
+    msg?.me?.id ?? 
+    null;
+  const isFromMe = !!msg?.fromMe;
+  // Apenas use lid se a mensagem NÃO for fromMe (ou seja, é do customer)
+  const lid = !isFromMe && rawLid && typeof rawLid === "string" && rawLid.trim() ? rawLid.trim() : null;
   
   console.log('[WAHA][worker] Extracted lid from webhook', { 
     lid, 
     rawLid,
+    meId,
+    isFromMe,
+    lidIgnored: isFromMe && !!rawLid,
     hasJobRaw: !!(job.raw as any)?.me,
     hasPayloadMe: !!(payload as any)?.me,
     hasMsgMe: !!msg?.me,
@@ -1930,7 +2218,13 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     messageId 
   });
 
-  if (isGroupChat) {
+  // ========== OPTIMIZATION: Try cache first ==========
+  let cachedChatId = await getCachedChatId(job.inboxId, chatJid);
+  
+  if (cachedChatId) {
+    chatId = cachedChatId;
+    console.log('[WAHA][worker] ⚡ Chat found in cache:', { chatId, chatJid });
+  } else if (isGroupChat) {
     groupMeta = extractWahaGroupMetadata(payload);
     rememberAvatar(job.companyId, chatJid, groupMeta?.avatarUrl ?? null);
     const ensured = await ensureGroupChat({
@@ -1941,6 +2235,8 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       groupAvatarUrl: groupMeta?.avatarUrl ?? null,
     });
     chatId = ensured.chatId;
+    // Cache the result
+    await cacheChatLookup(job.inboxId, chatJid, chatId);
   } else {
     const ensured = await ensureLeadCustomerChat({
       inboxId: job.inboxId,
@@ -1951,6 +2247,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       lid: lid,
     });
     chatId = ensured.chatId;
+    // Cache the result
+    await cacheChatLookup(job.inboxId, chatJid, chatId);
+  }
+  
+  // Load group metadata if from cache and is group
+  if (cachedChatId && isGroupChat && !groupMeta) {
+    groupMeta = extractWahaGroupMetadata(payload);
+    rememberAvatar(job.companyId, chatJid, groupMeta?.avatarUrl ?? null);
   }
 
   const isFromCustomer = !msg?.fromMe;
@@ -2022,28 +2326,20 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     sentFromDevice = 'web';
   }
   
-  // ========== NEW: STORAGE-FIRST MEDIA PROCESSING ==========
-  // Extract media from WAHA payload and normalize to Buffer → Upload to Storage
-  let mediaInfo: {
-    storagePath: string;
-    publicUrl: string;
-    sha256: string;
-    source: 'waha_file' | 'waha_url' | 'waha_base64';
-  } | null = null;
-
-  // Normalize alternative shapes (file.data|url) into msg.media
+  // ========== OPTIMIZED: DETECT MEDIA BUT DON'T PROCESS YET ==========
+  // Extract media from WAHA payload but defer processing to background
   let mediaObj: any = msg?.media || null;
   
-    console.log('[WAHA][worker] 📦 Media object extraction:', {
-      hasMsgMedia: !!msg?.media,
-      hasMsgFile: !!msg?.file,
-      hasMsgUrl: !!msg?.url,
-      msgMedia: msg?.media,
-      msgFile: msg?.file,
-      msgUrl: msg?.url,
-      msgFilename: msg?.filename,
-      msgMimetype: msg?.mimetype
-    });
+  console.log('[WAHA][worker] 📦 Media object extraction:', {
+    hasMsgMedia: !!msg?.media,
+    hasMsgFile: !!msg?.file,
+    hasMsgUrl: !!msg?.url,
+    msgMedia: msg?.media,
+    msgFile: msg?.file,
+    msgUrl: msg?.url,
+    msgFilename: msg?.filename,
+    msgMimetype: msg?.mimetype
+  });
   
   if (!mediaObj && msg?.file) {
     // Outbound-style schema echoed back or custom webhook shape
@@ -2076,97 +2372,6 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     messageId,
     chatJid
   });
-  
-  if (hasMedia) {
-    const m = mediaObj || {};
-    let mediaSource: 'waha_file' | 'waha_url' | 'waha_base64' | null = null;
-    let mediaData: string | null = null;
-    let mimeType = m?.mimetype || 'application/octet-stream';
-
-    // Detect source and data
-    if (m.filePath) {
-      mediaSource = 'waha_file';
-      mediaData = m.filePath;
-    } else if (m.file) {
-      mediaSource = 'waha_file';
-      mediaData = m.file;
-    } else if (m.url) {
-      mediaSource = 'waha_url';
-      mediaData = m.url;
-    } else if (m.base64) {
-      mediaSource = 'waha_base64';
-      mediaData = m.base64;
-      mimeType = String(mimeType).split(";")[0].trim() || "application/octet-stream";
-    }
-    
-    console.log('[WAHA][worker] 🔍 Media source detection:', {
-      mediaSource,
-      hasFilePath: !!m.filePath,
-      hasFile: !!m.file,
-      hasUrl: !!m.url,
-      hasBase64: !!m.base64,
-      mimeType,
-      mediaDataPreview: mediaData ? mediaData.substring(0, 100) : null
-    });
-
-    // Upload to Supabase Storage (normalização)
-    if (mediaSource && mediaData) {
-      try {
-        console.log('[WAHA][worker] Processing media:', {
-          source: mediaSource,
-          mimeType,
-          dataLength: mediaData.length,
-          chatId
-        });
-
-        // Download/read media to buffer
-        // If WAHA URL, include API key headers
-        let extraHeaders: Record<string, string> | undefined;
-        if (mediaSource === 'waha_url' && typeof mediaData === 'string' && mediaData.startsWith(WAHA_BASE_URL)) {
-          try {
-            const { apiKey } = await getWahaInboxConfig(job.inboxId);
-            extraHeaders = {
-              Authorization: `Bearer ${apiKey}`,
-              "X-Api-Key": apiKey,
-            };
-          } catch (e) {
-            console.warn('[WAHA][worker] could not resolve inbox apiKey for WAHA media download', e);
-          }
-        }
-
-        const { buffer, mimeType: detectedMime } = await downloadMediaToBuffer({
-          source: mediaSource === 'waha_file' ? 'file' : 
-                  mediaSource === 'waha_url' ? 'url' : 'base64',
-          data: mediaData,
-          mimeType,
-          headers: extraHeaders,
-        });
-
-        // Upload to storage
-        const filename = pickFilename(m?.filename, detectedMime);
-        mediaInfo = await uploadWahaMedia({
-          buffer,
-          contentType: detectedMime,
-          filename,
-          companyId: job.companyId,
-          chatId,
-          source: mediaSource
-        });
-
-        console.log('[WAHA][worker] ✅ Media uploaded to storage:', {
-          storagePath: mediaInfo.storagePath,
-          publicUrl: mediaInfo.publicUrl,
-          sha256: mediaInfo.sha256,
-          source: mediaSource,
-          size: buffer.length
-        });
-      } catch (error) {
-        console.error('[WAHA][worker] ❌ Media upload failed:', error);
-        // Continue without media - don't break the message
-        mediaInfo = null;
-      }
-    }
-  }
 
   // Determine if inbox requires sensitive media handling
   const isSensitive = await checkIfInboxSensitive(job.inboxId);
@@ -2174,14 +2379,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   console.log('[WAHA][worker] Media sensitivity:', {
     inboxId: job.inboxId,
     isSensitive,
-    hasMedia: !!mediaInfo
+    hasMedia
   });
   
   const messageType = deriveWahaMessageType(msg);
   const body =
     typeof msg?.body === "string" && msg.body.trim()
       ? msg.body
-      : mediaInfo
+      : hasMedia
         ? `[${messageType}]`
         : "";
   const createdAt =
@@ -2242,6 +2447,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
       : null;
 
+  // ========== STEP 1: INSERT MESSAGE WITHOUT MEDIA (FAST PATH) ==========
   const upsertResult = await upsertChatMessage({
     chatId,
     externalId: messageId || `${chatId}:${Date.now()}`,
@@ -2249,15 +2455,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     type: messageType,
     viewStatus: ackStatus ?? null,
-      sentFromDevice,
-    // ✅ New storage-first fields
-    mediaStoragePath: mediaInfo?.storagePath ?? null,
-    mediaPublicUrl: isSensitive ? null : (mediaInfo?.publicUrl ?? null),
-    mediaSource: mediaInfo?.source ?? null,
+    sentFromDevice,
+    // No media yet - will be updated in background
+    mediaStoragePath: null,
+    mediaPublicUrl: null,
+    mediaSource: null,
     isMediaSensitive: isSensitive,
-    // ⚠️ Legacy fields (for backward compatibility)
-    mediaUrl: mediaInfo?.publicUrl ?? null,
-    mediaSha256: mediaInfo?.sha256 ?? null,
+    mediaUrl: null,
+    mediaSha256: null,
     createdAt,
     remoteParticipantId,
     remoteSenderId: remoteMeta?.remoteId ?? null,
@@ -2279,7 +2484,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     content: body,
     lastMessageFrom: isFromCustomer ? "CUSTOMER" : "AGENT",
     lastMessageType: upsertResult.message.type ?? messageType ?? "TEXT",
-    lastMessageMediaUrl: upsertResult.message.media_url ?? (mediaInfo?.publicUrl ?? null),
+    lastMessageMediaUrl: null, // No media yet
     listContext: {
       companyId: job.companyId,
       inboxId: job.inboxId,
@@ -2288,18 +2493,6 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       remoteId: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
     },
   });
-
-  if (mediaInfo) {
-    await upsertWahaAttachment({
-      messageId: upsertResult.message.id,
-      chatId,
-      inboxId: job.inboxId,
-      companyId: job.companyId,
-      url: mediaInfo.publicUrl,
-      mimeType: payload?.media?.mimetype ?? null,
-      filename: payload?.media?.filename ?? null,
-    });
-  }
 
   if (!upsertResult.inserted) {
     if (ackStatus && !isFromCustomer) {
@@ -2354,7 +2547,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     view_status: upsertResult.message.view_status ?? ackStatus ?? "Pending",
     type: upsertResult.message.type ?? messageType,
     is_private: false,
-    media_url: buildProxyUrl(upsertResult.message.media_url) ?? (mediaInfo?.publicUrl ?? null),
+    media_url: buildProxyUrl(upsertResult.message.media_url) ?? null,
     remote_sender_id: upsertResult.message.remote_sender_id ?? null,
     remote_sender_name: upsertResult.message.remote_sender_name ?? null,
     remote_sender_phone: upsertResult.message.remote_sender_phone ?? null,
@@ -2365,6 +2558,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     client_draft_id: job?.draftId ?? msg?.draftId ?? null,
   };
 
+  // ========== STEP 2: EMIT SOCKET IMMEDIATELY (BEFORE MEDIA PROCESSING) ==========
   try {
     const chatSummary = await fetchChatUpdateForSocket(chatId);
     const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
@@ -2404,6 +2598,26 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     }
   } catch (error) {
     console.warn("[WAHA][worker] failed to publish socket inbound message", error);
+  }
+
+  // ========== STEP 3: PROCESS MEDIA IN BACKGROUND (NON-BLOCKING) ==========
+  if (hasMedia && mediaObj) {
+    // Don't await - process in background
+    processMediaInBackground({
+      messageId: upsertResult.message.id,
+      chatId,
+      inboxId: job.inboxId,
+      companyId: job.companyId,
+      mediaObj,
+      isSensitive,
+      payload,
+    }).catch((error) => {
+      console.error('[WAHA][worker] Background media processing failed:', {
+        messageId: upsertResult.message.id,
+        chatId,
+        error: error instanceof Error ? error.message : error,
+      });
+    });
   }
 
   if (ackStatus && !isFromCustomer) {

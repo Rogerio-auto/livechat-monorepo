@@ -917,6 +917,138 @@ io.on("connection", (socket) => {
       callback?.({ ok: false, error: error?.message || 'Unknown error' });
     }
   });
+
+  // List user's inboxes
+  socket.on("livechat:inboxes:my", async (ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+
+      const { data: links } = await supabaseAdmin
+        .from("inbox_users")
+        .select("inbox_id")
+        .eq("user_id", authUserId);
+
+      const ids = Array.from(new Set((links || []).map((r: any) => r.inbox_id))).filter(Boolean);
+      if (ids.length === 0) return ack?.({ ok: true, data: [] });
+
+      const { data, error } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, name, phone_number, is_active, provider, channel, waha_db_name")
+        .in("id", ids)
+        .eq("is_active", true)
+        .order("name", { ascending: true });
+      if (error) return ack?.({ ok: false, error: error.message });
+      const rows = (data || []).map((row: any) => ({
+        ...row,
+        provider: row?.provider ?? "META_CLOUD",
+        channel: row?.channel ?? null,
+      }));
+      return ack?.({ ok: true, data: rows });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || "inboxes fetch error" });
+    }
+  });
+
+  // List chats
+  socket.on("livechat:chats:list", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
+
+      const inboxId = (params?.inboxId as string) || undefined;
+      const status = (params?.status as string) || undefined;
+      const q = (params?.q as string) || undefined;
+      const limit = params?.limit ? Number(params.limit) : 20;
+      const offset = params?.offset ? Number(params.offset) : 0;
+
+      let query = supabaseAdmin
+        .from("chats")
+        .select("id, external_id, status, last_message, last_message_at, inbox_id, customer_id, assignee_agent", { count: "exact" })
+        .order("last_message_at", { ascending: false, nullsFirst: false });
+      if (inboxId) query = query.eq("inbox_id", inboxId);
+      if (status && String(status).toUpperCase() !== "ALL") query = query.eq("status", status);
+      if (q) query = query.ilike("last_message", `%${q}%`);
+
+      const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
+      if (error) return ack?.({ ok: false, error: error.message });
+      const items = data || [];
+
+      // Enrich from chats.assignee_agent (stores inbox_users.id)
+      try {
+        const linkIds = Array.from(new Set((items as any[]).map((c) => (c as any).assignee_agent).filter(Boolean)));
+        let userIdByLink: Record<string, string> = {};
+        if (linkIds.length > 0) {
+          const { data: links } = await supabaseAdmin.from('inbox_users').select('id, user_id').in('id', linkIds);
+          for (const r of (links as any[]) || []) userIdByLink[(r as any).id] = (r as any).user_id;
+          const userIds = Array.from(new Set(Object.values(userIdByLink).filter(Boolean)));
+          let usersById: Record<string, string> = {};
+          if (userIds.length > 0) {
+            const { data: u } = await supabaseAdmin.from('users').select('id, name').in('id', userIds);
+            usersById = Object.fromEntries(((u as any[]) || []).map((x) => [x.id, x.name || x.id]));
+          }
+          for (const it of (items as any[])) {
+            const linkId = (it as any).assignee_agent || null;
+            const uid = linkId ? userIdByLink[linkId] : null;
+            (it as any).assigned_agent_id = linkId;
+            (it as any).assigned_agent_name = uid ? usersById[uid] || null : null;
+          }
+        }
+      } catch {}
+
+      // Enrich customer display
+      try {
+        const cids = Array.from(new Set((items as any[]).map((c) => (c as any).customer_id).filter(Boolean)));
+        if (cids.length > 0) {
+          const displayById: Record<string, { name: string | null; phone: string | null }> = {};
+          async function loadDisplay(table: string, cols: string[]) {
+            const sel = ["id", ...cols].join(",");
+            const { data: rows } = await supabaseAdmin.from(table).select(sel).in("id", cids);
+            for (const r of ((rows as any[]) || [])) {
+              const name = (r as any).name || (r as any).title || null;
+              const phone = (r as any).phone || (r as any).cellphone || (r as any).celular || (r as any).telefone || (r as any).contact || null;
+              displayById[(r as any).id] = { name, phone };
+            }
+          }
+          await loadDisplay("customers", ["name", "phone", "cellphone", "contact"]).catch(() => {});
+          await loadDisplay("customers", ["name", "celular", "telefone", "contact"]).catch(() => {});
+          await loadDisplay("leads", ["name", "phone", "cellphone"]).catch(() => {});
+          for (const it of (items as any[])) {
+            const d = displayById[(it as any).customer_id];
+            (it as any).customer_name = d?.name || null;
+            (it as any).customer_phone = d?.phone || null;
+          }
+        }
+      } catch {}
+
+      // last sender of last message enrichment (best-effort)
+      try {
+        const ids = (items as any[]).map((c) => (c as any).id);
+        if (ids.length > 0) {
+          const { data: msgs } = await supabaseAdmin
+            .from("chat_messages")
+            .select("chat_id, is_from_customer, sender_type, created_at")
+            .in("chat_id", ids)
+            .order("created_at", { ascending: false });
+          const lastByChat: Record<string, string> = {};
+          for (const r of ((msgs as any[]) || [])) {
+            const cid = (r as any).chat_id as string;
+            if (lastByChat[cid]) continue;
+            const from = (r as any).is_from_customer ? "CUSTOMER" : ((r as any).sender_type || "AGENT");
+            lastByChat[cid] = from;
+          }
+          for (const it of (items as any[])) {
+            const cid = (it as any).id as string;
+            if (lastByChat[cid]) (it as any).last_message_from = lastByChat[cid];
+          }
+        }
+      } catch {}
+
+      return ack?.({ ok: true, items, total: count ?? (items?.length || 0) });
+    } catch (e: any) {
+      return ack?.({ ok: false, error: e?.message || "chats list error" });
+    }
+  });
 });
 
 // Perfil do Usuário autenticado + dados b?sicos da empresa

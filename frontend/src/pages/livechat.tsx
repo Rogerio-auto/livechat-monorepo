@@ -732,23 +732,29 @@ export default function LiveChatPage() {
     }
   };
   useEffect(() => {
-    currentChatIdRef.current = currentChat?.id ?? null;
-  }, [currentChat?.id]);
-  useEffect(() => {
     if (!currentChat) {
       const prevChatId = currentChatIdRef.current;
       if (prevChatId) {
         socketRef.current?.emit("leave", { chatId: prevChatId });
       }
       setSelectedChat(null);
+      currentChatIdRef.current = null;
       return;
     }
-    if (currentChat?.id && currentChatIdRef.current !== currentChat.id) {
+    
+    // Check if chat changed before updating ref
+    const isNewChat = currentChat?.id && currentChatIdRef.current !== currentChat.id;
+    
+    if (isNewChat) {
       socketRef.current?.emit("join", { chatId: currentChat.id });
       
       // Mark chat as read when opening it
       markChatAsRead(currentChat.id);
+      
+      // Update ref AFTER calling markChatAsRead
+      currentChatIdRef.current = currentChat.id;
     }
+    
     setSelectedChat((prev) => {
       if (prev && prev.id === currentChat.id) {
         return {
@@ -909,82 +915,7 @@ const bumpChatToTop = useCallback((update: {
     }
     return prev;
   });
-
-  setCurrentChat((prev) => {
-    if (prev && prev.id === update.chatId) {
-      return normalizeChat({ ...prev, ...update });
-    }
-    return prev;
-  });
 }, [normalizeChat, updateChatSnapshots]);
-
-
-
-
-
-  useEffect(() => {
-    const s = socketRef.current;
-    if (!s) return;
-
-    // Novo contrato (relay j? emite tamb?m os legados)
-    const handleChatUpdated = (u: any) => bumpChatToTop(u);
-    const handleMessageActivity = (m: any) => {
-      // (debug removido) socket message received
-      bumpChatToTop({
-        chatId: m.chat_id,
-        last_message: m.body ?? (m.media_url ? "[MEDIA]" : ""),
-        last_message_at: m.created_at,
-        last_message_from: m.sender_type,
-        last_message_type: m.type ?? null,
-        last_message_media_url: m.media_url ?? null,
-        group_name: Object.prototype.hasOwnProperty.call(m, "group_name") ? m.group_name ?? null : undefined,
-        group_avatar_url: Object.prototype.hasOwnProperty.call(m, "group_avatar_url")
-          ? m.group_avatar_url ?? null
-          : undefined,
-        remote_id: Object.prototype.hasOwnProperty.call(m, "remote_id") ? m.remote_id ?? null : undefined,
-        kind: Object.prototype.hasOwnProperty.call(m, "kind") ? m.kind ?? null : undefined,
-      });
-    };
-    const handleMessageStatus = (st: any) => {
-      if (!st?.messageId) return;
-      setMessageStatuses(prev => ({
-        ...prev,
-        [st.messageId]: st.view_status ?? st.raw_status ?? null,
-      }));
-    };
-
-    s.on("chat:updated", handleChatUpdated);
-    s.on("message:new", handleMessageActivity);
-    // (Opcional) se voc? quiser tratar diferente:
-    s.on("message:inbound", handleMessageActivity);
-    s.on("message:outbound", handleMessageActivity);
-    s.on("message:status", handleMessageStatus);
-
-    // Listener para mudança de agente de IA
-    const handleAgentChanged = (payload: any) => {
-      if (payload.chatId) {
-        bumpChatToTop({
-          chatId: payload.chatId,
-          ai_agent_id: payload.ai_agent_id,
-          ai_agent_name: payload.ai_agent_name,
-        } as any);
-      }
-    };
-    s.on("chat:agent-changed", handleAgentChanged);
-
-    return () => {
-      s.off("chat:updated", handleChatUpdated);
-      s.off("message:new", handleMessageActivity);
-      s.off("message:inbound", handleMessageActivity);
-      s.off("message:outbound", handleMessageActivity);
-      s.off("message:status", handleMessageStatus);
-      s.off("chat:agent-changed", handleAgentChanged);
-    };
-  }, [selectedChat?.id, setMessageStatuses]);
-
-
-
-
 
   useEffect(() => {
     let cancelled = false;
@@ -1160,11 +1091,15 @@ const scrollToBottom = useCallback(
       const normalized = normalizeMessage(msg);
       const chatId = normalized.chat_id;
       const existing = messagesCache.get(chatId) ?? [];
+      
+      // Find existing message by ID, client_draft_id, or external_id (for draft replacement)
       const index = existing.findIndex(
         (item) =>
           item.id === normalized.id ||
-          (normalized.client_draft_id && item.client_draft_id === normalized.client_draft_id),
+          (normalized.client_draft_id && item.client_draft_id === normalized.client_draft_id) ||
+          ((normalized as any).external_id && (item as any).external_id === (normalized as any).external_id && item.id?.startsWith('draft-')),
       );
+      
       let updated: Message[];
       if (index >= 0) {
         const previous = existing[index];
@@ -1373,6 +1308,25 @@ const scrollToBottom = useCallback(
     const onMessageNew = (m: Message) => {
       appendMessageToCache(m);
       logSendLatency(m.chat_id ?? null, m.id ?? null, m.view_status ?? null);
+      
+      // Bump chat to top quando receber mensagem nova
+      bumpChatToTop({
+        chatId: m.chat_id,
+        last_message: m.body ?? (m.media_url ? "[MEDIA]" : ""),
+        last_message_at: m.created_at,
+        last_message_from: (m.sender_type === "CUSTOMER" || m.sender_type === "AGENT") ? m.sender_type : undefined,
+        last_message_type: m.type ?? null,
+        last_message_media_url: m.media_url ?? null,
+        group_name: Object.prototype.hasOwnProperty.call(m, "group_name") ? (m as any).group_name ?? null : undefined,
+        group_avatar_url: Object.prototype.hasOwnProperty.call(m, "group_avatar_url")
+          ? (m as any).group_avatar_url ?? null
+          : undefined,
+        remote_id: Object.prototype.hasOwnProperty.call(m, "remote_id") ? (m as any).remote_id ?? null : undefined,
+        kind: Object.prototype.hasOwnProperty.call(m, "kind") ? (m as any).kind ?? null : undefined,
+        unread_count: Object.prototype.hasOwnProperty.call(m, "unread_count") 
+          ? (m as any).unread_count ?? undefined
+          : undefined,
+      });
     };
 
     const onMessageStatus = (payload: any) => {
@@ -1401,8 +1355,6 @@ const scrollToBottom = useCallback(
       }
     };
 
-    s.on("message:new", onMessageNew);
-    s.on("message:status", onMessageStatus);
     const onChatUpdated = (p: any) => {
       bumpChatToTop({
         chatId: p.chatId,
@@ -1424,15 +1376,54 @@ const scrollToBottom = useCallback(
         remote_id: Object.prototype.hasOwnProperty.call(p, "remote_id") ? p.remote_id ?? null : undefined,
         kind: Object.prototype.hasOwnProperty.call(p, "kind") ? p.kind ?? null : undefined,
         status: p.status ?? undefined,
+        unread_count: Object.prototype.hasOwnProperty.call(p, "unread_count") 
+          ? p.unread_count ?? undefined
+          : undefined,
       });
     };
 
+    // Listener para atualização de mídia em background
+    const onMediaReady = (payload: any) => {
+      if (!payload?.messageId || !payload?.media_url) return;
+      console.log('[livechat] Media ready:', payload);
+      
+      // Atualiza mensagem no cache
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === payload.messageId
+            ? { ...msg, media_url: payload.media_url, media_storage_path: payload.media_storage_path }
+            : msg
+        )
+      );
+    };
+
+    // Listener para mudança de agente de IA
+    const onAgentChanged = (payload: any) => {
+      if (payload.chatId) {
+        bumpChatToTop({
+          chatId: payload.chatId,
+          ai_agent_id: payload.ai_agent_id,
+          ai_agent_name: payload.ai_agent_name,
+        } as any);
+      }
+    };
+
+    s.on("message:new", onMessageNew);
+    s.on("message:inbound", onMessageNew);  // Também trata como message:new
+    s.on("message:outbound", onMessageNew); // Também trata como message:new
+    s.on("message:status", onMessageStatus);
     s.on("chat:updated", onChatUpdated);
+    s.on("message:media-ready", onMediaReady);
+    s.on("chat:agent-changed", onAgentChanged);
 
     return () => {
       s.off("message:new", onMessageNew);
+      s.off("message:inbound", onMessageNew);
+      s.off("message:outbound", onMessageNew);
       s.off("message:status", onMessageStatus);
       s.off("chat:updated", onChatUpdated);
+      s.off("message:media-ready", onMediaReady);
+      s.off("chat:agent-changed", onAgentChanged);
       s.disconnect();
     };
   }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop, logSendLatency]);
@@ -1752,6 +1743,7 @@ const scrollToBottom = useCallback(
         });
         const headerBefore = res.headers.get("X-Next-Before");
         const textBody = await res.text();
+        
         let payload: any = [];
         if (textBody) {
           try {

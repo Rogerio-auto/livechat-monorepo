@@ -426,6 +426,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           "last_message",
           "last_message_at",
           "last_message_from",
+          "unread_count",
         ];
         if (chatsSupportsLastMessageType) fields.push("last_message_type");
         if (chatsSupportsLastMessageMediaUrl) fields.push("last_message_media_url");
@@ -439,6 +440,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
           "inbox:inboxes!inner(id, company_id)",
           // join AI agent identity by FK (requires constraint chats_ai_agent_id_fkey)
           "ai_agent:agents!chats_ai_agent_id_fkey(id, name)",
+          // join customer data for search
+          "customer:customers(id, name, phone)",
         );
         return fields.join(",");
       };
@@ -457,7 +460,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
               .order("created_at", { ascending: false })
               .order("id", { ascending: true });
             if (inboxId) query = query.eq("inbox_id", inboxId);
-            if (statusFilter) query = query.eq("status", statusFilter);
+            if (statusFilter) {
+              query = query.eq("status", statusFilter);
+              // PENDING status: only show chats with unread messages
+              if (statusFilter === "PENDING") {
+                query = query.gt("unread_count", 0);
+              }
+            }
             if (kindFilter === "GROUP") {
               query = query.or(
                 [
@@ -476,11 +485,24 @@ export function registerLivechatChatRoutes(app: express.Application) {
                 ].join(","),
               );
             }
-            if (q && q.trim()) {
-              const term = q.trim();
-              query = query.or(`last_message.ilike.%${term}%,external_id.ilike.%${term}%`);
-            }
-            return await query.range(offset, offset + Math.max(0, limit - 1));
+            // When searching, fetch more results without text filter
+            // and filter client-side to include customer name/phone
+            const fetchLimit = q && q.trim() ? Math.max(limit * 3, 100) : limit;
+            
+            // Only apply database text filter if NOT searching customer fields
+            // (we'll filter everything client-side when searching)
+            // Commenting out the .or() filter to fetch all chats when searching
+            // if (q && q.trim()) {
+            //   const term = q.trim();
+            //   query = query.or(
+            //     [
+            //       `last_message.ilike.%${term}%`,
+            //       `external_id.ilike.%${term}%`,
+            //     ].join(",")
+            //   );
+            // }
+            
+            return await query.range(offset, offset + Math.max(0, fetchLimit - 1));
           },
         );
 
@@ -518,9 +540,36 @@ export function registerLivechatChatRoutes(app: express.Application) {
           row.ai_agent_id = row.ai_agent_id ?? null;
           row.ai_agent_name = row.ai_agent_name ?? null;
         }
+        // flatten customer relationship
+        if (row?.customer) {
+          row.customer_name = row.customer?.name ?? null;
+          row.customer_phone = row.customer?.phone ?? null;
+          delete row.customer;
+        } else {
+          row.customer_name = row.customer_name ?? null;
+          row.customer_phone = row.customer_phone ?? null;
+        }
         return row;
       });
-      const items = rawItems;
+      
+      // Client-side filtering for all searchable fields when query exists
+      let items = rawItems;
+      if (q && q.trim()) {
+        const searchTerm = q.trim().toLowerCase();
+        items = rawItems.filter((chat: any) => {
+          const lastMessage = (chat.last_message || '').toLowerCase();
+          const externalId = (chat.external_id || '').toLowerCase();
+          const customerName = (chat.customer_name || '').toLowerCase();
+          const customerPhone = (chat.customer_phone || '').toLowerCase();
+          
+          return lastMessage.includes(searchTerm) || 
+                 externalId.includes(searchTerm) ||
+                 customerName.includes(searchTerm) || 
+                 customerPhone.includes(searchTerm);
+        });
+        // Limit to original requested limit after filtering
+        items = items.slice(0, limit);
+      }
       const remoteIdSet = new Set<string>();
       for (const chat of items as any[]) {
         if (!chat) continue;
@@ -1133,7 +1182,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       await supabaseAdmin
         .from("chats")
-        .update({ last_message: String(text), last_message_at: nowIso })
+        .update({ 
+          last_message: String(text), 
+          last_message_at: nowIso,
+          last_message_from: isFromCustomer ? "CUSTOMER" : "AGENT"
+        })
         .eq("id", chatId);
 
       const runCacheInvalidation = () => {
@@ -1421,7 +1474,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       await supabaseAdmin
         .from("chats")
-        .update({ last_message: String(initialMessage), last_message_at: nowIso })
+        .update({ 
+          last_message: String(initialMessage), 
+          last_message_at: nowIso,
+          last_message_from: "AGENT"
+        })
         .eq("id", chat.id);
 
       setTimeout(() => {
@@ -1659,6 +1716,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         >(cacheKey),
         rGet<{ privateChatId: string | null }>(privMetaKey),
       ]);
+      
       if (cachedRaw) {
         const cachedEnvelope = ensureEnvelope(cachedRaw);
         const cachedData = Array.isArray(cachedEnvelope.data)
@@ -1759,11 +1817,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
 
       const pubRowsDesc = (pubResp.data || []) as any[];
-      
-      // Debug: Log messages query results
-      console.log(`[livechat/messages] Query returned ${pubRowsDesc.length} messages for chat ${id}`, {
-        messageIds: pubRowsDesc.slice(0, 5).map(r => ({ id: r.id, content: r.content?.substring(0, 30), sender_id: r.sender_id, replied_message_id: r.replied_message_id }))
-      });
       
       const mappedPubAsc = [...pubRowsDesc]
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -1951,7 +2004,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       await supabaseAdmin
         .from("chats")
-        .update({ last_message: String(text), last_message_at: nowIso })
+        .update({ 
+          last_message: String(text), 
+          last_message_at: nowIso,
+          last_message_from: isFromCustomer ? "CUSTOMER" : "AGENT"
+        })
         .eq("id", chatId);
 
       // invalida caches relacionados e reaquece mensagens recentes
@@ -2129,7 +2186,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       await supabaseAdmin
         .from("chats")
-        .update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso })
+        .update({ 
+          last_message: `[Arquivo] ${filename}`, 
+          last_message_at: nowIso,
+          last_message_from: "AGENT" // File upload endpoint is always from agent
+        })
         .eq("id", id);
 
       // invalida caches e reaquece mensagens
@@ -2328,7 +2389,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       await supabaseAdmin
         .from("chats")
-        .update({ last_message: `[Arquivo] ${filename}`, last_message_at: nowIso })
+        .update({ 
+          last_message: `[Arquivo] ${filename}`, 
+          last_message_at: nowIso,
+          last_message_from: "AGENT"
+        })
         .eq("id", chatId);
 
       // invalida caches e aquece
@@ -2691,64 +2756,209 @@ export function registerLivechatChatRoutes(app: express.Application) {
         provider,
       });
 
-      // 3. Delegate to provider-specific endpoint
+      // 3. Process based on provider
       if (provider === "WAHA") {
-        // Call /waha/chats/:chatId/mark-read
-        const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 8080}`;
-        const wahaUrl = `${baseUrl}/waha/chats/${chatId}/mark-read`;
-        
-        console.log("[READ_RECEIPTS][livechat/mark-read] Delegating to WAHA endpoint", {
-          chatId,
-          wahaUrl,
-        });
+        // WAHA provider - mark messages as read in database
+        console.log("[READ_RECEIPTS][livechat/mark-read] WAHA provider - processing", { chatId });
 
         try {
-          const response = await fetch(wahaUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: req.headers.authorization || "",
-            },
-          });
+          // Get unread customer messages
+          const { data: unreadMessages, error: messagesError } = await supabaseAdmin
+            .from("chat_messages")
+            .select("id, external_id")
+            .eq("chat_id", chatId)
+            .eq("is_from_customer", true)
+            .or("view_status.is.null,view_status.neq.read");
 
-          const result = await response.json();
-          
-          if (!response.ok) {
-            console.error("[READ_RECEIPTS][livechat/mark-read] WAHA endpoint error", {
+          if (messagesError) {
+            console.error("[READ_RECEIPTS][livechat/mark-read] Messages query error", {
               chatId,
-              status: response.status,
-              result,
+              error: messagesError.message,
             });
-            return res.status(response.status).json(result);
+            return res.status(500).json({ ok: false, error: messagesError.message });
           }
 
-          console.log("[READ_RECEIPTS][livechat/mark-read] WAHA endpoint success", {
+          const messageIds = (unreadMessages || []).map((m: any) => m.id);
+
+          if (messageIds.length === 0) {
+            console.log("[READ_RECEIPTS][livechat/mark-read] No unread messages", { chatId });
+            return res.json({ ok: true, markedCount: 0, messageIds: [] });
+          }
+
+          // Mark messages as read in database
+          const { error: updateError } = await supabaseAdmin
+            .from("chat_messages")
+            .update({ view_status: "read", updated_at: new Date().toISOString() })
+            .in("id", messageIds);
+
+          if (updateError) {
+            console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
+              chatId,
+              error: updateError.message,
+            });
+            return res.status(500).json({ ok: false, error: updateError.message });
+          }
+
+          // Reset unread_count to 0
+          const { error: chatUpdateError } = await supabaseAdmin
+            .from("chats")
+            .update({ unread_count: 0, updated_at: new Date().toISOString() })
+            .eq("id", chatId);
+
+          if (chatUpdateError) {
+            console.warn("[READ_RECEIPTS][livechat/mark-read] Chat unread_count update error", {
+              chatId,
+              error: chatUpdateError.message,
+            });
+          }
+
+          console.log("[READ_RECEIPTS][livechat/mark-read] WAHA messages marked as read", {
             chatId,
-            result,
+            count: messageIds.length,
           });
 
-          // Emit socket event for other agents to sync
+          // Emit socket events
           const io = getIO();
+          
+          // Emit message status updates
+          for (const msg of unreadMessages || []) {
+            io.to(`chat:${chatId}`).emit("message:status", {
+              kind: "livechat.message.status",
+              chatId,
+              messageId: msg.id,
+              externalId: msg.external_id,
+              view_status: "read",
+              status: "READ",
+            });
+          }
+
+          // Emit chat updated with unread_count = 0
+          io.emit("chat:updated", {
+            chatId,
+            unread_count: 0,
+          });
+
           io.emit("chat:read", {
             chatId,
             inboxId: chat.inbox_id,
             timestamp: new Date().toISOString(),
           });
 
-          return res.json(result);
-        } catch (fetchError) {
-          console.error("[READ_RECEIPTS][livechat/mark-read] Failed to call WAHA endpoint", {
+          console.log("[READ_RECEIPTS][livechat/mark-read] Socket events emitted", {
             chatId,
-            error: fetchError instanceof Error ? fetchError.message : String(fetchError),
+            count: messageIds.length,
           });
-          return res.status(500).json({ ok: false, error: "Failed to delegate to provider" });
+
+          return res.json({ ok: true, markedCount: messageIds.length, messageIds });
+        } catch (wahaError) {
+          console.error("[READ_RECEIPTS][livechat/mark-read] WAHA processing error", {
+            chatId,
+            error: wahaError instanceof Error ? wahaError.message : String(wahaError),
+          });
+          return res.status(500).json({ ok: false, error: "Failed to mark messages as read" });
         }
-      } else if (provider === "META") {
-        // META provider - placeholder for future implementation
-        console.warn("[READ_RECEIPTS][livechat/mark-read] META provider not yet implemented", {
+      } else if (provider === "META" || provider === "META_CLOUD") {
+        // META provider - mark messages as read in database only (no API call)
+        console.log("[READ_RECEIPTS][livechat/mark-read] META provider - marking as read in DB", {
           chatId,
         });
-        return res.status(501).json({ ok: false, error: "META provider not yet implemented" });
+
+        try {
+          // 1. Get unread customer messages
+          const { data: unreadMessages, error: messagesError } = await supabaseAdmin
+            .from("chat_messages")
+            .select("id, external_id")
+            .eq("chat_id", chatId)
+            .eq("is_from_customer", true)
+            .or("view_status.is.null,view_status.neq.read");
+
+          if (messagesError) {
+            console.error("[READ_RECEIPTS][livechat/mark-read] Messages query error", {
+              chatId,
+              error: messagesError.message,
+            });
+            return res.status(500).json({ ok: false, error: messagesError.message });
+          }
+
+          const messageIds = (unreadMessages || []).map((m: any) => m.id);
+
+          if (messageIds.length === 0) {
+            console.log("[READ_RECEIPTS][livechat/mark-read] No unread messages", { chatId });
+            return res.json({ ok: true, markedCount: 0, messageIds: [] });
+          }
+
+          // 2. Mark messages as read in database
+          const { error: updateError } = await supabaseAdmin
+            .from("chat_messages")
+            .update({ view_status: "read", updated_at: new Date().toISOString() })
+            .in("id", messageIds);
+
+          if (updateError) {
+            console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
+              chatId,
+              error: updateError.message,
+            });
+            return res.status(500).json({ ok: false, error: updateError.message });
+          }
+
+          // 3. Reset unread_count to 0
+          const { error: chatUpdateError } = await supabaseAdmin
+            .from("chats")
+            .update({ unread_count: 0, updated_at: new Date().toISOString() })
+            .eq("id", chatId);
+
+          if (chatUpdateError) {
+            console.warn("[READ_RECEIPTS][livechat/mark-read] Chat unread_count update error", {
+              chatId,
+              error: chatUpdateError.message,
+            });
+          }
+
+          console.log("[READ_RECEIPTS][livechat/mark-read] META messages marked as read", {
+            chatId,
+            count: messageIds.length,
+          });
+
+          // 4. Emit socket events
+          const io = getIO();
+          
+          // Emit message status updates
+          for (const msg of unreadMessages || []) {
+            io.to(`chat:${chatId}`).emit("message:status", {
+              kind: "livechat.message.status",
+              chatId,
+              messageId: msg.id,
+              externalId: msg.external_id,
+              view_status: "read",
+              status: "READ",
+            });
+          }
+
+          // Emit chat updated with unread_count = 0
+          io.emit("chat:updated", {
+            chatId,
+            unread_count: 0,
+          });
+
+          io.emit("chat:read", {
+            chatId,
+            inboxId: chat.inbox_id,
+            timestamp: new Date().toISOString(),
+          });
+
+          console.log("[READ_RECEIPTS][livechat/mark-read] Socket events emitted", {
+            chatId,
+            count: messageIds.length,
+          });
+
+          return res.json({ ok: true, markedCount: messageIds.length, messageIds });
+        } catch (metaError) {
+          console.error("[READ_RECEIPTS][livechat/mark-read] META processing error", {
+            chatId,
+            error: metaError instanceof Error ? metaError.message : String(metaError),
+          });
+          return res.status(500).json({ ok: false, error: "Failed to mark messages as read" });
+        }
       } else {
         console.warn("[READ_RECEIPTS][livechat/mark-read] Unknown provider", {
           chatId,

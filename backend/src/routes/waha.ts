@@ -1957,13 +1957,13 @@ export function registerWAHARoutes(app: Express) {
         remoteChatId,
       });
 
-      // 3. Query unread messages from customer (is_from_customer=true, view_status != 'Read')
+      // 3. Query unread messages from customer (is_from_customer=true, view_status != 'read')
       const { data: unreadMessages, error: messagesError } = await supabaseAdmin
         .from("chat_messages")
         .select("id, external_id")
         .eq("chat_id", chatId)
         .eq("is_from_customer", true)
-        .neq("view_status", "read")
+        .or("view_status.is.null,view_status.neq.read")
         .order("created_at", { ascending: false });
 
       if (messagesError) {
@@ -1985,7 +1985,28 @@ export function registerWAHARoutes(app: Express) {
       }
 
       // 4. Get WAHA credentials
-      const { session, apiKey } = await getWahaInboxConfig(chat.inbox_id);
+      let session: string;
+      let apiKey: string;
+      try {
+        const config = await getWahaInboxConfig(chat.inbox_id);
+        session = config.session;
+        apiKey = config.apiKey;
+        console.log("[READ_RECEIPTS][mark-read] WAHA config loaded", {
+          chatId,
+          inboxId: chat.inbox_id,
+          session,
+        });
+      } catch (configError) {
+        console.error("[READ_RECEIPTS][mark-read] Failed to get WAHA config", {
+          chatId,
+          inboxId: chat.inbox_id,
+          error: configError instanceof Error ? configError.message : String(configError),
+        });
+        return res.status(500).json({ 
+          ok: false, 
+          error: "Failed to load WAHA configuration: " + (configError instanceof Error ? configError.message : String(configError))
+        });
+      }
 
       // 5. Call WAHA API to mark messages as read
       // WAHA API: POST /api/{session}/chats/{chatId}/messages/read?messages=30
@@ -2068,6 +2089,12 @@ export function registerWAHARoutes(app: Express) {
           status: "READ",
         });
       }
+
+      // Emit chat:updated event with unread_count = 0
+      io.emit("chat:updated", {
+        chatId,
+        unread_count: 0,
+      });
 
       console.log("[READ_RECEIPTS][mark-read] Socket events emitted", {
         chatId,

@@ -798,7 +798,7 @@ export default function ConfiguracoesPage() {
                     </div>
                     Empresa
                   </h2>
-                  <p className="text-gray-400 mt-1">Gerencie dados da empresa e plano ativo</p>
+                  <p className="text-gray-400 mt-1">Gerencie dados da empresa{["ADMIN", "MANAGER", "SUPERVISOR"].includes(String(profileRole || "").toUpperCase()) && " e plano ativo"}</p>
                 </div>
                 <EmpresaPanel
                   form={companyForm}
@@ -809,6 +809,7 @@ export default function ConfiguracoesPage() {
                     setCompanyBaseline(next);
                   }}
                   disabled={loading}
+                  userRole={profileRole}
                 />
               </div>
             )}

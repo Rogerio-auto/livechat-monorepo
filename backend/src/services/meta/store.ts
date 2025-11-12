@@ -927,31 +927,31 @@ export async function ensureLeadCustomerChat(args: {
       const [createdLead, createdCustomer] = await Promise.all([
         // Create lead if needed
         !lead ? (async () => {
-          try {
-            const newLead = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-              `insert into public.leads (company_id, phone, name, kanban_board_id, lid)
-               values ($1, $2, $3, $4, $5) returning id, name, customer_id, lid`,
-              [args.companyId, msisdn, fallbackName, boardId, lid],
+          // Use INSERT ... ON CONFLICT DO NOTHING to avoid race conditions
+          await tx.none(
+            `insert into public.leads (company_id, phone, name, kanban_board_id, lid)
+             values ($1, $2, $3, $4, $5)
+             on conflict (company_id, phone) do nothing`,
+            [args.companyId, msisdn, fallbackName, boardId, lid],
+          );
+          
+          // Now fetch the lead (either newly created or existing)
+          if (lid) {
+            const byLid = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+              `select id, name, customer_id, lid from public.leads where company_id = $1 and lid = $2 limit 1`,
+              [args.companyId, lid],
             );
-            console.log("[META][store] lead created", { leadId: newLead.id, companyId: args.companyId, msisdn, lid });
-            return newLead;
-          } catch (error: any) {
-            if (String(error?.code) === "23505") {
-              // Conflict: re-fetch
-              if (lid) {
-                const byLid = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-                  `select id, name, customer_id, lid from public.leads where company_id = $1 and lid = $2 limit 1`,
-                  [args.companyId, lid],
-                );
-                if (byLid) return byLid;
-              }
-              return await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
-                `select id, name, customer_id, lid from public.leads where company_id = $1 and phone = $2 limit 1`,
-                [args.companyId, msisdn],
-              );
+            if (byLid) {
+              console.log("[META][store] lead ensured (by LID)", { leadId: byLid.id, companyId: args.companyId, msisdn, lid });
+              return byLid;
             }
-            throw error;
           }
+          const byPhone = await tx.one<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
+            `select id, name, customer_id, lid from public.leads where company_id = $1 and phone = $2 limit 1`,
+            [args.companyId, msisdn],
+          );
+          console.log("[META][store] lead ensured (by phone)", { leadId: byPhone.id, companyId: args.companyId, msisdn, lid });
+          return byPhone;
         })() : Promise.resolve(lead),
         
         // Create customer if needed (but need lead.id, so wait if lead was just created)
@@ -962,32 +962,28 @@ export async function ensureLeadCustomerChat(args: {
       
       // Now create customer with lead.id if needed
       if (!createdCustomer) {
-        try {
-          customer = await tx.one<{ id: string; name: string }>(
-            `insert into public.customers (company_id, phone, name, lead_id, lid)
-             values ($1, $2, $3, $4, $5) returning id, name`,
-            [args.companyId, msisdn, fallbackName, lead!.id, lid],
+        // Use INSERT ... ON CONFLICT DO NOTHING to avoid race conditions
+        await tx.none(
+          `insert into public.customers (company_id, phone, name, lead_id, lid)
+           values ($1, $2, $3, $4, $5)
+           on conflict (company_id, phone) do nothing`,
+          [args.companyId, msisdn, fallbackName, lead!.id, lid],
+        );
+        
+        // Now fetch the customer (either newly created or existing)
+        if (lid) {
+          customer = await tx.oneOrNone<{ id: string; name: string }>(
+            `select id, name from public.customers where lid = $1 limit 1`,
+            [lid],
           );
-          console.log("[META][store] customer created", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
-        } catch (error: any) {
-          if (String(error?.code) === "23505") {
-            // Conflict: re-fetch
-            if (lid) {
-              customer = await tx.oneOrNone<{ id: string; name: string }>(
-                `select id, name from public.customers where lid = $1 limit 1`,
-                [lid],
-              );
-            }
-            if (!customer) {
-              customer = await tx.one<{ id: string; name: string }>(
-                `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
-                [args.companyId, msisdn],
-              );
-            }
-          } else {
-            throw error;
-          }
         }
+        if (!customer) {
+          customer = await tx.one<{ id: string; name: string }>(
+            `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
+            [args.companyId, msisdn],
+          );
+        }
+        console.log("[META][store] customer ensured", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
       }
     }
 

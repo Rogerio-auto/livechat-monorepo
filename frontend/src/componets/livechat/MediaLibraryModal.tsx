@@ -182,13 +182,16 @@ export default function MediaLibraryModal({
     
     // Ícones para outros tipos
     const icons = {
-      VIDEO: <FiVideo className="w-12 h-12 text-(--color-text-muted)" />,
-      AUDIO: <FiMusic className="w-12 h-12 text-(--color-text-muted)" />,
-      DOCUMENT: <FiFile className="w-12 h-12 text-(--color-text-muted)" />,
+      VIDEO: <FiVideo className="w-12 h-12" style={{ color: "var(--color-text-muted)" }} />,
+      AUDIO: <FiMusic className="w-12 h-12" style={{ color: "var(--color-text-muted)" }} />,
+      DOCUMENT: <FiFile className="w-12 h-12" style={{ color: "var(--color-text-muted)" }} />,
     };
     
     return (
-      <div className="w-full h-full flex items-center justify-center bg-(--color-bg)">
+      <div
+        className="w-full h-full flex items-center justify-center"
+        style={{ backgroundColor: "var(--color-bg)" }}
+      >
         {icons[media.media_type]}
       </div>
     );
@@ -210,17 +213,33 @@ export default function MediaLibraryModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-3xl shadow-2xl border border-(--color-border) overflow-hidden">
+      <div
+        className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-3xl shadow-2xl border overflow-hidden"
+        style={{ borderColor: "var(--color-border)" }}
+      >
   <Card gradient className="h-full w-full rounded-3xl shadow-none p-0">
           {/* Header */}
-          <div className="px-6 py-4 border-b border-(--color-border) flex items-center justify-between bg-linear-to-br from-white to-gray-50 dark:from-[#141414] dark:to-[#0f0f0f]">
+          <div
+            className="px-6 py-4 border-b flex items-center justify-between bg-linear-to-br from-white to-gray-50 dark:from-[#141414] dark:to-[#0f0f0f]"
+            style={{ borderColor: "var(--color-border)" }}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-100 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400">
                 <FiImage className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-(--color-heading)">Biblioteca de Mídias</h3>
-                <p className="text-[12px] text-(--color-text-muted)">Gerencie imagens, vídeos, áudios e documentos</p>
+                <h3
+                  className="text-xl font-semibold"
+                  style={{ color: "var(--color-heading)" }}
+                >
+                  Biblioteca de Mídias
+                </h3>
+                <p
+                  className="text-[12px]"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Gerencie imagens, vídeos, áudios e documentos
+                </p>
               </div>
             </div>
             <Button aria-label="Fechar" variant="ghost" size="sm" onClick={onClose}>
@@ -229,7 +248,10 @@ export default function MediaLibraryModal({
           </div>
 
           {/* Toolbar */}
-          <div className="px-6 py-4 border-b border-(--color-border) flex items-center gap-3 bg-white/60 dark:bg-[#111]/60 backdrop-blur">
+          <div
+            className="px-6 py-4 border-b flex items-center gap-3 bg-white/60 dark:bg-[#111]/60 backdrop-blur"
+            style={{ borderColor: "var(--color-border)" }}
+          >
             {/* Upload */}
             {allowUpload && (
               <label className="inline-flex items-center gap-2 cursor-pointer">
@@ -261,11 +283,20 @@ export default function MediaLibraryModal({
                 <button
                   key={t}
                   onClick={() => { setLocalTypeFilter(localTypeFilter === t ? undefined : t); setPage(1); }}
-                  className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                  className="px-3 py-1.5 text-xs rounded-full border transition-colors hover:opacity-90"
+                  style={
                     localTypeFilter === t
-                      ? "bg-(--color-primary)/10 text-(--color-primary) border-(--color-primary)/30"
-                      : "bg-(--color-bg) text-(--color-text-muted) border-(--color-border) hover:text-(--color-heading)"
-                  }`}
+                      ? {
+                          backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)",
+                          color: "var(--color-primary)",
+                          borderColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
+                        }
+                      : {
+                          backgroundColor: "var(--color-bg)",
+                          color: "var(--color-text-muted)",
+                          borderColor: "var(--color-border)",
+                        }
+                  }
                 >
                   {t}
                 </button>
@@ -275,7 +306,12 @@ export default function MediaLibraryModal({
             {/* Search */}
             <div className="ml-auto w-[360px]">
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-(--color-text-muted)"><FiSearch className="w-4 h-4" /></span>
+                <span
+                  className="absolute left-3 top-2.5"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  <FiSearch className="w-4 h-4" />
+                </span>
                 <Input
                   placeholder="Buscar por nome..."
                   value={search}
@@ -298,17 +334,37 @@ export default function MediaLibraryModal({
           <div className="flex-1 overflow-y-auto p-6">
             {loading ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-sm text-(--color-text-muted)">Carregando...</div>
+                <div
+                  className="text-sm"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Carregando...
+                </div>
               </div>
             ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-(--color-bg) border border-(--color-border) mb-3">
-                  <FiFolder className="w-8 h-8 text-(--color-text-muted)" />
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border"
+                  style={{
+                    backgroundColor: "var(--color-bg)",
+                    borderColor: "var(--color-border)",
+                  }}
+                >
+                  <FiFolder
+                    className="w-8 h-8"
+                    style={{ color: "var(--color-text-muted)" }}
+                  />
                 </div>
-                <p className="text-sm text-(--color-text-muted)">
+                <p
+                  className="text-sm"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
                   {search ? "Nenhuma mídia encontrada" : "Biblioteca vazia"}
                 </p>
-                <p className="text-xs text-(--color-text-muted) mt-1">
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
                   {allowUpload && "Faça upload de imagens, vídeos, áudios ou documentos"}
                 </p>
               </div>
@@ -319,11 +375,15 @@ export default function MediaLibraryModal({
                     key={media.id} 
                     gradient={false} 
                     hover 
-                    className={`relative aspect-square p-0 overflow-hidden border-2 cursor-pointer group ${
+                    className="relative aspect-square p-0 overflow-hidden border-2 cursor-pointer group"
+                    style={
                       selectedId === media.id
-                        ? "border-(--color-primary) ring-2 ring-(--color-primary)/20"
-                        : "border-(--color-border)"
-                    }`}
+                        ? {
+                            borderColor: "var(--color-primary)",
+                            boxShadow: "0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent)",
+                          }
+                        : { borderColor: "var(--color-border)" }
+                    }
                     onClick={() => handleSelect(media)}
                   >
                     {/* Preview */}
@@ -360,7 +420,10 @@ export default function MediaLibraryModal({
 
                     {/* Checkmark quando selecionado */}
                     {selectedId === media.id && (
-                      <div className="absolute top-2 right-2 w-7 h-7 bg-(--color-primary) rounded-xl shadow-md flex items-center justify-center pointer-events-none">
+                      <div
+                        className="absolute top-2 right-2 w-7 h-7 rounded-xl shadow-md flex items-center justify-center pointer-events-none"
+                        style={{ backgroundColor: "var(--color-primary)" }}
+                      >
                         <FiCheck className="w-4 h-4 text-white" />
                       </div>
                     )}
@@ -372,7 +435,10 @@ export default function MediaLibraryModal({
 
           {/* Paginação */}
           {totalPages > 1 && (
-            <div className="px-6 py-4 border-t border-(--color-border) flex items-center justify-between bg-white/60 dark:bg-[#111]/60">
+            <div
+              className="px-6 py-4 border-t flex items-center justify-between bg-white/60 dark:bg-[#111]/60"
+              style={{ borderColor: "var(--color-border)" }}
+            >
               <Button
                 variant="secondary"
                 size="sm"
@@ -381,7 +447,10 @@ export default function MediaLibraryModal({
               >
                 Anterior
               </Button>
-              <span className="text-sm text-(--color-text-muted)">
+              <span
+                className="text-sm"
+                style={{ color: "var(--color-text-muted)" }}
+              >
                 Página {page} de {totalPages}
               </span>
               <Button
@@ -395,10 +464,36 @@ export default function MediaLibraryModal({
             </div>
           )}
 
-          {/* Footer com ações */}
-          {selectionMode && selectedId && (
-            <div className="px-6 py-4 border-t border-(--color-border) flex justify-end gap-2 bg-white/60 dark:bg-[#111]/60">
-              <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          {/* Footer info */}
+          <div
+            className="px-6 py-4 border-t flex items-center justify-between bg-white/60 dark:bg-[#111]/60"
+            style={{ borderColor: "var(--color-border)" }}
+          >
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                {items.length} mídias
+              </span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                {selectedId ? "1 mídia selecionada" : "Nenhuma selecionada"}
+              </span>
+            </div>
+            <span
+              className="text-sm"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Dica: clique duas vezes para inserir no chat
+            </span>
+          </div>
+
+          {/* Footer ações */}
+          <div
+            className="px-6 py-4 border-t flex justify-end gap-2 bg-white/60 dark:bg-[#111]/60"
+            style={{ borderColor: "var(--color-border)" }}
+          >
+            <Button variant="ghost" onClick={onClose}>
+              Fechar
+            </Button>
+            {selectionMode && selectedId && (
               <Button
                 variant="primary"
                 onClick={() => {
@@ -409,10 +504,10 @@ export default function MediaLibraryModal({
                   }
                 }}
               >
-                Selecionar
+                Inserir selecionada
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
       </div>
     </div>

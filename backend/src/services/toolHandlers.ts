@@ -706,8 +706,78 @@ async function handleSocket(
   params: Record<string, any>,
   context: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const { event, room } = config;
+  const { event, room, validate_inbox, allowed_providers, max_buttons, max_button_length } = config;
   if (!event) throw new Error("handler_config.event is required for SOCKET");
+
+  // ====== VALIDAÇÃO ESPECIAL: send_interactive_buttons ======
+  if (event === "send:interactive_message") {
+    // 1. Validar provider da inbox (apenas META_CLOUD)
+    if (validate_inbox) {
+      const { data: chatData } = await supabaseAdmin
+        .from("chats")
+        .select("inbox_id, inboxes!inner(provider)")
+        .eq("id", context.chatId)
+        .single();
+
+      if (!chatData?.inboxes) {
+        throw new Error("Não foi possível identificar a inbox do chat");
+      }
+
+      const provider = (chatData.inboxes as any).provider?.toUpperCase();
+      const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
+
+      if (!allowedProviders.includes(provider)) {
+        throw new Error(
+          `Botões interativos só funcionam com WhatsApp Business API (Meta Cloud). ` +
+          `Provider atual: ${provider}. Esta conversa não suporta botões.`
+        );
+      }
+
+      console.log(`[SOCKET][send_interactive_buttons] ✅ Provider validado: ${provider}`);
+    }
+
+    // 2. Validar estrutura dos botões
+    if (!params.message || typeof params.message !== "string") {
+      throw new Error("Campo 'message' é obrigatório e deve ser texto");
+    }
+
+    if (!Array.isArray(params.buttons) || params.buttons.length === 0) {
+      throw new Error("Campo 'buttons' deve ser um array com pelo menos 1 botão");
+    }
+
+    const maxButtons = max_buttons || 3;
+    if (params.buttons.length > maxButtons) {
+      throw new Error(`Máximo de ${maxButtons} botões permitidos. Enviados: ${params.buttons.length}`);
+    }
+
+    const maxLength = max_button_length || 20;
+    for (const [index, button] of params.buttons.entries()) {
+      if (!button.id || typeof button.id !== "string") {
+        throw new Error(`Botão ${index + 1}: campo 'id' é obrigatório`);
+      }
+      if (!button.title || typeof button.title !== "string") {
+        throw new Error(`Botão ${index + 1}: campo 'title' é obrigatório`);
+      }
+      if (button.title.length > maxLength) {
+        throw new Error(
+          `Botão ${index + 1}: título muito longo (${button.title.length} caracteres). ` +
+          `Máximo: ${maxLength} caracteres`
+        );
+      }
+    }
+
+    // 3. Validar footer se presente
+    if (params.footer && typeof params.footer === "string" && params.footer.length > 60) {
+      throw new Error(`Footer muito longo (${params.footer.length} caracteres). Máximo: 60 caracteres`);
+    }
+
+    console.log(`[SOCKET][send_interactive_buttons] ✅ Validações OK`, {
+      chatId: context.chatId,
+      buttonsCount: params.buttons.length,
+      messageLength: params.message.length,
+      hasFooter: !!params.footer
+    });
+  }
 
   const targetRoom = room || `chat:${context.chatId}`;
   
@@ -726,7 +796,31 @@ async function handleSocket(
   }
 
   const io = getIO();
-  io.to(targetRoom).emit(event, params);
+  
+  // Preparar payload para emissão
+  const payload = {
+    chatId: context.chatId,
+    agentId: context.agentId,
+    contactId: context.contactId,
+    ...params,
+    timestamp: new Date().toISOString()
+  };
 
-  return { success: true, data: { message: `Event '${event}' emitted to '${targetRoom}'` } };
+  io.to(targetRoom).emit(event, payload);
+
+  console.log(`[SOCKET] Event '${event}' emitted to room '${targetRoom}'`, {
+    chatId: context.chatId,
+    event,
+    paramsKeys: Object.keys(params)
+  });
+
+  return { 
+    success: true, 
+    data: { 
+      message: `Botões interativos enviados com sucesso`,
+      event,
+      room: targetRoom,
+      buttonsCount: params.buttons?.length || 0
+    } 
+  };
 }

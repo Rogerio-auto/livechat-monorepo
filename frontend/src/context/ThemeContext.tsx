@@ -32,9 +32,13 @@ function readStoredTheme(key: string): Theme | null {
 
 function applyDocumentTheme(theme: Theme) {
   if (typeof document === "undefined") return;
+  // Sistema legado
   document.documentElement.dataset.theme = theme;
   document.documentElement.classList.toggle("theme-dark", theme === "dark");
   document.documentElement.classList.toggle("theme-light", theme === "light");
+  
+  // Sistema Tailwind - CRÍTICO para dark mode funcionar
+  document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
 function getInitialTheme(): Theme {

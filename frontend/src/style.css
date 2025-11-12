@@ -1,30 +1,88 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:is(.dark, .dark *));
+
+/* ========================================
+   SISTEMA DE CORES - TEMA CLARO (padrão)
+   ======================================== */
 :root {
   color-scheme: light;
+  
+  /* Cores de fundo */
   --color-bg: #f5f7ff;
   --color-surface: #ffffff;
   --color-surface-muted: #eef2ff;
+  
+  /* Cores de sidebar */
   --color-sidebar-bg: #1d4ed8;
   --color-sidebar-border: rgba(15, 23, 42, 0.08);
-  --color-border: rgba(15, 23, 42, 0.08);
-  --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-heading: #0b1220;
-  --color-primary: #1d4ed8;
-  --color-primary-strong: #1e3a8a;
-  --color-on-primary: #ffffff;
-  --color-highlight: #38bdf8;
-  --color-highlight-strong: #0ea5e9;
-  --color-overlay: rgba(15, 23, 42, 0.5);
-  --color-card-shadow: rgba(15, 23, 42, 0.12);
   --color-sidebar-text: #f8fafc;
   --color-sidebar-text-muted: rgba(248, 250, 252, 0.8);
   --color-sidebar-hover: rgba(15, 23, 42, 0.15);
   --color-sidebar-active: rgba(56, 189, 248, 0.25);
   --color-sidebar-icon: #38bdf8;
+  
+  /* Cores de borda e divisores */
+  --color-border: rgba(15, 23, 42, 0.08);
+  
+  /* Cores de texto */
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --color-heading: #0b1220;
+  
+  /* Cores primárias e de destaque */
+  --color-primary: #1d4ed8;
+  --color-primary-strong: #1e3a8a;
+  --color-on-primary: #ffffff;
+  --color-highlight: #38bdf8;
+  --color-highlight-strong: #0ea5e9;
+  
+  /* Overlays e sombras */
+  --color-overlay: rgba(15, 23, 42, 0.5);
+  --color-card-shadow: rgba(15, 23, 42, 0.12);
 }
 
+/* ========================================
+   SISTEMA DE CORES - TEMA ESCURO
+   ======================================== */
+.dark {
+  color-scheme: dark;
+  
+  /* Cores de fundo */
+  --color-bg: #0a0f1c;
+  --color-surface: #0f172a;
+  --color-surface-muted: #111c2e;
+  
+  /* Cores de sidebar */
+  --color-sidebar-bg: #0f172a;
+  --color-sidebar-border: rgba(148, 163, 184, 0.18);
+  --color-sidebar-text: #f8fafc;
+  --color-sidebar-text-muted: rgba(226, 232, 240, 0.72);
+  --color-sidebar-hover: rgba(56, 189, 248, 0.12);
+  --color-sidebar-active: rgba(56, 189, 248, 0.25);
+  --color-sidebar-icon: #38bdf8;
+  
+  /* Cores de borda e divisores */
+  --color-border: rgba(148, 163, 184, 0.18);
+  
+  /* Cores de texto */
+  --color-text: #e2e8f0;
+  --color-text-muted: #94a3b8;
+  --color-heading: #f8fafc;
+  
+  /* Cores primárias e de destaque */
+  --color-primary: #1d4ed8;
+  --color-primary-strong: #2563eb;
+  --color-on-primary: #f8fafc;
+  --color-highlight: #38bdf8;
+  --color-highlight-strong: #0ea5e9;
+  
+  /* Overlays e sombras */
+  --color-overlay: rgba(10, 15, 28, 0.7);
+  --color-card-shadow: rgba(2, 6, 23, 0.45);
+}
+
+/* Compatibilidade com sistema antigo de atributo data-theme */
 :root[data-theme="dark"] {
   color-scheme: dark;
   --color-bg: #0a0f1c;
@@ -50,6 +108,9 @@
   --color-sidebar-icon: #38bdf8;
 }
 
+/* ========================================
+   ESTILOS GLOBAIS
+   ======================================== */
 html {
   background-color: var(--color-bg);
 }
@@ -60,6 +121,9 @@ body {
   transition: background-color 0.35s ease, color 0.35s ease;
 }
 
+/* ========================================
+   CLASSES UTILITÁRIAS DE TEMA
+   ======================================== */
 .theme-surface {
   background-color: var(--color-surface);
   color: var(--color-text);
@@ -94,112 +158,9 @@ body {
   color: var(--color-highlight);
 }
 
-/* Legacy palette overrides */
-.bg-\[\#204A34\] {
-  background-color: var(--color-primary) !important;
-  color: var(--color-on-primary) !important;
-}
-
-.bg-\[\#204A34\]\/80 {
-  background-color: rgba(29, 78, 216, 0.8) !important;
-}
-
-.text-\[\#204A34\] {
-  color: var(--color-heading) !important;
-}
-
-.text-\[\#1d2b22\] {
-  color: var(--color-heading) !important;
-}
-
-.bg-\[\#42CD55\] {
-  background-color: var(--color-highlight) !important;
-  color: var(--color-on-primary) !important;
-}
-
-.border-\[\#42CD55\] {
-  border-color: var(--color-highlight) !important;
-}
-
-.text-\[\#42CD55\] {
-  color: var(--color-highlight) !important;
-}
-
-.hover\:text-\[\#42CD55\]:hover {
-  color: var(--color-highlight-strong) !important;
-}
-
-.bg-\[\#42CD55\]\/20 {
-  background-color: rgba(56, 189, 248, 0.2) !important;
-}
-
-.hover\:text-\[\#CCFF05\]:hover {
-  color: var(--color-highlight-strong) !important;
-}
-
-.focus\:ring-\[\#42CD55\]:focus {
-  --tw-ring-color: var(--color-highlight) !important;
-}
-
-.bg-\[\#0A0F1C\] {
-  background-color: var(--color-bg) !important;
-  color: var(--color-text) !important;
-}
-
-.bg-\[\#0A0F1C\]\/30 {
-  background-color: color-mix(in srgb, var(--color-bg) 30%, transparent) !important;
-}
-
-.bg-\[\#0A0F1C\]\/60 {
-  background-color: color-mix(in srgb, var(--color-bg) 60%, transparent) !important;
-}
-
-.bg-\[\#0A0F1C\]\/80 {
-  background-color: color-mix(in srgb, var(--color-bg) 80%, transparent) !important;
-}
-
-.bg-\[\#0F172A\] {
-  background-color: var(--color-surface) !important;
-  color: var(--color-text) !important;
-}
-
-.border-\[\#1E293B\] {
-  border-color: var(--color-border) !important;
-}
-
-.border-\[\#1E293B\]\/40 {
-  border-color: color-mix(in srgb, var(--color-border) 40%, transparent) !important;
-}
-
-.border-\[\#1E293B\]\/60 {
-  border-color: color-mix(in srgb, var(--color-border) 60%, transparent) !important;
-}
-
-.text-\[\#94A3B8\] {
-  color: var(--color-text-muted) !important;
-}
-
-.hover\:border-\[\#1E293B\]:hover {
-  border-color: var(--color-border) !important;
-}
-
-.hover\:bg-\[\#0A0F1C\]\/60:hover {
-  background-color: color-mix(in srgb, var(--color-bg) 60%, transparent) !important;
-}
-
-.hover\:bg-\[\#0A0F1C\]\/80:hover {
-  background-color: color-mix(in srgb, var(--color-bg) 80%, transparent) !important;
-}
-
-.scrollbar-thumb-\[\#1E293B\]::-webkit-scrollbar-thumb {
-  background-color: var(--color-border);
-}
-
-.hover\:\[\&::\-webkit-scrollbar-thumb\]\:bg-\[\#334155\]:hover::-webkit-scrollbar-thumb,
-\[\&::\-webkit-scrollbar-thumb\]\:bg-\[\#1E293B\]::-webkit-scrollbar-thumb {
-  background-color: color-mix(in srgb, var(--color-border) 65%, transparent);
-}
-
+/* ========================================
+   COMPONENTES CONFIG PAGE
+   ======================================== */
 .config-page {
   background-color: var(--color-bg);
   color: var(--color-text);
@@ -247,8 +208,7 @@ body {
   background-color: var(--color-surface-muted);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .config-btn:hover {
@@ -300,131 +260,4 @@ body {
 
 .config-chip--muted {
   color: var(--color-text-muted);
-}
-
-.config-page .text-white,
-.config-modal .text-white {
-  color: var(--color-heading) !important;
-}
-
-.config-page .text-white\/80,
-.config-modal .text-white\/80 {
-  color: color-mix(in srgb, var(--color-heading) 75%, var(--color-text-muted)) !important;
-}
-
-.config-page .text-white\/70,
-.config-modal .text-white\/70 {
-  color: color-mix(in srgb, var(--color-heading) 65%, var(--color-text-muted)) !important;
-}
-
-.config-page .bg-white\/5,
-.config-modal .bg-white\/5 {
-  background-color: color-mix(in srgb, var(--color-surface-muted) 70%, transparent) !important;
-}
-
-.config-page .bg-white\/2,
-.config-modal .bg-white\/2 {
-  background-color: color-mix(in srgb, var(--color-surface-muted) 40%, transparent) !important;
-}
-
-.config-page .bg-white\/10,
-.config-modal .bg-white\/10 {
-  background-color: color-mix(in srgb, var(--color-surface-muted) 85%, transparent) !important;
-}
-
-.config-page .text-[#94A3B8],
-.config-modal .text-[#94A3B8] {
-  color: var(--color-text-muted) !important;
-}
-
-.config-nav {
-  background-color: var(--color-surface);
-  border: none;
-  box-shadow: 0 16px 28px -20px var(--color-card-shadow);
-}
-
-.config-nav-btn {
-  background-color: transparent;
-  color: var(--color-text-muted);
-  border: none;
-  transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.config-nav-btn:hover {
-  background-color: color-mix(in srgb, var(--color-surface-muted) 60%, transparent);
-  color: var(--color-text);
-}
-
-.config-nav-btn--active {
-  background-color: color-mix(in srgb, var(--color-highlight) 18%, transparent);
-  color: var(--color-heading);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-highlight) 20%, transparent);
-}
-
-.config-nav-btn__subtitle {
-  color: var(--color-text-muted);
-}
-
-.config-nav-btn--active .config-nav-btn__subtitle,
-.config-nav-btn__subtitle--active {
-  color: var(--color-highlight);
-}
-
-.text-\[\#38BDF8\] {
-  color: var(--color-highlight) !important;
-}
-
-.bg-\[\#1E40AF\] {
-  background-color: var(--color-primary-strong) !important;
-}
-
-.hover\:bg-\[\#1E40AF\]:hover {
-  background-color: var(--color-primary-strong) !important;
-}
-.hover\:bg-\[\#42CD55\]:hover {
-  background-color: var(--color-highlight-strong) !important;
-}
-
-.hover\:bg-\[\#CCFF05\]:hover {
-  background-color: var(--color-highlight-strong) !important;
-  color: var(--color-on-primary) !important;
-}
-
-.bg-\[\#FF8800\] {
-  background-color: var(--color-highlight) !important;
-  color: var(--color-on-primary) !important;
-}
-
-.hover\:bg-\[\#FF8800\]:hover {
-  background-color: var(--color-highlight-strong) !important;
-  color: var(--color-on-primary) !important;
-}
-
-.hover\:bg-\[\#1a3b2a\]:hover {
-  background-color: var(--color-primary-strong) !important;
-}
-
-.bg-\[\#EDEDED\],
-.bg-\[\#F7F7F7\],
-.bg-\[\#EDEDED\]\/90 {
-  background-color: var(--color-bg) !important;
-}
-
-.text-gray-500,
-.text-gray-600 {
-  color: var(--color-text-muted) !important;
-}
-
-.border-gray-200,
-.border-gray-300,
-.border-\[\#E5E7EB\] {
-  border-color: var(--color-border) !important;
-}
-
-.bg-white {
-  background-color: var(--color-surface) !important;
-}
-
-.text-white {
-  color: var(--color-on-primary) !important;
 }

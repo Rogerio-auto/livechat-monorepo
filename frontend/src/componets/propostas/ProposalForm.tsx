@@ -1,4 +1,4 @@
-﻿import { FaTimes, FaSave } from 'react-icons/fa';
+import { FaTimes, FaSave } from 'react-icons/fa';
 import { useEffect, useMemo, useState } from "react";
 import { LeadPicker } from "../funil/LeadPicker";
 import { ClienteForm } from "../clientes/ClienteForm";
@@ -109,7 +109,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
       // CONTRACT or RECEIPT based on existing proposal
       if (!selectedProposalId) return alert('Selecione uma proposta');
       const pr = proposalOptions.find(p => p.id === selectedProposalId);
-      if (!pr) return alert('Proposta inv�lida');
+      if (!pr) return alert('Proposta inv?lida');
       const payload: any = {
         lead_id: selectedLead?.id,
         doc_type: docType === 'CONTRACT' ? 'CONTRACT' : 'RECEIPT',
@@ -180,9 +180,9 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
                     <div className="flex h-full flex-col">
                       <div className="font-medium text-zinc-800 leading-tight" title={p.name} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
                       {(p.power || p.brand) && (
-                        <div className="text-xs text-zinc-500 mt-1">{[p.power, p.brand].filter(Boolean).join(' � ')}</div>
+                        <div className="text-xs text-zinc-500 mt-1">{[p.power, p.brand].filter(Boolean).join(' ? ')}</div>
                       )}
-                      <div className="mt-auto text-sm font-semibold text-zinc-700">{preco != null ? Number(preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Sem pre�o'}</div>
+                      <div className="mt-auto text-sm font-semibold text-zinc-700">{preco != null ? Number(preco).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'Sem pre?o'}</div>
                     </div>
                   </button>
                 );
@@ -202,7 +202,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
                 <option value="">Selecione</option>
                 <option value="Pix">Pix</option>
                 <option value="Boleto">Boleto</option>
-                <option value="Cartao">Cart�o</option>
+                <option value="Cartao">Cart?o</option>
                 <option value="Parcelado">Parcelado</option>
               </select>
             </div>
@@ -217,7 +217,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
               <h3 className="font-semibold text-[#204A34] mb-2">Resumo da Proposta</h3>
               <p><strong>Cliente:</strong> {selectedLead?.name || '-'}</p>
               <p><strong>Produto:</strong> {produtoSelecionado?.name}</p>
-              <p><strong>Pre�o:</strong> {(produtoSelecionado?.sale_price ?? produtoSelecionado?.cost_price) != null ? (produtoSelecionado!.sale_price ?? produtoSelecionado!.cost_price)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}</p>
+              <p><strong>Pre?o:</strong> {(produtoSelecionado?.sale_price ?? produtoSelecionado?.cost_price) != null ? (produtoSelecionado!.sale_price ?? produtoSelecionado!.cost_price)!.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '-'}</p>
               <p><strong>Desconto:</strong> {desconto}%</p>
               <p><strong>Forma de Pagamento:</strong> {formaPagamento || '-'}</p>
             </div>

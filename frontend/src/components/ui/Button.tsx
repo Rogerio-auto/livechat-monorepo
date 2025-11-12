@@ -36,7 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         "focus:ring-blue-500 dark:focus:ring-blue-400",
       
       gradient: 
-        "bg-linear-to-r from-blue-600 to-indigo-600 " +
+        "bg-gradient-to-r from-blue-600 to-indigo-600 " +
         "hover:from-blue-700 hover:to-indigo-700 " +
         "text-white shadow-md hover:shadow-lg " +
         "focus:ring-blue-500",
@@ -49,7 +49,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         "focus:ring-gray-500 dark:focus:ring-gray-400",
       
       danger: 
-        "bg-linear-to-r from-red-600 to-red-700 " +
+        "bg-gradient-to-r from-red-600 to-red-700 " +
         "hover:from-red-700 hover:to-red-800 " +
         "text-white shadow-md hover:shadow-lg " +
         "focus:ring-red-500",

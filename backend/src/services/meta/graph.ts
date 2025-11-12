@@ -188,3 +188,111 @@ export async function downloadMedia(creds: GraphCreds, url: string): Promise<Arr
   if (!res.ok) throw new Error(`downloadMedia failed (${res.status})`);
   return await res.arrayBuffer();
 }
+
+/**
+ * Envia mensagem interativa com botões de resposta rápida (reply buttons)
+ * Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages#interactive-messages
+ */
+export async function sendInteractiveButtons({
+  inboxId,
+  chatId,
+  customerPhone,
+  message,
+  buttons,
+  footer,
+  senderSupabaseId,
+}: {
+  inboxId: string;
+  chatId: string;
+  customerPhone: string;
+  message: string;
+  buttons: Array<{ id: string; title: string }>;
+  footer?: string;
+  senderSupabaseId?: string | null;
+}): Promise<{ wamid: string }> {
+  const creds = await getDecryptedCredsForInbox(inboxId);
+  const graphCreds = toGraphCreds(creds);
+
+  // Validações
+  if (!buttons || buttons.length === 0 || buttons.length > 3) {
+    throw new Error("Botões interativos devem ter entre 1 e 3 opções");
+  }
+
+  for (const btn of buttons) {
+    if (!btn.id || !btn.title) {
+      throw new Error("Cada botão deve ter 'id' e 'title'");
+    }
+    if (btn.title.length > 20) {
+      throw new Error(`Título do botão muito longo: "${btn.title}" (máx: 20 caracteres)`);
+    }
+  }
+
+  // Monta payload conforme API da Meta
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: customerPhone,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: {
+        text: message,
+      },
+      action: {
+        buttons: buttons.map((btn) => ({
+          type: "reply",
+          reply: {
+            id: btn.id,
+            title: btn.title,
+          },
+        })),
+      },
+    },
+  };
+
+  // Adiciona footer se fornecido
+  if (footer && footer.trim()) {
+    (payload.interactive as any).footer = {
+      text: footer.trim().slice(0, 60), // Máximo 60 caracteres
+    };
+  }
+
+  console.log("[META][INTERACTIVE] Sending interactive buttons", {
+    chatId,
+    inboxId,
+    customerPhone,
+    buttonsCount: buttons.length,
+    messageLength: message.length,
+    hasFooter: !!footer,
+  });
+
+  // Envia para API da Meta
+  const data = await graphFetch(graphCreds, `${graphCreds.phone_number_id}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  const wamid: string | null = (data as any)?.messages?.[0]?.id ?? null;
+  if (!wamid) {
+    throw new Error("Meta API não retornou message ID (wamid)");
+  }
+
+  // Salva mensagem no banco
+  await insertOutboundMessage({
+    chatId,
+    inboxId,
+    customerId: "", // Will be set by trigger
+    externalId: wamid,
+    content: message,
+    type: "INTERACTIVE",
+    senderId: senderSupabaseId,
+  });
+
+  console.log("[META][INTERACTIVE] ✅ Interactive message sent", {
+    chatId,
+    wamid,
+    buttonsCount: buttons.length,
+  });
+
+  return { wamid };
+}

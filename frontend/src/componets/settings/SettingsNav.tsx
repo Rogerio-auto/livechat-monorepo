@@ -20,19 +20,19 @@ export default function SettingsNav({
                 type="button"
                 className={`w-full text-left px-4 py-3 rounded-xl transition-all duration-200 ${
                   active
-                    ? "bg-(--color-primary) text-(--color-on-primary) shadow-lg"
-                    : "text-(--color-text) hover:bg-(--color-sidebar-hover)"
+                    ? "bg-blue-600 dark:bg-blue-700 text-white shadow-lg shadow-blue-500/50"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/50"
                 }`}
                 onClick={() => onChange(s.id)}
               >
-                <div className={`text-sm font-semibold ${active ? "text-(--color-on-primary)" : "text-(--color-text)"}`}>
+                <div className={`text-sm font-semibold ${active ? "text-white" : "text-gray-900 dark:text-gray-100"}`}>
                   {s.title}
                 </div>
                 {s.subtitle && (
                   <div className={`text-xs mt-0.5 ${
                     active
-                      ? "text-(--color-on-primary) opacity-80"
-                      : "text-(--color-text-muted)"
+                      ? "text-white/90"
+                      : "text-gray-600 dark:text-gray-400"
                   }`}>
                     {s.subtitle}
                   </div>

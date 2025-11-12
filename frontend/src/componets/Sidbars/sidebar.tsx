@@ -13,6 +13,7 @@ import {
   FaSun,
   FaMoon,
   FaShieldAlt,
+  FaImages,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
@@ -58,6 +59,12 @@ const links: SidebarLink[] = [
     icon: <FaBoxOpen />,
     label: "Produtos",
     isActive: (path) => path.startsWith("/produtos"),
+  },
+  {
+    to: "/galeria",
+    icon: <FaImages />,
+    label: "Galeria",
+    isActive: (path) => path.startsWith("/galeria"),
   },
   {
     to: "/calendario",

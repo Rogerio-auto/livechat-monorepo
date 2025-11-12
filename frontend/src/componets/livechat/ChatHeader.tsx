@@ -876,11 +876,14 @@ const chatLeadId = getChatLeadId(chat);
         <button
           type="button"
           aria-label="Fechar menu"
-          className={`fixed inset-0 z-40 transition-opacity duration-200 ${overlayMode || agentsOpen || tagsOpen || etapasOpen ? "opacity-100" : "opacity-0"
+          className={`fixed inset-0 z-40 transition-opacity duration-200 ${(overlayMode || agentsOpen || tagsOpen || etapasOpen) ? "opacity-100" : "opacity-0"
             }`}
           onClick={closeOverlay}
         >
-          <span className="absolute inset-0 bg-(--color-overlay) backdrop-blur-sm" />
+          <span
+            className="absolute inset-0 backdrop-blur-sm"
+            style={{ backgroundColor: "var(--color-overlay)" }}
+          />
         </button>
       )}
 
@@ -902,28 +905,48 @@ const chatLeadId = getChatLeadId(chat);
                   }}
                 />
               ) : (
-                <div className="h-9 w-9 rounded-full bg-(--color-bg)/65 flex items-center justify-center text-xs text-(--color-text-muted)">
+                <div
+                  className="h-9 w-9 rounded-full flex items-center justify-center text-xs"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--color-bg) 65%, transparent)",
+                    color: "var(--color-text-muted)",
+                  }}
+                >
                   {headerInitials}
                 </div>
               )}
               <div className="min-w-0">
-                <div className="font-semibold text-(--color-heading) truncate">
+                <div
+                  className="font-semibold truncate"
+                  style={{ color: "var(--color-heading)" }}
+                >
                   {headerName || "Desconhecido"}
                 </div>
                 {headerSecondary && (
-                  <div className="text-xs text-(--color-text-muted) truncate">
+                  <div
+                    className="text-xs truncate"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
                     {headerSecondary}
                   </div>
                 )}
                 {currentAssigneeName && (
-                  <div className="text-[11px] text-(--color-text-muted) mt-0.5">
-                    Responsável: <span className="font-medium text-(--color-text)">{currentAssigneeName}</span>
+                  <div
+                    className="text-[11px] mt-0.5"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    Responsável: <span className="font-medium" style={{ color: "var(--color-text)" }}>{currentAssigneeName}</span>
                   </div>
                 )}
               </div>
             </>
           ) : (
-            <div className="font-semibold text-(--color-heading)">Selecione um chat</div>
+            <div
+              className="font-semibold"
+              style={{ color: "var(--color-heading)" }}
+            >
+              Selecione um chat
+            </div>
           )}
         </div>
 
@@ -945,9 +968,19 @@ const chatLeadId = getChatLeadId(chat);
               {/* AI agent selector/pill */}
               {chat && effectiveStatus === "AI" && (
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-(--color-text-muted)">Agente IA</label>
+                  <label
+                    className="text-xs"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    Agente IA
+                  </label>
                   <select
-                    className="rounded-lg border border-(--color-primary) bg-(--color-primary)/20 text-(--color-primary) px-2 py-1.5 text-xs font-medium outline-none hover:bg-(--color-primary)/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="rounded-lg border px-2 py-1.5 text-xs font-medium outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
+                    style={{
+                      borderColor: "var(--color-primary)",
+                      backgroundColor: "color-mix(in srgb, var(--color-primary) 20%, transparent)",
+                      color: "var(--color-primary)",
+                    }}
                     value={(chat as any).ai_agent_id || ""}
                     onChange={(e) => handleChangeAgent(e.target.value || null)}
                     disabled={changingAgent || loadingAgents}
@@ -970,7 +1003,10 @@ const chatLeadId = getChatLeadId(chat);
                     ))}
                   </select>
                   {changingAgent && (
-                    <FiRefreshCw className="h-3 w-3 animate-spin text-(--color-primary)" />
+                    <FiRefreshCw
+                      className="h-3 w-3 animate-spin"
+                      style={{ color: "var(--color-primary)" }}
+                    />
                   )}
                 </div>
               )}
@@ -984,7 +1020,12 @@ const chatLeadId = getChatLeadId(chat);
                       onChangeStatus("AI");
                     }
                   }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-full border border-(--color-border) bg-(--color-surface)/60 text-(--color-text) opacity-50 cursor-pointer hover:opacity-70 transition-all text-xs"
+                  className="flex items-center gap-1 px-2 py-1 rounded-full border opacity-50 cursor-pointer hover:opacity-70 transition-all text-xs"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    backgroundColor: "color-mix(in srgb, var(--color-surface) 60%, transparent)",
+                    color: "var(--color-text)",
+                  }}
                   title="Clique para ativar o agente IA"
                 >
                   <FiCpu className="h-3.5 w-3.5" />
@@ -995,9 +1036,19 @@ const chatLeadId = getChatLeadId(chat);
               {/* Status selector */}
               {chat && statusOptions && statusOptions.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-(--color-text-muted)">Status</label>
+                  <label
+                    className="text-xs"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    Status
+                  </label>
                   <select
-                    className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2 py-1.5 text-xs text-(--color-text) outline-none hover:bg-(--color-bg)/40"
+                    className="rounded-lg border px-2 py-1.5 text-xs outline-none transition-colors hover:opacity-90"
+                    style={{
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-surface)",
+                      color: "var(--color-text)",
+                    }}
                     value={(currentStatus || chat.status || "").toString().toUpperCase()}
                     onChange={(e) => {
                       const v = e.target.value;
@@ -1034,8 +1085,9 @@ const chatLeadId = getChatLeadId(chat);
                   {assignedTags.map((tag) => (
                     <span
                       key={tag.id}
-                      className="px-2 py-1 rounded-full text-xs font-medium border bg-(--color-surface)/70 backdrop-blur"
+                      className="px-2 py-1 rounded-full text-xs font-medium border backdrop-blur"
                       style={{
+                        backgroundColor: "color-mix(in srgb, var(--color-surface) 70%, transparent)",
                         borderColor: tag.color || "#6B7280",
                         color: tag.color || "#065F46",
                       }}
@@ -1044,7 +1096,10 @@ const chatLeadId = getChatLeadId(chat);
                     </span>
                   ))}
                   {assignedTags.length === 0 && (
-                    <span className="text-[11px] text-(--color-text-muted) pr-1">
+                    <span
+                      className="text-[11px] pr-1"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
                       Nenhuma tag vinculada
                     </span>
                   )}
@@ -1054,9 +1109,15 @@ const chatLeadId = getChatLeadId(chat);
 
             <div className="relative">
               {agentsOpen && (
-                <div className="absolute right-[calc(100%+0.75rem)] top-0 z-40 w-60 max-h-72 overflow-y-auto rounded-xl bg-(--color-surface) p-3 shadow-xl flex flex-col gap-2">
+                <div
+                  className="absolute right-[calc(100%+0.75rem)] top-0 z-40 w-60 max-h-72 overflow-y-auto rounded-xl p-3 shadow-xl flex flex-col gap-2"
+                  style={{ backgroundColor: "var(--color-surface)" }}
+                >
                   {agentsLoading ? (
-                    <div className="py-6 text-center text-xs text-(--color-text-muted)">
+                    <div
+                      className="py-6 text-center text-xs"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
                       Carregando agentes...
                     </div>
                   ) : agentsError ? (
@@ -1065,12 +1126,30 @@ const chatLeadId = getChatLeadId(chat);
                     <>
                       <button
                         type="button"
-                        className={`flex items-center gap-2 w-full rounded-lg px-2 py-2 text-sm border transition-colors ${!effectiveAssigneeId ? "border-[color:color-mix(in srgb,var(--color-highlight) 60%,transparent)] bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] text-(--color-highlight)" : "border-transparent hover:bg-(--color-bg)/55"
-                          } ${assigningUserId === "__none__" ? "opacity-60" : ""}`}
+                        className={`flex items-center gap-2 w-full rounded-lg px-2 py-2 text-sm border transition-all ${assigningUserId === "__none__" ? "opacity-60" : "hover:opacity-90"}`}
+                        style={
+                          !effectiveAssigneeId
+                            ? {
+                                borderColor: "color-mix(in srgb, var(--color-highlight) 60%, transparent)",
+                                backgroundColor: "color-mix(in srgb, var(--color-highlight) 18%, transparent)",
+                                color: "var(--color-highlight)",
+                              }
+                            : {
+                                borderColor: "transparent",
+                                backgroundColor: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                                color: "var(--color-text)",
+                              }
+                        }
                         onClick={() => handleSelectAgent(null)}
                         disabled={assigningUserId !== null || !onAssignAgent}
                       >
-                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-(--color-bg)/65 text-xs font-semibold text-(--color-text-muted)">
+                        <span
+                          className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+                          style={{
+                            backgroundColor: "color-mix(in srgb, var(--color-bg) 65%, transparent)",
+                            color: "var(--color-text-muted)",
+                          }}
+                        >
                           <FiUserMinus className="h-4 w-4" />
                         </span>
                         <span className="flex-1 text-left">
@@ -1080,7 +1159,10 @@ const chatLeadId = getChatLeadId(chat);
                       </button>
 
                       {agents.length === 0 && (
-                        <div className="py-4 text-xs text-(--color-text-muted)">
+                        <div
+                          className="py-4 text-xs"
+                          style={{ color: "var(--color-text-muted)" }}
+                        >
                           Nenhum agente vinculado à inbox.
                         </div>
                       )}
@@ -1092,10 +1174,20 @@ const chatLeadId = getChatLeadId(chat);
                           <button
                             key={agent.id || agent.user_id}
                             type="button"
-                            className={`flex items-center gap-2 w-full rounded-lg px-2 py-2 text-sm border transition-colors ${isSelected
-                                ? "border-[color:color-mix(in srgb,var(--color-highlight) 60%,transparent)] bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] text-(--color-highlight)"
-                                : "border-transparent hover:bg-(--color-bg)/55"
-                              } ${isAssigning ? "opacity-60" : ""}`}
+                            className={`flex items-center gap-2 w-full rounded-lg px-2 py-2 text-sm border transition-all ${isAssigning ? "opacity-60" : "hover:opacity-90"}`}
+                            style={
+                              isSelected
+                                ? {
+                                    borderColor: "color-mix(in srgb, var(--color-highlight) 60%, transparent)",
+                                    backgroundColor: "color-mix(in srgb, var(--color-highlight) 18%, transparent)",
+                                    color: "var(--color-highlight)",
+                                  }
+                                : {
+                                    borderColor: "transparent",
+                                    backgroundColor: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                                    color: "var(--color-text)",
+                                  }
+                            }
                             onClick={() => handleSelectAgent(agent.user_id)}
                             disabled={assigningUserId !== null || !onAssignAgent}
                           >
@@ -1106,14 +1198,23 @@ const chatLeadId = getChatLeadId(chat);
                                 className="h-8 w-8 rounded-full object-cover"
                               />
                             ) : (
-                              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-xs font-semibold text-(--color-highlight)">
+                              <span
+                                className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold"
+                                style={{
+                                  backgroundColor: "color-mix(in srgb, var(--color-highlight) 15%, white 85%)",
+                                  color: "var(--color-highlight)",
+                                }}
+                              >
                                 {initialsFrom(agent.name)}
                               </span>
                             )}
                             <span className="flex-1 text-left">
                               <span className="block truncate">{agent.name}</span>
                               {agent.role && (
-                                <span className="block text-[11px] text-(--color-text-muted)">
+                                <span
+                                  className="block text-[11px]"
+                                  style={{ color: "var(--color-text-muted)" }}
+                                >
                                   {agent.role}
                                 </span>
                               )}
@@ -1132,14 +1233,32 @@ const chatLeadId = getChatLeadId(chat);
               )}
 
               {etapasOpen && (
-                <div className="absolute right-[calc(100%+0.75rem)] top-0 z-40 w-[320px] max-h-[75vh] overflow-y-auto rounded-xl bg-(--color-surface) p-3 shadow-xl flex flex-col gap-3">
-                  <div className="text-sm font-semibold text-(--color-text)">Etapas do funil</div>
+                <div
+                  className="absolute right-[calc(100%+0.75rem)] top-0 z-40 w-[320px] max-h-[75vh] overflow-y-auto rounded-xl p-3 shadow-xl flex flex-col gap-3"
+                  style={{ backgroundColor: "var(--color-surface)" }}
+                >
+                  <div
+                    className="text-sm font-semibold"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    Etapas do funil
+                  </div>
 
                   {/* SELECT de etapa */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-(--color-text-muted)">Etapa (coluna do Kanban)</label>
+                    <label
+                      className="text-xs"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      Etapa (coluna do Kanban)
+                    </label>
                     <select
-                      className="rounded-lg border border-(--color-border) bg-(--color-surface) px-2 py-2 text-sm outline-none focus:border-[color:color-mix(in srgb,var(--color-highlight) 55%,transparent)]"
+                      className="rounded-lg border px-2 py-2 text-sm outline-none focus:border-[color:color-mix(in srgb,var(--color-highlight) 55%,transparent)]"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-surface)",
+                        color: "var(--color-text)",
+                      }}
                       value={stageDraft ?? ""}
                       onChange={(e) => setStageDraft(e.target.value || null)}
                       disabled={!canEditStage}
@@ -1155,9 +1274,19 @@ const chatLeadId = getChatLeadId(chat);
 
                   {/* Textarea de observação */}
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs text-(--color-text-muted)">Observação</label>
+                    <label
+                      className="text-xs"
+                      style={{ color: "var(--color-text-muted)" }}
+                    >
+                      Observação
+                    </label>
                     <textarea
-                      className="min-h-[100px] resize-y rounded-lg border border-(--color-border) bg-(--color-surface) px-2 py-2 text-sm outline-none focus:border-[color:color-mix(in srgb,var(--color-highlight) 55%,transparent)]"
+                      className="min-h-[100px] resize-y rounded-lg border px-2 py-2 text-sm outline-none focus:border-[color:color-mix(in srgb,var(--color-highlight) 55%,transparent)]"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-surface)",
+                        color: "var(--color-text)",
+                      }}
                       placeholder="Adicione uma observação..."
                       value={noteDraft}
                       onChange={(e) => setNoteDraft(e.target.value)}
@@ -1170,7 +1299,12 @@ const chatLeadId = getChatLeadId(chat);
                   <div className="flex items-center justify-end gap-2">
                     <button
                       type="button"
-                      className="px-3 py-2 text-sm rounded-lg border border-(--color-border) bg-(--color-surface) hover:bg-(--color-bg)/40 text-(--color-text)"
+                      className="px-3 py-2 text-sm rounded-lg border hover:opacity-85"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-surface)",
+                        color: "var(--color-text)",
+                      }}
                       onClick={() => {
                         setEtapasOpen(false);
                         setStageDraft(effectiveStageId);
@@ -1183,7 +1317,12 @@ const chatLeadId = getChatLeadId(chat);
                     </button>
                     <button
                       type="button"
-                      className="px-3 py-2 text-sm rounded-lg border border-[color:color-mix(in srgb,var(--color-highlight) 60%,transparent)] bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] text-(--color-highlight) hover:bg-emerald-100 disabled:opacity-60"
+                      className="px-3 py-2 text-sm rounded-lg border hover:opacity-90 disabled:opacity-60"
+                      style={{
+                        borderColor: "color-mix(in srgb, var(--color-highlight) 60%, transparent)",
+                        backgroundColor: "color-mix(in srgb, var(--color-highlight) 18%, transparent)",
+                        color: "var(--color-highlight)",
+                      }}
                       onClick={handleSaveEtapas}
                       disabled={savingEtapas || (!canUpdateStage && !canUpdateNote)}
                     >
@@ -1210,15 +1349,31 @@ const chatLeadId = getChatLeadId(chat);
                     className="flex items-center justify-end gap-2"
                     style={{ transitionDelay: menuOpen ? `${index * 60}ms` : "0ms" }}
                   >
-                    <span className="text-xs font-medium text-(--color-text) bg-(--color-surface)/90 backdrop-blur px-2 py-1 rounded-lg shadow">
+                    <span
+                      className="text-xs font-medium backdrop-blur px-2 py-1 rounded-lg shadow"
+                      style={{
+                        color: "var(--color-text)",
+                        backgroundColor: "color-mix(in srgb, var(--color-surface) 90%, transparent)",
+                      }}
+                    >
                       {action.label}
                     </span>
                     <button
                       type="button"
-                      className={`h-9 w-9 flex items-center justify-center rounded-full border transition-colors ${action.active
-                          ? "bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] border-[color:color-mix(in srgb,var(--color-highlight) 45%,transparent)] text-(--color-highlight)"
-                          : "bg-(--color-surface) border-(--color-border) text-(--color-text-muted) hover:bg-(--color-bg)/40"
-                        } disabled:opacity-40`}
+                      className="h-9 w-9 flex items-center justify-center rounded-full border transition-all disabled:opacity-40 hover:opacity-90"
+                      style={
+                        action.active
+                          ? {
+                              backgroundColor: "color-mix(in srgb, var(--color-highlight) 18%, transparent)",
+                              borderColor: "color-mix(in srgb, var(--color-highlight) 45%, transparent)",
+                              color: "var(--color-highlight)",
+                            }
+                          : {
+                              backgroundColor: "var(--color-surface)",
+                              borderColor: "var(--color-border)",
+                              color: "var(--color-text-muted)",
+                            }
+                      }
                       onClick={action.onClick}
                       disabled={action.disabled}
                     >
@@ -1230,10 +1385,20 @@ const chatLeadId = getChatLeadId(chat);
 
               <button
                 type="button"
-        className={`h-9 w-9 flex items-center justify-center rounded-full border transition-colors ${menuOpen
-          ? "bg-(--color-bg)/55 border-(--color-border) text-(--color-text)"
-          : "bg-(--color-surface) border-(--color-border) text-(--color-text-muted) hover:bg-(--color-bg)/40"
-                  }`}
+        className="h-9 w-9 flex items-center justify-center rounded-full border transition-all hover:opacity-95"
+        style={
+          menuOpen
+            ? {
+                backgroundColor: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                borderColor: "var(--color-border)",
+                color: "var(--color-text)",
+              }
+            : {
+                backgroundColor: "var(--color-surface)",
+                borderColor: "var(--color-border)",
+                color: "var(--color-text-muted)",
+              }
+        }
                 onClick={handleMenuToggle}
                 aria-expanded={menuOpen}
                 aria-label="Mais ações"
@@ -1249,7 +1414,10 @@ const chatLeadId = getChatLeadId(chat);
         <div className="flex flex-col items-end gap-2">
           <div className="flex flex-wrap justify-end gap-2">
             {tags.length === 0 ? (
-              <span className="text-xs text-(--color-text-muted)">
+              <span
+                className="text-xs"
+                style={{ color: "var(--color-text-muted)" }}
+              >
                 Nenhuma tag disponível para esta empresa.
               </span>
             ) : (
@@ -1261,14 +1429,21 @@ const chatLeadId = getChatLeadId(chat);
                     key={tag.id}
                     type="button"
                     onClick={() => handleToggleTag(tag.id)}
-                    className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${selected
-                        ? "shadow-sm text-(--color-heading)"
-                        : "bg-(--color-surface)/80 text-(--color-text) hover:bg-(--color-surface)"
-                      }`}
-                    style={{
-                      backgroundColor: selected ? baseColor : undefined,
-                      borderColor: baseColor,
-                    }}
+                    className="px-3 py-1.5 rounded-full text-xs border transition-all hover:opacity-90"
+                    style={
+                      selected
+                        ? {
+                            backgroundColor: baseColor,
+                            borderColor: baseColor,
+                            color: "var(--color-heading)",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                          }
+                        : {
+                            backgroundColor: "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+                            borderColor: baseColor,
+                            color: "var(--color-text)",
+                          }
+                    }
                   >
                     {tag.name}
                   </button>

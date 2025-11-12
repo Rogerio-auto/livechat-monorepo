@@ -118,7 +118,7 @@ export default function TemplateCard({ template, canManage, onEdit, onClone, onD
       className="shrink-0 w-72 overflow-hidden border-2 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 group hover:shadow-xl hover:-translate-y-1 transition-all duration-300 hover:border-gray-300 dark:hover:border-gray-600"
     >
       {/* Header com ícone grande e badge */}
-      <div className="p-5 bg-linear-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50 border-b border-gray-100 dark:border-gray-700 group-hover:from-blue-50/30 dark:group-hover:from-blue-900/10 transition-colors duration-300">
+      <div className="p-5 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50 border-b border-gray-100 dark:border-gray-700 group-hover:from-blue-50/30 dark:group-hover:from-blue-900/10 transition-colors duration-300">
         <div className="flex items-start justify-between mb-3">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
             {getIconByKind(template.kind)}

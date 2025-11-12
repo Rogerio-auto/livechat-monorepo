@@ -66,7 +66,7 @@ export default function AgentesPanel() {
 
   return (
     <section className="space-y-6">
-      <div className="p-6 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300">
+      <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300">
         <div className="flex items-start justify-between flex-wrap gap-4">
           <div>
             <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">

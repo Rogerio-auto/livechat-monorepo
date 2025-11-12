@@ -28,7 +28,7 @@ export function TransferNotification({
           <span className="font-medium text-purple-800 dark:text-purple-300">
             {fromAgent || "Agente IA"}
           </span>
-          <FiArrowRight className="text-(--color-text-muted)" />
+          <FiArrowRight style={{ color: "var(--color-text-muted)" }} />
           <span className="font-medium text-purple-800 dark:text-purple-300">
             {toAgent || "Outro Agente IA"}
           </span>
@@ -42,7 +42,7 @@ export function TransferNotification({
           <span className="font-medium text-blue-800 dark:text-blue-300">
             {fromAgent || "Agente IA"}
           </span>
-          <FiArrowRight className="text-(--color-text-muted)" />
+          <FiArrowRight style={{ color: "var(--color-text-muted)" }} />
           <span className="font-medium text-blue-800 dark:text-blue-300">
             Atendimento Humano
           </span>
@@ -55,7 +55,7 @@ export function TransferNotification({
         <span className="font-medium text-green-800 dark:text-green-300">
           Atendimento Humano
         </span>
-  <FiArrowRight className="text-(--color-text-muted)" />
+        <FiArrowRight style={{ color: "var(--color-text-muted)" }} />
         <span className="font-medium text-green-800 dark:text-green-300">
           {toAgent || "Agente IA"}
         </span>
@@ -78,17 +78,26 @@ export function TransferNotification({
           <div className="mt-0.5 shrink-0">{getIcon()}</div>
           <div className="flex-1 space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-(--color-text) uppercase tracking-wide">
+              <span
+                className="text-xs font-semibold uppercase tracking-wide"
+                style={{ color: "var(--color-text)" }}
+              >
                 Transferência de Atendimento
               </span>
             </div>
             {getMessage()}
             {reason && (
-              <p className="text-xs text-(--color-text-muted) mt-1">
+              <p
+                className="text-xs mt-1"
+                style={{ color: "var(--color-text-muted)" }}
+              >
                 {reason}
               </p>
             )}
-            <p className="text-xs text-(--color-text-muted) mt-1">
+            <p
+              className="text-xs mt-1"
+              style={{ color: "var(--color-text-muted)" }}
+            >
               {timestamp.toLocaleTimeString("pt-BR", {
                 hour: "2-digit",
                 minute: "2-digit",

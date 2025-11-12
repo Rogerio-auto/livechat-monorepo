@@ -622,7 +622,12 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       {/* Seção de Templates/Messages no topo - sempre renderiza */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-(--color-heading)">Templates/Mensagens</h3>
+          <h3
+            className="text-sm font-semibold"
+            style={{ color: "var(--color-heading)" }}
+          >
+            Templates/Mensagens
+          </h3>
           <div className="flex items-center gap-2">
             {canManageTemplates && (
               <>
@@ -659,9 +664,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
 
         {/* quando não houver templates: mostrar CTA central */}
         {templates.length === 0 ? (
-          <div className="min-h-32 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl flex items-center justify-center bg-linear-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50">
+          <div className="min-h-32 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl flex items-center justify-center bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50">
             <div className="text-center p-8">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-linear-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center shadow-lg">
                 <FiMessageSquare className="w-10 h-10 text-blue-600 dark:text-blue-400" />
               </div>
               <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
@@ -673,7 +678,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
               {canManageTemplates ? (
                 <button
                   onClick={openNewTemplateWizard}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium shadow-lg shadow-blue-500/30 transition-all hover:scale-105"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium shadow-lg shadow-blue-500/30 transition-all hover:scale-105"
                 >
                   <FiPlus className="w-4 h-4" />
                   Criar primeiro template
@@ -734,11 +739,21 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       {/* Seção de Campanhas */}
       <div className="flex-1 grid grid-rows-[auto,1fr] gap-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold text-(--color-heading)">Campanhas</h2>
+          <h2
+            className="text-base font-semibold"
+            style={{ color: "var(--color-heading)" }}
+          >
+            Campanhas
+          </h2>
           {canManageTemplates && (
             <button
               onClick={openNewCampaign}
-              className="rounded-xl border-2 border-(--color-primary)/30 bg-(--color-primary)/10 px-4 py-2 text-xs font-medium text-(--color-primary) hover:bg-(--color-primary)/20 transition-colors"
+              className="rounded-xl border-2 px-4 py-2 text-xs font-medium transition-colors hover:opacity-90"
+              style={{
+                borderColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)",
+                color: "var(--color-primary)",
+              }}
             >
               + Nova campanha
             </button>
@@ -752,11 +767,21 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
               <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center">
                 <FiMessageSquare className="w-8 h-8 text-gray-400" />
               </div>
-              <p className="text-sm text-(--color-text-muted)">Nenhuma campanha criada ainda.</p>
+              <p
+                className="text-sm"
+                style={{ color: "var(--color-text-muted)" }}
+              >
+                Nenhuma campanha criada ainda.
+              </p>
               {canManageTemplates && (
                 <button
                   onClick={openNewCampaign}
-                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border-2 border-(--color-primary) text-sm font-medium text-(--color-primary) hover:bg-(--color-primary)/10 transition-colors"
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border-2 text-sm font-medium transition-colors hover:opacity-90"
+                  style={{
+                    borderColor: "var(--color-primary)",
+                    color: "var(--color-primary)",
+                    backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)",
+                  }}
                 >
                   <FiPlus className="w-4 h-4" />
                   Criar primeira campanha
@@ -926,7 +951,14 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
             
             {/* Sentinel para infinite scroll - dentro do grid */}
             <div ref={sentinelRef} className="h-4 w-full flex items-center justify-center col-span-full">
-              {loading && <span className="text-xs text-(--color-text-muted)">Carregando…</span>}
+              {loading && (
+                <span
+                  className="text-xs"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Carregando…
+                </span>
+              )}
             </div>
             </div>
             </>

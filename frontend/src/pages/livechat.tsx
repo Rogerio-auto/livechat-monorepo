@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type UIEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type UIEvent } from "react";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -140,7 +140,7 @@ export default function LiveChatPage() {
     () => [
       { value: "ALL", label: "Todos" },
       { value: "OPEN", label: "Abertos" },
-      { value: "ASSIGNED", label: "Atribuído" },
+      { value: "ASSIGNED", label: "Atribu�do" },
       { value: "PENDING", label: "Pendentes" },
       { value: "AI", label: "Agente de IA" },
       { value: "RESOLVED", label: "Resolvidos" },
@@ -404,7 +404,7 @@ export default function LiveChatPage() {
       const lastMessageText = mediaLabel
         ? mediaLabel
         : chat.last_message
-          ? `${chat.last_message_from === "AGENT" ? "Voc�: " : ""}${chat.last_message}`
+          ? `${chat.last_message_from === "AGENT" ? "Voc?: " : ""}${chat.last_message}`
           : null;
       const displayName = (chat.display_name && chat.display_name.trim())
         ? chat.display_name.trim()
@@ -452,7 +452,7 @@ export default function LiveChatPage() {
           const data = await response.json();
           setCurrentUser({
             id: data.id,
-            name: data.name || data.email || "Usuário",
+            name: data.name || data.email || "Usu�rio",
             avatar: data.avatar || null,
           });
         }
@@ -620,7 +620,7 @@ export default function LiveChatPage() {
       const leadId =
         (selectedChat as any)?.lead_id ??
         (selectedChat as any)?.leadId ??
-        selectedChat.customer_id ?? // FALLBACK: usa customer_id se não tiver lead_id
+        selectedChat.customer_id ?? // FALLBACK: usa customer_id se n�o tiver lead_id
         null;
 
       console.log('[livechat] handleChangeStage', {
@@ -1382,7 +1382,7 @@ const scrollToBottom = useCallback(
       });
     };
 
-    // Listener para atualização de mídia em background
+    // Listener para atualiza��o de m�dia em background
     const onMediaReady = (payload: any) => {
       if (!payload?.messageId || !payload?.media_url) return;
       console.log('[livechat] Media ready:', payload);
@@ -1397,7 +1397,7 @@ const scrollToBottom = useCallback(
       );
     };
 
-    // Listener para mudança de agente de IA
+    // Listener para mudan�a de agente de IA
     const onAgentChanged = (payload: any) => {
       if (payload.chatId) {
         bumpChatToTop({
@@ -1408,13 +1408,94 @@ const scrollToBottom = useCallback(
       }
     };
 
+    // Listener para envio de mensagens interativas (botões)
+    const onInteractiveMessage = async (payload: any) => {
+      console.log("[SOCKET] Received send:interactive_message", payload);
+      
+      const { chatId, message, buttons, footer, agentId } = payload;
+      
+      if (!chatId || !message || !Array.isArray(buttons) || buttons.length === 0) {
+        console.error("[SOCKET] Invalid interactive message payload", payload);
+        return;
+      }
+
+      // Buscar chat para obter inbox_id e customer_phone
+      const chat = chatsRef.current.find((c) => c.id === chatId);
+      if (!chat) {
+        console.error("[SOCKET] Chat not found for interactive message", { chatId });
+        return;
+      }
+
+      const inbox = inboxes.find((i) => i.id === chat.inbox_id);
+      const isMetaCloud = inbox?.provider?.toUpperCase() === "META_CLOUD";
+
+      if (!isMetaCloud) {
+        console.error("[SOCKET] Interactive buttons only work with META_CLOUD provider", {
+          chatId,
+          provider: inbox?.provider,
+        });
+        return;
+      }
+
+      try {
+        // Criar draft otimista usando crypto.randomUUID se disponível
+        const draftId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" 
+          ? crypto.randomUUID() 
+          : `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const createdAt = new Date().toISOString();
+        
+        const displayMessage = `${message}\n\n${buttons.map((b: any) => `• ${b.title}`).join('\n')}`;
+        
+        const draft = {
+          id: draftId,
+          chat_id: chatId,
+          content: displayMessage,
+          type: "INTERACTIVE",
+          is_from_customer: false,
+          created_at: createdAt,
+          view_status: "sending",
+          sender_id: null,
+          sender_name: "Agente IA",
+          media_url: null,
+        };
+
+        appendMessageToCache(draft as any);
+
+        // Enviar via API do backend
+        const response = await fetchJson<any>(`${API}/api/meta/send-interactive-buttons`, {
+          method: "POST",
+          body: JSON.stringify({
+            inboxId: chat.inbox_id,
+            chatId: chat.id,
+            customerPhone: chat.customer_phone,
+            message,
+            buttons,
+            footer: footer || undefined,
+          }),
+        });
+
+        console.log("[SOCKET] Interactive message sent successfully", {
+          chatId,
+          wamid: response.wamid,
+          buttonsCount: buttons.length,
+        });
+
+        // Atualizar status do draft
+        updateMessageStatusInCache(draftId, "sent");
+      } catch (error: any) {
+        console.error("[SOCKET] Failed to send interactive message", error);
+        alert(`Erro ao enviar botões: ${error.message || "Erro desconhecido"}`);
+      }
+    };
+
     s.on("message:new", onMessageNew);
-    s.on("message:inbound", onMessageNew);  // Também trata como message:new
-    s.on("message:outbound", onMessageNew); // Também trata como message:new
+    s.on("message:inbound", onMessageNew);  // Tamb�m trata como message:new
+    s.on("message:outbound", onMessageNew); // Tamb�m trata como message:new
     s.on("message:status", onMessageStatus);
     s.on("chat:updated", onChatUpdated);
     s.on("message:media-ready", onMediaReady);
     s.on("chat:agent-changed", onAgentChanged);
+    s.on("send:interactive_message", onInteractiveMessage);
 
     return () => {
       s.off("message:new", onMessageNew);
@@ -1424,6 +1505,7 @@ const scrollToBottom = useCallback(
       s.off("chat:updated", onChatUpdated);
       s.off("message:media-ready", onMediaReady);
       s.off("chat:agent-changed", onAgentChanged);
+      s.off("send:interactive_message", onInteractiveMessage);
       s.disconnect();
     };
   }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop, logSendLatency]);
@@ -2091,7 +2173,7 @@ const scrollToBottom = useCallback(
         }
         if (!to) {
           console.error("Falha ao resolver destinatario WAHA do chat", chat.id);
-          markDraftAsError(draftId, chat.id, "Destinatário inválido");
+          markDraftAsError(draftId, chat.id, "Destinat�rio inv�lido");
           logSendLatency(chat.id, draftId, "ERROR");
           return;
         }
@@ -2208,6 +2290,10 @@ const scrollToBottom = useCallback(
     setReplyingTo(null);
     await sendMessageToChat(currentChat, trimmedText, replyId);
   }, [currentChat, text, replyingTo, sendMessageToChat]);
+
+  const handleTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+  }, []);
 
   const retryFailedMessage = useCallback(
     async (message: Message) => {
@@ -2619,20 +2705,22 @@ const scrollToBottom = useCallback(
   return (
     <>
       <Sidebar />
-  <div className="ml-16 min-h-screen bg-(--color-bg) text-(--color-text) transition-colors duration-300">
-        <div className="grid grid-cols-12 gap-4 h-[calc(100vh-4rem)]">
+      <div
+        className="ml-16 min-h-screen transition-colors duration-300"
+        style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+      >
+        <div className="grid h-[calc(100vh-4rem)] grid-cols-12 gap-4">
           <div className="col-span-2">
             <LivechatMenu section={section} onChange={setSection} />
           </div>
 
           {(section === "all" || section === "unanswered") && (
             <Card padding="md" className="col-span-4 flex flex-col max-h-screen min-h-0">
-              {/* Header (filtros) */}
               <div className="shrink-0">
                 <div className="mb-3">
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">Caixa</label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide theme-text-muted">Caixa</label>
                   <select
-                    className="w-full rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
+                    className="config-input w-full rounded-lg px-3 py-2 text-sm"
                     value={inboxId}
                     onChange={(e) => setInboxId(e.target.value)}
                   >
@@ -2653,15 +2741,15 @@ const scrollToBottom = useCallback(
                   </select>
                 </div>
 
-                <div className="flex gap-2 mb-3">
+                <div className="mb-3 flex gap-2">
                   <input
-                    className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
+                    className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
                     placeholder="Buscar..."
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                   />
                   <select
-                    className="rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-2 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
+                    className="config-input rounded-lg px-3 py-2 text-sm"
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
                   >
@@ -2677,20 +2765,40 @@ const scrollToBottom = useCallback(
                   <button
                     type="button"
                     onClick={() => setChatScope("conversations")}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "conversations"
-                      ? "bg-(--color-primary)/15 text-(--color-primary) border-(--color-primary)/50"
-                      : "bg-(--color-surface-muted) text-(--color-text) border-transparent hover:bg-(--color-surface-muted)/80"}
-                    `}
+                    className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
+                    style={
+                      chatScope === "conversations"
+                        ? {
+                            backgroundColor: "color-mix(in srgb, var(--color-primary) 18%, transparent)",
+                            color: "var(--color-primary)",
+                            borderColor: "color-mix(in srgb, var(--color-primary) 45%, transparent)",
+                          }
+                        : {
+                            backgroundColor: "var(--color-surface-muted)",
+                            color: "var(--color-text)",
+                            borderColor: "transparent",
+                          }
+                    }
                   >
                     Conversas
                   </button>
                   <button
                     type="button"
                     onClick={() => setChatScope("groups")}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-colors border ${chatScope === "groups"
-                      ? "bg-(--color-primary)/15 text-(--color-primary) border-(--color-primary)/50"
-                      : "bg-(--color-surface-muted) text-(--color-text) border-transparent hover:bg-(--color-surface-muted)/80"}
-                    `}
+                    className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
+                    style={
+                      chatScope === "groups"
+                        ? {
+                            backgroundColor: "color-mix(in srgb, var(--color-primary) 18%, transparent)",
+                            color: "var(--color-primary)",
+                            borderColor: "color-mix(in srgb, var(--color-primary) 45%, transparent)",
+                          }
+                        : {
+                            backgroundColor: "var(--color-surface-muted)",
+                            color: "var(--color-text)",
+                            borderColor: "transparent",
+                          }
+                    }
                   >
                     Grupos
                   </button>
@@ -2710,7 +2818,7 @@ const scrollToBottom = useCallback(
             "
               >
                 {chatListItems.length === 0 ? (
-                  <div className="p-3 text-sm text-(--color-text-muted)">
+                  <div className="p-3 text-sm theme-text-muted">
                     {isChatsLoading
                       ? "Carregando chats..."
                       : chatScope === "groups"
@@ -2729,11 +2837,11 @@ const scrollToBottom = useCallback(
                 )}
 
                 {chatListItems.length > 0 && isChatsLoading && (
-                  <div className="p-3 text-xs text-(--color-text-muted) text-center">Carregando chats...</div>
+                  <div className="p-3 text-xs theme-text-muted text-center">Carregando chats...</div>
                 )}
                 {chatListItems.length > 0 && !hasMoreChats && !isChatsLoading && (
-                  <div className="p-3 text-xs text-(--color-text-muted) opacity-60 text-center">
-                    {chatScope === "groups" ? "N�o h� mais grupos." : "N�o h� mais conversas."}
+                  <div className="p-3 text-xs theme-text-muted opacity-60 text-center">
+                    {chatScope === "groups" ? "N?o h? mais grupos." : "N?o h? mais conversas."}
                   </div>
                 )}
               </div>
@@ -2777,17 +2885,17 @@ const scrollToBottom = useCallback(
             "
               >
                 {isFetchingOlderMessages && (
-                  <div className="py-2 text-center text-xs text-(--color-text-muted)">
+                  <div className="py-2 text-center text-xs theme-text-muted">
                     Carregando mensagens anteriores...
                   </div>
                 )}
                 {!isFetchingOlderMessages && !messagesHasMore && messages.length > 0 && (
-                  <div className="py-2 text-center text-xs text-(--color-text-muted) opacity-70">
+                  <div className="py-2 text-center text-xs theme-text-muted opacity-70">
                     N?o h? mais mensagens no hist?rico.
                   </div>
                 )}
                 {messagesLoading && (
-                  <div className="py-4 text-center text-sm text-(--color-text-muted)">Carregando mensagens...</div>
+                  <div className="py-4 text-center text-sm theme-text-muted">Carregando mensagens...</div>
                 )}
 
                 {messages.map((m) => (
@@ -2808,7 +2916,7 @@ const scrollToBottom = useCallback(
                 ))}
 
                 {!messagesLoading && messages.length === 0 && (
-                  <div className="py-4 text-center text-sm text-(--color-text-muted)">Nenhuma mensagem.</div>
+                  <div className="py-4 text-center text-sm theme-text-muted">Nenhuma mensagem.</div>
                 )}
                 <div ref={bottomRef} />
               </div>
@@ -2838,8 +2946,8 @@ const scrollToBottom = useCallback(
                     size="sm"
                     variant={isRecording ? "danger" : "ghost"}
                     onClick={toggleRecording}
-                    title="Gravar áudio"
-                    aria-label="Gravar áudio"
+                    title="Gravar �udio"
+                    aria-label="Gravar �udio"
                   >
                     <FiMic className="w-5 h-5" />
                   </Button>
@@ -2856,7 +2964,13 @@ const scrollToBottom = useCallback(
                 </div>
 
                 {showEmoji && (
-                  <div className="grid grid-cols-8 gap-1 p-2 bg-(--color-surface-muted)/70 border border-(--color-border) rounded-lg shadow mb-2 w-fit text-xl">
+                  <div
+                    className="grid w-fit grid-cols-8 gap-1 rounded-lg border p-2 text-xl shadow"
+                    style={{
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 70%, transparent)",
+                    }}
+                  >
                     {"????????????????"
                       .split("")
                       .map((e, i) => (
@@ -2887,10 +3001,10 @@ const scrollToBottom = useCallback(
 
                 <div className="flex gap-2">
                   <input
-                    className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
-                    placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
+                    className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
+                    placeholder={isRecording ? "Gravando �udio..." : "Digite sua mensagem..."}
                     value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    onChange={handleTextChange}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -2936,39 +3050,54 @@ const scrollToBottom = useCallback(
       {/* Modal de privado */}
       <div>
         {isPrivateOpen && (
-          <div className="fixed inset-0 bg-(--color-overlay) backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="rounded-2xl border border-(--color-border) bg-(--color-surface)/98 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] w-[min(640px,95vw)] p-4 flex flex-col max-h-[80vh] transition-colors duration-300">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+            style={{ backgroundColor: "var(--color-overlay)" }}
+          >
+            <div
+              className="flex max-h-[80vh] w-[min(640px,95vw)] flex-col rounded-2xl border p-4 transition-colors duration-300"
+              style={{
+                borderColor: "var(--color-border)",
+                backgroundColor: "color-mix(in srgb, var(--color-surface) 98%, transparent)",
+                boxShadow: "0 32px 70px -45px rgba(8, 12, 20, 0.95)",
+              }}
+            >
               <div className="flex items-center justify-between mb-2">
-                <div className="font-semibold text-(--color-heading)">Conversa privada</div>
+                <div className="font-semibold theme-heading">Conversa privada</div>
                 <button
                   onClick={() => setIsPrivateOpen(false)}
-                  className="p-2 rounded hover:bg-(--color-surface-muted)/75"
+                  className="rounded p-2 transition hover:opacity-75"
+                  style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 40%, transparent)" }}
                 >
-                  <FiX className="h-5 w-5 text-(--color-text-muted)" />
+                  <FiX className="h-5 w-5 theme-text-muted" />
                 </button>
               </div>
 
               {currentChat && (
-                <div className="text-sm text-(--color-text-muted) mb-2">
+                <div className="mb-2 text-sm theme-text-muted">
                   Agente atribu?do:{" "}
-                  <span className="font-medium text-(--color-heading)">
+                  <span className="font-medium theme-heading">
                     {currentChat.assigned_agent_name || "?"}
                   </span>
                 </div>
               )}
 
-              <div className="text-xs text-(--color-text-muted) mb-3">
+              <div className="mb-3 text-xs theme-text-muted">
                 Somente sua equipe v? estas mensagens. Elas tamb?m aparecem no hist?rico do chat, destacadas como privadas.
               </div>
 
               <div
-                className="flex-1 overflow-auto space-y-1.5 pr-1 rounded-lg p-2 border border-(--color-border) bg-(--color-bg)
+                className="flex-1 space-y-1.5 overflow-auto rounded-lg border p-2 pr-1
               scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
               [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
               hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_22%,var(--color-bg))]
             "
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-bg)",
+                }}
               >
                 {messages
                   .filter((m) => m.is_private || m.type === "PRIVATE")
@@ -2988,7 +3117,7 @@ const scrollToBottom = useCallback(
 
               <div className="mt-3 flex gap-2">
                 <input
-                  className="flex-1 rounded-lg border border-(--color-border) bg-(--color-bg)/70 px-3 py-2 text-sm text-(--color-text) transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-(--color-primary)/45"
+                  className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
                   placeholder="Mensagem privada..."
                   value={privateText}
                   onChange={(e) => setPrivateText(e.target.value)}

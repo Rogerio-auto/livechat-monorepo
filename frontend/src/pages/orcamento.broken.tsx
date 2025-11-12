@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 
   const produtosFiltrados = useMemo(() => {
@@ -41,7 +41,7 @@ export function PropostaPage() {
   const [produtos, setProdutos] = useState<CSSMathProduct[]>([]);
   const [query, setQuery] = useState("");
 
-  // produtos serão carregados do backend
+  // produtos ser�o carregados do backend
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
@@ -105,7 +105,7 @@ export function PropostaPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium">Consumo mÃ©dio (kWh/mÃªs)</label>
+              <label className="block text-sm font-medium">Consumo médio (kWh/mês)</label>
               <input
                 type="number"
                 value={consumo}
@@ -124,7 +124,7 @@ export function PropostaPage() {
                 <option value="">Selecione</option>
                 <option value="Pix">Pix</option>
                 <option value="Boleto">Boleto</option>
-                <option value="CartÃ£o">CartÃ£o</option>
+                <option value="Cartão">Cartão</option>
                 <option value="Parcelado">Parcelado</option>
               </select>
             </div>
@@ -150,14 +150,14 @@ export function PropostaPage() {
                   className={`text-left rounded-xl p-3 ring-1 transition ${produto === p.id ? "bg-emerald-100 ring-emerald-300" : "bg-white ring-zinc-200 hover:bg-zinc-50"}`}
                 >
                   <div className="font-medium text-zinc-800">{p.nome}</div>
-                  <div className="text-sm text-zinc-600">{(p.sale_price ?? p.cost_price)?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "Sem preço"}</div>
+                  <div className="text-sm text-zinc-600">{(p.sale_price ?? p.cost_price)?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "Sem pre�o"}</div>
                 </button>
               }) }
             </div>
           </div>
 
           <div className="bg-zinc-50 p-4 rounded-xl ring-1 ring-zinc-200 text-sm text-zinc-800">
-            <div className="font-medium mb-2">Vendedor responsÃ¡vel</div>
+            <div className="font-medium mb-2">Vendedor responsável</div>
             <div>{vendedor || "-"}</div>
           </div>
 
@@ -166,7 +166,7 @@ export function PropostaPage() {
               <h3 className="font-semibold text-[#204A34] mb-2">Resumo da Proposta</h3>
               <p><strong>Cliente:</strong> {selectedLead?.name || "-"}</p>
               <p><strong>Produto:</strong> {produtoSelecionado.name}</p>
-              <p><strong>PreÃ§o:</strong> {(produtoSelecionado.sale_price ?? produtoSelecionado.cost_price)?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "-"}</p>
+              <p><strong>Preço:</strong> {(produtoSelecionado.sale_price ?? produtoSelecionado.cost_price)?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ?? "-"}</p>
               <p><strong>Desconto:</strong> {desconto}%</p>
               <p><strong>Forma de Pagamento:</strong> {formaPagamento || "-"}</p>
             </div>
@@ -185,7 +185,7 @@ export function PropostaPage() {
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold text-zinc-800">{leadModeNew ? "Cadastrar novo cliente" : "Selecionar cliente"}</h3>
                 <button className="text-zinc-500 hover:text-zinc-800" onClick={() => { setShowLeadModal(false); setLeadModeNew(false); }}>
-                  âœ•
+                  ✕
                 </button>
               </div>
               {leadModeNew ? (

@@ -133,7 +133,7 @@ function TemplateCard({
   return (
     <button
       onClick={onSelect}
-      className="group relative bg-linear-to-br from-gray-800 to-gray-900 rounded-2xl p-6 text-left hover:from-blue-900 hover:to-indigo-900 transition-all duration-300 border-2 border-gray-700 hover:border-blue-500 hover:shadow-xl hover:scale-105"
+      className="group relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 text-left hover:from-blue-900 hover:to-indigo-900 transition-all duration-300 border-2 border-gray-700 hover:border-blue-500 hover:shadow-xl hover:scale-105"
     >
       {/* Category Badge */}
       {template.category && (

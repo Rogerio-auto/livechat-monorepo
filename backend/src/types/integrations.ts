@@ -26,7 +26,7 @@ const AgentStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]);
 export const AgentSchema = z
   .object({
     name: TrimmedString,
-    description: TrimmedString.max(5000).optional(),
+    description: TrimmedString.max(40000).optional(),
     status: AgentStatusSchema.optional(),
     integration_openai_id: TrimmedString.optional().or(z.null()),
     model: TrimmedString.optional(),
@@ -40,6 +40,8 @@ export const AgentSchema = z
     allow_handoff: z.boolean().optional(),
     ignore_group_messages: z.boolean().optional(),
     enabled_inbox_ids: z.array(z.string().uuid()).optional(),
+    transcription_model: z.string().optional().or(z.null()).transform(val => val === "" ? null : val),
+    vision_model: z.string().optional().or(z.null()).transform(val => val === "" ? null : val),
   })
   .strict();
 

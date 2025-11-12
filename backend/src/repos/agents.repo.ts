@@ -102,6 +102,8 @@ export async function createAgent(companyId: string, input: AgentInput): Promise
     allow_handoff: input.allow_handoff ?? false,
     ignore_group_messages: input.ignore_group_messages ?? true,
     enabled_inbox_ids: input.enabled_inbox_ids ?? [],
+    transcription_model: input.transcription_model ?? null,
+    vision_model: input.vision_model ?? null,
   };
 
   const { data, error } = await supabaseAdmin
@@ -208,6 +210,8 @@ export async function updateAgent(
   if (patch.allow_handoff !== undefined) update.allow_handoff = patch.allow_handoff;
   if (patch.ignore_group_messages !== undefined) update.ignore_group_messages = patch.ignore_group_messages;
   if (patch.enabled_inbox_ids !== undefined) update.enabled_inbox_ids = patch.enabled_inbox_ids ?? [];
+  if (patch.transcription_model !== undefined) update.transcription_model = patch.transcription_model ?? null;
+  if (patch.vision_model !== undefined) update.vision_model = patch.vision_model ?? null;
 
   if (Object.keys(update).length === 0) {
     throw new Error("No fields provided to update agent");

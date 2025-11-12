@@ -76,7 +76,7 @@ export default function CampaignMetricsModal({ apiBase, campaign, open, onClose 
     >
       <div className="w-[700px] max-w-[95vw] max-h-[90vh] bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border-2 border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-gray-900 dark:to-gray-800">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -108,7 +108,7 @@ export default function CampaignMetricsModal({ apiBase, campaign, open, onClose 
           {!loading && stats && (
             <>
               {/* Progress Overview */}
-              <Card gradient={false} className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+              <Card gradient={false} className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <FiSend className="w-4 h-4" />
                   Progresso Geral
@@ -122,7 +122,7 @@ export default function CampaignMetricsModal({ apiBase, campaign, open, onClose 
                   </div>
                   <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-linear-to-r from-blue-600 to-indigo-600 transition-all duration-500"
+                      className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 transition-all duration-500"
                       style={{ width: `${progress}%` }}
                     />
                   </div>

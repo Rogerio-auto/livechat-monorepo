@@ -23,7 +23,7 @@ export function Card({
     "transition-all duration-300";
 
   const gradientClasses = gradient
-    ? "bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 " +
+    ? "bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 " +
       "border-gray-200 dark:border-gray-700"
     : "bg-white dark:bg-gray-800 " +
       "border-gray-300 dark:border-gray-600";
@@ -137,7 +137,7 @@ export function InfoCard({
   };
 
   return (
-  <div className={`p-6 rounded-2xl bg-linear-to-br border transition-colors duration-300 ${colorClasses[color]}`}>
+  <div className={`p-6 rounded-2xl bg-gradient-to-br border transition-colors duration-300 ${colorClasses[color]}`}>
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">

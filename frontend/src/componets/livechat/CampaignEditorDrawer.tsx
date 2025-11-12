@@ -155,7 +155,7 @@ export default function CampaignEditorDrawer({
       {/* Drawer */}
       <div className="w-[540px] h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Editar Campanha</h2>
@@ -421,18 +421,33 @@ function ReadyBlock({ apiBase, campaignId }: { apiBase: string; campaignId: stri
   }, [apiBase, campaignId]);
 
   if (err) return <div className="text-xs text-red-400">{err}</div>;
-  if (!status) return <div className="text-xs text-(--color-text-muted)">Verificando…</div>;
+  if (!status) {
+    return (
+      <div
+        className="text-xs"
+        style={{ color: "var(--color-text-muted)" }}
+      >
+        Verificando…
+      </div>
+    );
+  }
 
   if (status.ok) return <div className="text-xs text-green-400">Tudo certo para disparar.</div>;
 
   return (
-    <div className="text-xs text-(--color-text-muted) grid gap-2">
+    <div
+      className="text-xs grid gap-2"
+      style={{ color: "var(--color-text-muted)" }}
+    >
       <div className="text-red-400">Faltam pré-requisitos:</div>
       <ul className="list-disc ml-5">
         {(status.missing || []).map((m) => <li key={m}>{m}</li>)}
       </ul>
       {status.details && (
-        <pre className="text-[10px] bg-black/30 p-2 rounded border border-(--color-border) overflow-auto">
+        <pre
+          className="text-[10px] bg-black/30 p-2 rounded border overflow-auto"
+          style={{ borderColor: "var(--color-border)" }}
+        >
 {JSON.stringify(status.details, null, 2)}
         </pre>
       )}

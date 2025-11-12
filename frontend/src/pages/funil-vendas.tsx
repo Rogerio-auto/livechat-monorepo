@@ -1,13 +1,15 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { FaPlus, FaTimes, FaUser, FaEnvelope, FaPhoneAlt, FaTag, FaEdit } from "react-icons/fa";
+import { FaPlus, FaTimes, FaUser, FaEnvelope, FaPhoneAlt, FaTag, FaEdit, FaCamera } from "react-icons/fa";
 import Sidebar from "../componets/Sidbars/sidebar";
-import bg from "../assets/omegagls.tras.jpg";
 import { NewColumnForm } from "../componets/funil/NewColumnForm";
 import type { Column, Card, LeadListItem } from "./funil/types";
 import { LeadPicker } from "../componets/funil/LeadPicker";
 import { ClienteForm } from "../componets/clientes/ClienteForm";
 import { LoadingOverlay } from "../componets/ui/LoadingOverlay";
+import { CardImageCapture } from "../componets/funil/CardImageCapture";
+import { CardImageGallery } from "../componets/funil/CardImageGallery";
+import { useImageUpload, type UploadedPhoto } from "../hooks/useImageUpload";
 import { useNavigate } from "react-router-dom";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -80,6 +82,15 @@ export function SalesFunnel() {
   const [loadingProposals, setLoadingProposals] = useState(false);
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
 
+  // Estados para fotos
+  const [showPhotoCapture, setShowPhotoCapture] = useState(false);
+  const [cardPhotos, setCardPhotos] = useState<UploadedPhoto[]>([]);
+
+  const onColumnCreated = useCallback((col: Column) => {
+    setColumns((prev) => [...prev, col].sort((a, b) => a.position - b.position));
+    setShowAddColumn(false);
+  }, []);
+
   const socketRef = useRef<Socket | null>(null);
   const boardScrollRef = useRef<HTMLDivElement | null>(null);
   const [cardForm, setCardForm] = useState<CardFormState>(EMPTY_CARD_FORM);
@@ -88,7 +99,6 @@ export function SalesFunnel() {
   const lastSelectedIdRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
-  // helper de fetch
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await window.fetch(url, {
       credentials: "include",
@@ -106,11 +116,11 @@ export function SalesFunnel() {
     MANAGER: "Gestor",
     ADMIN: "Administrador",
     AGENT: "Atendente",
-    TECHNICIAN: "Técnico",
+    TECHNICIAN: "T�cnico",
     SUPERVISOR: "Supervisor",
   };
 
-  // 1) board do usuário
+  // 1) board do usu�rio
   useEffect(() => {
     (async () => {
       try {
@@ -189,7 +199,7 @@ export function SalesFunnel() {
     };
   }, []);
 
-  // 3) usuários
+  // 3) usu�rios
   useEffect(() => {
     if (!boardId) return;
     (async () => {
@@ -206,7 +216,7 @@ export function SalesFunnel() {
           }))
         );
       } catch (e) {
-        console.error("Falha ao carregar usuários:", e);
+        console.error("Falha ao carregar usu�rios:", e);
       } finally {
         // se quiser um loadingUsers, adiciona aqui
       }
@@ -323,7 +333,7 @@ export function SalesFunnel() {
     [selected, flushCardDraft],
   );
 
-  // LINHAS 324–370 (substitui o effect inteiro)
+  // LINHAS 324�370 (substitui o effect inteiro)
   useEffect(() => {
     const previousId = lastSelectedIdRef.current;
     const currentId = selected?.id ?? null;
@@ -413,7 +423,7 @@ export function SalesFunnel() {
     }
   };
 
-  // persistir ordem de colunas (já sem badge de posição na UI)
+  // persistir ordem de colunas (j� sem badge de posi��o na UI)
   const persistColumnOrder = (orderedColumns: Column[], fallbackColumns: Column[]) => {
     if (!boardId) return;
     fetchJson<Column[]>(`${API}/kanban/boards/${boardId}/columns/reorder`, {
@@ -569,6 +579,48 @@ export function SalesFunnel() {
     };
   }, [selected?.leadId]);
 
+  // Carregar fotos quando um card é selecionado
+  const { fetchPhotos, deletePhoto } = useImageUpload(selected?.id || "");
+  
+  useEffect(() => {
+    if (!selected?.id) {
+      setCardPhotos([]);
+      return;
+    }
+    
+    let active = true;
+    (async () => {
+      try {
+        const photos = await fetchPhotos();
+        if (active) {
+          setCardPhotos(photos);
+        }
+      } catch (error) {
+        console.error("Falha ao carregar fotos:", error);
+        if (active) {
+          setCardPhotos([]);
+        }
+      }
+    })();
+    
+    return () => {
+      active = false;
+    };
+  }, [selected?.id, fetchPhotos]);
+
+  const handleDeletePhoto = async (photoId: string) => {
+    const success = await deletePhoto(photoId);
+    if (success) {
+      setCardPhotos((prev) => prev.filter((p) => p.id !== photoId));
+    }
+  };
+
+  const handlePhotoUploaded = async () => {
+    // Recarrega a lista de fotos após upload
+    const photos = await fetchPhotos();
+    setCardPhotos(photos);
+  };
+
   const selectedProposal = useMemo(() => {
     if (!selectedProposalId) return null;
     return leadProposals.find((p) => p.id === selectedProposalId) || null;
@@ -580,38 +632,37 @@ export function SalesFunnel() {
   // ===== RENDER =====
   return (
     <>
-      <div>
-        <Sidebar />
-      </div>
-
+      <Sidebar />
       <div
-        className="relative ml-16 min-h-screen h-[90vh] overflow-hidden bg-cover bg-center bg-no-repeat"
+        className="relative ml-16 min-h-screen flex-1 transition-colors"
         style={{
-          backgroundImage: `url(${bg})`,
-          backgroundColor: "rgba(20, 24, 22, 0.55)",
-          backgroundBlendMode: "darken",
+          background:
+            "linear-gradient(140deg, color-mix(in srgb, var(--color-bg) 96%, transparent) 0%, color-mix(in srgb, var(--color-surface) 88%, transparent) 45%, color-mix(in srgb, var(--color-surface-muted) 82%, transparent) 100%)",
         }}
       >
-        {loadingData && <LoadingOverlay text="Buscando colunas e cards" fullscreen={false} />}
-
+        {loadingData && (
+          <LoadingOverlay
+            text="Sincronizando funil de vendas"
+            subtext="Buscando colunas e cards atualizados"
+            fullscreen={false}
+          />
+        )}
         <div
           ref={boardScrollRef}
-          className="
-            flex flex-1 pt-16 gap-5
-            min-h-screen
-            overflow-x-auto overflow-y-hidden
-            px-4 pb-6
-            snap-x snap-mandatory
-            [scrollbar-width:thin]
-          "
+          className="flex flex-1 min-h-screen gap-6 overflow-x-auto overflow-y-hidden px-8 pb-10 pt-14 snap-x snap-mandatory [scrollbar-width:thin]"
         >
-          <div className="shrink-0 w-288px snap-start">
+          <div className="w-72 shrink-0 snap-start">
             {showAddColumn ? (
               <NewColumnForm apiBase={API} boardId={boardId} onCreated={(c) => onColumnCreated(c)} onCancel={() => setShowAddColumn(false)} />
             ) : (
               <button
                 onClick={() => setShowAddColumn(true)}
-                className="w-full h-[56px] rounded-2xl border-2 border-dashed border-white/40 text-white/80 hover:border-emerald-300/70 hover:text-white transition flex items-center justify-center gap-2 backdrop-blur bg-white/10 p-4"
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 transition-all duration-150 shadow-sm hover:shadow-md"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)",
+                  background: "color-mix(in srgb, var(--color-surface) 90%, transparent)",
+                  color: "var(--color-text-muted)",
+                }}
               >
                 <FaPlus /> Nova coluna
               </button>
@@ -623,7 +674,7 @@ export function SalesFunnel() {
             return (
               <div
                 key={col.id}
-                className="flex flex-col w-[20rem] md:w-[22rem] shrink-0 snap-start"
+                className="flex w-80 flex-col shrink-0 snap-start md:w-96"
                 onDragOver={(e) => {
                   if (!draggingColId || draggingColId === col.id) return;
                   e.preventDefault();
@@ -635,9 +686,9 @@ export function SalesFunnel() {
                   setDraggingColId(null);
                 }}
               >
-                {/* Cabeçalho da coluna (sem mostrar posição) */}
+                {/* Cabecalho da coluna (sem mostrar posicao) */}
                 <div
-                  className="rounded-2xl p-3 text-white shadow-sm ring-1 ring-black/5 cursor-grab active:cursor-grabbing"
+                  className="rounded-2xl border px-4 py-3 shadow-sm cursor-grab active:cursor-grabbing transition-colors"
                   draggable
                   onDragStart={(e) => {
                     e.stopPropagation();
@@ -653,15 +704,34 @@ export function SalesFunnel() {
                     }
                   }}
                   onDragEnd={() => setDraggingColId(null)}
-                  style={{ background: `linear-gradient(135deg, ${col.color}DD, ${col.color}FF)` }}
+                  style={{
+                    background: `linear-gradient(135deg, color-mix(in srgb, ${col.color} 22%, var(--color-surface)) 0%, color-mix(in srgb, ${col.color} 8%, var(--color-surface)) 100%)`,
+                    borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)",
+                    color: "var(--color-heading)",
+                    boxShadow: "0 18px 36px -24px var(--color-card-shadow)",
+                  }}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold tracking-wide">{col.title}</div>
+                    <div className="font-semibold tracking-wide" style={{ color: "var(--color-heading)" }}>
+                      {col.title}
+                    </div>
                     <div className="flex items-center gap-2">
-                      <div className="text-sm px-2 py-0.5 rounded-full bg-black/15">{list.length}</div>
+                      <div
+                        className="rounded-full px-2 py-0.5 text-sm"
+                        style={{
+                          backgroundColor: "color-mix(in srgb, var(--color-primary) 12%, transparent)",
+                          color: "var(--color-primary)",
+                        }}
+                      >
+                        {list.length}
+                      </div>
                       <button
                         onClick={() => openEditColumn(col)}
-                        className="inline-flex items-center gap-1 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg px-2 py-1"
+                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm transition-colors"
+                        style={{
+                          backgroundColor: `color-mix(in srgb, ${col.color} 14%, transparent)`,
+                          color: "var(--color-heading)",
+                        }}
                         title="Editar coluna"
                       >
                         <FaEdit />
@@ -673,7 +743,7 @@ export function SalesFunnel() {
                 {/* Cards */}
                 <div className="mt-3 flex-1 overflow-y-auto pr-1">
                   <div
-                    className="space-y-3 min-h-[4rem]"
+                    className="space-y-3 min-h-16"
                     onDragOver={(e) => {
                       if (!draggingCard) return;
                       e.preventDefault();
@@ -724,8 +794,14 @@ export function SalesFunnel() {
                               void flushCardDraft();
                               setSelected(lead);
                             }}
-                            className={`w-full text-left rounded-2xl backdrop-blur bg-white/60 hover:bg-white/80 ring-1 ring-black/5 hover:ring-emerald-300/60 transition shadow-sm hover:shadow-md p-3 group ${isDraggingThisCard ? "opacity-50 ring-2 ring-emerald-300/70" : ""
-                              }`}
+                            className={`group w-full rounded-2xl border p-3 text-left shadow-sm transition hover:shadow-md ${
+                              isDraggingThisCard ? "opacity-50" : ""
+                            }`}
+                            style={{
+                              background: "color-mix(in srgb, var(--color-surface) 86%, transparent)",
+                              borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)",
+                              color: "var(--color-text)",
+                            }}
                             draggable
                             onDragStart={(e) => {
                               setDraggingCard({ id: lead.id, fromColumnId: col.id });
@@ -768,15 +844,26 @@ export function SalesFunnel() {
                           >
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-2">
-                                <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                                <span className="font-semibold text-[#1d2b22] leading-tight">{lead.title}</span>
+                                <span
+                                  className="inline-block h-2.5 w-2.5 rounded-full"
+                                  style={{ backgroundColor: "var(--color-primary)" }}
+                                />
+                                <span className="font-semibold leading-tight" style={{ color: "var(--color-heading)" }}>
+                                  {lead.title}
+                                </span>
                               </div>
-                              <span className="text-xs font-semibold rounded-full px-2 py-1 bg-emerald-100 text-emerald-800">
+                              <span
+                                className="text-xs font-semibold rounded-full px-2 py-1"
+                                style={{
+                                  backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, transparent)",
+                                  color: "var(--color-primary)",
+                                }}
+                              >
                                 {currency(lead.value || 0)}
                               </span>
                             </div>
 
-                            <div className="mt-2 flex items-center gap-2 text-xs text-zinc-600">
+                            <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
                               <span className="inline-flex items-center gap-1">
                                 <FaTag className="opacity-70" />
                                 {lead.source || "-"}
@@ -788,7 +875,7 @@ export function SalesFunnel() {
                               </span>
                             </div>
 
-                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-600">
+                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
                               {lead.email && (
                                 <span className="inline-flex items-center gap-1">
                                   <FaEnvelope className="opacity-70" />
@@ -818,7 +905,7 @@ export function SalesFunnel() {
           })}
         </div>
 
-        {/* Painel lateral (exibição + ajustes de oportunidade) */}
+        {/* Painel lateral (exibi��o + ajustes de oportunidade) */}
         {selected && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
             <div className="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
@@ -836,8 +923,8 @@ export function SalesFunnel() {
               </button>
 
               <h2 className="text-xl font-semibold text-[#1d2b22] pr-10">{selected.title}</h2>
-              <p className="text-sm text-zinc-600 pr-10">
-                {currency(parseNumericInput(cardForm.value))} • {columns.find((c) => c.id === selected.stage)?.title}
+              <p className="pr-10 text-sm text-zinc-600">
+                {currency(parseNumericInput(cardForm.value))} - {columns.find((c) => c.id === selected.stage)?.title}
               </p>
 
               <div className="mt-6 space-y-6 pr-6">
@@ -900,7 +987,7 @@ export function SalesFunnel() {
                         updateCard(selected.id, { owner: e.target.value });
                       }}
                     >
-                      <option value="">Selecionar responsável</option>
+                      <option value="">Selecionar responsavel</option>
                       {users.map((u) => (
                         <option key={u.id} value={u.id}>
                           {u.name} ({u.roleLabel})
@@ -922,8 +1009,8 @@ export function SalesFunnel() {
                   </div>
 
                   <textarea
-                    className="mt-2 w-full rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none resize-y min-h-[96px]"
-                    placeholder="Notas / próximo passo."
+                    className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none resize-y min-h-24"
+                    placeholder="Notas / proximo passo."
                     value={cardForm.notes}
                     onChange={(e) => {
                       const raw = e.target.value;
@@ -952,7 +1039,7 @@ export function SalesFunnel() {
                           >
                             {leadProposals.map((p) => (
                               <option key={p.id} value={p.id}>
-                                {p.number} • {p.title}
+                                {p.number} - {p.title}
                               </option>
                             ))}
                           </select>
@@ -962,7 +1049,7 @@ export function SalesFunnel() {
                                 Valor: {currency(selectedProposal.totalValue)}
                               </div>
                               <div className="mt-1 whitespace-pre-wrap">
-                                {selectedProposal.description?.trim() || "Sem descrição do produto."}
+                                {selectedProposal.description?.trim() || "Sem descricao do produto."}
                               </div>
                             </div>
                           )}
@@ -973,9 +1060,32 @@ export function SalesFunnel() {
                     <div className="mt-2 text-sm text-zinc-500">Nenhum lead vinculado a este card.</div>
                   )}
                 </section>
+
+                <section>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs uppercase tracking-wider text-zinc-500">Fotos anexadas</h3>
+                    <button
+                      onClick={() => setShowPhotoCapture(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                    >
+                      <FaCamera />
+                      Adicionar Foto
+                    </button>
+                  </div>
+                  <CardImageGallery photos={cardPhotos} onDelete={handleDeletePhoto} />
+                </section>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal de captura/upload de foto */}
+        {showPhotoCapture && selected && (
+          <CardImageCapture
+            cardId={selected.id}
+            onClose={() => setShowPhotoCapture(false)}
+            onPhotoUploaded={handlePhotoUploaded}
+          />
         )}
 
         {/* Modal: escolher/cadastrar lead para criar card */}
@@ -1041,7 +1151,7 @@ export function SalesFunnel() {
 
         {/* Editar coluna */}
         {editColModal && colDraft && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
             <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-[#1d2b22]">Editar coluna</h3>
@@ -1093,10 +1203,6 @@ export function SalesFunnel() {
     </>
   );
 
-  function onColumnCreated(col: Column) {
-    setColumns((prev) => [...prev, col].sort((a, b) => a.position - b.position));
-    setShowAddColumn(false);
-  }
 }
 
 

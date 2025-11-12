@@ -1,23 +1,62 @@
-import express from "express";
+import type { Application } from "express";
 import { z } from "zod";
+
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 
-const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || "products";
+const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || "catalog_items";
 
-const parseMoney = (v: any): number | null => {
-  if (v === null || v === undefined || v === "") return null;
-  if (typeof v === "number") return v;
-  if (typeof v !== "string") return null;
-  const s = v.replace(/\./g, "").replace(/,/, ".").replace(/[^0-9.-]/g, "");
-  const n = Number(s);
-  return isNaN(n) ? null : n;
-};
+function parseMoney(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\./g, "").replace(/,/, ".").replace(/[^0-9.-]/g, "");
+  const numeric = Number(normalized);
+  return Number.isNaN(numeric) ? null : numeric;
+}
 
-export function registerProductRoutes(app: express.Application) {
-  // List products
-  app.get("/products", requireAuth, async (req, res) => {
+function respondWithProductsError(res: any, error: unknown, fallback: string) {
+  const status = typeof (error as any)?.status === "number" ? Number((error as any).status) : 500;
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : fallback;
+  return res.status(status).json({ error: message || fallback });
+}
+
+async function resolveProductsCompanyId(req: any): Promise<string> {
+  const cached = typeof req?.user?.company_id === "string" ? req.user.company_id.trim() : "";
+  if (cached) return cached;
+
+  const authUserId = typeof req?.user?.id === "string" ? req.user.id : "";
+  if (!authUserId) {
+    throw Object.assign(new Error("Not authenticated"), { status: 401 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("company_id")
+    .eq("user_id", authUserId)
+    .maybeSingle();
+
+  if (error) {
+    throw Object.assign(new Error(error.message), { status: 500 });
+  }
+
+  const companyId = typeof (data as any)?.company_id === "string" ? (data as any).company_id : null;
+  if (!companyId) {
+    throw Object.assign(new Error("Usuário sem empresa associada"), { status: 403 });
+  }
+
+  if (req?.user) {
+    req.user.company_id = companyId;
+  }
+
+  return companyId;
+}
+
+export function registerProductRoutes(app: Application) {
+  app.get("/api/products", requireAuth, async (req: any, res) => {
     try {
+      const companyId = await resolveProductsCompanyId(req);
       const q = (req.query.q as string | undefined)?.trim();
       const status = (req.query.status as string | undefined)?.trim();
       const limit = req.query.limit ? Number(req.query.limit) : undefined;
@@ -26,6 +65,7 @@ export function registerProductRoutes(app: express.Application) {
       let query = supabaseAdmin
         .from(PRODUCTS_TABLE)
         .select("*", { count: "exact" })
+        .eq("company_id", companyId)
         .order("updated_at", { ascending: false });
 
       if (q) query = query.ilike("name", `%${q}%`);
@@ -35,16 +75,16 @@ export function registerProductRoutes(app: express.Application) {
       }
 
       const { data, error, count } = await query;
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return respondWithProductsError(res, error, "Products list error");
       return res.json({ items: data || [], total: count ?? (data?.length || 0) });
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "Products list error" });
+    } catch (error) {
+      return respondWithProductsError(res, error, "Products list error");
     }
   });
 
-  // Create product
-  app.post("/products", requireAuth, async (req, res) => {
+  app.post("/api/products", requireAuth, async (req: any, res) => {
     try {
+      const companyId = await resolveProductsCompanyId(req);
       const schema = z
         .object({
           external_id: z.string().optional(),
@@ -65,24 +105,25 @@ export function registerProductRoutes(app: express.Application) {
       const parsed = schema.safeParse(req.body || {});
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
 
-      const payload: any = { ...parsed.data };
+      const payload: Record<string, unknown> = { ...parsed.data };
       if (payload.cost_price !== undefined) payload.cost_price = parseMoney(payload.cost_price);
       if (payload.sale_price !== undefined) payload.sale_price = parseMoney(payload.sale_price);
+      payload.company_id = companyId;
 
       const { data, error } = await supabaseAdmin
         .from(PRODUCTS_TABLE)
         .insert([payload])
         .select("*")
         .single();
-      if (error) return res.status(500).json({ error: error.message });
+
+      if (error) return respondWithProductsError(res, error, "Create product error");
       return res.status(201).json(data);
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "Create product error" });
+    } catch (error) {
+      return respondWithProductsError(res, error, "Create product error");
     }
   });
 
-  // Update product
-  app.put("/products/:id", requireAuth, async (req, res) => {
+  app.put("/api/products/:id", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
     const schema = z
       .object({
@@ -104,31 +145,50 @@ export function registerProductRoutes(app: express.Application) {
     const parsed = schema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
 
-    const payload: any = { ...parsed.data };
-    if (payload.cost_price !== undefined) payload.cost_price = parseMoney(payload.cost_price);
-    if (payload.sale_price !== undefined) payload.sale_price = parseMoney(payload.sale_price);
-    payload.updated_at = new Date().toISOString();
+    try {
+      const companyId = await resolveProductsCompanyId(req);
+      const payload: Record<string, unknown> = { ...parsed.data };
+      if (payload.cost_price !== undefined) payload.cost_price = parseMoney(payload.cost_price);
+      if (payload.sale_price !== undefined) payload.sale_price = parseMoney(payload.sale_price);
+      payload.updated_at = new Date().toISOString();
 
-    const { data, error } = await supabaseAdmin
-      .from(PRODUCTS_TABLE)
-      .update(payload)
-      .eq("id", id)
-      .select("*")
-      .single();
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json(data);
+      const { data, error } = await supabaseAdmin
+        .from(PRODUCTS_TABLE)
+        .update(payload)
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .select("*")
+        .maybeSingle();
+
+      if (error) return respondWithProductsError(res, error, "Update product error");
+      if (!data) return res.status(404).json({ error: "Product not found" });
+      return res.json(data);
+    } catch (error) {
+      return respondWithProductsError(res, error, "Update product error");
+    }
   });
 
-  // Delete product
-  app.delete("/products/:id", requireAuth, async (req, res) => {
+  app.delete("/api/products/:id", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
-    const { error } = await supabaseAdmin.from(PRODUCTS_TABLE).delete().eq("id", id);
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(204).send();
+    try {
+      const companyId = await resolveProductsCompanyId(req);
+      const { data, error } = await supabaseAdmin
+        .from(PRODUCTS_TABLE)
+        .delete()
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .select("id")
+        .maybeSingle();
+
+      if (error) return respondWithProductsError(res, error, "Delete product error");
+      if (!data) return res.status(404).json({ error: "Product not found" });
+      return res.status(204).send();
+    } catch (error) {
+      return respondWithProductsError(res, error, "Delete product error");
+    }
   });
 
-  // Bulk upsert
-  app.post("/products/bulk-upsert", requireAuth, async (req, res) => {
+  app.post("/api/products/bulk-upsert", requireAuth, async (req: any, res) => {
     const items = (req.body || []) as any[];
     if (!Array.isArray(items)) return res.status(400).json({ error: "Body deve ser array" });
 
@@ -147,13 +207,12 @@ export function registerProductRoutes(app: express.Application) {
       specs: z.string().optional().nullable(),
     });
 
-    const toUpsert: any[] = [];
+    const nowIso = new Date().toISOString();
+    const toUpsert: Record<string, unknown>[] = [];
     for (const raw of items) {
       const parsed = schema.safeParse(raw);
       if (!parsed.success) {
-        return res
-          .status(400)
-          .json({ error: "Item inválido", details: parsed.error.format() });
+        return res.status(400).json({ error: "Item inválido", details: parsed.error.format() });
       }
       const r = parsed.data as any;
       toUpsert.push({
@@ -169,15 +228,24 @@ export function registerProductRoutes(app: express.Application) {
         supplier: r.supplier ?? null,
         status: r.status ?? null,
         specs: r.specs ?? null,
-        updated_at: new Date().toISOString(),
+        updated_at: nowIso,
       });
     }
 
-    const { data, error } = await supabaseAdmin
-      .from(PRODUCTS_TABLE)
-      .upsert(toUpsert, { onConflict: "external_id" })
-      .select("*");
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json({ upserted: data?.length || 0 });
+    try {
+      const companyId = await resolveProductsCompanyId(req);
+      const payload = toUpsert.map((item) => ({ ...item, company_id: companyId }));
+
+      const { data, error } = await supabaseAdmin
+        .from(PRODUCTS_TABLE)
+        .upsert(payload, { onConflict: "external_id" })
+        .select("*");
+
+      if (error) return respondWithProductsError(res, error, "Bulk upsert error");
+      const affected = (data || []).filter((row: any) => row?.company_id === companyId).length;
+      return res.json({ upserted: affected });
+    } catch (error) {
+      return respondWithProductsError(res, error, "Bulk upsert error");
+    }
   });
 }

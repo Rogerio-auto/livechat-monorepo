@@ -664,8 +664,23 @@ async function getCachedChatId(inboxId: string, remoteId: string): Promise<strin
   const cacheKey = k.chatLookup(inboxId, remoteId);
   const cached = await rGet<string>(cacheKey);
   if (cached) {
-    console.log('[worker][cache] Chat lookup HIT:', { inboxId, remoteId, chatId: cached });
-    return cached;
+    // Validate that cached chatId still exists in DB (avoid phantom IDs)
+    try {
+      const exists = await db.oneOrNone<{ id: string }>(
+        `SELECT id FROM public.chats WHERE id = $1 AND inbox_id = $2 LIMIT 1`,
+        [cached, inboxId]
+      );
+      if (exists?.id) {
+        console.log('[worker][cache] Chat lookup HIT (validated in DB):', { inboxId, remoteId, chatId: cached });
+        return cached;
+      } else {
+        // Cached ID is phantom - invalidate cache
+        await rDel(cacheKey);
+        console.log('[worker][cache] Chat lookup HIT but phantom in DB, invalidated:', { inboxId, remoteId, cachedChatId: cached });
+      }
+    } catch (error) {
+      console.warn('[worker][cache] Failed to validate cached chatId:', { inboxId, remoteId, cached, error: error instanceof Error ? error.message : error });
+    }
   }
 
   console.log('[worker][cache] Chat lookup MISS:', { inboxId, remoteId });
@@ -691,6 +706,33 @@ async function cacheChatLookup(inboxId: string, remoteId: string, chatId: string
   const cacheKey = k.chatLookup(inboxId, remoteId);
   await rSet(cacheKey, chatId, 3600); // 1 hour
   console.log('[worker][cache] Chat lookup saved:', { inboxId, remoteId, chatId });
+}
+
+/**
+ * Cache helper: save chat ID under BOTH phone and LID identifiers to handle aliasing
+ * When contact identified by LID, also cache under phone format and vice versa
+ */
+async function cacheChatLookupBiDirectional(
+  inboxId: string,
+  chatId: string,
+  phoneFormatId: string | null,
+  lidFormatId: string | null
+): Promise<void> {
+  const cacheDuration = 3600; // 1 hour
+
+  // Cache under phone format if available
+  if (phoneFormatId) {
+    const phoneKey = k.chatLookup(inboxId, phoneFormatId);
+    await rSet(phoneKey, chatId, cacheDuration);
+    console.log('[worker][cache] Chat lookup saved (phone):', { inboxId, phoneFormat: phoneFormatId, chatId });
+  }
+
+  // Cache under LID format if available
+  if (lidFormatId) {
+    const lidKey = k.chatLookup(inboxId, lidFormatId);
+    await rSet(lidKey, chatId, cacheDuration);
+    console.log('[worker][cache] Chat lookup saved (LID):', { inboxId, lidFormat: lidFormatId, chatId });
+  }
 }
 
 function ensureWahaChatId(to?: string | null, fallbackPhone?: string | null): string | null {
@@ -1128,6 +1170,137 @@ function extractWahaQuotedMessageId(payload: any): string | null {
   return null;
 }
 
+/**
+ * Extrai número e LID de um identificador Webhook
+ * Exemplos:
+ * - "55111999999999" => { phone: "55111999999999", lid: null }
+ * - "5511999999999@lid" => { phone: "5511999999999", lid: "5511999999999@lid" }
+ * - "5511999999999@c.us" => { phone: "5511999999999", lid: null }
+ */
+function extractPhoneAndLid(
+  rawId: string | null | undefined,
+): { phone: string | null; lid: string | null } {
+  if (!rawId || typeof rawId !== "string") return { phone: null, lid: null };
+
+  const trimmed = rawId.trim();
+  if (!trimmed) return { phone: null, lid: null };
+
+  // Se contém @lid, extrair antes e depois
+  if (trimmed.includes("@lid")) {
+    const beforeLid = trimmed.split("@")[0]; // "5511999999999" de "5511999999999@lid"
+    return { phone: beforeLid, lid: trimmed };
+  }
+
+  // Se contém @c.us ou @g.us, é só o número
+  if (trimmed.includes("@c.us") || trimmed.includes("@g.us")) {
+    const beforeAt = trimmed.split("@")[0];
+    return { phone: beforeAt, lid: null };
+  }
+
+  // Senão, assume que é um número puro
+  return { phone: trimmed, lid: null };
+}
+
+/**
+ * Resolve LID ↔ Número via API WAHA
+ * Se só tem LID, busca o número (@c.us)
+ * Se só tem número, busca o LID
+ * Retorna sempre ambos os identificadores
+ */
+async function resolveWahaLidAndPhone(
+  sessionName: string | null | undefined,
+  contactId: string | null | undefined,
+  inboxId: string,
+): Promise<{ phone: string | null; lid: string | null }> {
+  if (!sessionName || !contactId) {
+    return { phone: null, lid: null };
+  }
+
+  const trimmed = String(contactId).trim();
+  if (!trimmed) return { phone: null, lid: null };
+
+  try {
+    // Se já tem ambos, retorna
+    if (trimmed.includes("@lid") && trimmed.includes("@c.us")) {
+      const phone = trimmed.split("@c.us")[0];
+      const lid = trimmed.split("|")[1] || null;
+      return { phone, lid };
+    }
+
+    // Se é LID, busca o número correspondente
+    if (trimmed.includes("@lid")) {
+      try {
+        const response = await wahaFetch<{ lid: string; pn: string }>(
+          `/api/${encodeURIComponent(sessionName)}/lids/${encodeURIComponent(trimmed)}`,
+        );
+        if (response?.pn) {
+          const pnNormalized = response.pn.replace("@c.us", "");
+          return { phone: pnNormalized, lid: trimmed };
+        }
+      } catch (error) {
+        console.warn("[WAHA][worker] Failed to resolve LID to phone number", {
+          sessionName,
+          lid: trimmed,
+          error,
+        });
+      }
+      // Se falhar, extrai o número do LID (antes do @)
+      const phoneFromLid = trimmed.split("@")[0];
+      return { phone: phoneFromLid, lid: trimmed };
+    }
+
+    // Se é número (@c.us), busca o LID correspondente
+    if (trimmed.includes("@c.us")) {
+      try {
+        const response = await wahaFetch<{ lid: string; pn: string }>(
+          `/api/${encodeURIComponent(sessionName)}/lids/pn/${encodeURIComponent(trimmed)}`,
+        );
+        if (response?.lid) {
+          const phoneNormalized = trimmed.replace("@c.us", "");
+          return { phone: phoneNormalized, lid: response.lid };
+        }
+      } catch (error) {
+        console.warn("[WAHA][worker] Failed to resolve phone to LID", {
+          sessionName,
+          phone: trimmed,
+          error,
+        });
+      }
+      // Se falhar, usa o número puro
+      const phoneNormalized = trimmed.replace("@c.us", "");
+      return { phone: phoneNormalized, lid: null };
+    }
+
+    // Se é número puro (sem @c.us), adiciona o sufixo e tenta buscar LID
+    const asContactId = `${trimmed}@c.us`;
+    try {
+      const response = await wahaFetch<{ lid: string; pn: string }>(
+        `/api/${encodeURIComponent(sessionName)}/lids/pn/${encodeURIComponent(asContactId)}`,
+      );
+      if (response?.lid) {
+        return { phone: trimmed, lid: response.lid };
+      }
+    } catch (error) {
+      console.warn("[WAHA][worker] Failed to resolve pure phone to LID", {
+        sessionName,
+        phone: asContactId,
+        error,
+      });
+    }
+
+    return { phone: trimmed, lid: null };
+  } catch (error) {
+    console.error("[WAHA][worker] resolveWahaLidAndPhone unexpected error", {
+      sessionName,
+      contactId,
+      error,
+    });
+    // Fallback: tenta extrair pelo menos o número
+    const extracted = extractPhoneAndLid(contactId);
+    return extracted;
+  }
+}
+
 function buildMetaContactsIndex(value: any): Map<string, any> {
   const map = new Map<string, any>();
   if (Array.isArray(value?.contacts)) {
@@ -1327,16 +1500,21 @@ async function handleMetaInboundMessages(args: {
       (typeof m?.from === "string" && m.from) ||
       metaContext.participantId ||
       null;
-    const remotePhone = participantWaId ? normalizeMsisdn(participantWaId) : null;
+    
+    // ✅ Extrair número e LID do participantWaId
+    const { phone: extractedPhone, lid: extractedLid } = extractPhoneAndLid(participantWaId);
+    const remotePhone = extractedPhone ? normalizeMsisdn(extractedPhone) : null;
 
     if (!remotePhone && !isGroupMessage) {
-      console.warn("[META][inbound] message without valid 'from'", { wamid });
+      console.warn("[META][inbound] message without valid 'from'", { wamid, participantWaId });
       continue;
     }
 
     console.log("[META][inbound] Processing message", {
       wamid,
       participantWaId,
+      extractedPhone,
+      extractedLid,
       remotePhone,
       pushname,
       participantName: metaContext.participantName,
@@ -1363,6 +1541,7 @@ async function handleMetaInboundMessages(args: {
         phone: remotePhone || normalizeMsisdn(participantWaId || ""),
         name: metaContext.participantName ?? pushname ?? remotePhone ?? participantWaId ?? null,
         rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
+        lid: extractedLid,  // ✅ Passar o LID extraído
       });
       chatId = ensured.chatId;
       console.log("[META][inbound] Direct chat ensured", {
@@ -1371,6 +1550,7 @@ async function handleMetaInboundMessages(args: {
         leadId: ensured.leadId,
         phone: remotePhone,
         rawPhone: participantWaId,
+        lid: extractedLid,  // ✅ Log do LID
       });
     }
 
@@ -2196,33 +2376,53 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   let groupMeta: { name: string | null; avatarUrl: string | null } | null = null;
 
-  // Extrair lid do webhook (disponível no campo 'me' da WAHA)
-  // IMPORTANTE: Para mensagens fromMe=true, o lid é do REMETENTE (você), não do destinatário
-  // Então NÃO devemos usar para identificar o chat/customer quando fromMe=true
-  const rawLid = 
-    (job.raw as any)?.me?.lid ?? 
-    (payload as any)?.me?.lid ?? 
-    msg?.me?.lid ?? 
-    null;
-  const meId = 
-    (job.raw as any)?.me?.id ?? 
-    (payload as any)?.me?.id ?? 
-    msg?.me?.id ?? 
-    null;
-  const isFromMe = !!msg?.fromMe;
-  // Apenas use lid se a mensagem NÃO for fromMe (ou seja, é do customer)
-  const lid = !isFromMe && rawLid && typeof rawLid === "string" && rawLid.trim() ? rawLid.trim() : null;
+  // ========== WAHA LID RESOLUTION ==========
+  // O webhook pode vir com:
+  // - payload.from = "556999999999@c.us" (número)
+  // - payload.from = "138955630588105@lid" (LID)
+  // Precisamos resolver ambos para evitar criar chats duplicados
   
-  console.log('[WAHA][worker] Extracted lid from webhook', { 
-    lid, 
-    rawLid,
-    meId,
-    isFromMe,
-    lidIgnored: isFromMe && !!rawLid,
-    hasJobRaw: !!(job.raw as any)?.me,
-    hasPayloadMe: !!(payload as any)?.me,
-    hasMsgMe: !!msg?.me,
+  const isGroupChat_check = isWahaGroupJid(chatJid);
+  let resolvedPhone: string | null = null;
+  let resolvedLid: string | null = null;
+
+  if (!isGroupChat_check && !msg?.fromMe) {
+    // Para mensagens de customer (não fromMe), resolve sempre número + LID
+    try {
+      const resolved = await resolveWahaLidAndPhone(
+        job.session ?? "default",
+        chatJid,
+        job.inboxId
+      );
+      resolvedPhone = resolved.phone;
+      resolvedLid = resolved.lid;
+      
+      console.log('[WAHA][worker] 🔍 Resolved contact LID/Phone from API:', {
+        chatJid,
+        resolvedPhone,
+        resolvedLid,
+      });
+    } catch (error) {
+      console.warn('[WAHA][worker] ⚠️ Failed to resolve LID/Phone, using local extraction', {
+        chatJid,
+        error,
+      });
+      // Fallback: usa extração local
+      const extracted = extractPhoneAndLid(chatJid);
+      resolvedPhone = extracted.phone;
+      resolvedLid = extracted.lid;
+    }
+  }
+
+  // Use resolved values if available, otherwise fallback
+  const phoneForContact = resolvedPhone || phoneForLead;
+  const lidForContact = resolvedLid || null;
+  
+  console.log('[WAHA][worker] 📱 Contact identification:', { 
     chatJid,
+    phoneForContact,
+    lidForContact,
+    isGroupChat: isGroupChat_check,
     messageId 
   });
 
@@ -2249,14 +2449,33 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     const ensured = await ensureLeadCustomerChat({
       inboxId: job.inboxId,
       companyId: job.companyId,
-      phone: phoneForLead,
-      name: name ?? phoneForLead,
+      phone: phoneForContact,
+      name: name ?? phoneForContact,
       rawPhone: chatJid,
-      lid: lid,
+      lid: lidForContact,
     });
     chatId = ensured.chatId;
-    // Cache the result
-    await cacheChatLookup(job.inboxId, chatJid, chatId);
+    
+    // ========== NEW: Cache under BOTH phone and LID formats ==========
+    // Build phone format ID: add @c.us suffix if not present
+    let phoneFormatId: string | null = null;
+    let lidFormatId: string | null = null;
+    
+    if (phoneForContact) {
+      phoneFormatId = phoneForContact.includes("@") ? phoneForContact : `${phoneForContact}@c.us`;
+    }
+    
+    if (lidForContact) {
+      lidFormatId = lidForContact.includes("@") ? lidForContact : `${lidForContact}@lid`;
+    }
+    
+    // Cache using bi-directional mapping
+    await cacheChatLookupBiDirectional(job.inboxId, chatId, phoneFormatId, lidFormatId);
+    console.log('[WAHA][worker] 🔐 Chat cached with bi-directional mapping:', {
+      chatId,
+      phoneFormat: phoneFormatId,
+      lidFormat: lidFormatId,
+    });
   }
   
   // Load group metadata if from cache and is group
@@ -3982,7 +4201,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
       }
 
       const chatId = String(job.chatId || "");
-      const content = String(job.content || "");
+      const content = String(job.payload?.content || job.content || "");
       if (!chatId || !content) throw new Error("chatId/content missing");
 
       const { chat_id, customer_phone, inbox_id } =

@@ -33,6 +33,8 @@ import { registerCompanyRoutes } from "./routes/companies.ts";
 import { registerKnowledgeBaseRoutes } from "./routes/knowledge.base.ts";
 import templateToolsRouter from "./routes/agents.templates.tools.ts";
 import toolsAdminRouter from "./routes/tools.admin.ts";
+import uploadRouter from "./routes/upload.ts";
+import mediaRouter from "./routes/media.ts";
 import { registerMetaTemplatesRoutes } from "./routes/meta.templates.ts";
 import filesRoute from "./server/files.route.ts";
 import { startSocketRelay } from "./socket.relay.ts";
@@ -46,10 +48,12 @@ import { registerCampaignWorker } from "./worker.campaigns.ts";
 import { registerWAHARoutes } from "./routes/waha.ts";
 import mediaProxyRouter from "./routes/media.proxy.ts";
 import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
+import { registerDashboardRoutes } from "./routes/dashboard.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
 import { normalizeMsisdn } from "./util.ts";
 import { registerCalendarRoutes } from "./routes/calendar.ts";
 import { registerLeadRoutes } from "./routes/leads.ts";
+import { registerProductRoutes } from "./routes/products.ts";
 import { registerAuthRoutes } from "./routes/auth.ts";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.ts";
 
@@ -78,8 +82,8 @@ app.use(cors({
 app.use(cookieParser());
 
 // body parsers genéricos (suas rotas de upload usam multer, então ok)
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // === Arquivos locais ===
 const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
@@ -225,7 +229,7 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -631,12 +635,51 @@ app.post("/queue/livechat/start-chat", requireAuth, async (req: any, res) => {
   }
 });
 
+function respondWithProductsError(res: any, error: unknown, fallback: string) {
+  const status = typeof (error as any)?.status === "number" ? Number((error as any).status) : 500;
+  const message =
+    error instanceof Error ? error.message : typeof error === "string" ? error : fallback;
+  return res.status(status).json({ error: message || fallback });
+}
+
+async function resolveProductsCompanyId(req: any): Promise<string> {
+  const cached = typeof req?.user?.company_id === "string" ? req.user.company_id.trim() : "";
+  if (cached) return cached;
+
+  const authUserId = typeof req?.user?.id === "string" ? req.user.id : "";
+  if (!authUserId) {
+    throw Object.assign(new Error("Not authenticated"), { status: 401 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("company_id")
+    .eq("user_id", authUserId)
+    .maybeSingle();
+
+  if (error) {
+    throw Object.assign(new Error(error.message), { status: 500 });
+  }
+
+  const companyId = typeof (data as any)?.company_id === "string" ? (data as any).company_id : null;
+  if (!companyId) {
+    throw Object.assign(new Error("Usuário sem empresa associada"), { status: 403 });
+  }
+
+  if (req?.user) {
+    req.user.company_id = companyId;
+  }
+
+  return companyId;
+}
+
 // ===== Produtos =====
 const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || "products";
 
 // GET listar produtos (suporta pagina??o e filtros)
 app.get("/products", requireAuth, async (req, res) => {
   try {
+    const companyId = await resolveProductsCompanyId(req);
     const q = (req.query.q as string | undefined)?.trim();
     const status = (req.query.status as string | undefined)?.trim();
     const limit = req.query.limit ? Number(req.query.limit) : undefined;
@@ -645,6 +688,7 @@ app.get("/products", requireAuth, async (req, res) => {
     let query = supabaseAdmin
       .from(PRODUCTS_TABLE)
       .select("*", { count: "exact" })
+      .eq("company_id", companyId)
       .order("updated_at", { ascending: false });
 
     if (q) {
@@ -661,16 +705,17 @@ app.get("/products", requireAuth, async (req, res) => {
     }
 
     const { data, error, count } = await query;
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithProductsError(res, error, "Products list error");
     return res.json({ items: data || [], total: count ?? (data?.length || 0) });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Products list error" });
+    return respondWithProductsError(res, e, "Products list error");
   }
 });
 
 // POST criar produto
 app.post("/products", requireAuth, async (req, res) => {
   try {
+    const companyId = await resolveProductsCompanyId(req);
     const schema = z
       .object({
         external_id: z.string().optional(),
@@ -709,18 +754,17 @@ app.post("/products", requireAuth, async (req, res) => {
       payload.cost_price = parseMoney(payload.cost_price);
     if (payload.sale_price !== undefined)
       payload.sale_price = parseMoney(payload.sale_price);
+    payload.company_id = companyId;
 
     const { data, error } = await supabaseAdmin
       .from(PRODUCTS_TABLE)
       .insert([payload])
       .select("*")
       .single();
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) return respondWithProductsError(res, error, "Create product error");
     return res.status(201).json(data);
   } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "Create product error" });
+    return respondWithProductsError(res, e, "Create product error");
   }
 });
 
@@ -761,33 +805,49 @@ app.put("/products/:id", requireAuth, async (req, res) => {
   if (!parsed.success)
     return res.status(400).json({ error: parsed.error.message });
 
-  const payload: any = { ...parsed.data };
-  if (payload.cost_price !== undefined)
-    payload.cost_price = parseMoney(payload.cost_price);
-  if (payload.sale_price !== undefined)
-    payload.sale_price = parseMoney(payload.sale_price);
-  payload.updated_at = new Date().toISOString();
+  try {
+    const companyId = await resolveProductsCompanyId(req);
+    const payload: any = { ...parsed.data };
+    if (payload.cost_price !== undefined)
+      payload.cost_price = parseMoney(payload.cost_price);
+    if (payload.sale_price !== undefined)
+      payload.sale_price = parseMoney(payload.sale_price);
+    payload.updated_at = new Date().toISOString();
 
-  const { data, error } = await supabaseAdmin
-    .from(PRODUCTS_TABLE)
-    .update(payload)
-    .eq("id", id)
-    .select("*")
-    .single();
+    const { data, error } = await supabaseAdmin
+      .from(PRODUCTS_TABLE)
+      .update(payload)
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .select("*")
+      .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json(data);
+    if (error) return respondWithProductsError(res, error, "Update product error");
+    if (!data) return res.status(404).json({ error: "Product not found" });
+    return res.json(data);
+  } catch (e: any) {
+    return respondWithProductsError(res, e, "Update product error");
+  }
 });
 
 // DELETE produto por id
 app.delete("/products/:id", requireAuth, async (req, res) => {
   const { id } = req.params as { id: string };
-  const { error } = await supabaseAdmin
-    .from(PRODUCTS_TABLE)
-    .delete()
-    .eq("id", id);
-  if (error) return res.status(500).json({ error: error.message });
-  return res.status(204).send();
+  try {
+    const companyId = await resolveProductsCompanyId(req);
+    const { data, error } = await supabaseAdmin
+      .from(PRODUCTS_TABLE)
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId)
+      .select("id")
+      .maybeSingle();
+    if (error) return respondWithProductsError(res, error, "Delete product error");
+    if (!data) return res.status(404).json({ error: "Product not found" });
+    return res.status(204).send();
+  } catch (e: any) {
+    return respondWithProductsError(res, e, "Delete product error");
+  }
 });
 
 // POST upsert em massa de produtos
@@ -823,6 +883,7 @@ app.post("/products/bulk-upsert", requireAuth, async (req, res) => {
     return isNaN(n) ? null : n;
   };
 
+  const nowIso = new Date().toISOString();
   const toUpsert = [] as any[];
   for (const raw of items) {
     const parsed = schema.safeParse(raw);
@@ -845,17 +906,25 @@ app.post("/products/bulk-upsert", requireAuth, async (req, res) => {
       supplier: r.supplier ?? null,
       status: r.status ?? null,
       specs: r.specs ?? null,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     });
   }
 
-  const { data, error } = await supabaseAdmin
-    .from(PRODUCTS_TABLE)
-    .upsert(toUpsert, { onConflict: "external_id" })
-    .select("*");
+  try {
+    const companyId = await resolveProductsCompanyId(req);
+    const payload = toUpsert.map((item) => ({ ...item, company_id: companyId }));
 
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json({ upserted: data?.length || 0 });
+    const { data, error } = await supabaseAdmin
+      .from(PRODUCTS_TABLE)
+      .upsert(payload, { onConflict: "external_id" })
+      .select("*");
+
+    if (error) return respondWithProductsError(res, error, "Bulk upsert error");
+    const affected = (data || []).filter((row: any) => row?.company_id === companyId).length;
+    return res.json({ upserted: affected });
+  } catch (e: any) {
+    return respondWithProductsError(res, e, "Bulk upsert error");
+  }
 });
 
 
@@ -2682,288 +2751,94 @@ app.get("/proposals", requireAuth, async (req: any, res) => {
 
     let query = supabaseAdmin
       .from("proposals")
-      .select(
-        "id, number, title, description, total_value, status, valid_until, created_at, customer_id, ai_generated, lead_id",
-      )
+      .select("*", { count: "exact" })
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
 
-    if (leadFilter) query = query.eq("lead_id", leadFilter);
+    if (leadFilter) {
+      query = query.eq("lead_id", leadFilter);
+    }
 
-    const { data, error } = await query;
-    if (error) return res.status(500).json({ error: error.message });
-    return res.json(data || []);
+    const { data: src, error: serr } = await query;
+    if (serr) return res.status(500).json({ error: serr.message });
+
+    return res.json(src || []);
   } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "Proposals list error" });
+    return res.status(500).json({ error: e?.message || "proposals list error" });
   }
 });
 
-// Create proposal
+// POST /proposals (create)
 app.post("/proposals", requireAuth, async (req: any, res) => {
   try {
-    const authUserId = req.user.id as string;
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
       .select("id, company_id")
-      .eq("user_id", authUserId)
+      .eq("user_id", req.user.id)
       .maybeSingle();
     if (uerr) return res.status(500).json({ error: uerr.message });
-    if (!urow?.company_id)
-      return res.status(404).json({ error: "Usuário sem company_id" });
+    const companyId = (urow as any)?.company_id || null;
 
-    const body = req.body || {};
-    let customerId: string | null = body.customer_id || null;
-    const leadId: string | null = body.lead_id || null;
+    if (!companyId) return res.status(403).json({ error: "No company" });
 
-    if (!customerId && leadId) {
-      try {
-        const { data: cust } = await supabaseAdmin
-          .from("customers")
-          .select("id")
-          .eq("lead_id", leadId)
-          .maybeSingle();
-        customerId = (cust as any)?.id || null;
-      } catch { }
-      if (!customerId) {
-        const { data: l } = await supabaseAdmin
-          .from("leads")
-          .select("id, name, email")
-          .eq("id", leadId)
-          .maybeSingle();
-        const payload: any = {
-          company_id: (urow as any).company_id,
-          name: (l as any)?.name || "Cliente",
-          email: (l as any)?.email || null,
-        };
-        try {
-          payload.lead_id = leadId;
-          const { data: created } = await supabaseAdmin
-            .from("customers")
-            .insert([payload])
-            .select("id")
-            .single();
-          customerId = (created as any)?.id || null;
-        } catch {
-          delete payload.lead_id;
-          const { data: created2 } = await supabaseAdmin
-            .from("customers")
-            .insert([payload])
-            .select("id")
-            .single();
-          customerId = (created2 as any)?.id || null;
-        }
-      }
-    }
-
-    if (!customerId)
-      return res
-        .status(400)
-        .json({ error: "customer_id ou lead_id obrigatório" });
-
+    // Gerar número sequencial YYYYMM-####
     const now = new Date();
     const pad = (n: number) => n.toString().padStart(2, "0");
-    const num =
-      "P-" +
-      now.getFullYear().toString() +
-      pad(now.getMonth() + 1) +
-      pad(now.getDate()) +
-      "-" +
-      pad(now.getHours()) +
-      pad(now.getMinutes()) +
-      pad(now.getSeconds());
+    const ym = `${now.getFullYear()}${pad(now.getMonth() + 1)}`;
+    const { data: last } = await supabaseAdmin
+      .from("proposals")
+      .select("number")
+      .like("number", `${ym}-%`)
+      .order("number", { ascending: false })
+      .limit(1);
+    let seq = 1;
+    const lastNum =
+      Array.isArray(last) && (last as any)[0]?.number
+        ? String((last as any)[0].number)
+        : null;
+    if (lastNum && /^\d{6}-\d{4}$/.test(lastNum)) {
+      seq = (parseInt(lastNum.slice(-4)) || 0) + 1;
+    }
+    const newNumber = `${ym}-${seq.toString().padStart(4, "0")}`;
 
-    const sysPower = Number(body.system_power ?? 0) || 0;
-    const panelQty = Number(body.panel_quantity ?? 1) || 1;
-    const totalValue = Number(body.total_value ?? 0) || 0;
-    const title = String(body.title || "Proposta");
-    const description = body.description ?? null;
-    const installments = body.installments ?? 1;
-    const installmentValue = body.installment_value ?? null;
-    const validDays = Number(body.valid_days ?? 30) || 30;
-    const validUntil = new Date(now.getTime() + validDays * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 10);
+    const insert: any = { ...req.body, company_id: companyId, number: newNumber, created_by_id: (urow as any).id };
 
-    const insert: any = {
-      number: num,
-      title,
-      description,
-      system_power: sysPower,
-      panel_quantity: panelQty,
-      total_value: totalValue,
-      installments,
-      installment_value: installmentValue,
-      valid_until: validUntil,
-      status: body.status || "DRAFT",
-      ai_generated: !!body.ai_generated,
-      company_id: (urow as any).company_id,
-      customer_id: customerId,
-      lead_id: leadId,
-      created_by_id: (urow as any).id,
-    };
-
-    const { data, error } = await supabaseAdmin
+    const { data: created, error: cerr } = await supabaseAdmin
       .from("proposals")
       .insert([insert])
-      .select("id")
+      .select("*")
       .single();
-    if (error) return res.status(500).json({ error: error.message });
-    try {
-      io.emit("proposals:changed", { type: "created", id: (data as any).id });
-    } catch { }
-    return res.status(201).json({ id: (data as any).id, number: num });
+
+    if (cerr) return res.status(500).json({ error: cerr.message });
+    return res.status(201).json(created);
   } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "Create proposal error" });
+    return res.status(500).json({ error: e?.message || "proposal create error" });
   }
 });
 
-// Edit proposal (partial update)
-app.patch("/proposals/:id", requireAuth, async (req: any, res) => {
-  try {
-    const authUserId = req.user.id as string;
-    const { data: urow, error: uerr } = await supabaseAdmin
-      .from("users")
-      .select("id, company_id")
-      .eq("user_id", authUserId)
-      .maybeSingle();
-    if (uerr) return res.status(500).json({ error: uerr.message });
-    const companyId = (urow as any)?.company_id || null;
-    if (!companyId)
-      return res.status(404).json({ error: "Usuário sem company_id" });
-
-    const { id } = req.params as { id: string };
-    const { data: prop, error: perr } = await supabaseAdmin
-      .from("proposals")
-      .select("id, company_id")
-      .eq("id", id)
-      .maybeSingle();
-    if (perr) return res.status(500).json({ error: perr.message });
-    if (!prop || (prop as any).company_id !== companyId)
-      return res.status(404).json({ error: "Proposta n o encontrada" });
-
-    const body = req.body || {};
-    const up: Record<string, any> = {};
-    const fields = [
-      "title",
-      "description",
-      "system_power",
-      "panel_quantity",
-      "total_value",
-      "installments",
-      "installment_value",
-      "valid_until",
-      "status",
-    ] as const;
-    for (const k of fields)
-      if (Object.prototype.hasOwnProperty.call(body, k))
-        up[k] = (body as any)[k];
-    if (Object.keys(up).length === 0)
-      return res.status(400).json({ error: "Nada para atualizar" });
-
-    const { error } = await supabaseAdmin
-      .from("proposals")
-      .update(up)
-      .eq("id", id);
-    if (error) return res.status(500).json({ error: error.message });
-    try {
-      io.emit("proposals:changed", { type: "updated", id });
-    } catch { }
-    return res.status(204).send();
-  } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "Update proposal error" });
-  }
-});
-
-// Update proposal status
-app.patch("/proposals/:id/status", requireAuth, async (req: any, res) => {
-  try {
-    const authUserId = req.user.id as string;
-    // Resolve local user row to get company
-    const { data: urow, error: uerr } = await supabaseAdmin
-      .from("users")
-      .select("id, company_id")
-      .eq("user_id", authUserId)
-      .maybeSingle();
-    if (uerr) return res.status(500).json({ error: uerr.message });
-    const companyId = (urow as any)?.company_id || null;
-    if (!companyId)
-      return res.status(404).json({ error: "Usuário sem company_id" });
-
-    const { id } = req.params as { id: string };
-    const status = String(req.body?.status ?? "").trim();
-    if (!status) return res.status(400).json({ error: "status obrigatório" });
-
-    // Optional: restrict to known statuses
-    const allowed = new Set([
-      "DRAFT",
-      "SENT",
-      "ACCEPTED",
-      "REJECTED",
-      "CANCELLED",
-      "APPROVED",
-    ]);
-    if (!allowed.has(status.toUpperCase())) {
-      return res.status(400).json({ error: "status inválido" });
-    }
-
-    // Ensure proposal belongs to same company
-    const { data: prop, error: perr } = await supabaseAdmin
-      .from("proposals")
-      .select("id, company_id")
-      .eq("id", id)
-      .maybeSingle();
-    if (perr) return res.status(500).json({ error: perr.message });
-    if (!prop || (prop as any).company_id !== companyId) {
-      return res.status(404).json({ error: "Proposta n o encontrada" });
-    }
-
-    const { error } = await supabaseAdmin
-      .from("proposals")
-      .update({ status })
-      .eq("id", id);
-    if (error) return res.status(500).json({ error: error.message });
-    try {
-      io.emit("proposals:changed", { type: "updated", id });
-    } catch { }
-    return res.status(204).send();
-  } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "Update proposal status error" });
-  }
-});
-
-// Duplicate proposal
+// POST /proposals/:id/duplicate
 app.post("/proposals/:id/duplicate", requireAuth, async (req: any, res) => {
   try {
-    const authUserId = req.user.id as string;
+    const { id } = req.params;
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
       .select("id, company_id")
-      .eq("user_id", authUserId)
+      .eq("user_id", req.user.id)
       .maybeSingle();
     if (uerr) return res.status(500).json({ error: uerr.message });
     const companyId = (urow as any)?.company_id || null;
-    if (!companyId)
-      return res.status(404).json({ error: "Usuário sem company_id" });
 
-    const { id } = req.params as { id: string };
+    if (!companyId) return res.json([]);
+
+    // Buscar proposta original
     const { data: src, error: serr } = await supabaseAdmin
       .from("proposals")
-      .select(
-        "id, number, title, description, system_power, panel_quantity, total_value, installments, installment_value, valid_until, status, customer_id, lead_id, ai_generated, company_id",
-      )
+      .select("*")
       .eq("id", id)
       .maybeSingle();
     if (serr) return res.status(500).json({ error: serr.message });
     if (!src || (src as any).company_id !== companyId)
-      return res.status(404).json({ error: "Proposta n o encontrada" });
+      return res.status(404).json({ error: "Proposta não encontrada" });
 
     // Generate new sequential-like number (YYYYMM-####)
     const now = new Date();
@@ -3323,6 +3198,9 @@ registerCompanyRoutes(app);
 registerKnowledgeBaseRoutes(app);
 registerCalendarRoutes(app);
 registerLeadRoutes(app);
+app.use("/api/upload", uploadRouter);
+app.use("/api/media", mediaRouter);
+registerProductRoutes(app);
 registerMetaTemplatesRoutes(app);
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
@@ -3337,6 +3215,7 @@ registerCampaignUploadsRoutes(app);
 registerMediaLibraryRoutes(app);
 
 registerWAHARoutes(app);
+registerDashboardRoutes(app);
 
 // Media proxy for encrypted URLs (CORS-safe)
 app.use("/media", mediaProxyRouter);

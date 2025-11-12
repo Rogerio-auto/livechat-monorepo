@@ -56,6 +56,56 @@ function formatRouteError(error: unknown) {
 }
 
 export function registerAgentsRoutes(app: Application) {
+  // Admin: listar TODOS os agentes de TODAS as empresas
+  app.get("/api/admin/agents", requireAuth, async (req: any, res) => {
+    try {
+      // Verificar se usuário é ADMIN
+      const authId = String(req?.user?.id || "");
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("role")
+        .eq("user_id", authId)
+        .maybeSingle();
+      
+      if (userError) {
+        throw Object.assign(new Error(userError.message), { status: 500 });
+      }
+      
+      const role = String((userData as any)?.role || "").toUpperCase();
+      if (role !== "ADMIN") {
+        return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
+      }
+
+      // Buscar todos os agentes com nome da empresa
+      const { data: agents, error: agentsError } = await supabaseAdmin
+        .from("agents")
+        .select(`
+          *,
+          companies:company_id (
+            id,
+            name
+          )
+        `)
+        .order("created_at", { ascending: false });
+
+      if (agentsError) {
+        throw Object.assign(new Error(agentsError.message), { status: 500 });
+      }
+
+      // Formatar resposta para incluir nome da empresa
+      const result = (agents as any[])?.map((agent: any) => ({
+        ...agent,
+        company_name: agent.companies?.name || "Sem empresa",
+        companies: undefined, // Remove o objeto companies para limpar a resposta
+      })) || [];
+
+      return res.json(result);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
   // Nova rota: agentes com métricas de desempenho
   app.get("/api/agents/metrics", requireAuth, async (req: any, res) => {
     try {

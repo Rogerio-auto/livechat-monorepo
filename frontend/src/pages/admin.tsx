@@ -6,15 +6,17 @@ import { ToolsAdminPanel } from "../componets/tools/ToolsAdminPanel";
 import TemplatesAdminPanel from "../componets/agents/TemplatesAdminPanel";
 import { AgentToolsManager } from "../componets/admin/AgentToolsManager";
 import { CompaniesManager } from "../componets/admin/CompaniesManager";
+import { AgentsAdminPanel } from "../componets/admin/AgentsAdminPanel";
 import { API } from "../utils/api";
-import { FiShield, FiTool, FiUsers, FiCpu, FiSettings } from "react-icons/fi";
+import { FiShield, FiTool, FiUsers, FiCpu, FiSettings, FiCrosshair } from "react-icons/fi";
 
-type TabId = "tools" | "templates" | "agent-tools" | "companies" | "system";
+type TabId = "tools" | "templates" | "agent-tools" | "agents" | "companies" | "system";
 
 const SECTIONS = [
   { id: "tools", title: "Ferramentas", subtitle: "Catálogo de Tools", icon: FiTool },
   { id: "templates", title: "Templates", subtitle: "Templates de Agentes", icon: FiCpu },
   { id: "agent-tools", title: "Agentes & Tools", subtitle: "Gerenciar ferramentas", icon: FiSettings },
+  { id: "agents", title: "Agentes IA", subtitle: "Editar prompts e configs", icon: FiCrosshair },
   { id: "companies", title: "Empresas", subtitle: "Gerenciar empresas", icon: FiUsers },
 ] as const;
 
@@ -72,7 +74,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 flex items-center justify-center">
+      <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
       </div>
     );
@@ -162,6 +164,21 @@ export default function AdminPage() {
                   </p>
                 </div>
                 <CompaniesManager />
+              </div>
+            )}
+
+            {tab === "agents" && (
+              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
+                    <FiCrosshair className="text-(--color-highlight)" />
+                    Agentes de IA
+                  </h2>
+                  <p className="text-sm text-(--color-text-muted) mt-2">
+                    Edite prompts, modelos e configurações dos agentes
+                  </p>
+                </div>
+                <AgentsAdminPanel />
               </div>
             )}
           </div>

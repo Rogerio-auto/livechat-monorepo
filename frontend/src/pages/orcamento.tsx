@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../componets/Sidbars/sidebar";
 import { LeadPicker } from "../componets/funil/LeadPicker";
 import { ClienteForm } from "../componets/clientes/ClienteForm";
@@ -193,14 +193,14 @@ export function PropostaPage() {
 
                       {(p.power || p.brand) && (
                         <div className="text-xs text-zinc-500 mt-1">
-                          {[p.power, p.brand].filter(Boolean).join(" â€¢ ")}
+                          {[p.power, p.brand].filter(Boolean).join(" • ")}
                         </div>
                       )}
 
                       <div className="mt-auto text-sm font-semibold text-zinc-700">
                         {preco != null
                           ? preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                          : "Sem preÃ§o"}
+                          : "Sem preço"}
                       </div>
                     </div>
                   </button>

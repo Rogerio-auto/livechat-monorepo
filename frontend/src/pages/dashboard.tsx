@@ -1,13 +1,7 @@
-﻿
-import { DashOrca } from "../componets/dashboards/dashboard-orca";
 
-
+import { DashboardNew } from "../componets/dashboard/DashboardNew";
 
 export function Dash() {
-  return (
-    <div className="relative min-h-screen bg-[var(--color-bg)] text-[var(--color-text)] transition-colors duration-300">
-      <DashOrca />
-    </div>
-  );
+  return <DashboardNew />;
 }
 

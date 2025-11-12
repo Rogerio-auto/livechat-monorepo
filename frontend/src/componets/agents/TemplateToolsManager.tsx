@@ -109,7 +109,7 @@ export function TemplateToolsManager({ templateId, templateName, onClose }: Prop
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-linear-to-r from-blue-600 to-indigo-600 text-white p-6">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-bold mb-1">Gerenciar Ferramentas</h2>

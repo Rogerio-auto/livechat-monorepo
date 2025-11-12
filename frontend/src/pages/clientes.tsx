@@ -195,11 +195,11 @@ export function ClientesPage() {
   return (
     <>
       <Sidebar />
-      <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
+  <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
         <div className="h-screen overflow-auto p-6">
-          <div className="max-w-[1600px] mx-auto space-y-6">
+          <div className="w-full space-y-6">
             {/* Card principal com todo o conteúdo */}
-            <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
               
               {/* Header */}
               <div className="mb-6 flex items-center justify-between">
@@ -225,7 +225,7 @@ export function ClientesPage() {
               {stats && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
                   {/* Total */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-blue-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -239,7 +239,7 @@ export function ClientesPage() {
                   </div>
 
                   {/* Ativos */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-green-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-green-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -256,7 +256,7 @@ export function ClientesPage() {
                   </div>
 
                   {/* Novos/Mês */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-purple-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-purple-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -278,7 +278,7 @@ export function ClientesPage() {
                   </div>
 
                   {/* Conversão */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-orange-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-orange-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -297,7 +297,7 @@ export function ClientesPage() {
                   </div>
 
                   {/* Ticket Médio */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-pink-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-pink-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-pink-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -313,7 +313,7 @@ export function ClientesPage() {
                   </div>
 
                   {/* Inativos */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-red-500/10 via-transparent to-transparent p-5">
+                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-red-500/10 via-transparent to-transparent p-5">
                     <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-red-500/10 blur-2xl" />
                     <div className="relative">
                       <div className="flex items-center justify-between mb-2">
@@ -517,7 +517,7 @@ export function ClientesPage() {
         {showForm && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div 
-              className="relative max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl"
+              className="relative max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header fixo do modal */}

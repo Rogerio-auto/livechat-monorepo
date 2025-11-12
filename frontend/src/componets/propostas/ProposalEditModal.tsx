@@ -1,4 +1,4 @@
-ï»¿import { FaTimes, FaSave } from 'react-icons/fa';
+import { FaTimes, FaSave } from 'react-icons/fa';
 import { useState } from 'react';
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -64,7 +64,7 @@ export default function ProposalEditModal({ proposal, onClose, onSaved }: Props)
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">TÃ­tulo</label>
+            <label className="block text-sm font-medium mb-1">Título</label>
             <input className="w-full border rounded-lg p-2" value={title} onChange={e=>setTitle(e.target.value)} />
           </div>
           <div>
@@ -72,11 +72,11 @@ export default function ProposalEditModal({ proposal, onClose, onSaved }: Props)
             <input type="number" className="w-full border rounded-lg p-2" value={total} onChange={e=>setTotal(Number(e.target.value))} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">VÃ¡lido atÃ©</label>
+            <label className="block text-sm font-medium mb-1">Válido até</label>
             <input type="date" className="w-full border rounded-lg p-2" value={validUntil} onChange={e=>setValidUntil(e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">DescriÃ§Ã£o</label>
+            <label className="block text-sm font-medium mb-1">Descrição</label>
             <textarea className="w-full border rounded-lg p-2 min-h-24" value={description} onChange={e=>setDescription(e.target.value)} />
           </div>
         </div>

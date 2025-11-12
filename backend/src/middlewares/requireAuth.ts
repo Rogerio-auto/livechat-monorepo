@@ -89,6 +89,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
     const bearer = (req.headers.authorization ?? "") as string;
     let token = bearer.startsWith("Bearer ") ? bearer.slice(7) : undefined;
+    
+    // Se o token do header for "undefined" (string), ignorar
+    if (token === "undefined") token = undefined;
+    
     if (!token) token = (req as any).cookies?.[JWT_COOKIE_NAME];
     if (!token) return res.status(401).json({ error: "Not authenticated" });
 

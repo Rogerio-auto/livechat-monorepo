@@ -2779,30 +2779,30 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           const messageIds = (unreadMessages || []).map((m: any) => m.id);
+          const nowIso = new Date().toISOString();
 
           if (messageIds.length === 0) {
             console.log("[READ_RECEIPTS][livechat/mark-read] No unread messages", { chatId });
-            return res.json({ ok: true, markedCount: 0, messageIds: [] });
-          }
+          } else {
+            // Mark messages as read in database
+            const { error: updateError } = await supabaseAdmin
+              .from("chat_messages")
+              .update({ view_status: "read", updated_at: nowIso })
+              .in("id", messageIds);
 
-          // Mark messages as read in database
-          const { error: updateError } = await supabaseAdmin
-            .from("chat_messages")
-            .update({ view_status: "read", updated_at: new Date().toISOString() })
-            .in("id", messageIds);
-
-          if (updateError) {
-            console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
-              chatId,
-              error: updateError.message,
-            });
-            return res.status(500).json({ ok: false, error: updateError.message });
+            if (updateError) {
+              console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
+                chatId,
+                error: updateError.message,
+              });
+              return res.status(500).json({ ok: false, error: updateError.message });
+            }
           }
 
           // Reset unread_count to 0
           const { error: chatUpdateError } = await supabaseAdmin
             .from("chats")
-            .update({ unread_count: 0, updated_at: new Date().toISOString() })
+            .update({ unread_count: 0, updated_at: nowIso })
             .eq("id", chatId);
 
           if (chatUpdateError) {
@@ -2821,15 +2821,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
           const io = getIO();
           
           // Emit message status updates
-          for (const msg of unreadMessages || []) {
-            io.to(`chat:${chatId}`).emit("message:status", {
-              kind: "livechat.message.status",
-              chatId,
-              messageId: msg.id,
-              externalId: msg.external_id,
-              view_status: "read",
-              status: "READ",
-            });
+          if (messageIds.length > 0) {
+            for (const msg of unreadMessages || []) {
+              io.to(`chat:${chatId}`).emit("message:status", {
+                kind: "livechat.message.status",
+                chatId,
+                messageId: msg.id,
+                externalId: msg.external_id,
+                view_status: "read",
+                status: "READ",
+              });
+            }
           }
 
           // Emit chat updated with unread_count = 0
@@ -2881,30 +2883,30 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           const messageIds = (unreadMessages || []).map((m: any) => m.id);
+          const nowIso = new Date().toISOString();
 
           if (messageIds.length === 0) {
             console.log("[READ_RECEIPTS][livechat/mark-read] No unread messages", { chatId });
-            return res.json({ ok: true, markedCount: 0, messageIds: [] });
-          }
+          } else {
+            // 2. Mark messages as read in database
+            const { error: updateError } = await supabaseAdmin
+              .from("chat_messages")
+              .update({ view_status: "read", updated_at: nowIso })
+              .in("id", messageIds);
 
-          // 2. Mark messages as read in database
-          const { error: updateError } = await supabaseAdmin
-            .from("chat_messages")
-            .update({ view_status: "read", updated_at: new Date().toISOString() })
-            .in("id", messageIds);
-
-          if (updateError) {
-            console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
-              chatId,
-              error: updateError.message,
-            });
-            return res.status(500).json({ ok: false, error: updateError.message });
+            if (updateError) {
+              console.error("[READ_RECEIPTS][livechat/mark-read] Update error", {
+                chatId,
+                error: updateError.message,
+              });
+              return res.status(500).json({ ok: false, error: updateError.message });
+            }
           }
 
           // 3. Reset unread_count to 0
           const { error: chatUpdateError } = await supabaseAdmin
             .from("chats")
-            .update({ unread_count: 0, updated_at: new Date().toISOString() })
+            .update({ unread_count: 0, updated_at: nowIso })
             .eq("id", chatId);
 
           if (chatUpdateError) {
@@ -2923,15 +2925,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
           const io = getIO();
           
           // Emit message status updates
-          for (const msg of unreadMessages || []) {
-            io.to(`chat:${chatId}`).emit("message:status", {
-              kind: "livechat.message.status",
-              chatId,
-              messageId: msg.id,
-              externalId: msg.external_id,
-              view_status: "read",
-              status: "READ",
-            });
+          if (messageIds.length > 0) {
+            for (const msg of unreadMessages || []) {
+              io.to(`chat:${chatId}`).emit("message:status", {
+                kind: "livechat.message.status",
+                chatId,
+                messageId: msg.id,
+                externalId: msg.external_id,
+                view_status: "read",
+                status: "READ",
+              });
+            }
           }
 
           // Emit chat updated with unread_count = 0

@@ -84,11 +84,11 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
   if (agents.length === 0) {
     return (
       <div className="text-center py-16">
-        <h3 className="text-xl font-bold text-white mb-2">Nenhum agente criado ainda</h3>
-        <p className="text-gray-400 mb-6">Crie seu primeiro agente para começar a atender clientes</p>
+        <h3 className="text-xl font-bold theme-heading mb-2">Nenhum agente criado ainda</h3>
+        <p className="theme-text-muted mb-6">Crie seu primeiro agente para começar a atender clientes</p>
         <button
           onClick={onNewAgent}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-xl transition inline-flex items-center gap-2"
+          className="theme-primary font-medium py-3 px-6 rounded-xl transition inline-flex items-center gap-2 shadow-sm"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -103,15 +103,15 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">Meus Agentes</h2>
-          <p className="text-gray-400 text-sm">
+          <h2 className="text-2xl font-bold theme-heading">Meus Agentes</h2>
+          <p className="theme-text-muted text-sm">
             {agents.length} {agents.length === 1 ? "agente" : "agentes"} • Total de{" "}
             {agents.reduce((sum, a) => sum + a.total_chats, 0)} atendimentos realizados
           </p>
         </div>
         <button
           onClick={onNewAgent}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-xl transition flex items-center gap-2"
+          className="theme-primary font-medium py-3 px-6 rounded-xl transition flex items-center gap-2 shadow-sm"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -125,21 +125,25 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
           return (
             <div
               key={agent.id}
-              className="bg-linear-to-br from-gray-800 to-gray-900 rounded-2xl p-6 border border-gray-700 hover:border-blue-500 transition-all hover:shadow-xl group"
+              className="group rounded-2xl border p-6 transition-all hover:shadow-xl hover:border-sky-400 theme-surface"
+              style={{
+                borderColor: "var(--color-border)",
+                boxShadow: "0 24px 32px -24px var(--color-card-shadow)",
+              }}
             >
               {/* Header com status */}
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-white">{agent.name}</h3>
+                  <h3 className="text-lg font-bold theme-heading">{agent.name}</h3>
                   {agent.template_name && (
-                    <p className="text-xs text-gray-400">{agent.template_name}</p>
+                    <p className="text-xs theme-text-muted">{agent.template_name}</p>
                   )}
                 </div>
 
                 <button
                   onClick={() => toggleAgentStatus(agent.id, agent.is_active)}
                   className={`w-12 h-6 rounded-full transition-colors relative ${
-                    agent.is_active ? "bg-green-600" : "bg-gray-600"
+                    agent.is_active ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
                   }`}
                   title={agent.is_active ? "Agente ativo" : "Agente pausado"}
                 >
@@ -154,7 +158,13 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
               {/* Badge da categoria */}
               {agent.template_category && (
                 <div className="mb-4">
-                  <span className="inline-block px-3 py-1 bg-blue-900/50 text-blue-300 text-xs font-medium rounded-full">
+                  <span
+                    className="inline-block px-3 py-1 text-xs font-medium rounded-full"
+                    style={{
+                      backgroundColor: "color-mix(in srgb, var(--color-highlight) 12%, transparent)",
+                      color: "var(--color-highlight-strong)",
+                    }}
+                  >
                     {agent.template_category}
                   </span>
                 </div>
@@ -162,25 +172,26 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
 
               {/* Métricas de desempenho */}
               <div className="space-y-3 mb-4">
-                <div className="bg-gray-900/50 rounded-lg p-3">
+                <div
+                  className="rounded-lg p-3 border theme-surface-muted"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 65%, transparent)" }}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-sm text-gray-400">Atendendo agora</span>
+                      <span className="text-sm theme-text-muted">Atendendo agora</span>
                     </div>
-                    <span className="text-xl font-bold text-white">{agent.active_chats}</span>
+                    <span className="text-xl font-bold theme-heading">{agent.active_chats}</span>
                   </div>
                 </div>
 
-                <div className="bg-gray-900/50 rounded-lg p-3">
+                <div
+                  className="rounded-lg p-3 border theme-surface-muted"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 65%, transparent)" }}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <svg
-                        className="w-4 h-4 text-blue-400"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-highlight)" }}>
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
@@ -188,9 +199,9 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
                           d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
                         />
                       </svg>
-                      <span className="text-sm text-gray-400">Total atendido</span>
+                      <span className="text-sm theme-text-muted">Total atendido</span>
                     </div>
-                    <span className="text-xl font-bold text-white">{agent.total_chats}</span>
+                    <span className="text-xl font-bold theme-heading">{agent.total_chats}</span>
                   </div>
                 </div>
               </div>
@@ -199,7 +210,8 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
               <div className="flex gap-2">
                 <button
                   onClick={() => onEditAgent(agent.id)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg transition flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100"
+                  className="flex-1 rounded-lg border font-medium py-2 px-4 transition flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 theme-surface-muted"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)" }}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -219,7 +231,7 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
                 </button>
                 <button
                   onClick={() => setDeleteTarget(agent.id)}
-                  className="bg-red-900/30 hover:bg-red-900/50 text-red-400 font-medium py-2 px-3 rounded-lg transition opacity-0 group-hover:opacity-100"
+                  className="rounded-lg border border-transparent py-2 px-3 transition opacity-0 group-hover:opacity-100 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/40"
                   title="Deletar agente"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,23 +252,34 @@ export function SimplifiedAgentList({ onNewAgent, onEditAgent }: Props) {
       {/* Modal de confirmação de exclusão */}
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 rounded-2xl p-6 max-w-md w-full border border-gray-700">
-            <h3 className="text-xl font-bold text-white mb-3">Confirmar exclusão</h3>
-            <p className="text-gray-400 mb-6">
+          <div
+            className="rounded-2xl p-6 max-w-md w-full border theme-surface"
+            style={{
+              borderColor: "var(--color-border)",
+              boxShadow: "0 24px 44px -24px var(--color-card-shadow)",
+            }}
+          >
+            <h3 className="text-xl font-bold theme-heading mb-3">Confirmar exclusão</h3>
+            <p className="theme-text-muted mb-6">
               Tem certeza que deseja deletar este agente? Esta ação não pode ser desfeita.
             </p>
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setDeleteTarget(null)}
                 disabled={deleting}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition"
+                className="px-4 py-2 rounded-lg transition theme-surface-muted border"
+                style={{ borderColor: "var(--color-border)" }}
               >
                 Cancelar
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={deleting}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition disabled:opacity-50"
+                className="px-4 py-2 rounded-lg transition disabled:opacity-50 text-white font-medium"
+                style={{
+                  backgroundColor: "var(--color-primary)",
+                  borderColor: "color-mix(in srgb, var(--color-primary) 85%, var(--color-border))",
+                }}
               >
                 {deleting ? "Deletando..." : "Deletar"}
               </button>

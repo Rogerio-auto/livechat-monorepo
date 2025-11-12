@@ -422,11 +422,31 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
 
       {/* New Contact Modal */}
       {showNewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-overlay)]/80 backdrop-blur-sm">
-          <div className="w-[min(720px,95vw)] rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 p-4 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] transition-colors duration-300">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
+          style={{ backgroundColor: "color-mix(in srgb, var(--color-overlay) 80%, transparent)" }}
+        >
+          <div
+            className="w-[min(720px,95vw)] rounded-2xl border p-4 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] transition-colors duration-300"
+            style={{
+              borderColor: "var(--color-border)",
+              backgroundColor: "color-mix(in srgb, var(--color-surface) 95%, transparent)",
+            }}
+          >
             <div className="flex items-center justify-between mb-2">
-              <div className="font-semibold text-(--color-text)">Novo contato</div>
-              <button onClick={() => setShowNewModal(false)} className="px-2 py-1 rounded text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55">✕</button>
+              <div
+                className="font-semibold"
+                style={{ color: "var(--color-text)" }}
+              >
+                Novo contato
+              </div>
+              <button
+                onClick={() => setShowNewModal(false)}
+                className="px-2 py-1 rounded transition-colors duration-150 hover:opacity-85"
+                style={{ color: "var(--color-text)" }}
+              >
+                ✕
+              </button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {([
@@ -440,18 +460,38 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                 ["website", "Website"],
               ] as const).map(([k, label]) => (
                 <div key={k}>
-                  <label className="block text-xs text-[var(--color-text-muted)] mb-1">{label}</label>
+                  <label
+                    className="block text-xs mb-1"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    {label}
+                  </label>
                   <input
-                    className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                    className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                    style={{
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "color-mix(in srgb, var(--color-bg) 60%, transparent)",
+                      color: "var(--color-text)",
+                    }}
                     value={(newForm as any)[k] || ""}
                     onChange={(e) => setNewForm((f) => ({ ...f, [k]: e.target.value }))}
                   />
                 </div>
               ))}
               <div className="md:col-span-2">
-                <label className="block text-xs text-[var(--color-text-muted)] mb-1">Observações</label>
+                <label
+                  className="block text-xs mb-1"
+                  style={{ color: "var(--color-text-muted)" }}
+                >
+                  Observações
+                </label>
                 <textarea
-                  className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                  className="w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                  style={{
+                    borderColor: "var(--color-border)",
+                    backgroundColor: "color-mix(in srgb, var(--color-bg) 60%, transparent)",
+                    color: "var(--color-text)",
+                  }}
                   rows={3}
                   value={newForm.notes || ""}
                   onChange={(e) => setNewForm((f) => ({ ...f, notes: e.target.value }))}
@@ -459,8 +499,26 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
               </div>
             </div>
             <div className="mt-3 flex items-center justify-end gap-2">
-              <button onClick={() => setShowNewModal(false)} className="px-3 py-2 rounded-lg bg-[color:var(--color-bg)]/55 text-sm text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/65">Cancelar</button>
-              <button onClick={createNew} className="px-3 py-2 rounded-lg bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)] transition-colors duration-150 hover:bg-[var(--color-primary-strong)]">Criar</button>
+              <button
+                onClick={() => setShowNewModal(false)}
+                className="px-3 py-2 rounded-lg text-sm transition-colors duration-150 hover:opacity-85"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--color-bg) 55%, transparent)",
+                  color: "var(--color-text)",
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={createNew}
+                className="px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 hover:opacity-90"
+                style={{
+                  backgroundColor: "var(--color-primary)",
+                  color: "var(--color-on-primary)",
+                }}
+              >
+                Criar
+              </button>
             </div>
           </div>
         </div>

@@ -10,6 +10,7 @@ import {
   sendTemplateMessage,
   uploadMediaToMeta,
 } from "../services/meta/templates.js";
+import { sendInteractiveButtons } from "../services/meta/graph.js";
 
 async function resolveCompanyId(req: any) {
   const companyId = req?.user?.company_id || null;
@@ -341,6 +342,81 @@ export function registerMetaTemplatesRoutes(app: Application) {
         success: true, 
         wamid: result.wamid,
         message: "Template enviado com sucesso",
+      });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * POST /api/meta/send-interactive-buttons
+   * Envia mensagem interativa com botões de resposta rápida
+   * Usado pelo agente de IA via ferramenta send_interactive_buttons
+   */
+  app.post("/api/meta/send-interactive-buttons", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+
+      const schema = z.object({
+        inboxId: z.string().uuid(),
+        chatId: z.string().uuid(),
+        customerPhone: z.string().min(10),
+        message: z.string().min(1).max(1024),
+        buttons: z.array(z.object({
+          id: z.string().min(1),
+          title: z.string().min(1).max(20),
+        })).min(1).max(3),
+        footer: z.string().max(60).optional(),
+      }).strict();
+
+      const body = schema.parse(req.body || {});
+
+      // Valida se inbox pertence à empresa e é META_CLOUD
+      const { data: inbox, error: inboxErr } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, provider, company_id")
+        .eq("id", body.inboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (inboxErr) throw new Error(inboxErr.message);
+      if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
+      if (inbox.provider !== "META_CLOUD") {
+        return res.status(400).json({ 
+          error: "Botões interativos só funcionam com WhatsApp Business API (Meta Cloud)" 
+        });
+      }
+
+      // Valida se chat pertence à empresa
+      const { data: chat, error: chatErr } = await supabaseAdmin
+        .from("chats")
+        .select("id, company_id, inbox_id")
+        .eq("id", body.chatId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (chatErr) throw new Error(chatErr.message);
+      if (!chat) return res.status(404).json({ error: "Chat não encontrado" });
+      if (chat.inbox_id !== body.inboxId) {
+        return res.status(400).json({ error: "Chat não pertence à inbox especificada" });
+      }
+
+      // Envia mensagem interativa
+      const result = await sendInteractiveButtons({
+        inboxId: body.inboxId,
+        chatId: body.chatId,
+        customerPhone: body.customerPhone,
+        message: body.message,
+        buttons: body.buttons,
+        footer: body.footer,
+        senderSupabaseId: req.user?.id || null,
+      });
+
+      return res.json({ 
+        success: true, 
+        wamid: result.wamid,
+        message: "Botões interativos enviados com sucesso",
       });
     } catch (error) {
       const { status, payload } = formatRouteError(error);

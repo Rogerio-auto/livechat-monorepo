@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../componets/Sidbars/sidebar";
 import * as XLSX from "xlsx";
@@ -25,7 +25,7 @@ export type Product = {
   updated_at?: string;
 };
 
-// Form permite string nos campos numéricos para não quebrar o setState
+// Form permite string nos campos num�ricos para n�o quebrar o setState
 export type ProductForm = Omit<Product, "cost_price" | "sale_price"> & {
   cost_price?: string | number | null;
   sale_price?: string | number | null;
@@ -83,6 +83,38 @@ export function ProdutosPage() {
   const [pageSize, setPageSize] = useState(10);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const summaryMetrics = useMemo(() => {
+    let saleSum = 0;
+    let saleCount = 0;
+    let costSum = 0;
+    let costCount = 0;
+    let activeCount = 0;
+    let inactiveCount = 0;
+
+    products.forEach((product) => {
+      if (typeof product.sale_price === "number") {
+        saleSum += product.sale_price;
+        saleCount += 1;
+      }
+      if (typeof product.cost_price === "number") {
+        costSum += product.cost_price;
+        costCount += 1;
+      }
+
+      const status = String(product.status || "").toLowerCase();
+      if (status === "ativo") activeCount += 1;
+      else if (status === "inativo") inactiveCount += 1;
+    });
+
+    return {
+      totalItems: products.length,
+      saleAverage: saleCount > 0 ? saleSum / saleCount : 0,
+      costAverage: costCount > 0 ? costSum / costCount : 0,
+      activeCount,
+      inactiveCount,
+    };
+  }, [products]);
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, {
@@ -191,16 +223,25 @@ export function ProdutosPage() {
   return (
     <>
       <Sidebar />
-      <div className="ml-16 min-h-screen bg-[#F7F7F7] p-6">
-        <div className="bg-white/90 backdrop-blur rounded-xl border border-gray-200 shadow-sm mt-8 p-5">
-          <div className="flex items-start justify-between gap-4 mb-4">
+      <div
+        className="ml-16 min-h-screen p-6"
+        style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+      >
+        <div
+          className="mt-8 rounded-2xl border p-6 shadow-lg theme-surface"
+          style={{
+            borderColor: "var(--color-border)",
+            boxShadow: "0 32px 48px -32px var(--color-card-shadow)",
+          }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-xl font-semibold text-gray-900">Produtos</h2>
-              <p className="text-gray-500 text-sm">Gerencie seu catalogo e importe planilhas XLSX</p>
+              <h2 className="text-2xl font-semibold theme-heading">Produtos</h2>
+              <p className="theme-text-muted text-sm">Gerencie seu catálogo, preços e importações</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
-                className="px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+                className="theme-primary px-4 py-2 text-sm rounded-xl transition shadow-sm"
                 onClick={() => {
                   setEditing(null);
                   setForm({});
@@ -209,7 +250,10 @@ export function ProdutosPage() {
               >
                 + Novo Produto
               </button>
-              <label className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+              <label
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-xl border cursor-pointer theme-surface-muted"
+                style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+              >
                 <input
                   type="file"
                   accept=".xlsx,.xls"
@@ -225,63 +269,121 @@ export function ProdutosPage() {
             </div>
           </div>
 
-          {fileName && (
-            <div className="mt-3 text-xs text-gray-500">
-              Arquivo: <span className="font-medium">{fileName}</span>
-              {importCount !== null && <span className="ml-2">— Itens processados: {importCount}</span>}
+          <div className="grid gap-4 mb-6 md:grid-cols-2 xl:grid-cols-4">
+            <div
+              className="rounded-2xl border p-4 theme-surface-muted"
+              style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+            >
+              <p className="text-xs font-medium uppercase theme-text-muted">Itens do catálogo</p>
+              <p className="mt-2 text-2xl font-semibold theme-heading">{summaryMetrics.totalItems}</p>
+              <p className="mt-1 text-xs theme-text-muted">{summaryMetrics.activeCount} ativos • {summaryMetrics.inactiveCount} inativos</p>
             </div>
-          )}
-
-          <div className="mt-4 flex flex-col sm:flex-row items-center gap-3">
-            <div className="flex-1 w-full">
-              <input
-                type="text"
-                placeholder="Pesquisar por nome..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
-                }}
-              />
+            <div
+              className="rounded-2xl border p-4 theme-surface-muted"
+              style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+            >
+              <p className="text-xs font-medium uppercase theme-text-muted">Preço médio de venda</p>
+              <p className="mt-2 text-2xl font-semibold theme-heading">
+                {summaryMetrics.saleAverage > 0
+                  ? summaryMetrics.saleAverage.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : "-"}
+              </p>
+              <p className="mt-1 text-xs theme-text-muted">Baseado em produtos com preço informado</p>
             </div>
-            <div>
-              <select
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="all">Todos os status</option>
-                <option value="Ativo">Ativo</option>
-                <option value="Inativo">Inativo</option>
-              </select>
+            <div
+              className="rounded-2xl border p-4 theme-surface-muted"
+              style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+            >
+              <p className="text-xs font-medium uppercase theme-text-muted">Preço médio de custo</p>
+              <p className="mt-2 text-2xl font-semibold theme-heading">
+                {summaryMetrics.costAverage > 0
+                  ? summaryMetrics.costAverage.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : "-"}
+              </p>
+              <p className="mt-1 text-xs theme-text-muted">Compare margem e rentabilidade</p>
+            </div>
+            <div
+              className="rounded-2xl border p-4 theme-surface-muted"
+              style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+            >
+              <p className="text-xs font-medium uppercase theme-text-muted">Importações recentes</p>
+              <p className="mt-2 text-2xl font-semibold theme-heading">{importCount ?? 0}</p>
+              <p className="mt-1 text-xs theme-text-muted">Itens atualizados a partir do último XLSX</p>
             </div>
           </div>
 
-          <div className="mt-4 overflow-auto border border-gray-200 rounded-xl">
+          {fileName && (
+            <div className="mt-3 text-xs theme-text-muted">
+              Arquivo: <span className="font-medium theme-heading">{fileName}</span>
+              {importCount !== null && <span className="ml-2">Itens processados: {importCount}</span>}
+            </div>
+          )}
+
+          <div
+            className="rounded-2xl border theme-surface-muted p-4 mb-6"
+            style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex-1 w-full">
+                <input
+                  type="text"
+                  placeholder="Pesquisar por nome..."
+                  className="config-input w-full rounded-xl px-3 py-2 text-sm"
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </div>
+              <div>
+                <select
+                  className="config-input rounded-xl px-3 py-2 text-sm"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="all">Todos os status</option>
+                  <option value="Ativo">Ativo</option>
+                  <option value="Inativo">Inativo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div
+            className="overflow-auto rounded-2xl border"
+            style={{ borderColor: "color-mix(in srgb, var(--color-border) 75%, transparent)" }}
+          >
             <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-gray-600 bg-gray-50">
-                  <th className="py-2.5 px-3 text-xs font-semibold tracking-wide uppercase whitespace-nowrap">Nome do Produto</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold tracking-wide uppercase whitespace-nowrap">Descricao</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold tracking-wide uppercase whitespace-nowrap">Preco de Venda</th>
-                  <th className="py-2.5 px-3 text-xs font-semibold tracking-wide uppercase whitespace-nowrap">Preco de Custo</th>
+              <thead
+                style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)" }}
+              >
+                <tr className="theme-text-muted text-xs uppercase tracking-wide">
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Nome do Produto</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Descrição</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Preço de Venda</th>
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Preço de Custo</th>
                 </tr>
               </thead>
-              <tbody className="text-sm text-gray-700">
+              <tbody className="text-sm">
                 {products.map((p) => (
-                  <tr key={p.id || p.external_id} className="border-t border-gray-100 hover:bg-gray-50/80">
-                    <td className="py-2.5 px-3 max-w-[360px]">
+                  <tr
+                    key={p.id || p.external_id}
+                    className="border-t transition-colors hover:bg-sky-50/50 dark:hover:bg-white/5"
+                    style={{ borderColor: "color-mix(in srgb, var(--color-border) 70%, transparent)" }}
+                  >
+                    <td className="py-3 px-4 max-w-[360px]">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="block truncate font-medium text-gray-900" title={p.name}>
+                        <span className="block truncate font-medium theme-heading" title={p.name}>
                           {p.name}
                         </span>
-                        <div className="flex items-center gap-2 opacity-60 hover:opacity-100">
+                        <div className="flex items-center gap-2 opacity-60 transition hover:opacity-100">
                           <button
-                            className="p-1 rounded hover:bg-gray-100 text-gray-600"
+                            className="p-1 rounded-md theme-surface-muted border"
+                            style={{ borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)" }}
                             title="Editar"
                             onClick={() => {
                               setEditing(p);
@@ -292,7 +394,7 @@ export function ProdutosPage() {
                             <FaEdit />
                           </button>
                           <button
-                            className="p-1 rounded hover:bg-gray-100 text-red-600"
+                            className="p-1 rounded-md border border-transparent text-rose-600 hover:bg-rose-100 transition dark:text-rose-200 dark:hover:bg-rose-500/20"
                             title="Excluir"
                             onClick={async () => {
                               if (!p.id) return alert("Produto sem id");
@@ -310,17 +412,17 @@ export function ProdutosPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 max-w-[520px]">
-                      <span className="block truncate text-gray-600" title={p.specs || "-"}>
+                    <td className="py-3 px-4 max-w-[520px]">
+                      <span className="block truncate theme-text-muted" title={p.specs || "-"}>
                         {p.specs || "-"}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3 font-medium text-emerald-700">
+                    <td className="py-3 px-4 font-medium" style={{ color: "var(--color-highlight-strong)" }}>
                       {p.sale_price != null
                         ? p.sale_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
                         : "-"}
                     </td>
-                    <td className="py-2.5 px-3 text-gray-700">
+                    <td className="py-3 px-4 theme-text-muted">
                       {p.cost_price != null
                         ? p.cost_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
                         : "-"}
@@ -329,7 +431,7 @@ export function ProdutosPage() {
                 ))}
                 {total === 0 && !loading && (
                   <tr>
-                    <td className="py-6 px-3 text-gray-500 text-sm" colSpan={4}>
+                    <td className="py-6 px-4 theme-text-muted" colSpan={4}>
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -339,13 +441,16 @@ export function ProdutosPage() {
           </div>
 
           {/* Paginacao */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-3">
-            <div className="text-xs text-gray-600">
+          <div
+            className="mt-6 flex flex-col gap-4 rounded-2xl border theme-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between"
+            style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+          >
+            <div className="text-xs theme-text-muted">
               Mostrando {total === 0 ? 0 : startIdx + 1}-{endIdx} de {total}
             </div>
             <div className="flex items-center gap-3">
               <select
-                className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-400"
+                className="config-input rounded-xl px-2 py-1 text-sm"
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
@@ -360,143 +465,154 @@ export function ProdutosPage() {
               </select>
               <div className="flex items-center gap-2">
                 <button
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg disabled:opacity-50 hover:bg-gray-50"
+                  className="px-3 py-1 text-sm rounded-xl border theme-surface transition disabled:opacity-50"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
                   disabled={currentPage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   Anterior
                 </button>
-                <span className="text-sm text-gray-700">
+                <span className="text-sm theme-heading">
                   {currentPage} / {totalPages}
                 </span>
                 <button
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg disabled:opacity-50 hover:bg-gray-50"
+                  className="px-3 py-1 text-sm rounded-xl border theme-surface transition disabled:opacity-50"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 >
-                  Proxima
+                  Próxima
                 </button>
               </div>
             </div>
           </div>
 
-          {loading && <div className="text-sm text-gray-600">Carregando...</div>}
+          {loading && <div className="text-sm theme-text-muted mt-4">Carregando...</div>}
         </div>
 
         {showForm && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl p-6 relative">
+          <div
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            style={{ backgroundColor: "var(--color-overlay)" }}
+          >
+            <div
+              className="relative w-full max-w-3xl rounded-2xl border p-6 shadow-xl theme-surface"
+              style={{
+                borderColor: "var(--color-border)",
+                boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
+              }}
+            >
               <button
-                className="absolute top-3 right-4 text-gray-500 hover:text-black"
+                className="absolute top-3 right-4 text-sm theme-text-muted hover:opacity-70 transition"
                 onClick={() => setShowForm(false)}
                 aria-label="Fechar"
               >
                 x
               </button>
-              <h3 className="text-lg font-semibold text-[#204A34] mb-4">{editing ? 'Editar Produto' : 'Novo Produto'}</h3>
+              <h3 className="text-lg font-semibold theme-heading mb-4">{editing ? "Editar Produto" : "Novo Produto"}</h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="block text-sm text-gray-600 mb-1">Nome</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Nome</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.name || ""}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="Nome do produto"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">ID (planilha)</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">ID (planilha)</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.external_id || ""}
                     onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Unidade</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Unidade</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.unit || ""}
                     onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm text-gray-600 mb-1">Descricao</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Descrição</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.name || ""}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Preco de Custo</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Preço de Custo</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.cost_price ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Preco de Venda</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Preço de Venda</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.sale_price ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Marca</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Marca</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.brand || ""}
                     onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Agrupamento</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Agrupamento</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.grouping || ""}
                     onChange={(e) => setForm((f) => ({ ...f, grouping: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Potencia</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Potência</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.power || ""}
                     onChange={(e) => setForm((f) => ({ ...f, power: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Tamanho</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Tamanho</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.size || ""}
                     onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Fornecedor</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Fornecedor</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.supplier || ""}
                     onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-600 mb-1">Situacao</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Situação</label>
                   <input
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="config-input w-full rounded-lg px-3 py-2"
                     value={form.status || ""}
                     onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label className="block text-sm text-gray-600 mb-1">Especificacoes</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Especificações</label>
                   <textarea
-                    className="w-full border rounded-lg px-3 py-2 min-h-[80px]"
+                    className="config-input w-full rounded-lg px-3 py-2 min-h-20"
                     value={form.specs || ""}
                     onChange={(e) => setForm((f) => ({ ...f, specs: e.target.value }))}
                   />
@@ -504,11 +620,15 @@ export function ProdutosPage() {
               </div>
 
               <div className="mt-5 flex justify-end gap-3">
-                <button className="px-4 py-2 rounded-lg border" onClick={() => setShowForm(false)}>
+                <button
+                  className="px-4 py-2 rounded-xl border theme-surface-muted"
+                  style={{ borderColor: "var(--color-border)" }}
+                  onClick={() => setShowForm(false)}
+                >
                   Cancelar
                 </button>
                 <button
-                  className="px-4 py-2 rounded-lg bg-[#204A34] text-white hover:bg-[#42CD55]"
+                  className="px-4 py-2 rounded-xl theme-primary"
                   onClick={async () => {
                     try {
                       const payload: any = { ...form };
@@ -534,7 +654,7 @@ export function ProdutosPage() {
                           body: JSON.stringify(payload),
                         });
                         setProducts((prev) => [created, ...prev]);
-                        // ir para primeira página para ver o item, opcional
+                        // ir para primeira p�gina para ver o item, opcional
                         setPage(1);
                       }
                       setShowForm(false);

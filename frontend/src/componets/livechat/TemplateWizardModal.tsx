@@ -564,7 +564,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                           )}
                           <div className="space-y-3">
                             <div className="flex items-start gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
                                 {inbox.name?.[0]?.toUpperCase() || "I"}
                               </div>
                               <div className="flex-1 min-w-0">

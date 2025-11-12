@@ -1309,9 +1309,194 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
         }
     });
 
+    // ==================== ROTAS DE FOTOS DOS CARDS ====================
 
+    // GET - Listar fotos de um card
+    app.get("/kanban/cards/:cardId/photos", requireAuth, async (req: any, res) => {
+        try {
+            const { cardId } = req.params;
+            const userId = req.user.id;
 
+            // Verifica se o usuário tem acesso ao card
+            const { data: userRow } = await supabaseAdmin
+                .from("users")
+                .select("company_id")
+                .eq("user_id", userId)
+                .maybeSingle();
 
+            if (!userRow?.company_id) {
+                return res.status(403).json({ error: "Usuário sem empresa" });
+            }
+
+            const { data: photos, error } = await supabaseAdmin
+                .from("lead_photos")
+                .select("*")
+                .eq("card_id", cardId)
+                .eq("company_id", userRow.company_id)
+                .order("created_at", { ascending: false });
+
+            if (error) {
+                console.error("[kanban.photos] List error:", error);
+                return res.status(500).json({ error: error.message });
+            }
+
+            res.json(photos || []);
+        } catch (e: any) {
+            console.error("[kanban.photos] GET error:", e);
+            res.status(500).json({ error: e?.message || "Failed to list photos" });
+        }
+    });
+
+    // POST - Upload de foto para um card
+    app.post("/kanban/cards/:cardId/photos", requireAuth, async (req: any, res) => {
+        try {
+            const { cardId } = req.params;
+            const userId = req.user.id;
+            const { imageData, metadata } = req.body;
+
+            if (!imageData) {
+                return res.status(400).json({ error: "imageData é obrigatório" });
+            }
+
+            // Busca company_id do usuário
+            const { data: userRow } = await supabaseAdmin
+                .from("users")
+                .select("id, company_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (!userRow?.company_id) {
+                return res.status(403).json({ error: "Usuário sem empresa" });
+            }
+
+            // Busca o card e verifica se pertence à empresa
+            const { data: card } = await supabaseAdmin
+                .from("kanban_cards")
+                .select("id, lead_id")
+                .eq("id", cardId)
+                .maybeSingle();
+
+            if (!card) {
+                return res.status(404).json({ error: "Card não encontrado" });
+            }
+
+            // Decodifica base64
+            const base64Data = imageData.replace(/^data:image\/\w+;base64,/, "");
+            const buffer = Buffer.from(base64Data, "base64");
+
+            // Gera nome único
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).slice(2, 10);
+            const filename = `photo_${timestamp}_${randomId}.jpg`;
+
+            // Path no storage: lead-photos/{company_id}/{card_id}/{filename}
+            const storagePath = `lead-photos/${userRow.company_id}/${cardId}/${filename}`;
+
+            // Upload para Supabase Storage
+            const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+                .from("chat-uploads")
+                .upload(storagePath, buffer, {
+                    contentType: "image/jpeg",
+                    upsert: false
+                });
+
+            if (uploadError) {
+                console.error("[kanban.photos] Upload error:", uploadError);
+                return res.status(500).json({ error: uploadError.message });
+            }
+
+            // Gera URL pública
+            const { data: urlData } = supabaseAdmin.storage
+                .from("chat-uploads")
+                .getPublicUrl(uploadData.path);
+
+            const publicUrl = urlData?.publicUrl;
+
+            if (!publicUrl) {
+                return res.status(500).json({ error: "Failed to generate public URL" });
+            }
+
+            // Salva registro no banco (usando userRow.id ao invés de userId)
+            const { data: photoRecord, error: dbError } = await supabaseAdmin
+                .from("lead_photos")
+                .insert({
+                    company_id: userRow.company_id,
+                    card_id: cardId,
+                    lead_id: card.lead_id,
+                    storage_path: uploadData.path,
+                    storage_url: publicUrl,
+                    metadata: metadata || {},
+                    uploaded_by: userRow.id // Usa o ID da tabela users, não auth.uid()
+                })
+                .select()
+                .single();
+
+            if (dbError) {
+                console.error("[kanban.photos] DB insert error:", dbError);
+                return res.status(500).json({ error: dbError.message });
+            }
+
+            res.status(201).json(photoRecord);
+        } catch (e: any) {
+            console.error("[kanban.photos] POST error:", e);
+            res.status(500).json({ error: e?.message || "Failed to upload photo" });
+        }
+    });
+
+    // DELETE - Remover foto
+    app.delete("/kanban/photos/:photoId", requireAuth, async (req: any, res) => {
+        try {
+            const { photoId } = req.params;
+            const userId = req.user.id;
+
+            // Busca a foto e verifica permissão
+            const { data: photo, error: fetchError } = await supabaseAdmin
+                .from("lead_photos")
+                .select("storage_path, uploaded_by, company_id")
+                .eq("id", photoId)
+                .maybeSingle();
+
+            if (fetchError || !photo) {
+                return res.status(404).json({ error: "Foto não encontrada" });
+            }
+
+            // Verifica se o usuário pertence à mesma empresa
+            const { data: userRow } = await supabaseAdmin
+                .from("users")
+                .select("company_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (!userRow?.company_id || userRow.company_id !== photo.company_id) {
+                return res.status(403).json({ error: "Sem permissão para deletar esta foto" });
+            }
+
+            // Remove do storage
+            const { error: storageError } = await supabaseAdmin.storage
+                .from("chat-uploads")
+                .remove([photo.storage_path]);
+
+            if (storageError) {
+                console.error("[kanban.photos] Storage delete error:", storageError);
+                // Continua mesmo se falhar no storage
+            }
+
+            // Remove do banco
+            const { error: deleteError } = await supabaseAdmin
+                .from("lead_photos")
+                .delete()
+                .eq("id", photoId);
+
+            if (deleteError) {
+                return res.status(500).json({ error: deleteError.message });
+            }
+
+            res.json({ success: true });
+        } catch (e: any) {
+            console.error("[kanban.photos] DELETE error:", e);
+            res.status(500).json({ error: e?.message || "Failed to delete photo" });
+        }
+    });
 
     // ================== FIM DO BLOCO DE ROTAS ==================
 }

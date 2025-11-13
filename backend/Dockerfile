@@ -1,15 +1,15 @@
-# --- build
+# --- build stage
 FROM node:20-alpine AS build
 WORKDIR /monorepo
 
-# Copy root package files (monorepo workspace)
+# Copy all package files for workspace resolution
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 
-# Install all dependencies (including workspace dependencies)
+# Install all dependencies (monorepo aware)
 RUN npm ci
 
-# Copy backend source
+# Copy backend source files
 COPY backend/tsconfig.json ./backend/
 COPY backend/tsup.config.ts ./backend/
 COPY backend/src ./backend/src
@@ -17,19 +17,19 @@ COPY backend/src ./backend/src
 # Build backend
 RUN npm run build:backend
 
-# --- run
+# --- production stage
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy only backend package files for production
-COPY backend/package*.json ./
+# Copy package files for installing production dependencies
+COPY package*.json ./
+COPY backend/package*.json ./backend/
 
-# Copy root package files for workspace resolution
-COPY package*.json /monorepo/
-RUN cd /monorepo && npm ci --omit=dev --workspace=backend
+# Install ONLY production dependencies
+RUN npm ci --omit=dev --workspace=backend
 
-# Copy built dist from build stage
+# Copy built artifacts from build stage
 COPY --from=build /monorepo/backend/dist ./dist
 
 EXPOSE 5000

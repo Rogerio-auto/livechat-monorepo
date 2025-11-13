@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.npm/
+.pnpm-debug.log*
+
+# Build outputs (serão recriados no Docker)
+dist/
+**/dist/
+backend/dist/
+frontend/dist/
+
+# Development files
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Environment files (usar .env.example e montar .env no runtime)
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+frontend/.env.production
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Test and scripts
+backend/scripts/
+backend/sql/
+**/tests/
+*.test.ts
+*.spec.ts
+
+# Temporary files
+tmp/
+temp/
+tmp_*
+*.diff
+*.swp
+*.swo
+snapshot.txt
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Documentation (não necessário no container)
+*.md
+!README.md
+
+# Docker files (não copiar para dentro do container)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Media and volumes
+**/waha-media/
+**/media/
+volumes/
+
+# Cache
+.cache/
+.eslintcache
+frontend/.vite/
+*.tsbuildinfo
+
+# Batch scripts (específicos do Windows)
+*.bat
+*.ps1

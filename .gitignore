@@ -6,6 +6,11 @@ npm-debug.log*
 *.log
 logs/
 
+# Permitir package-lock.json para builds reproduzíveis
+# IMPORTANTE: NÃO ignorar package-lock.json para deploy consistente
+!package-lock.json
+!**/package-lock.json
+
 # TypeScript cache
 *.tsbuildinfo
 

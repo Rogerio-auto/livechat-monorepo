@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
+import { OnboardingModal } from '../onboarding/OnboardingModal';
+import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
 
 type Props = { children: React.ReactNode };
 
@@ -8,13 +10,16 @@ export function RequireAuth({ children }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const [status, setStatus] = useState<'checking' | 'ok' | 'fail'>('checking');
-  const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || 'http://localhost:5000';
+  const { needsOnboarding, loading: onboardingLoading, markCompleted } = useOnboardingStatus();
 
   useEffect(() => {
     let mounted = true;
     (async () => {
       try {
-        const res = await fetch(`${API}/auth/me`, { credentials: 'include' });
+        // Usar URL relativa - o proxy do Vite vai encaminhar para http://localhost:5000
+        const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
+        const headers = devCompany && import.meta.env.DEV ? { 'X-Company-Id': devCompany } : undefined;
+        const res = await fetch('/auth/me', { credentials: 'include', headers });
         if (!mounted) return;
         if (res.ok) setStatus('ok');
         else {
@@ -28,10 +33,35 @@ export function RequireAuth({ children }: Props) {
       }
     })();
     return () => { mounted = false; };
-  }, [API, navigate, location.pathname]);
+  }, [navigate, location.pathname]);
 
-  if (status === 'checking') return <LoadingOverlay text="Verificando sessão..." fullscreen />;
-  if (status === 'ok') return <>{children}</>;
+  const handleOnboardingComplete = () => {
+    markCompleted();
+    // Recarregar a página para aplicar configurações
+    window.location.reload();
+  };
+
+  if (status === 'checking' || onboardingLoading) {
+    return <LoadingOverlay text="Verificando sessão..." fullscreen />;
+  }
+  
+  if (status === 'ok') {
+    return (
+      <>
+        {/* Modal de onboarding obrigatório */}
+        <OnboardingModal 
+          isOpen={needsOnboarding} 
+          onComplete={handleOnboardingComplete}
+        />
+        
+        {/* Conteúdo da página (fica "travado" enquanto modal está aberto) */}
+        <div className={needsOnboarding ? 'pointer-events-none filter blur-sm' : ''}>
+          {children}
+        </div>
+      </>
+    );
+  }
+  
   return null;
 }
 

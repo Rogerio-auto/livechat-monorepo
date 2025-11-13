@@ -27,6 +27,108 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
 
     // ⬇️⬇️⬇️ COLE TODO O BLOCO QUE VOCÊ MANDOU AQUI ⬇️⬇️⬇️
 
+    // POST /kanban/initialize-board - Criar board + colunas padrão para primeira vez
+    app.post("/kanban/initialize-board", requireAuth, async (req: any, res) => {
+        const userId = req.user.id;
+        
+        try {
+            // Buscar company_id do usuário
+            const { data: userRow, error: errUser } = await supabaseAdmin
+                .from("users")
+                .select("company_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            if (errUser) return res.status(500).json({ error: errUser.message });
+            if (!userRow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
+
+            const companyId = userRow.company_id;
+
+            // Verificar se já existe board
+            const { data: existingBoard } = await supabaseAdmin
+                .from("kanban_boards")
+                .select("id")
+                .eq("company_id", companyId)
+                .maybeSingle();
+
+            if (existingBoard) {
+                return res.status(400).json({ error: "Board já existe para esta empresa" });
+            }
+
+            // Receber dados do request (opcional, usar padrões se não enviado)
+            const { boardName = "Pipeline de Vendas", columns } = req.body || {};
+
+            // Colunas padrão se não enviadas
+            const defaultColumns = [
+                { name: "Novo Lead", color: "#3B82F6", position: 1 },
+                { name: "Contato Inicial", color: "#8B5CF6", position: 2 },
+                { name: "Proposta Enviada", color: "#F59E0B", position: 3 },
+                { name: "Negociação", color: "#10B981", position: 4 },
+                { name: "Fechado", color: "#22C55E", position: 5 }
+            ];
+
+            const columnsToCreate = Array.isArray(columns) && columns.length > 0 
+                ? columns 
+                : defaultColumns;
+
+            // Criar board
+            const { data: newBoard, error: errBoard } = await supabaseAdmin
+                .from("kanban_boards")
+                .insert({
+                    name: boardName,
+                    company_id: companyId,
+                    is_default: true
+                })
+                .select("id, name, is_default")
+                .single();
+
+            if (errBoard) return res.status(500).json({ error: errBoard.message });
+
+            // Buscar a maior position existente para evitar conflito com constraint UNIQUE
+            const { data: maxPosRow } = await supabaseAdmin
+                .from("kanban_columns")
+                .select("position")
+                .order("position", { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            const startPosition = (maxPosRow?.position || 0) + 1;
+
+            // Criar colunas com positions únicas globalmente
+            const columnsData = columnsToCreate.map((col: any, idx: number) => ({
+                name: col.name,
+                color: col.color || "#6B7280",
+                position: startPosition + idx,
+                kanban_board_id: newBoard.id,
+                is_default: idx === 0 // primeira coluna é padrão
+            }));
+
+            const { data: createdColumns, error: errColumns } = await supabaseAdmin
+                .from("kanban_columns")
+                .insert(columnsData)
+                .select("id, name, color, position");
+
+            if (errColumns) {
+                // Rollback: deletar board se falhar ao criar colunas
+                await supabaseAdmin.from("kanban_boards").delete().eq("id", newBoard.id);
+                return res.status(500).json({ error: errColumns.message });
+            }
+
+            return res.json({
+                board: newBoard,
+                columns: createdColumns.map((col: any) => ({
+                    id: col.id,
+                    title: col.name,
+                    color: col.color,
+                    position: col.position
+                }))
+            });
+
+        } catch (error: any) {
+            console.error("[kanban/initialize-board] Erro:", error);
+            return res.status(500).json({ error: error.message });
+        }
+    });
 
     app.get("/kanban/my-board", requireAuth, async (req: any, res) => {
         const userId = req.user.id;
@@ -51,7 +153,14 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
             .maybeSingle();
 
         if (errBoard) return res.status(500).json({ error: errBoard.message });
-        if (!board) return res.status(404).json({ error: "Nenhum board para a empresa" });
+        
+        // Se não encontrou board, retorna 200 com needs_setup: true
+        if (!board) {
+            return res.status(200).json({ 
+                needs_setup: true,
+                message: "Nenhum board configurado. Use POST /kanban/initialize-board para criar."
+            });
+        }
 
         res.json(board); // { id, name, is_default }
     });

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
-import { FiCheck, FiCheckSquare, FiMoreVertical, FiTag, FiUserMinus, FiUsers, FiCpu, FiRefreshCw } from "react-icons/fi";
+import type { ChangeEvent, PointerEvent as ReactPointerEvent } from "react";
+import {
+  FiCheck,
+  FiCheckSquare,
+  FiMoreVertical,
+  FiTag,
+  FiUserMinus,
+  FiUsers,
+  FiCpu,
+  FiRefreshCw,
+  FiGrid,
+  FiAlertCircle,
+} from "react-icons/fi";
 import type { Chat, Tag } from "./types";
 
 type Agent = {
@@ -58,6 +69,12 @@ type ChatHeaderProps = {
   currentStatus?: string | null;
   statusOptions?: Array<{ value: string; label: string }>;
   onChangeStatus?: (nextStatus: string) => Promise<void> | void;
+  departments?: Array<{ id: string; name: string; color?: string | null; icon?: string | null }>;
+  departmentsLoading?: boolean;
+  selectedDepartmentId?: string | null;
+  onChangeDepartment?: (departmentId: string | null) => Promise<void> | void;
+  isDepartmentChanging?: boolean;
+  departmentError?: string | null;
 };
 
 type DragContext = {
@@ -185,6 +202,12 @@ export function ChatHeader({
   currentStatus = null,
   statusOptions = [],
   onChangeStatus,
+  departments = [],
+  departmentsLoading = false,
+  selectedDepartmentId = null,
+  onChangeDepartment,
+  isDepartmentChanging = false,
+  departmentError = null,
 }: ChatHeaderProps) {
   const [overlayMode, setOverlayMode] = useState<"menu" | null>(null);
   const [tagsOpen, setTagsOpen] = useState(false);
@@ -841,6 +864,45 @@ const chatLeadId = getChatLeadId(chat);
   const effectiveAssigneeId = assigneeUserId ?? chat?.assigned_agent_user_id ?? null;
   const currentAssigneeName = assigneeName ?? chat?.assigned_agent_name ?? null;
 
+  const selectedDepartmentValue = selectedDepartmentId ?? chat?.department_id ?? null;
+
+  const currentDepartment = useMemo(() => {
+    const id = selectedDepartmentValue;
+    if (!id) return null;
+    const fromList = departments.find((dept) => dept.id === id);
+    if (fromList) return fromList;
+    if (!chat) return null;
+    return {
+      id,
+      name: chat.department_name ?? "Departamento",
+      color: chat.department_color ?? null,
+      icon: chat.department_icon ?? null,
+    };
+  }, [chat, departments, selectedDepartmentValue]);
+
+  const hasDepartmentOption = useMemo(() => {
+    if (!selectedDepartmentValue) return false;
+    return departments.some((dept) => dept.id === selectedDepartmentValue);
+  }, [departments, selectedDepartmentValue]);
+
+  const fallbackDepartmentLabel = useMemo(() => {
+    if (!selectedDepartmentValue || hasDepartmentOption) return null;
+    return chat?.department_name ?? "Departamento";
+  }, [chat?.department_name, hasDepartmentOption, selectedDepartmentValue]);
+
+  const handleDepartmentSelect = useCallback(
+    async (event: ChangeEvent<HTMLSelectElement>) => {
+      if (!onChangeDepartment) return;
+      const value = event.target.value;
+      try {
+        await onChangeDepartment(value ? value : null);
+      } catch (error) {
+        console.error("[ChatHeader] onChangeDepartment failed", error);
+      }
+    },
+    [onChangeDepartment],
+  );
+
   const actionButtons = [
     {
       id: "tags",
@@ -936,6 +998,15 @@ const chatLeadId = getChatLeadId(chat);
                     style={{ color: "var(--color-text-muted)" }}
                   >
                     Responsável: <span className="font-medium" style={{ color: "var(--color-text)" }}>{currentAssigneeName}</span>
+                  </div>
+                )}
+                {currentDepartment && (
+                  <div
+                    className="text-[11px] mt-0.5 flex items-center gap-1"
+                    style={{ color: currentDepartment.color || "var(--color-text-muted)" }}
+                  >
+                    <FiGrid className="h-3 w-3" />
+                    <span>Departamento: <span className="font-medium" style={{ color: currentDepartment.color || "var(--color-text)" }}>{currentDepartment.name}</span></span>
                   </div>
                 )}
               </div>
@@ -1061,6 +1132,40 @@ const chatLeadId = getChatLeadId(chat);
                       </option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {chat && onChangeDepartment && (
+                <div className="flex items-center gap-2">
+                  <label
+                    className="text-xs flex items-center gap-1"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    <FiGrid className="h-3.5 w-3.5" />
+                    Departamento
+                  </label>
+                  <select
+                    className="rounded-lg border px-2 py-1.5 text-xs outline-none transition-colors hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      borderColor: currentDepartment?.color || "var(--color-border)",
+                      backgroundColor: "var(--color-surface)",
+                      color: currentDepartment?.color || "var(--color-text)",
+                    }}
+                    value={selectedDepartmentValue ?? ""}
+                    onChange={handleDepartmentSelect}
+                    disabled={departmentsLoading || isDepartmentChanging}
+                  >
+                    <option value="">Sem departamento</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                    {selectedDepartmentValue && !hasDepartmentOption && (
+                      <option value={selectedDepartmentValue}>{fallbackDepartmentLabel ?? "Departamento"}</option>
+                    )}
+                  </select>
+                  {(departmentsLoading || isDepartmentChanging) && <Spinner />}
                 </div>
               )}
 
@@ -1409,6 +1514,13 @@ const chatLeadId = getChatLeadId(chat);
           </div>
         )}
       </div>
+
+      {departmentError && (
+        <div className="mt-1 flex items-center gap-2 text-xs text-red-500">
+          <FiAlertCircle className="h-3.5 w-3.5" />
+          <span>{departmentError}</span>
+        </div>
+      )}
 
       {tagsOpen && (
         <div className="flex flex-col items-end gap-2">

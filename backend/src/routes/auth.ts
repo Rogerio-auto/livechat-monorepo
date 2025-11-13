@@ -39,14 +39,29 @@ export function registerAuthRoutes(app: express.Application) {
     return res.json({ ok: true });
   });
 
-  app.get("/auth/me", requireAuth, (req: any, res) => {
+  app.get("/auth/me", requireAuth, async (req: any, res) => {
     console.log('[/auth/me] 🎯 ENDPOINT CALLED - NEW VERSION');
     console.log('[/auth/me] 📦 req.user:', req.user);
     console.log('[/auth/me] 👤 req.profile:', req.profile);
     
-    // Return user with role from profile if available
     const user = req.user || {};
     const profile = req.profile || {};
+    
+    // Buscar preferência de tema do banco
+    let theme_preference = "system";
+    try {
+      const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("theme_preference")
+        .eq("user_id", user.id || profile.id)
+        .maybeSingle();
+      
+      if (userData?.theme_preference) {
+        theme_preference = userData.theme_preference;
+      }
+    } catch (e) {
+      console.error('[/auth/me] Error fetching theme preference:', e);
+    }
     
     const response = { 
       id: user.id || profile.id,
@@ -54,11 +69,39 @@ export function registerAuthRoutes(app: express.Application) {
       role: profile.role || "USER",
       company_id: user.company_id || profile.company_id,
       name: profile.name || user.name || user.email,
+      theme_preference,
     };
     
     console.log('[/auth/me] 📤 Response:', response);
     
     return res.json(response);
+  });
+
+  // Update theme preference
+  app.patch("/auth/me/theme", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const { theme_preference } = req.body || {};
+      
+      if (!theme_preference || !["light", "dark", "system"].includes(theme_preference)) {
+        return res.status(400).json({ error: "Preferência de tema inválida. Use 'light', 'dark' ou 'system'" });
+      }
+
+      const { error } = await supabaseAdmin
+        .from("users")
+        .update({ theme_preference })
+        .eq("user_id", authUserId);
+
+      if (error) {
+        console.error('[/auth/me/theme] Error updating theme:', error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      return res.json({ ok: true, theme_preference });
+    } catch (e: any) {
+      console.error('[/auth/me/theme] Error:', e);
+      return res.status(500).json({ error: e?.message || "theme update error" });
+    }
   });
 
   // Profile of authenticated user + company basics

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import session from "express-session";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
@@ -47,6 +48,8 @@ import { registerMediaLibraryRoutes } from "./routes/livechat.mediaLibrary.ts";
 import { registerCampaignWorker } from "./worker.campaigns.ts";
 import { registerWAHARoutes } from "./routes/waha.ts";
 import mediaProxyRouter from "./routes/media.proxy.ts";
+import { registerDepartmentsRoutes } from "./routes/departments.ts";
+import { registerTeamsRoutes } from "./routes/teams.ts";
 import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
 import { registerDashboardRoutes } from "./routes/dashboard.ts";
 import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
@@ -56,6 +59,8 @@ import { registerLeadRoutes } from "./routes/leads.ts";
 import { registerProductRoutes } from "./routes/products.ts";
 import { registerAuthRoutes } from "./routes/auth.ts";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.ts";
+import { registerOnboardingRoutes } from "./routes/onboarding.ts";
+import { registerSubscriptionRoutes } from "./routes/subscriptions.ts";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -80,6 +85,18 @@ app.use(cors({
   credentials: true,
 }));
 app.use(cookieParser());
+
+// Configurar express-session para onboarding
+app.use(session({
+  secret: process.env.SESSION_SECRET || "onboarding-secret-change-in-production",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+  }
+}));
 
 // body parsers genéricos (suas rotas de upload usam multer, então ok)
 app.use(express.json({ limit: "100mb" }));
@@ -674,9 +691,9 @@ async function resolveProductsCompanyId(req: any): Promise<string> {
 }
 
 // ===== Produtos =====
-const PRODUCTS_TABLE = process.env.PRODUCTS_TABLE || "products";
+const PRODUCTS_TABLE = "catalog_items";
 
-// GET listar produtos (suporta pagina??o e filtros)
+// GET listar produtos (suporta paginação e filtros)
 app.get("/products", requireAuth, async (req, res) => {
   try {
     const companyId = await resolveProductsCompanyId(req);
@@ -1321,6 +1338,11 @@ export function mapLead(form: LeadForm) {
   };
 }
 
+// ===== ROTAS DE LEADS MOVIDAS PARA routes/leads.ts =====
+// As rotas abaixo foram movidas para o arquivo routes/leads.ts com isolamento por company_id
+// Mantidas aqui comentadas para referência histórica
+
+/*
 // LISTAR
 app.get("/leads", requireAuth, async (_req, res) => {
   const { data, error } = await supabaseAdmin
@@ -1618,6 +1640,9 @@ app.delete("/leads/:id", requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   return res.status(204).send();
 });
+*/
+
+// ===== FIM DAS ROTAS DE LEADS ANTIGAS =====
 
 
 // GET /livechat/inboxes/:id/agents (revisado)
@@ -3187,6 +3212,10 @@ app.post("/documents", requireAuth, async (req: any, res) => {
 app.get("/integrations/meta/webhook", metaWebhookGet);
 app.post("/integrations/meta/webhook", metaWebhookPost);
 
+// ONBOARDING (precisa vir ANTES dos routers globais /api que tem requireAuth)
+registerOnboardingRoutes(app);
+registerSubscriptionRoutes(app);
+
 // autenticados
 startLivechatSocketBridge();
 registerLivechatContactsRoutes(app);
@@ -3195,6 +3224,8 @@ registerAgentsRoutes(app);
 registerAgentTemplatesRoutes(app);
 registerAgentTemplatesAdminRoutes(app);
 registerCompanyRoutes(app);
+registerDepartmentsRoutes(app);
+registerTeamsRoutes(app);
 registerKnowledgeBaseRoutes(app);
 registerCalendarRoutes(app);
 registerLeadRoutes(app);
@@ -3202,6 +3233,8 @@ app.use("/api/upload", uploadRouter);
 app.use("/api/media", mediaRouter);
 registerProductRoutes(app);
 registerMetaTemplatesRoutes(app);
+// ATENÇÃO: Esses routers aplicam requireAuth globalmente em /api/*
+// Por isso o onboarding precisa estar registrado ANTES
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
 registerSettingsInboxesRoutes(app);

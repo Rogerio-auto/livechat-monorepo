@@ -1,6 +1,7 @@
 import type { Application } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
+import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 import { FRONTEND_ORIGINS } from "../config/env.ts";
@@ -106,7 +107,7 @@ export function registerSettingsUsersRoutes(app: Application) {
     }
   });
 
-  app.post("/settings/users", requireAuth, async (req: any, res) => {
+  app.post("/settings/users", requireAuth, checkResourceLimit("users"), async (req: any, res) => {
     try {
       const { companyId } = await fetchActorContext(req);
 

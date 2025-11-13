@@ -272,6 +272,78 @@ function toUuidArray(arr: any[]): string[] {
   return Array.from(new Set(out));
 }
 
+function buildChatSelectFields(): string {
+  const fields = [
+    "id",
+    "company_id",
+    "inbox_id",
+    "customer_id",
+    "kind",
+    "chat_type",
+    "remote_id",
+    "group_name",
+    "group_avatar_url",
+    "external_id",
+    "status",
+    "last_message",
+    "last_message_at",
+    "last_message_from",
+    "unread_count",
+    "created_at",
+    "updated_at",
+    "assignee_agent",
+    "ai_agent_id",
+    "department_id",
+    "team_id",
+  ];
+  if (chatsSupportsLastMessageType) fields.push("last_message_type");
+  if (chatsSupportsLastMessageMediaUrl) fields.push("last_message_media_url");
+  fields.push(
+    "inbox:inboxes!inner(id, company_id)",
+    "ai_agent:agents!chats_ai_agent_id_fkey(id, name)",
+    "customer:customers(id, name, phone)",
+    "department:departments(id, name, color, icon)",
+  );
+  return fields.join(",");
+}
+
+function flattenChatRow(row: any) {
+  if (!row || typeof row !== "object") return row;
+
+  if (row.inbox) delete row.inbox;
+
+  if (row.ai_agent) {
+    row.ai_agent_id = row.ai_agent?.id ?? null;
+    row.ai_agent_name = row.ai_agent?.name ?? null;
+    delete row.ai_agent;
+  } else {
+    row.ai_agent_id = row.ai_agent_id ?? null;
+    row.ai_agent_name = row.ai_agent_name ?? null;
+  }
+
+  if (row.department) {
+    row.department_name = row.department?.name ?? null;
+    row.department_color = row.department?.color ?? null;
+    row.department_icon = row.department?.icon ?? null;
+    delete row.department;
+  } else {
+    row.department_name = row.department_name ?? null;
+    row.department_color = row.department_color ?? null;
+    row.department_icon = row.department_icon ?? null;
+  }
+
+  if (row.customer) {
+    row.customer_name = row.customer?.name ?? null;
+    row.customer_phone = row.customer?.phone ?? null;
+    delete row.customer;
+  } else {
+    row.customer_name = row.customer_name ?? null;
+    row.customer_phone = row.customer_phone ?? null;
+  }
+
+  return row;
+}
+
 
 export function registerLivechatChatRoutes(app: express.Application) {
   // Mount messages sub-router for GET /livechat/messages/:id
@@ -299,6 +371,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const inboxId = (req.query.inboxId as string) || undefined;
       const rawStatus = (req.query.status as string) || undefined;
       const rawKind = (req.query.kind as string) || undefined;
+      const departmentId = (req.query.department_id as string) || undefined;
       const q = (req.query.q as string) || undefined;
       const limit = req.query.limit ? Math.max(1, Number(req.query.limit)) : 20;
       const offset = req.query.offset ? Math.max(0, Number(req.query.offset)) : 0;
@@ -325,11 +398,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
         endTimer({ error: "invalid_inbox" });
         return res.status(400).json({ error: "Inbox invalida" });
       }
+      
+      if (departmentId && !UUID_RE.test(departmentId)) {
+        endTimer({ error: "invalid_department" });
+        return res.status(400).json({ error: "Departamento inválido" });
+      }
 
       const statusFilter =
         normalizedStatus && normalizedStatus !== "ALL" ? normalizedStatus : undefined;
       const statusSegment = statusFilter ?? "ALL";
       const kindSegment = kindFilter ?? "ALL";
+      const deptSegment = departmentId ?? "ALL";
 
       const actorResp = await traceSupabase(
         "users.company",
@@ -362,8 +441,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         q || null,
         offset,
         limit,
+        deptSegment,
       );
-      const listIndexKey = k.listIndex(companyId, inboxId || null, statusSegment, kindSegment);
+      const listIndexKey = k.listIndex(companyId, inboxId || null, statusSegment, kindSegment, deptSegment);
       const cachedRaw = await rGet<
         CacheEnvelope<{ items: any[]; total: number }> | { items: any[]; total: number }
       >(cacheKey);
@@ -414,38 +494,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
-      const buildChatSelectFields = () => {
-        const fields = [
-          "id",
-          "kind",
-          "remote_id",
-          "group_name",
-          "group_avatar_url",
-          "external_id",
-          "status",
-          "last_message",
-          "last_message_at",
-          "last_message_from",
-          "unread_count",
-        ];
-        if (chatsSupportsLastMessageType) fields.push("last_message_type");
-        if (chatsSupportsLastMessageMediaUrl) fields.push("last_message_media_url");
-        fields.push(
-          "inbox_id",
-          "customer_id",
-          "chat_type",
-          "created_at",
-          "updated_at",
-          "assignee_agent",
-          "inbox:inboxes!inner(id, company_id)",
-          // join AI agent identity by FK (requires constraint chats_ai_agent_id_fkey)
-          "ai_agent:agents!chats_ai_agent_id_fkey(id, name)",
-          // join customer data for search
-          "customer:customers(id, name, phone)",
-        );
-        return fields.join(",");
-      };
-
       const runChatsQuery = async (label: string) =>
         await traceSupabase(
           label,
@@ -460,6 +508,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
               .order("created_at", { ascending: false })
               .order("id", { ascending: true });
             if (inboxId) query = query.eq("inbox_id", inboxId);
+            if (departmentId) query = query.eq("department_id", departmentId);
             if (statusFilter) {
               query = query.eq("status", statusFilter);
               // PENDING status: only show chats with unread messages
@@ -529,28 +578,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         return res.status(500).json(parsedError);
       }
 
-      const rawItems = ((listResp.data || []) as any[]).map((row: any) => {
-        if (row?.inbox) delete row.inbox;
-        // flatten AI agent relationship
-        if (row?.ai_agent) {
-          row.ai_agent_id = row.ai_agent?.id ?? null;
-          row.ai_agent_name = row.ai_agent?.name ?? null;
-          delete row.ai_agent;
-        } else {
-          row.ai_agent_id = row.ai_agent_id ?? null;
-          row.ai_agent_name = row.ai_agent_name ?? null;
-        }
-        // flatten customer relationship
-        if (row?.customer) {
-          row.customer_name = row.customer?.name ?? null;
-          row.customer_phone = row.customer?.phone ?? null;
-          delete row.customer;
-        } else {
-          row.customer_name = row.customer_name ?? null;
-          row.customer_phone = row.customer_phone ?? null;
-        }
-        return row;
-      });
+      const rawItems = ((listResp.data || []) as any[]).map((row: any) => (row ? flattenChatRow(row) : row));
       
       // Client-side filtering for all searchable fields when query exists
       let items = rawItems;
@@ -1591,11 +1619,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
       if (baseKind) kinds.add(baseKind);
 
       const inboxes = new Set<string | null>([inboxCandidate ?? null, null]);
+      const departments = new Set<string | null>([
+        (data as any)?.department_id ?? null,
+        null,
+      ]);
       const indexKeys: string[] = [];
       for (const inbox of inboxes) {
         for (const statusKey of statuses) {
           for (const kindKey of kinds) {
-            indexKeys.push(k.listIndex(companyId, inbox, statusKey, kindKey));
+            for (const deptId of departments) {
+              indexKeys.push(k.listIndex(companyId, inbox, statusKey, kindKey, deptId));
+            }
           }
         }
       }
@@ -1603,6 +1637,189 @@ export function registerLivechatChatRoutes(app: express.Application) {
     }
 
     return res.json(data);
+  });
+
+  // Atualizar departamento do chat
+  app.put("/livechat/chats/:id/department", requireAuth, async (req, res) => {
+    const { id } = req.params as { id: string };
+    let { department_id: departmentId } = (req.body || {}) as { department_id?: string | null };
+
+    console.info("[livechat] PUT /livechat/chats/:id/department", {
+      chatId: id,
+      requestedDepartmentId: departmentId ?? null,
+      userId: req.user?.id ?? null,
+    });
+
+    if (departmentId === "") departmentId = null;
+    if (departmentId !== null && departmentId !== undefined && typeof departmentId !== "string") {
+      return res.status(400).json({ error: "department_id deve ser string ou null" });
+    }
+    if (departmentId && !UUID_RE.test(departmentId)) {
+      return res.status(400).json({ error: "Departamento inválido" });
+    }
+
+    const { data: chatRowRaw, error: chatError } = await supabaseAdmin
+      .from("chats")
+      .select(buildChatSelectFields())
+      .eq("id", id)
+      .maybeSingle();
+
+    const chatRow = chatRowRaw ? flattenChatRow(chatRowRaw) : null;
+
+    if (chatError) {
+      console.error("[livechat] department update failed loading chat", {
+        chatId: id,
+        error: chatError.message,
+      });
+      return res.status(500).json({ error: chatError.message });
+    }
+    if (!chatRow) {
+      console.warn("[livechat] department update chat not found", { chatId: id });
+      return res.status(404).json({ error: "Chat não encontrado" });
+    }
+
+    console.debug("[livechat] department update current chat", {
+      chatId: id,
+      currentDepartmentId: (chatRow as any)?.department_id ?? null,
+      companyId: (chatRow as any)?.company_id ?? null,
+    });
+
+    const companyId = (chatRow as any).company_id ?? req.user?.company_id ?? null;
+    if (!companyId) return res.status(401).json({ error: "Empresa não identificada" });
+    if (req.user?.company_id && req.user.company_id !== companyId) {
+      return res.status(403).json({ error: "Acesso negado" });
+    }
+
+    let departmentMeta: { id: string; name: string | null; color: string | null; icon: string | null } | null = null;
+    if (departmentId) {
+      const { data: deptRow, error: deptError } = await supabaseAdmin
+        .from("departments")
+        .select("id, name, color, icon, company_id")
+        .eq("id", departmentId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (deptError) {
+        console.error("[livechat] department update failed loading department", {
+          chatId: id,
+          departmentId,
+          error: deptError.message,
+        });
+        return res.status(500).json({ error: deptError.message });
+      }
+      if (!deptRow) {
+        console.warn("[livechat] department update department not found", {
+          chatId: id,
+          departmentId,
+        });
+        return res.status(404).json({ error: "Departamento não encontrado" });
+      }
+      departmentMeta = {
+        id: deptRow.id,
+        name: deptRow.name ?? null,
+        color: deptRow.color ?? null,
+        icon: deptRow.icon ?? null,
+      };
+    }
+
+    const previousDepartmentId = (chatRow as any)?.department_id ?? null;
+
+    const { data: updatedRaw, error: updateError } = await supabaseAdmin
+      .from("chats")
+      .update({ department_id: departmentId ?? null })
+      .eq("id", id)
+      .select(buildChatSelectFields())
+      .single();
+
+    const updatedRow = updatedRaw ? flattenChatRow(updatedRaw) : null;
+
+    if (updateError) {
+      console.error("[livechat] department update failed writing chat", {
+        chatId: id,
+        departmentId: departmentId ?? null,
+        error: updateError.message,
+      });
+      return res.status(500).json({ error: updateError.message });
+    }
+    if (!updatedRow) {
+      console.error("[livechat] department update missing updated row", {
+        chatId: id,
+        departmentId: departmentId ?? null,
+      });
+      return res.status(500).json({ error: "Falha ao atualizar departamento do chat" });
+    }
+
+    const departmentPayloadName = departmentMeta?.name ?? updatedRow.department_name ?? null;
+    const departmentPayloadColor = departmentMeta?.color ?? updatedRow.department_color ?? null;
+    const departmentPayloadIcon = departmentMeta?.icon ?? updatedRow.department_icon ?? null;
+
+    console.info("[livechat] department update success", {
+      chatId: id,
+      previousDepartmentId,
+      nextDepartmentId: updatedRow?.department_id ?? null,
+    });
+
+    await rDel(k.chat(id));
+
+    const statuses = new Set<string>(["ALL"]);
+    const statusUpper = typeof updatedRow?.status === "string" ? updatedRow.status.trim().toUpperCase() : "";
+    if (statusUpper) statuses.add(statusUpper);
+
+    let baseKind =
+      typeof updatedRow?.kind === "string" && updatedRow.kind
+        ? String(updatedRow.kind).trim().toUpperCase()
+        : null;
+    const chatType = typeof updatedRow?.chat_type === "string" ? updatedRow.chat_type.trim().toUpperCase() : null;
+    if (!baseKind && chatType) {
+      baseKind = chatType === "GROUP" ? "GROUP" : "DIRECT";
+    }
+    const kinds = new Set<string>(["ALL"]);
+    if (baseKind) kinds.add(baseKind);
+
+    const inboxes = new Set<string | null>([(updatedRow as any)?.inbox_id ?? null, null]);
+    const departments = new Set<string | null>([
+      previousDepartmentId ?? null,
+      updatedRow?.department_id ?? null,
+      null,
+    ]);
+
+    const indexKeys: string[] = [];
+    for (const inbox of inboxes) {
+      for (const statusKey of statuses) {
+        for (const kindKey of kinds) {
+          for (const dept of departments) {
+            indexKeys.push(k.listIndex(companyId, inbox, statusKey, kindKey, dept));
+          }
+        }
+      }
+    }
+    await clearListCacheIndexes(indexKeys);
+
+    const io = getIO();
+    if (io) {
+      io.to(`chat:${id}`).emit("chat:department-changed", {
+        kind: "livechat.chat.department-changed",
+        chatId: id,
+        department_id: updatedRow?.department_id ?? null,
+        department_name: departmentPayloadName,
+        department_color: departmentPayloadColor,
+        department_icon: departmentPayloadIcon,
+      });
+      io.emit("chat:updated", {
+        chatId: id,
+        department_id: updatedRow?.department_id ?? null,
+        department_name: departmentPayloadName,
+        department_color: departmentPayloadColor,
+        department_icon: departmentPayloadIcon,
+      });
+    }
+
+    return res.json({
+      ...updatedRow,
+      department_name: departmentPayloadName,
+      department_color: departmentPayloadColor,
+      department_icon: departmentPayloadIcon,
+    });
   });
 
   // Atualizar agente de IA do chat
@@ -1680,8 +1897,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Listar mensagens (publicas + privadas) com cache
-  app.get("/livechat/chats/:id/messages", requireAuth, async (req, res) => {
+  app.get("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
+    
     const limitParam = Number(req.query.limit);
     const limit = Number.isFinite(limitParam)
       ? Math.max(1, Math.min(100, Math.trunc(limitParam)))
@@ -1817,6 +2035,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
 
       const pubRowsDesc = (pubResp.data || []) as any[];
+      
+      console.log(`[livechat/messages] Found ${pubRowsDesc.length} messages for chat ${id}`);
       
       const mappedPubAsc = [...pubRowsDesc]
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -1997,6 +2217,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
           sender_avatar_url: senderAvatarUrl,
           created_at: nowIso,
           view_status: "Pending",
+          company_id: req.user?.company_id || null,
+          inbox_id: chat.inbox_id || null,
+          from_user_id: req.user?.id || null,
         }])
         .select("id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, view_status, type")
         .single();

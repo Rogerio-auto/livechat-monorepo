@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { FiCpu, FiUser } from "react-icons/fi";
+import { FiCpu, FiUser, FiGrid } from "react-icons/fi";
 import type { Chat as LivechatChat, Tag } from "../../componets/livechat/types";
 
 type BaseChat = Partial<LivechatChat> & {
@@ -25,6 +25,10 @@ type BaseChat = Partial<LivechatChat> & {
   ai_mode?: string | null;
   status?: string | null;
   tag_ids?: string[];
+  department_id?: string | null;
+  department_name?: string | null;
+  department_color?: string | null;
+  department_icon?: string | null;
 };
 
 export type Chat = BaseChat;
@@ -272,6 +276,23 @@ export default function ChatList({
                     title={`Inbox: ${inboxLabel}${inboxProvider ? ` (${inboxProvider})` : ""}`}
                   >
                     {inboxLabel.length > 15 ? `${inboxLabel.slice(0, 15)}...` : inboxLabel}
+                  </span>
+                )}
+
+                {chat.department_name && (
+                  <span
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium whitespace-nowrap"
+                    style={{
+                      borderColor: chat.department_color || "var(--color-border)",
+                      color: chat.department_color || "var(--color-text)",
+                      backgroundColor: "color-mix(in srgb, var(--color-surface) 80%, transparent)",
+                    }}
+                    title={`Departamento: ${chat.department_name}`}
+                  >
+                    <FiGrid className="w-3 h-3" />
+                    {chat.department_name.length > 18
+                      ? `${chat.department_name.slice(0, 18)}…`
+                      : chat.department_name}
                   </span>
                 )}
                 

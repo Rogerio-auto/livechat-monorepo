@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+:root {
+	color-scheme: light;
+	--color-bg: #f5f7ff;
+	--color-surface: #ffffff;
+	--color-surface-muted: #eef2ff;
+	--color-sidebar-bg: #1d4ed8;
+	--color-sidebar-border: rgba(15, 23, 42, 0.08);
+	--color-sidebar-text: #f8fafc;
+	--color-sidebar-text-muted: rgba(248, 250, 252, 0.8);
+	--color-sidebar-hover: rgba(15, 23, 42, 0.15);
+	--color-sidebar-active: rgba(56, 189, 248, 0.25);
+	--color-sidebar-icon: #38bdf8;
+	--color-border: rgba(15, 23, 42, 0.08);
+	--color-text: #0f172a;
+	--color-text-muted: #475569;
+	--color-heading: #0b1220;
+	--color-primary: #1d4ed8;
+	--color-primary-strong: #1e3a8a;
+	--color-on-primary: #ffffff;
+	--color-highlight: #38bdf8;
+	--color-highlight-strong: #0ea5e9;
+	--color-overlay: rgba(15, 23, 42, 0.5);
+	--color-card-shadow: rgba(15, 23, 42, 0.12);
+}
+
+.dark {
+	color-scheme: dark;
+	--color-bg: #0a0f1c;
+	--color-surface: #0f172a;
+	--color-surface-muted: #111c2e;
+	--color-sidebar-bg: #0f172a;
+	--color-sidebar-border: rgba(148, 163, 184, 0.18);
+	--color-sidebar-text: #f8fafc;
+	--color-sidebar-text-muted: rgba(226, 232, 240, 0.72);
+	--color-sidebar-hover: rgba(56, 189, 248, 0.12);
+	--color-sidebar-active: rgba(56, 189, 248, 0.25);
+	--color-sidebar-icon: #38bdf8;
+	--color-border: rgba(148, 163, 184, 0.18);
+	--color-text: #e2e8f0;
+	--color-text-muted: #94a3b8;
+	--color-heading: #f8fafc;
+	--color-primary: #1d4ed8;
+	--color-primary-strong: #2563eb;
+	--color-on-primary: #f8fafc;
+	--color-highlight: #38bdf8;
+	--color-highlight-strong: #0ea5e9;
+	--color-overlay: rgba(10, 15, 28, 0.7);
+	--color-card-shadow: rgba(2, 6, 23, 0.45);
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--color-bg: #0a0f1c;
+	--color-surface: #0f172a;
+	--color-surface-muted: #111c2e;
+	--color-sidebar-bg: #0f172a;
+	--color-sidebar-border: rgba(148, 163, 184, 0.18);
+	--color-border: rgba(148, 163, 184, 0.18);
+	--color-text: #e2e8f0;
+	--color-text-muted: #94a3b8;
+	--color-heading: #f8fafc;
+	--color-primary: #1d4ed8;
+	--color-primary-strong: #2563eb;
+	--color-on-primary: #f8fafc;
+	--color-highlight: #38bdf8;
+	--color-highlight-strong: #0ea5e9;
+	--color-overlay: rgba(10, 15, 28, 0.7);
+	--color-card-shadow: rgba(2, 6, 23, 0.45);
+	--color-sidebar-text: #f8fafc;
+	--color-sidebar-text-muted: rgba(226, 232, 240, 0.72);
+	--color-sidebar-hover: rgba(56, 189, 248, 0.12);
+	--color-sidebar-active: rgba(56, 189, 248, 0.25);
+	--color-sidebar-icon: #38bdf8;
+}
+
+html {
+	background-color: var(--color-bg);
+}
+
+body {
+	background-color: var(--color-bg);
+	color: var(--color-text);
+	transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+.theme-surface {
+	background-color: var(--color-surface);
+	color: var(--color-text);
+}
+
+.theme-surface-muted {
+	background-color: var(--color-surface-muted);
+}
+
+.theme-border {
+	border-color: var(--color-border);
+}
+
+.theme-heading {
+	color: var(--color-heading);
+}
+
+.theme-text-muted {
+	color: var(--color-text-muted);
+}
+
+.theme-primary {
+	background-color: var(--color-primary);
+	color: var(--color-on-primary);
+}
+
+.theme-primary:hover {
+	background-color: var(--color-primary-strong);
+}
+
+.theme-highlight {
+	color: var(--color-highlight);
+}
+
+.config-page {
+	background-color: var(--color-bg);
+	color: var(--color-text);
+}
+
+.config-card {
+	background-color: var(--color-surface);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	box-shadow: 0 24px 32px -24px var(--color-card-shadow);
+}
+
+.config-card-muted {
+	background-color: var(--color-surface-muted);
+	color: var(--color-text);
+	border: 1px solid color-mix(in srgb, var(--color-border) 40%, transparent);
+}
+
+.config-heading {
+	color: var(--color-heading);
+}
+
+.config-text-muted {
+	color: var(--color-text-muted);
+}
+
+.config-input {
+	background-color: var(--color-surface-muted);
+	border: 1px solid var(--color-border);
+	color: var(--color-text);
+	transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.config-input::placeholder {
+	color: var(--color-text-muted);
+}
+
+.config-input:focus {
+	outline: none;
+	border-color: var(--color-highlight);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-highlight) 25%, transparent);
+}
+
+.config-btn {
+	background-color: var(--color-surface-muted);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.config-btn:hover {
+	background-color: color-mix(in srgb, var(--color-surface-muted) 70%, var(--color-border));
+}
+
+.config-btn:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.config-btn-primary {
+	background-color: var(--color-primary);
+	color: var(--color-on-primary);
+	border: 1px solid color-mix(in srgb, var(--color-primary) 85%, var(--color-border));
+	transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.config-btn-primary:hover {
+	background-color: var(--color-primary-strong);
+}
+
+.config-btn-primary:disabled {
+	opacity: 0.7;
+	cursor: not-allowed;
+}
+
+.config-badge {
+	background-color: color-mix(in srgb, var(--color-highlight) 15%, transparent);
+	color: var(--color-highlight);
+}
+
+.config-modal {
+	background-color: var(--color-surface);
+	color: var(--color-text);
+	border: 1px solid var(--color-border);
+	box-shadow: 0 24px 44px -24px var(--color-card-shadow);
+}
+
+.config-divider {
+	border-color: var(--color-border);
+}
+
+.config-chip {
+	background-color: color-mix(in srgb, var(--color-surface-muted) 75%, transparent);
+	color: var(--color-text);
+	border: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+}
+
+.config-chip--muted {
+	color: var(--color-text-muted);
+}

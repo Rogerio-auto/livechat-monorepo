@@ -142,8 +142,8 @@ export function registerKnowledgeBaseRoutes(app: Application) {
       return res.status(201).json(item);
     } catch (error: any) {
       console.error("[knowledge-base] POST error:", error);
-      if (error.name === "ZodError") {
-        return res.status(400).json({ error: "Dados inválidos", details: error.errors });
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ error: "Dados inválidos", details: error.issues });
       }
       return res.status(500).json({ error: error.message || "Erro ao criar knowledge base" });
     }
@@ -162,8 +162,8 @@ export function registerKnowledgeBaseRoutes(app: Application) {
       return res.json(item);
     } catch (error: any) {
       console.error("[knowledge-base] PUT error:", error);
-      if (error.name === "ZodError") {
-        return res.status(400).json({ error: "Dados inválidos", details: error.errors });
+        if (error instanceof z.ZodError) {
+          return res.status(400).json({ error: "Dados inválidos", details: error.issues });
       }
       return res.status(500).json({ error: error.message || "Erro ao atualizar knowledge base" });
     }

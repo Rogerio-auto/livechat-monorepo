@@ -95,7 +95,10 @@ export default function MediaCard({ media, onRefresh }: MediaCardProps) {
             description: editFormData.description,
             alt_text: editFormData.alt_text,
             category: editFormData.category,
-            tags: editFormData.tags.split(",").map((t) => t.trim()).filter(Boolean),
+            tags: editFormData.tags
+              .split(",")
+              .map((tag: string) => tag.trim())
+              .filter(Boolean),
           }),
         }
       );

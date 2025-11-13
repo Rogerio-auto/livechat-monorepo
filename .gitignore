@@ -1,4 +1,4 @@
-# Root ignores
+﻿# Root ignores
 node_modules/
 .npm/
 .pnpm-debug.log*
@@ -14,14 +14,22 @@ backend/dist/
 frontend/dist/
 dist/
 
-# Test files
+# Test files e scripts de teste
 backend/scripts/tests/
+backend/scripts/test*.ts
+backend/scripts/check*.ts
+backend/scripts/run*.ts
+backend/scripts/seed*.ts
+backend/scripts/create*.ts
+backend/scripts/cleanup*.sql
 **/tests/
 *.test.ts
 *.spec.ts
 
-# SQL migrations
+# SQL migrations e arquivos SQL
 backend/sql/
+*.sql
+!backend/sql/README.md
 
 # Temporary/cache directories
 .cache/
@@ -34,10 +42,10 @@ frontend/.vite/
 frontend/.eslintcache
 backend/.eslintcache
 
-# Markdown files (except README.md)
+# Markdown files (ignorar todos exceto importantes)
 *.md
 !README.md
-!**/README.md
+!LICENSE.md
 
 # IDE/editor files
 .vscode/*
@@ -45,11 +53,19 @@ backend/.eslintcache
 !.vscode/settings.json
 !.vscode/launch.json
 
-# Environment files
+# Environment files (NUNCA commitar com valores reais!)
 .env
-.env.*
 .env.local
 .env.*.local
+.env.production
+backend/.env
+frontend/.env
+frontend/.env.production
+
+# Manter apenas os arquivos .example
+!.env.example
+!**/.env.example
+!**/.env.production.example
 
 # OS / editor files
 .DS_Store
@@ -58,5 +74,11 @@ Thumbs.db
 *.swp
 *.swo
 
+# Docker volumes e media
+**/waha-media/
+**/media/
+volumes/
+
 # Outros
 .collect-snapshots
+backend/tmp.bin

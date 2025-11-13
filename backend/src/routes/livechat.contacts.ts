@@ -90,11 +90,17 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
  // Get a single contact
  app.get("/livechat/contacts/:id", requireAuth, async (req: any, res) => {
    const { id } = req.params as { id: string };
+   const companyId = req.user?.company_id;
+   if (!companyId) {
+     return res.status(400).json({ error: "Missing company context" });
+   }
+   
    try {
      const { data, error } = await supabaseAdmin
        .from("customers")
        .select("*")
        .eq("id", id)
+       .eq("company_id", companyId)
        .maybeSingle();
      if (!error && data) {
        let assigned_agent: string | null = null;
@@ -306,6 +312,11 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
  // Update contact
  app.put("/livechat/contacts/:id", requireAuth, async (req: any, res) => {
    const { id } = req.params as { id: string };
+   const companyId = req.user?.company_id;
+   if (!companyId) {
+     return res.status(400).json({ error: "Missing company context" });
+   }
+   
    const body = req.body || {};
    const payload = {
      name: body.name ?? undefined,
@@ -323,6 +334,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        .from("customers")
        .update(payload)
        .eq("id", id)
+       .eq("company_id", companyId)
        .select("id")
        .maybeSingle();
      if (!error) return res.json({ id: (data as any)?.id ?? id });
@@ -343,6 +355,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        .from("customers")
        .update(legacy)
        .eq("id", id)
+       .eq("company_id", companyId)
        .select("id")
        .maybeSingle();
      if (error) return res.status(500).json({ error: error.message });

@@ -898,21 +898,28 @@ export async function ensureLeadCustomerChat(args: {
       // Customer lookup (lid -> phone)
       (async () => {
         if (lid) {
+          console.log("[META][store] 🔍 customer lookup by LID with company_id", { companyId: args.companyId, lid });
           const byLid = await tx.oneOrNone<{ id: string; name: string }>(
-            `select id, name from public.customers where lid = $1 limit 1`,
-            [lid],
+            `select id, name from public.customers where company_id = $1 and lid = $2 limit 1`,
+            [args.companyId, lid],
           );
           if (byLid) {
-            console.log("[META][store] customer lookup by lid", { lid, found: true });
+            console.log("[META][store] ✅ customer found by lid", { companyId: args.companyId, lid, customerId: byLid.id, found: true });
             return byLid;
           }
+          console.log("[META][store] ⚠️ customer NOT found by lid", { companyId: args.companyId, lid });
         }
         
+        console.log("[META][store] 🔍 customer lookup by phone with company_id", { companyId: args.companyId, msisdn });
         const byPhone = await tx.oneOrNone<{ id: string; name: string }>(
-          `select id, name from public.customers where phone = $1 limit 1`,
-          [msisdn],
+          `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
+          [args.companyId, msisdn],
         );
-        console.log("[META][store] customer lookup by phone", { msisdn, found: !!byPhone });
+        if (byPhone) {
+          console.log("[META][store] ✅ customer found by phone", { companyId: args.companyId, msisdn, customerId: byPhone.id, found: true });
+        } else {
+          console.log("[META][store] ⚠️ customer NOT found by phone", { companyId: args.companyId, msisdn });
+        }
         return byPhone;
       })(),
     ]);
@@ -924,25 +931,35 @@ export async function ensureLeadCustomerChat(args: {
     if (!lead || !customer) {
       const boardId = !lead ? await getBoardIdForCompany(args.companyId) : null;
       
+      console.log("[META][store] 🔧 VERSÃO ATUALIZADA: Using ON CONFLICT DO UPDATE RETURNING");
+      
       const [createdLead, createdCustomer] = await Promise.all([
         // Create lead if needed
         !lead ? (async () => {
-          // Use INSERT ... ON CONFLICT DO NOTHING to avoid race conditions
-          await tx.none(
+          console.log("[META][store] 💾 Creating lead", { companyId: args.companyId, msisdn, lid, boardId });
+          // Use INSERT ... ON CONFLICT DO UPDATE to ensure we get the lead even if it exists
+          const insertedLead = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
             `insert into public.leads (company_id, phone, name, kanban_board_id, lid)
              values ($1, $2, $3, $4, $5)
-             on conflict (company_id, phone) do nothing`,
+             on conflict (company_id, phone) 
+             do update set lid = coalesce(excluded.lid, leads.lid), name = excluded.name
+             returning id, name, customer_id, lid`,
             [args.companyId, msisdn, fallbackName, boardId, lid],
           );
           
-          // Now fetch the lead (either newly created or existing)
+          if (insertedLead) {
+            console.log("[META][store] ✅ lead created/updated (by conflict)", { leadId: insertedLead.id, companyId: args.companyId, msisdn, lid });
+            return insertedLead;
+          }
+          
+          // Fallback: fetch the lead (in case ON CONFLICT didn't return anything)
           if (lid) {
             const byLid = await tx.oneOrNone<{ id: string; name: string; customer_id: string | null; lid: string | null }>(
               `select id, name, customer_id, lid from public.leads where company_id = $1 and lid = $2 limit 1`,
               [args.companyId, lid],
             );
             if (byLid) {
-              console.log("[META][store] lead ensured (by LID)", { leadId: byLid.id, companyId: args.companyId, msisdn, lid });
+              console.log("[META][store] ✅ lead ensured (by LID)", { leadId: byLid.id, companyId: args.companyId, msisdn, lid });
               return byLid;
             }
           }
@@ -950,7 +967,7 @@ export async function ensureLeadCustomerChat(args: {
             `select id, name, customer_id, lid from public.leads where company_id = $1 and phone = $2 limit 1`,
             [args.companyId, msisdn],
           );
-          console.log("[META][store] lead ensured (by phone)", { leadId: byPhone.id, companyId: args.companyId, msisdn, lid });
+          console.log("[META][store] ✅ lead ensured (by phone)", { leadId: byPhone.id, companyId: args.companyId, msisdn, lid });
           return byPhone;
         })() : Promise.resolve(lead),
         
@@ -962,28 +979,36 @@ export async function ensureLeadCustomerChat(args: {
       
       // Now create customer with lead.id if needed
       if (!createdCustomer) {
-        // Use INSERT ... ON CONFLICT DO NOTHING to avoid race conditions
-        await tx.none(
+        console.log("[META][store] 💾 Creating customer", { companyId: args.companyId, msisdn, lid, leadId: lead!.id });
+        // Use INSERT ... ON CONFLICT DO UPDATE to ensure we get the customer even if it exists
+        const insertedCustomer = await tx.oneOrNone<{ id: string; name: string }>(
           `insert into public.customers (company_id, phone, name, lead_id, lid)
            values ($1, $2, $3, $4, $5)
-           on conflict (company_id, phone) do nothing`,
+           on conflict (company_id, phone) 
+           do update set lid = coalesce(excluded.lid, customers.lid), lead_id = excluded.lead_id, name = excluded.name
+           returning id, name`,
           [args.companyId, msisdn, fallbackName, lead!.id, lid],
         );
         
-        // Now fetch the customer (either newly created or existing)
-        if (lid) {
-          customer = await tx.oneOrNone<{ id: string; name: string }>(
-            `select id, name from public.customers where lid = $1 limit 1`,
-            [lid],
-          );
+        if (insertedCustomer) {
+          customer = insertedCustomer;
+          console.log("[META][store] ✅ customer created/updated (by conflict)", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
+        } else {
+          // Fallback: fetch the customer (in case ON CONFLICT didn't return anything)
+          if (lid) {
+            customer = await tx.oneOrNone<{ id: string; name: string }>(
+              `select id, name from public.customers where company_id = $1 and lid = $2 limit 1`,
+              [args.companyId, lid],
+            );
+          }
+          if (!customer) {
+            customer = await tx.one<{ id: string; name: string }>(
+              `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
+              [args.companyId, msisdn],
+            );
+          }
+          console.log("[META][store] ✅ customer ensured", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
         }
-        if (!customer) {
-          customer = await tx.one<{ id: string; name: string }>(
-            `select id, name from public.customers where company_id = $1 and phone = $2 limit 1`,
-            [args.companyId, msisdn],
-          );
-        }
-        console.log("[META][store] customer ensured", { customerId: customer.id, companyId: args.companyId, msisdn, leadId: lead!.id, lid });
       }
     }
 
@@ -1071,8 +1096,8 @@ export async function ensureLeadCustomerChat(args: {
     if (!chat) {
       try {
         chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
-            `insert into public.chats (inbox_id, customer_id, status, last_message_at, external_id, chat_type)
-           values ($1, $2, 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
+            `insert into public.chats (inbox_id, customer_id, company_id, status, last_message_at, external_id, chat_type)
+           values ($1, $2, (select company_id from public.inboxes where id = $1 limit 1), 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
            returning id, external_id, chat_type, remote_id`,
           [args.inboxId, customer!.id, externalIdCandidate ?? null, "CONTACT"],
         );
@@ -1173,13 +1198,16 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
              media_url, media_sha256,
                sent_from_device,
              remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone,
-             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, created_at)
+             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, created_at,
+             company_id, inbox_id)
           values
             ($1, $2, $3, $4, $5, $6, $7,
              $8, $9, $10, $11,
              $12, $13,
                $14,
-               $15, $16, $17, $18, $19, $20, $21, coalesce($22::timestamptz, now()))
+               $15, $16, $17, $18, $19, $20, $21, coalesce($22::timestamptz, now()),
+               (select company_id from public.chats where id = $1 limit 1),
+               (select inbox_id from public.chats where id = $1 limit 1))
           on conflict (chat_id, external_id) do update
             set content     = coalesce(excluded.content,     public.chat_messages.content),
                 type        = coalesce(excluded.type,        public.chat_messages.type),
@@ -1263,9 +1291,12 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
   const fallbackRow = await db.oneOrNone<UpsertChatMessageRow>(
     `
       insert into public.chat_messages
-        (chat_id, sender_id, is_from_customer, external_id, content, type, view_status, media_url, created_at)
+        (chat_id, sender_id, is_from_customer, external_id, content, type, view_status, media_url, created_at,
+         company_id, inbox_id)
       values
-        ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamptz, now()))
+        ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamptz, now()),
+         (select company_id from public.chats where id = $1 limit 1),
+         (select inbox_id from public.chats where id = $1 limit 1))
       on conflict (chat_id, external_id) do update
         set content     = coalesce(excluded.content,     public.chat_messages.content),
             type        = coalesce(excluded.type,        public.chat_messages.type),

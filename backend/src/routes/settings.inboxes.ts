@@ -1,6 +1,7 @@
 import type { Application } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
+import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "../lib/crypto.ts";
@@ -319,17 +320,29 @@ export function registerSettingsInboxesRoutes(app: Application) {
     }
   });
 
-  app.post("/settings/inboxes", requireAuth, async (req: any, res) => {
+  app.post("/settings/inboxes", requireAuth, checkResourceLimit("inboxes"), async (req: any, res) => {
     try {
+      console.log("[POST /settings/inboxes] 🎬 Iniciando criação de inbox");
+      console.log("[POST /settings/inboxes] 📦 Body recebido:", JSON.stringify(req.body, null, 2));
+      
       const ctx = await fetchActorContext(req);
+      console.log("[POST /settings/inboxes] 👤 Contexto do usuário:", {
+        userId: ctx.localUserId,
+        companyId: ctx.companyId,
+        role: ctx.role
+      });
+      
       const parsed = inboxCreateSchema.safeParse(req.body || {});
       if (!parsed.success) {
+        console.error("[POST /settings/inboxes] ❌ Validação falhou:", parsed.error.format());
         return res
           .status(400)
           .json({ error: "Dados invalidos", details: parsed.error.format() });
       }
       const body = parsed.data;
       const provider = (body.provider || META_PROVIDER).toUpperCase();
+      console.log("[POST /settings/inboxes] 🔌 Provider:", provider);
+      
       const meta = extractMeta(provider, body.provider_config);
       const waha = extractWaha(provider, body.provider_config);
       const resolvedMetaWebhook = provider === META_PROVIDER ? resolveMetaWebhookUrl(req) : null;
@@ -341,6 +354,7 @@ export function registerSettingsInboxesRoutes(app: Application) {
           !meta.waba_id ||
           !meta.webhook_verify_token
         ) {
+          console.error("[POST /settings/inboxes] ❌ Campos Meta obrigatórios ausentes");
           return res.status(400).json({
             error:
               "Campos obrigatorios da Meta ausentes (access_token, phone_number_id, waba_id, webhook_verify_token)",
@@ -353,9 +367,19 @@ export function registerSettingsInboxesRoutes(app: Application) {
           ? buildWahaSessionId(body.name, ctx.companyId)
           : null;
 
+      if (wahaSessionId) {
+        console.log("[POST /settings/inboxes] 🔑 WAHA Session ID gerado:", wahaSessionId);
+      }
+
       const normalizedPhoneNumber = normalizeString(body.phone_number);
       const fallbackPhoneNumber =
         wahaSessionId ? `PENDING_${wahaSessionId.slice(0, 20)}` : null;
+
+      console.log("[POST /settings/inboxes] 📞 Número de telefone:", {
+        original: body.phone_number,
+        normalized: normalizedPhoneNumber,
+        fallback: fallbackPhoneNumber
+      });
 
       const nowIso = new Date().toISOString();
       const insert: Record<string, any> = {
@@ -391,14 +415,28 @@ export function registerSettingsInboxesRoutes(app: Application) {
         insert.phone_number_id = wahaSessionId;
       }
 
+      console.log("[POST /settings/inboxes] 💾 Inserindo inbox no banco de dados:", {
+        name: insert.name,
+        provider: insert.provider,
+        phone_number: insert.phone_number,
+        instance_id: insert.instance_id,
+        company_id: insert.company_id
+      });
+
       const { data: inbox, error } = await supabaseAdmin
         .from("inboxes")
         .insert([insert])
         .select(INBOX_SELECT)
         .single();
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) {
+        console.error("[POST /settings/inboxes] ❌ Erro ao inserir inbox:", error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      console.log("[POST /settings/inboxes] ✅ Inbox criada com ID:", inbox.id);
 
       if (meta) {
+        console.log("[POST /settings/inboxes] 🔐 Salvando secrets da Meta");
         const secretPayload: Record<string, any> = { inbox_id: inbox.id };
         const assignSecret = (
           key: "access_token" | "refresh_token" | "provider_api_key",
@@ -415,8 +453,10 @@ export function registerSettingsInboxesRoutes(app: Application) {
         await supabaseAdmin
           .from("inbox_secrets")
           .upsert([secretPayload], { onConflict: "inbox_id" });
+        console.log("[POST /settings/inboxes] ✅ Secrets da Meta salvos");
       }
       if (waha?.api_key !== undefined) {
+        console.log("[POST /settings/inboxes] 🔐 Salvando API key da WAHA");
         await supabaseAdmin
           .from("inbox_secrets")
           .upsert(
@@ -428,17 +468,23 @@ export function registerSettingsInboxesRoutes(app: Application) {
             ],
             { onConflict: "inbox_id" },
           );
+        console.log("[POST /settings/inboxes] ✅ API key da WAHA salva");
       }
       if (resolvedMetaWebhook) {
+        console.log("[POST /settings/inboxes] 🔗 Atualizando webhook URL da Meta");
         await supabaseAdmin
           .from("inboxes")
           .update({ webhook_url: resolvedMetaWebhook })
           .eq("id", inbox.id);
       }
       if (provider === WAHA_PROVIDER && wahaSessionId) {
+        console.log("[POST /settings/inboxes] 🚀 Garantindo sessão WAHA:", wahaSessionId);
         try {
           await ensureWahaSession(wahaSessionId, { start: true });
+          console.log("[POST /settings/inboxes] ✅ Sessão WAHA garantida com sucesso");
         } catch (error: any) {
+          console.error("[POST /settings/inboxes] ❌ Erro ao garantir sessão WAHA:", error);
+          console.log("[POST /settings/inboxes] 🧹 Limpando inbox criada devido ao erro");
           try {
             await supabaseAdmin.from("inbox_secrets").delete().eq("inbox_id", inbox.id);
           } catch {}

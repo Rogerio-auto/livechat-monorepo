@@ -2,6 +2,7 @@ import type { Application } from "express";
 import { ZodError, z } from "zod";
 
 import { requireAuth } from "../middlewares/requireAuth.ts";
+import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { createAgent, deleteAgent, listAgentsFiltered, updateAgent, getAgent } from "../repos/agents.repo.ts";
 import { AgentSchema } from "../types/integrations.ts";
@@ -281,7 +282,7 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.post("/api/agents", requireAuth, async (req: any, res) => {
+  app.post("/api/agents", requireAuth, checkResourceLimit("ai_agents"), async (req: any, res) => {
     try {
       const companyId = await resolveCompanyId(req);
       const parsed = AgentSchema.parse(req.body ?? {});

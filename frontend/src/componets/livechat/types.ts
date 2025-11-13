@@ -25,6 +25,10 @@ export type Chat = {
   ai_agent_id?: string | null;
   ai_agent_name?: string | null;
   ai_mode?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  department_color?: string | null;
+  department_icon?: string | null;
   display_name?: string | null;
   display_phone?: string | null;
   display_remote_id?: string | null;

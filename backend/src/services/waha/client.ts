@@ -91,46 +91,66 @@ export async function wahaFetch<T = any>(path: string, opts?: RequestInit): Prom
 }
 
 export async function ensureWahaSession(sessionName: string, opts?: { start?: boolean; config?: any; webhooks?: any }) {
+  console.log("[ensureWahaSession] 🎬 Iniciando criação/atualização de sessão WAHA:", sessionName);
+  console.log("[ensureWahaSession] ⚙️ Opções:", opts);
+  
   const payload: Record<string, unknown> = { name: sessionName };
   if (opts?.config) payload.config = opts.config;
   if (opts?.webhooks) payload.webhooks = opts.webhooks;
 
+  console.log("[ensureWahaSession] 📦 Payload para criação:", payload);
+
   try {
+    console.log("[ensureWahaSession] 📡 POST /api/sessions");
     await wahaFetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    console.log("[ensureWahaSession] ✅ Sessão criada com sucesso");
   } catch (error) {
     if (error instanceof WahaHttpError && (error.status === 409 || error.status === 422)) {
+      console.log("[ensureWahaSession] ⚠️ Sessão já existe (status " + error.status + "), tentando atualizar...");
       try {
+        console.log("[ensureWahaSession] 📡 PUT /api/sessions/" + sessionName);
         await wahaFetch(`/api/sessions/${encodeURIComponent(sessionName)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
+        console.log("[ensureWahaSession] ✅ Sessão atualizada com sucesso");
       } catch (e) {
         if (!(e instanceof WahaHttpError) || (e.status !== 409 && e.status !== 422)) {
+          console.error("[ensureWahaSession] ❌ Erro ao atualizar sessão:", e);
           throw e;
         }
+        console.log("[ensureWahaSession] ✅ Sessão já existe, continuando...");
       }
     } else {
+      console.error("[ensureWahaSession] ❌ Erro ao criar sessão:", error);
       throw error;
     }
   }
 
   if (opts?.start) {
+    console.log("[ensureWahaSession] 🚀 Iniciando sessão WAHA...");
     try {
+      console.log("[ensureWahaSession] 📡 POST /api/sessions/" + sessionName + "/start");
       await wahaFetch(`/api/sessions/${encodeURIComponent(sessionName)}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
+      console.log("[ensureWahaSession] ✅ Sessão iniciada com sucesso");
     } catch (error) {
       if (!(error instanceof WahaHttpError) || (error.status !== 409 && error.status !== 423 && error.status !== 422)) {
+        console.error("[ensureWahaSession] ❌ Erro ao iniciar sessão:", error);
         throw error;
       }
+      console.log("[ensureWahaSession] ✅ Sessão já está em execução");
     }
   }
+  
+  console.log("[ensureWahaSession] 🎉 Processo concluído com sucesso");
 }
 
 export async function fetchWahaSession(sessionName: string): Promise<any> {
@@ -150,9 +170,19 @@ export async function requestWahaQr(sessionName: string, format: "raw" | "image"
 
 export function buildWahaSessionId(name: string, companyId: string, randomSuffix?: string) {
   const normalizedName = name.trim().toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "") || "WAHA";
-  const normalizedCompany = companyId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "COMPANY";
+  // Usar apenas últimos 8 caracteres do company_id para evitar exceder limite de 54 chars
+  const normalizedCompany = (companyId.trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "COMPANY").slice(-8);
   const suffix = (randomSuffix || randomUUID()).split("-")[0].toUpperCase();
-  return `${normalizedName}_${normalizedCompany}_${suffix}`;
+  const sessionId = `${normalizedName}_${normalizedCompany}_${suffix}`;
+  
+  console.log("[buildWahaSessionId] 🔑 Gerado:", sessionId, "| Tamanho:", sessionId.length, "| Limite: 54");
+  
+  if (sessionId.length > 54) {
+    console.warn("[buildWahaSessionId] ⚠️ Session ID muito longo! Truncando...");
+    return sessionId.slice(0, 54);
+  }
+  
+  return sessionId;
 }
 
 export async function fetchWahaChatDetails(

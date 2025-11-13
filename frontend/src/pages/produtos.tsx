@@ -7,13 +7,20 @@ import { FaEdit, FaTrash } from "react-icons/fa";
 // =============================
 // Tipos
 // =============================
+export type ItemType = "PRODUCT" | "SERVICE" | "SUBSCRIPTION";
+
 export type Product = {
   id?: string;
   external_id?: string;
   name: string;
+  description?: string | null;
+  sku?: string | null;
   unit?: string | null;
+  item_type?: ItemType;
   cost_price?: number | null;
   sale_price?: number | null;
+  duration_minutes?: number | null;
+  billing_type?: string | null;
   brand?: string | null;
   grouping?: string | null;
   power?: string | null;
@@ -21,14 +28,16 @@ export type Product = {
   supplier?: string | null;
   status?: string | null;
   specs?: string | null;
+  is_active?: boolean;
   created_at?: string;
   updated_at?: string;
 };
 
-// Form permite string nos campos num�ricos para n�o quebrar o setState
-export type ProductForm = Omit<Product, "cost_price" | "sale_price"> & {
+// Form permite string nos campos numéricos para não quebrar o setState
+export type ProductForm = Omit<Product, "cost_price" | "sale_price" | "duration_minutes"> & {
   cost_price?: string | number | null;
   sale_price?: string | number | null;
+  duration_minutes?: string | number | null;
 };
 
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
@@ -67,6 +76,20 @@ function parseMoney(value: unknown): number | null {
     .replace(/[^0-9.-]/g, "");
   const n = Number(s);
   return Number.isNaN(n) ? null : n;
+}
+
+function parseSpecs(specs: unknown): string {
+  if (!specs) return "-";
+  if (typeof specs === "string") return specs;
+  if (typeof specs === "object" && specs !== null) {
+    // Se tem legacy_specs, extrai o conteúdo
+    if ("legacy_specs" in specs) {
+      return String((specs as any).legacy_specs);
+    }
+    // Caso contrário, converte para JSON
+    return JSON.stringify(specs);
+  }
+  return String(specs);
 }
 
 export function ProdutosPage() {
@@ -129,6 +152,10 @@ export function ProdutosPage() {
       }
       throw new Error((payload as any)?.error || `HTTP ${res.status}`);
     }
+    // Se for 204 No Content, retorna null
+    if (res.status === 204) {
+      return null as T;
+    }
     return res.json();
   };
 
@@ -140,7 +167,7 @@ export function ProdutosPage() {
       params.set("offset", String((page - 1) * pageSize));
       if (query.trim()) params.set("q", query.trim());
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
-      const resp = await fetchJson<{ items: Product[]; total: number }>(`${API}/products?${params.toString()}`);
+      const resp = await fetchJson<{ items: Product[]; total: number }>(`${API}/api/products?${params.toString()}`);
       setProducts(resp.items || []);
       setTotal(resp.total || 0);
     } catch (e: any) {
@@ -179,8 +206,9 @@ export function ProdutosPage() {
             if (!mappedKey) continue;
             out[mappedKey] = value;
           }
-          out.external_id = String(out.external_id ?? "").trim();
+          out.external_id = String(out.external_id ?? "").trim().toLowerCase(); // Normalizar lowercase
           out.name = String(out.name ?? "").trim();
+          out.item_type = "PRODUCT"; // Todos importados como PRODUCT por padrão
           out.unit = out.unit ? String(out.unit) : null;
           out.cost_price = parseMoney(out.cost_price);
           out.sale_price = parseMoney(out.sale_price);
@@ -201,7 +229,7 @@ export function ProdutosPage() {
         return;
       }
 
-      const res = await fetchJson<{ upserted: number }>(`${API}/products/bulk-upsert`, {
+      const res = await fetchJson<{ upserted: number }>(`${API}/api/products/bulk-upsert`, {
         method: "POST",
         body: JSON.stringify(mapped),
       });
@@ -400,7 +428,7 @@ export function ProdutosPage() {
                               if (!p.id) return alert("Produto sem id");
                               if (!confirm("Excluir este produto?")) return;
                               try {
-                                await fetchJson(`${API}/products/${p.id}`, { method: "DELETE" });
+                                await fetchJson(`${API}/api/products/${p.id}`, { method: "DELETE" });
                                 setProducts((prev) => prev.filter((x) => x.id !== p.id));
                               } catch (e: any) {
                                 alert(e?.message || "Erro ao excluir");
@@ -413,8 +441,8 @@ export function ProdutosPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4 max-w-[520px]">
-                      <span className="block truncate theme-text-muted" title={p.specs || "-"}>
-                        {p.specs || "-"}
+                      <span className="block truncate theme-text-muted" title={parseSpecs(p.specs)}>
+                        {parseSpecs(p.specs)}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-medium" style={{ color: "var(--color-highlight-strong)" }}>
@@ -513,20 +541,43 @@ export function ProdutosPage() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1 theme-heading">Nome</label>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Nome*</label>
                   <input
                     className="config-input w-full rounded-lg px-3 py-2"
                     value={form.name || ""}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Nome do produto"
+                    placeholder="Nome do produto/serviço"
                   />
                 </div>
+                
+                <div>
+                  <label className="block text-sm font-medium mb-1 theme-heading">Tipo*</label>
+                  <select
+                    className="config-input w-full rounded-lg px-3 py-2"
+                    value={form.item_type || "PRODUCT"}
+                    onChange={(e) => setForm((f) => ({ ...f, item_type: e.target.value as ItemType }))}
+                  >
+                    <option value="PRODUCT">📦 Produto</option>
+                    <option value="SERVICE">🛠️ Serviço</option>
+                    <option value="SUBSCRIPTION">🔄 Assinatura</option>
+                  </select>
+                </div>
+                
                 <div>
                   <label className="block text-sm font-medium mb-1 theme-heading">ID (planilha)</label>
                   <input
                     className="config-input w-full rounded-lg px-3 py-2"
                     value={form.external_id || ""}
                     onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1 theme-heading">SKU</label>
+                  <input
+                    className="config-input w-full rounded-lg px-3 py-2"
+                    value={form.sku || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                    placeholder="Código SKU"
                   />
                 </div>
                 <div>
@@ -539,10 +590,11 @@ export function ProdutosPage() {
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-1 theme-heading">Descrição</label>
-                  <input
+                  <textarea
                     className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.name || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    value={form.description || ""}
+                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                    rows={2}
                   />
                 </div>
                 <div>
@@ -641,20 +693,24 @@ export function ProdutosPage() {
                         payload.cost_price = parseMoney(payload.cost_price);
                       if (payload.sale_price !== undefined)
                         payload.sale_price = parseMoney(payload.sale_price);
+                      if (payload.duration_minutes !== undefined && payload.duration_minutes !== null && payload.duration_minutes !== "")
+                        payload.duration_minutes = Number(payload.duration_minutes);
+                      
+                      if (!payload.item_type) payload.item_type = "PRODUCT"; // Padrão
 
                       if (editing?.id) {
-                        const updated = await fetchJson<Product>(`${API}/products/${editing.id}`, {
+                        const updated = await fetchJson<Product>(`${API}/api/products/${editing.id}`, {
                           method: "PUT",
                           body: JSON.stringify(payload),
                         });
                         setProducts((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
                       } else {
-                        const created = await fetchJson<Product>(`${API}/products`, {
+                        const created = await fetchJson<Product>(`${API}/api/products`, {
                           method: 'POST',
                           body: JSON.stringify(payload),
                         });
                         setProducts((prev) => [created, ...prev]);
-                        // ir para primeira p�gina para ver o item, opcional
+                        // ir para primeira página para ver o item, opcional
                         setPage(1);
                       }
                       setShowForm(false);

@@ -10,6 +10,8 @@ import IntegracoesPanel from "../componets/integrations/IntegracoesPanel";
 import { SimplifiedAgentPanel } from "../componets/agents/SimplifiedAgentPanel";
 import { KnowledgeBasePanel } from "../componets/knowledge/KnowledgeBasePanel";
 import AgentesPanel from "../componets/users/AgentesPanel";
+import { DepartmentsManager } from "../componets/admin/DepartmentsManager";
+import { TeamsManager } from "../componets/admin/TeamsManager";
 import { API, fetchJson } from "../utils/api";
 import type {
   Inbox,
@@ -27,6 +29,8 @@ const SECTIONS = [
   { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes" },
   { id: "ia", title: "IA", subtitle: "Agentes e modelos" },
   { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes" },
+  { id: "departamentos", title: "Departamentos", subtitle: "Organizar em departamentos", restrictTo: ["ADMIN", "MANAGER"] },
+  { id: "times", title: "Times", subtitle: "Gerenciar equipes e horários", restrictTo: ["ADMIN", "MANAGER"] },
   { id: "calendarios", title: "Calendários", subtitle: "Gerenciar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
   { id: "permissoes-calendario", title: "Permissões de Calendário", subtitle: "Compartilhar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
 ] as const;
@@ -926,6 +930,18 @@ export default function ConfiguracoesPage() {
                   <p className="text-gray-600 dark:text-gray-400 mt-1">Gerencie usuários e permissões</p>
                 </div>
                 <AgentesPanel />
+              </div>
+            )}
+
+            {tab === "departamentos" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <DepartmentsManager />
+              </div>
+            )}
+
+            {tab === "times" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <TeamsManager />
               </div>
             )}
 

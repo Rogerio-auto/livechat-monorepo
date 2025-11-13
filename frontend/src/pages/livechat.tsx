@@ -12,9 +12,10 @@ import { MessageBubble } from "../componets/livechat/MessageBubble";
 import { LabelsManager } from "../componets/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/types";
-import { FiPaperclip, FiMic, FiSmile, FiX } from "react-icons/fi";
+import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
+import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
 import { Button, Card } from "../components/ui";
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -91,8 +92,16 @@ export default function LiveChatPage() {
   const [status, setStatus] = useState<string>("OPEN");
   const [chatScope, setChatScope] = useState<"conversations" | "groups">("conversations");
   const [section, setSection] = useState<LivechatSection>("all");
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string; color?: string | null; icon?: string | null }>>([]);
+  const [departmentsLoading, setDepartmentsLoading] = useState(false);
+  const [departmentsRefreshKey, setDepartmentsRefreshKey] = useState(0);
+  const [isDepartmentChanging, setIsDepartmentChanging] = useState(false);
+  const [departmentError, setDepartmentError] = useState<string | null>(null);
   const [inboxes, setInboxes] = useState<Inbox[]>([]);
   const [inboxId, setInboxId] = useState<string>("");
+  const [showFirstInboxWizard, setShowFirstInboxWizard] = useState(false);
+  const [inboxesLoading, setInboxesLoading] = useState(true);
   const [currentChat, setCurrentChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -134,6 +143,42 @@ export default function LiveChatPage() {
   const chatsStoreRef = useRef<Record<string, { items: Chat[]; total: number; offset: number; hasMore: boolean }>>({});
   const currentChatsKeyRef = useRef<string | null>(null);
   const chatsReqIdRef = useRef(0);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersContainerRef = useRef<HTMLDivElement | null>(null);
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (inboxId) count += 1;
+    if (selectedDepartmentId) count += 1;
+    if (status && status !== "OPEN") count += 1;
+    return count;
+  }, [inboxId, selectedDepartmentId, status]);
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const handleOutsideClick = (event: MouseEvent) => {
+      const node = filtersContainerRef.current;
+      if (!node) return;
+      if (event.target instanceof Node && node.contains(event.target)) return;
+      setFiltersOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFiltersOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [filtersOpen]);
+
+  const resetFilters = useCallback(() => {
+    setInboxId("");
+    setSelectedDepartmentId(null);
+    setStatus("OPEN");
+  }, []);
 
   // Status options: used for filtering and per-chat status change
   const FILTER_STATUS_OPTIONS = useMemo(
@@ -276,6 +321,19 @@ export default function LiveChatPage() {
     const maybeGroupSize = base.group_size ?? (raw as any)?.group_size ?? (raw as any)?.participants_count ?? null;
     base.group_size = typeof maybeGroupSize === "number" && Number.isFinite(maybeGroupSize) ? maybeGroupSize : null;
 
+    base.department_id = typeof base.department_id === "string" && base.department_id.trim()
+      ? base.department_id
+      : null;
+    base.department_name = typeof base.department_name === "string" && base.department_name.trim()
+      ? base.department_name
+      : null;
+    base.department_color = typeof base.department_color === "string" && base.department_color.trim()
+      ? base.department_color
+      : null;
+    base.department_icon = typeof base.department_icon === "string" && base.department_icon.trim()
+      ? base.department_icon
+      : null;
+
     return base as Chat;
   }, []);
 
@@ -363,6 +421,7 @@ export default function LiveChatPage() {
       console.error("[livechat] updateChatStatus error", error);
     }
   }, [patchChatLocal, normalizeChat, updateChatSnapshots]);
+
 
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
@@ -494,7 +553,7 @@ export default function LiveChatPage() {
 
   const [stagesList, setStagesList] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
   const [chatsByStage, setChatsByStage] = useState<Record<string, Chat[]>>({});
-  const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+  const fetchJson = useCallback(async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const token = getAccessToken();
     const headers = new Headers(init?.headers || {});
     if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -514,7 +573,37 @@ export default function LiveChatPage() {
       throw new Error((payload as any)?.error || `HTTP ${res.status}`);
     }
     return res.json();
-  };
+  }, [navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadDepartments = async () => {
+      setDepartmentsLoading(true);
+      try {
+        const rows = await fetchJson<Array<{ id: string; name: string; color?: string | null; icon?: string | null }>>(
+          `${API}/api/departments`,
+        );
+        if (cancelled) return;
+        const formatted = Array.isArray(rows)
+          ? rows.map((row) => ({
+              id: row.id,
+              name: row.name ?? "Sem nome",
+              color: row.color ?? null,
+              icon: row.icon ?? null,
+            }))
+          : [];
+        setDepartments(formatted);
+      } catch (error) {
+        if (!cancelled) setDepartments([]);
+      } finally {
+        if (!cancelled) setDepartmentsLoading(false);
+      }
+    };
+    loadDepartments();
+    return () => {
+      cancelled = true;
+    };
+  }, [API, departmentsRefreshKey, fetchJson]);
 
 
 
@@ -843,6 +932,7 @@ export default function LiveChatPage() {
   // helper: empurra o chat pro topo com base no update
 const bumpChatToTop = useCallback((update: {
   chatId: string;
+  inboxId?: string | null;
   last_message?: string | null;
   last_message_at?: string | null;
   last_message_from?: "CUSTOMER" | "AGENT";
@@ -856,11 +946,48 @@ const bumpChatToTop = useCallback((update: {
   kind?: string | null;
   status?: string;
   unread_count?: number | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  department_color?: string | null;
+  department_icon?: string | null;
 }) => {
   setChats((prev) => {
     const arr = [...prev];
     const idx = arr.findIndex((c) => c.id === update.chatId);
-    if (idx === -1) return prev;
+    
+    // Se chat não existe, criar novo chat
+    if (idx === -1) {
+      console.log('[livechat] 🆕 New chat received via socket:', { chatId: update.chatId, customer_name: update.customer_name });
+      const newChat: Chat = normalizeChat({
+        id: update.chatId,
+        inbox_id: update.inboxId ?? null,
+        customer_id: null,
+        external_id: null,
+        kind: update.kind ?? null,
+        group_name: update.group_name ?? null,
+        group_avatar_url: update.group_avatar_url ?? null,
+        remote_id: update.remote_id ?? null,
+        status: update.status ?? "ACTIVE",
+        last_message: update.last_message ?? null,
+        last_message_at: update.last_message_at ?? new Date().toISOString(),
+        last_message_from: update.last_message_from ?? null,
+        last_message_type: update.last_message_type ?? null,
+        last_message_media_url: update.last_message_media_url ?? null,
+        unread_count: update.unread_count ?? 1,
+        created_at: new Date().toISOString(),
+        customer_name: update.customer_name ?? null,
+        customer_phone: update.customer_phone ?? null,
+        ai_agent_id: (update as any).ai_agent_id ?? null,
+        ai_agent_name: (update as any).ai_agent_name ?? null,
+        department_id: update.department_id ?? null,
+        department_name: update.department_name ?? null,
+        department_color: update.department_color ?? null,
+        department_icon: update.department_icon ?? null,
+      } as any);
+      
+      // Adiciona no início da lista
+      return [newChat, ...arr];
+    }
 
     const current = arr[idx];
     const mergedRaw = {
@@ -900,6 +1027,18 @@ const bumpChatToTop = useCallback((update: {
       unread_count: Object.prototype.hasOwnProperty.call(update, "unread_count")
         ? update.unread_count ?? current.unread_count ?? 0
         : current.unread_count ?? 0,
+      department_id: Object.prototype.hasOwnProperty.call(update, "department_id")
+        ? update.department_id ?? current.department_id ?? null
+        : current.department_id ?? null,
+      department_name: Object.prototype.hasOwnProperty.call(update, "department_name")
+        ? update.department_name ?? current.department_name ?? null
+        : current.department_name ?? null,
+      department_color: Object.prototype.hasOwnProperty.call(update, "department_color")
+        ? update.department_color ?? current.department_color ?? null
+        : current.department_color ?? null,
+      department_icon: Object.prototype.hasOwnProperty.call(update, "department_icon")
+        ? update.department_icon ?? current.department_icon ?? null
+        : current.department_icon ?? null,
     } as Chat;
 
     const normalized = normalizeChat(mergedRaw);
@@ -1379,6 +1518,18 @@ const scrollToBottom = useCallback(
         unread_count: Object.prototype.hasOwnProperty.call(p, "unread_count") 
           ? p.unread_count ?? undefined
           : undefined,
+        department_id: Object.prototype.hasOwnProperty.call(p, "department_id")
+          ? p.department_id ?? null
+          : undefined,
+        department_name: Object.prototype.hasOwnProperty.call(p, "department_name")
+          ? p.department_name ?? null
+          : undefined,
+        department_color: Object.prototype.hasOwnProperty.call(p, "department_color")
+          ? p.department_color ?? null
+          : undefined,
+        department_icon: Object.prototype.hasOwnProperty.call(p, "department_icon")
+          ? p.department_icon ?? null
+          : undefined,
       });
     };
 
@@ -1406,6 +1557,40 @@ const scrollToBottom = useCallback(
           ai_agent_name: payload.ai_agent_name,
         } as any);
       }
+    };
+
+    const onDepartmentChanged = (payload: any) => {
+      const chatId = payload?.chatId ?? payload?.chat_id ?? null;
+      if (!chatId) return;
+      const nextDepartmentId = payload?.department_id ?? null;
+      const nextUpdate = {
+        chatId,
+        department_id: nextDepartmentId,
+        department_name: payload?.department_name ?? null,
+        department_color: payload?.department_color ?? null,
+        department_icon: payload?.department_icon ?? null,
+      } as any;
+
+      bumpChatToTop(nextUpdate);
+      setCurrentChat((prev) => (prev && prev.id === chatId ? ({ ...prev, ...nextUpdate } as Chat) : prev));
+      setSelectedChat((prev) => (prev && prev.id === chatId ? ({ ...prev, ...nextUpdate } as Chat) : prev));
+      setChats((prev) => {
+        const exists = prev.some((chat) => chat.id === chatId);
+        if (!exists) return prev;
+        if (selectedDepartmentId && nextDepartmentId !== selectedDepartmentId) {
+          return prev.filter((chat) => chat.id !== chatId);
+        }
+        return prev.map((chat) => (chat.id === chatId ? ({ ...chat, ...nextUpdate } as Chat) : chat));
+      });
+      if (selectedDepartmentId && nextDepartmentId !== selectedDepartmentId) {
+        setChatsTotal((prev) => Math.max(0, prev - 1));
+        if (currentChatIdRef.current === chatId) {
+          setCurrentChat(null);
+          setSelectedChat(null);
+        }
+      }
+      setDepartmentsRefreshKey((prev) => prev + 1);
+      setDepartmentError(null);
     };
 
     // Listener para envio de mensagens interativas (botões)
@@ -1481,7 +1666,13 @@ const scrollToBottom = useCallback(
         });
 
         // Atualizar status do draft
-        updateMessageStatusInCache(draftId, "sent");
+        updateMessageStatusInCache({
+          chatId,
+          draftId,
+          view_status: "sent",
+          delivery_status: "sent",
+          merge: { view_status: "sent" },
+        });
       } catch (error: any) {
         console.error("[SOCKET] Failed to send interactive message", error);
         alert(`Erro ao enviar botões: ${error.message || "Erro desconhecido"}`);
@@ -1495,6 +1686,7 @@ const scrollToBottom = useCallback(
     s.on("chat:updated", onChatUpdated);
     s.on("message:media-ready", onMediaReady);
     s.on("chat:agent-changed", onAgentChanged);
+    s.on("chat:department-changed", onDepartmentChanged);
     s.on("send:interactive_message", onInteractiveMessage);
 
     return () => {
@@ -1505,10 +1697,17 @@ const scrollToBottom = useCallback(
       s.off("chat:updated", onChatUpdated);
       s.off("message:media-ready", onMediaReady);
       s.off("chat:agent-changed", onAgentChanged);
+      s.off("chat:department-changed", onDepartmentChanged);
       s.off("send:interactive_message", onInteractiveMessage);
       s.disconnect();
     };
-  }, [appendMessageToCache, updateMessageStatusInCache, bumpChatToTop, logSendLatency]);
+  }, [
+    appendMessageToCache,
+    updateMessageStatusInCache,
+    bumpChatToTop,
+    logSendLatency,
+    selectedDepartmentId,
+  ]);
 
   const loadChats = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
@@ -1516,11 +1715,13 @@ const scrollToBottom = useCallback(
       const statusKey = status && status !== "ALL" ? status : "ALL";
       const inboxKey = inboxId || "*";
       const searchKey = debouncedQ.trim();
+      const departmentKey = selectedDepartmentId || "*";
       const cacheKey = JSON.stringify({
         inbox: inboxKey,
         status: statusKey,
         kind: activeKindParam,
         q: searchKey || "",
+        department: departmentKey,
         limit: PAGE_SIZE,
       });
 
@@ -1553,6 +1754,7 @@ const scrollToBottom = useCallback(
         status,
         inboxId: inboxId || undefined,
         kind: activeKindParam,
+        departmentId: selectedDepartmentId || undefined,
       };
 
       const applyResult = (items: Chat[], total: number) => {
@@ -1645,6 +1847,7 @@ const scrollToBottom = useCallback(
         if (params.status && params.status !== "ALL") qs.set("status", String(params.status));
         if (params.inboxId) qs.set("inboxId", String(params.inboxId));
         if (params.kind) qs.set("kind", String(params.kind));
+        if (params.departmentId) qs.set("department_id", String(params.departmentId));
 
         const headers = new Headers();
         headers.set("Accept", "application/json");
@@ -1778,7 +1981,7 @@ const scrollToBottom = useCallback(
         }
       }
     },
-    [API, debouncedQ, status, inboxId, PAGE_SIZE, normalizeChats, navigate, chatScope],
+    [API, debouncedQ, status, inboxId, selectedDepartmentId, PAGE_SIZE, normalizeChats, navigate, chatScope],
   );
 
   const loadMessages = useCallback(
@@ -1958,16 +2161,91 @@ const scrollToBottom = useCallback(
   );
 
 
+  const handleChangeDepartment = useCallback(
+    async (departmentId: string | null) => {
+      if (!currentChat?.id) return;
+      const chatId = currentChat.id;
+      if ((currentChat.department_id ?? null) === (departmentId ?? null)) {
+        return;
+      }
+      setDepartmentError(null);
+      setIsDepartmentChanging(true);
+      try {
+        const payload = await fetchJson<Chat>(`${API}/livechat/chats/${chatId}/department`, {
+          method: "PUT",
+          body: JSON.stringify({ department_id: departmentId ?? null }),
+        });
+        const normalized = normalizeChat(payload);
+        const willRemove = Boolean(selectedDepartmentId && normalized.department_id !== selectedDepartmentId);
+
+        setCurrentChat((prev) => {
+          if (!prev || prev.id !== chatId) return prev;
+          return willRemove ? null : normalized;
+        });
+        setSelectedChat((prev) => {
+          if (!prev || prev.id !== chatId) return prev;
+          return willRemove ? null : normalized;
+        });
+        setChats((prev) =>
+          willRemove
+            ? prev.filter((chat) => chat.id !== chatId)
+            : prev.map((chat) => (chat.id === chatId ? normalized : chat)),
+        );
+
+        if (willRemove) {
+          setChatsTotal((prev) => Math.max(0, prev - 1));
+          if (currentChatIdRef.current === chatId) {
+            currentChatIdRef.current = null;
+          }
+        } else {
+          updateChatSnapshots(normalized);
+          bumpChatToTop({
+            chatId,
+            department_id: normalized.department_id ?? null,
+            department_name: normalized.department_name ?? null,
+            department_color: normalized.department_color ?? null,
+            department_icon: normalized.department_icon ?? null,
+          } as any);
+        }
+
+        loadChats({ reset: true }).catch((error) => {
+          console.warn("[livechat] reload chats after department change failed", error);
+        });
+
+        setDepartmentsRefreshKey((prev) => prev + 1);
+        setDepartmentError(null);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Falha ao atualizar departamento";
+        setDepartmentError(message);
+      } finally {
+        setIsDepartmentChanging(false);
+      }
+    },
+    [
+      API,
+      currentChat?.id,
+      currentChat?.department_id,
+      fetchJson,
+      normalizeChat,
+      selectedDepartmentId,
+      updateChatSnapshots,
+      bumpChatToTop,
+      loadChats,
+    ],
+  );
+
   useEffect(() => {
     const activeKindParam = chatScope === "groups" ? "GROUP" : "DIRECT";
     const statusKey = status && status !== "ALL" ? status : "ALL";
     const inboxKey = inboxId || "*";
     const searchKey = debouncedQ.trim();
+    const departmentKey = selectedDepartmentId || "*";
     const cacheKey = JSON.stringify({
       inbox: inboxKey,
       status: statusKey,
       kind: activeKindParam,
       q: searchKey || "",
+      department: departmentKey,
       limit: PAGE_SIZE,
     });
 
@@ -1987,7 +2265,7 @@ const scrollToBottom = useCallback(
     }
 
     loadChats({ reset: true }).catch(() => { });
-  }, [debouncedQ, status, inboxId, chatScope, loadChats]);
+  }, [debouncedQ, status, inboxId, selectedDepartmentId, chatScope, loadChats]);
 
 
 
@@ -2104,16 +2382,38 @@ const scrollToBottom = useCallback(
       if (s && s.connected) {
         s.emit("livechat:inboxes:my", (resp: any) => {
           if (cancelled) return;
-          if (resp?.ok) setInboxes(resp.data || []);
-          else setInboxes([]);
+          setInboxesLoading(false);
+          if (resp?.ok) {
+            const inboxList = resp.data || [];
+            setInboxes(inboxList);
+            // Se não tem nenhuma inbox, mostrar wizard
+            if (inboxList.length === 0) {
+              console.log("[Livechat] Nenhuma inbox encontrada, mostrando wizard");
+              setShowFirstInboxWizard(true);
+            }
+          } else {
+            setInboxes([]);
+          }
         });
       } else {
         fetchJson<Inbox[]>(`${API}/livechat/inboxes/my`)
           .then((rows) => {
-            if (!cancelled) setInboxes(rows || []);
+            if (!cancelled) {
+              setInboxesLoading(false);
+              const inboxList = rows || [];
+              setInboxes(inboxList);
+              // Se não tem nenhuma inbox, mostrar wizard
+              if (inboxList.length === 0) {
+                console.log("[Livechat] Nenhuma inbox encontrada, mostrando wizard");
+                setShowFirstInboxWizard(true);
+              }
+            }
           })
           .catch(() => {
-            if (!cancelled) setInboxes([]);
+            if (!cancelled) {
+              setInboxesLoading(false);
+              setInboxes([]);
+            }
           });
       }
     };
@@ -2717,48 +3017,148 @@ const scrollToBottom = useCallback(
           {(section === "all" || section === "unanswered") && (
             <Card padding="md" className="col-span-4 flex flex-col max-h-screen min-h-0">
               <div className="shrink-0">
-                <div className="mb-3">
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-wide theme-text-muted">Caixa</label>
-                  <select
-                    className="config-input w-full rounded-lg px-3 py-2 text-sm"
-                    value={inboxId}
-                    onChange={(e) => setInboxId(e.target.value)}
-                  >
-                    {inboxes.length > 0 ? (
-                      <>
-                        <option value="">Todas as caixas</option>
-                        {inboxes.map((ib) => (
-                          <option key={ib.id} value={ib.id}>
-                            {ib.name} {ib.phone_number ? `(${ib.phone_number})` : ""}
-                          </option>
-                        ))}
-                      </>
-                    ) : (
-                      <option value="" disabled>
-                        Nenhuma caixa encontrada
-                      </option>
-                    )}
-                  </select>
-                </div>
+                <div className="mb-3 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-70" />
+                    <input
+                      className="config-input w-full rounded-lg pl-9 pr-3 py-2 text-sm"
+                      placeholder="Buscar conversa ou contato"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                    />
+                  </div>
+                  <div ref={filtersContainerRef} className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setFiltersOpen((prev) => !prev)}
+                      className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                      style={{
+                        backgroundColor: filtersOpen
+                          ? "color-mix(in srgb, var(--color-primary) 12%, transparent)"
+                          : "var(--color-surface)",
+                        borderColor: filtersOpen
+                          ? "color-mix(in srgb, var(--color-primary) 38%, transparent)"
+                          : "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)",
+                        color: filtersOpen || activeFilterCount > 0
+                          ? "var(--color-primary)"
+                          : "var(--color-text)",
+                      }}
+                    >
+                      <FiFilter size={16} />
+                      <span>Filtros</span>
+                      {activeFilterCount > 0 && (
+                        <span
+                          className="min-w-[1.25rem] rounded-full px-1 text-center text-xs font-semibold"
+                          style={{
+                            backgroundColor: "color-mix(in srgb, var(--color-primary) 85%, transparent)",
+                            color: "var(--color-on-primary)",
+                          }}
+                        >
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </button>
 
-                <div className="mb-3 flex gap-2">
-                  <input
-                    className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
-                    placeholder="Buscar..."
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                  />
-                  <select
-                    className="config-input rounded-lg px-3 py-2 text-sm"
-                    value={status}
-                    onChange={(e) => setStatus(e.target.value)}
-                  >
-                    {FILTER_STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                    {filtersOpen && (
+                      <div
+                        className="absolute right-0 z-40 mt-2 w-64 rounded-lg border shadow-lg"
+                        style={{
+                          backgroundColor: "var(--color-surface)",
+                          borderColor: "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)",
+                          color: "var(--color-text)",
+                        }}
+                      >
+                        <div className="border-b px-3 py-2" style={{ borderColor: "color-mix(in srgb, var(--color-surface-muted) 75%, transparent)" }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wide">Filtrar por</span>
+                            <button
+                              type="button"
+                              onClick={() => setFiltersOpen(false)}
+                              className="rounded p-1 text-xs hover:opacity-80"
+                            >
+                              <FiX size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 px-3 py-3 text-sm">
+                          <div>
+                            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide opacity-70">Caixa</span>
+                            <select
+                              className="config-input w-full rounded-lg px-3 py-2 text-sm"
+                              value={inboxId}
+                              onChange={(e) => setInboxId(e.target.value)}
+                            >
+                              <option value="">Todas as caixas</option>
+                              {inboxes.map((ib) => (
+                                <option key={ib.id} value={ib.id}>
+                                  {ib.name} {ib.phone_number ? `(${ib.phone_number})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide opacity-70">Status</span>
+                            <select
+                              className="config-input w-full rounded-lg px-3 py-2 text-sm"
+                              value={status}
+                              onChange={(e) => setStatus(e.target.value)}
+                            >
+                              {FILTER_STATUS_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <span className="mb-1 block text-xs font-semibold uppercase tracking-wide opacity-70">Departamento</span>
+                            <div className="relative">
+                              <select
+                                className="config-input w-full rounded-lg px-3 py-2 text-sm"
+                                value={selectedDepartmentId ?? ""}
+                                onChange={(e) => setSelectedDepartmentId(e.target.value || null)}
+                              >
+                                <option value="">Todos os departamentos</option>
+                                {departments.map((dept) => (
+                                  <option key={dept.id} value={dept.id}>
+                                    {dept.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
+                          className="flex items-center justify-between gap-2 border-t px-3 py-2"
+                          style={{ borderColor: "color-mix(in srgb, var(--color-surface-muted) 75%, transparent)" }}
+                        >
+                          <button
+                            type="button"
+                            onClick={resetFilters}
+                            className="rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide hover:opacity-80"
+                            style={{ color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}
+                          >
+                            Limpar filtros
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFiltersOpen(false)}
+                            className="rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
+                            style={{
+                              backgroundColor: "var(--color-primary)",
+                              color: "var(--color-on-primary)",
+                            }}
+                          >
+                            Aplicar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="mb-3 flex gap-2">
@@ -2766,19 +3166,20 @@ const scrollToBottom = useCallback(
                     type="button"
                     onClick={() => setChatScope("conversations")}
                     className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
-                    style={
-                      chatScope === "conversations"
-                        ? {
-                            backgroundColor: "color-mix(in srgb, var(--color-primary) 18%, transparent)",
-                            color: "var(--color-primary)",
-                            borderColor: "color-mix(in srgb, var(--color-primary) 45%, transparent)",
-                          }
-                        : {
-                            backgroundColor: "var(--color-surface-muted)",
-                            color: "var(--color-text)",
-                            borderColor: "transparent",
-                          }
-                    }
+                    style={{
+                      backgroundColor:
+                        chatScope === "conversations"
+                          ? "color-mix(in srgb, var(--color-primary) 18%, transparent)"
+                          : "var(--color-surface-muted)",
+                      color:
+                        chatScope === "conversations"
+                          ? "var(--color-primary)"
+                          : "var(--color-text)",
+                      borderColor:
+                        chatScope === "conversations"
+                          ? "color-mix(in srgb, var(--color-primary) 45%, transparent)"
+                          : "transparent",
+                    }}
                   >
                     Conversas
                   </button>
@@ -2786,19 +3187,20 @@ const scrollToBottom = useCallback(
                     type="button"
                     onClick={() => setChatScope("groups")}
                     className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
-                    style={
-                      chatScope === "groups"
-                        ? {
-                            backgroundColor: "color-mix(in srgb, var(--color-primary) 18%, transparent)",
-                            color: "var(--color-primary)",
-                            borderColor: "color-mix(in srgb, var(--color-primary) 45%, transparent)",
-                          }
-                        : {
-                            backgroundColor: "var(--color-surface-muted)",
-                            color: "var(--color-text)",
-                            borderColor: "transparent",
-                          }
-                    }
+                    style={{
+                      backgroundColor:
+                        chatScope === "groups"
+                          ? "color-mix(in srgb, var(--color-primary) 18%, transparent)"
+                          : "var(--color-surface-muted)",
+                      color:
+                        chatScope === "groups"
+                          ? "var(--color-primary)"
+                          : "var(--color-text)",
+                      borderColor:
+                        chatScope === "groups"
+                          ? "color-mix(in srgb, var(--color-primary) 45%, transparent)"
+                          : "transparent",
+                    }}
                   >
                     Grupos
                   </button>
@@ -2855,6 +3257,12 @@ const scrollToBottom = useCallback(
                 apiBase={API}
                 chat={currentChat}
                 inboxId={currentChat?.inbox_id ?? null}
+                departments={departments}
+                departmentsLoading={departmentsLoading}
+                selectedDepartmentId={currentChat?.department_id ?? null}
+                onChangeDepartment={handleChangeDepartment}
+                isDepartmentChanging={isDepartmentChanging}
+                departmentError={departmentError}
                 tags={allTags}
                 selectedTagIds={chatTags}
                 assigneeUserId={currentChat?.assigned_agent_user_id ?? null}
@@ -3140,6 +3548,31 @@ const scrollToBottom = useCallback(
           </div>
         )}
       </div>
+
+      {/* Wizard de primeira inbox */}
+      {showFirstInboxWizard && (
+        <FirstInboxWizard 
+          onComplete={() => {
+            console.log("[Livechat] Wizard concluído, recarregando inboxes");
+            setShowFirstInboxWizard(false);
+            // Recarregar inboxes
+            fetchJson<Inbox[]>(`${API}/livechat/inboxes/my`)
+              .then((rows) => {
+                setInboxes(rows || []);
+                if (rows && rows.length > 0) {
+                  console.log("[Livechat] Inbox criada com sucesso!");
+                }
+              })
+              .catch((err) => {
+                console.error("[Livechat] Erro ao recarregar inboxes:", err);
+              });
+          }}
+          onSkip={() => {
+            console.log("[Livechat] Wizard pulado");
+            setShowFirstInboxWizard(false);
+          }}
+        />
+      )}
     </>
 
   );

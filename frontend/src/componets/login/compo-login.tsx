@@ -16,7 +16,9 @@ export function CLogin() {
     // se já está logado, pula pro dashboard
     (async () => {
       try {
-        const res = await fetch(`${API}/auth/me`, { credentials: "include" });
+        const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
+        const headers = devCompany && import.meta.env.DEV ? { "X-Company-Id": devCompany } : undefined;
+        const res = await fetch(`${API}/auth/me`, { credentials: "include", headers });
         if (res.ok) navigate("/dashboard");
       } catch {
         // silencioso
@@ -67,98 +69,125 @@ export function CLogin() {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl bg-black/40 p-10 shadow-2xl backdrop-blur">
-      {/* Avatar */}
-      <div className="flex justify-center mb-6">
-        <div className="h-30 w-30 rounded-full bg-[#42CD55]/20 flex items-center justify-center overflow-hidden">
-          <img src={Icon} alt="Logo" className="h-full w-full object-contain" />
+    <div className="w-full">
+      {/* Card principal com gradiente */}
+      <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+        
+        {/* Logo */}
+        <div className="flex justify-center mb-8">
+          <div className="h-20 w-20 rounded-full bg-blue-500/10 flex items-center justify-center overflow-hidden ring-2 ring-blue-500/20">
+            <img src={Icon} alt="Logo" className="h-16 w-16 object-contain" />
+          </div>
         </div>
+
+        {/* Título */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Bem-vindo de volta</h1>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Entre com suas credenciais para continuar</p>
+        </div>
+
+        {/* Form */}
+        <form className="space-y-5" onSubmit={handleLogin}>
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              E-mail
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i className="fas fa-user text-gray-400"></i>
+              </div>
+              <input
+                type="email"
+                placeholder="seu@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                required
+                autoComplete="email"
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Senha
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i className="fas fa-lock text-gray-400"></i>
+              </div>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                required
+                autoComplete="current-password"
+              />
+            </div>
+          </div>
+
+          {/* Remember & Forgot */}
+          <div className="flex items-center justify-between text-sm">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-2"
+              />
+              <span className="text-gray-600 dark:text-gray-400">Lembrar-me</span>
+            </label>
+            <a href="#" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition">
+              Esqueceu a senha?
+            </a>
+          </div>
+
+          {/* Login Button */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 transition-all duration-200 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <i className="fas fa-spinner fa-spin"></i>
+                Entrando...
+              </span>
+            ) : (
+              "ENTRAR"
+            )}
+          </button>
+
+          {/* Divider */}
+          <div className="flex items-center my-6">
+            <div className="flex-1 h-px bg-gray-300 dark:bg-gray-700"></div>
+            <span className="px-4 text-gray-500 dark:text-gray-400 text-sm">OU</span>
+            <div className="flex-1 h-px bg-gray-300 dark:bg-gray-700"></div>
+          </div>
+
+          {/* Google Login */}
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            className="w-full flex items-center justify-center gap-3 rounded-xl border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 py-3 font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200 hover:shadow-md"
+          >
+            <i className="fab fa-google text-lg"></i>
+            Continue com o Google
+          </button>
+
+          {/* Sign Up */}
+          <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
+            É novo por aqui?{" "}
+            <a href="#" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold transition">
+              Cadastre-se
+            </a>
+          </p>
+        </form>
       </div>
-
-      {/* Form */}
-      <form className="space-y-5" onSubmit={handleLogin}>
-        {/* Email */}
-        <div>
-          <div className="flex items-center rounded-md bg-[#204A34]/80 px-3">
-            <i className="fas fa-user text-[#EDEDED]/70"></i>
-            <input
-              type="email"
-              placeholder="E-mail"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-transparent px-2 py-2 text-sm text-[#EDEDED] placeholder-[#EDEDED]/50 focus:outline-none"
-              required
-              autoComplete="email"
-            />
-          </div>
-        </div>
-
-        {/* Password */}
-        <div>
-          <div className="flex items-center rounded-md bg-[#204A34]/80 px-3">
-            <i className="fas fa-lock text-[#EDEDED]/70"></i>
-            <input
-              type="password"
-              placeholder="Senha"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-transparent px-2 py-2 text-sm text-[#EDEDED] placeholder-[#EDEDED]/50 focus:outline-none"
-              required
-              autoComplete="current-password"
-            />
-          </div>
-        </div>
-
-        {/* Remember & Forgot */}
-        <div className="flex items-center justify-between text-sm text-[#EDEDED]/70">
-          <label className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="rounded border-[#42CD55] bg-[#204A34] text-[#42CD55] focus:ring-[#42CD55]"
-            />
-            <span>Lembrar-me</span>
-          </label>
-          <a href="#" className="hover:text-[#CCFF05] transition">
-            Esqueceu a senha?
-          </a>
-        </div>
-
-        {/* Login Button */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-md bg-[#42CD55] py-2 font-semibold tracking-wide text-[#204A34] hover:bg-[#CCFF05] transition cursor-pointer disabled:opacity-60"
-        >
-          {loading ? "Entrando..." : "ENTRAR"}
-        </button>
-
-        {/* Divider */}
-        <div className="flex items-center my-4">
-          <div className="flex-1 h-px bg-[#EDEDED]/30"></div>
-          <span className="px-3 text-[#EDEDED]/60 text-sm">OU</span>
-          <div className="flex-1 h-px bg-[#EDEDED]/30"></div>
-        </div>
-
-        {/* Google Login */}
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-2 rounded-md bg-[#EDEDED] py-2 font-semibold text-[#204A34] shadow hover:bg-[#FF8800] hover:text-[#EDEDED] transition cursor-pointer"
-        >
-          <i className="fab fa-google"></i>
-          Continue com o Google
-        </button>
-
-        {/* Sign Up */}
-        <p className="mt-4 text-center text-sm text-[#EDEDED]/70">
-          É novo por aqui?{" "}
-          <a href="#" className="text-[#42CD55] hover:text-[#CCFF05] transition">
-            Cadastre-se
-          </a>
-        </p>
-      </form>
     </div>
   );
 }

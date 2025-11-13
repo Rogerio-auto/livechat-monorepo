@@ -11,6 +11,7 @@ import { CardImageCapture } from "../componets/funil/CardImageCapture";
 import { CardImageGallery } from "../componets/funil/CardImageGallery";
 import { useImageUpload, type UploadedPhoto } from "../hooks/useImageUpload";
 import { useNavigate } from "react-router-dom";
+import { KanbanSetupModal } from "../componets/funil/KanbanSetupModal";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -51,6 +52,8 @@ const EMPTY_CARD_FORM: CardFormState = {
 export function SalesFunnel() {
   const [boardId, setBoardId] = useState<string | null>(null);
   const [loadingBoard, setLoadingBoard] = useState(true);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [isCreatingBoard, setIsCreatingBoard] = useState(false);
 
   const [columns, setColumns] = useState<Column[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
@@ -131,15 +134,55 @@ export function SalesFunnel() {
           navigate("/login");
           return;
         }
-        const b = await fetchJson<{ id: string; name: string }>(`${API}/kanban/my-board`);
-        setBoardId(b.id);
-      } catch (e) {
-        console.error("Falha ao obter board:", e);
+        
+        const response = await fetchJson<{ id?: string; name?: string; needs_setup?: boolean }>(`${API}/kanban/my-board`);
+        
+        // Verificar se precisa configurar board
+        if (response.needs_setup) {
+          console.log("[Funil] Board não encontrado, mostrando modal de configuração");
+          setNeedsSetup(true);
+          return;
+        }
+        
+        // Board existe
+        if (response.id) {
+          console.log("[Funil] Board encontrado:", response);
+          setBoardId(response.id);
+          setNeedsSetup(false);
+        }
+      } catch (e: any) {
+        console.error("[Funil] Erro ao obter board:", e);
+        // Fallback: se houver erro inesperado, mostrar modal
+        setNeedsSetup(true);
       } finally {
         setLoadingBoard(false);
       }
     })();
   }, []);
+
+  // Handler para criar o board
+  const handleCreateBoard = async (boardName: string, columns: any[]) => {
+    try {
+      setIsCreatingBoard(true);
+      const result = await fetchJson<{ board: { id: string; name: string }, columns: Column[] }>(
+        `${API}/kanban/initialize-board`,
+        {
+          method: "POST",
+          body: JSON.stringify({ boardName, columns }),
+        }
+      );
+      
+      console.log("[KanbanSetup] Board criado:", result.board.id);
+      setBoardId(result.board.id);
+      setColumns(result.columns);
+      setNeedsSetup(false);
+    } catch (error: any) {
+      console.error("[KanbanSetup] Erro ao criar board:", error);
+      alert(`Erro ao criar pipeline: ${error.message}`);
+    } finally {
+      setIsCreatingBoard(false);
+    }
+  };
 
   // 2) colunas + cards
   useEffect(() => {
@@ -626,13 +669,35 @@ export function SalesFunnel() {
     return leadProposals.find((p) => p.id === selectedProposalId) || null;
   }, [leadProposals, selectedProposalId]);
 
-  if (loadingBoard) return <div />;
-  if (!boardId) return <div />;
+  if (loadingBoard) return <div className="flex items-center justify-center min-h-screen">Carregando...</div>;
+  
+  // Se precisa configurar, mostrar apenas o modal (sem verificar boardId)
+  if (needsSetup) {
+    return (
+      <>
+        <Sidebar />
+        <KanbanSetupModal 
+          onComplete={handleCreateBoard}
+          isLoading={isCreatingBoard}
+        />
+      </>
+    );
+  }
+  
+  // Se não tem board e não precisa configurar, algo deu errado
+  if (!boardId) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-red-500">Erro: Board não encontrado</p>
+      </div>
+    );
+  }
 
   // ===== RENDER =====
   return (
     <>
       <Sidebar />
+      
       <div
         className="relative ml-16 min-h-screen flex-1 transition-colors"
         style={{

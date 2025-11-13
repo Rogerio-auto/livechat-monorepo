@@ -17,6 +17,7 @@ import {
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
+import { PlanBadge } from "../../components/subscription/PlanBadge";
 
 type Profile = {
   id: string;
@@ -172,6 +173,11 @@ export default function Sidebar() {
                 {profile?.email || ""}
               </div>
             </div>
+          </div>
+          
+          {/* Plan Badge */}
+          <div className="mt-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <PlanBadge />
           </div>
         </div>
 

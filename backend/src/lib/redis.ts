@@ -95,27 +95,31 @@ export const k = {
     q?: string | null,
     offset?: number,
     limit?: number,
+    departmentId?: string | null,
   ) => {
     const c = safeSegment(companyId || "", "x");
     const i = safeSegment(inboxId || "", "*");
     const s = safeSegment((status || "ALL").toUpperCase(), "ALL");
     const kindSeg = safeSegment((kind || "ALL").toUpperCase(), "ALL");
+    const d = safeSegment(departmentId || "", "*");
     const off = Math.max(0, offset ?? 0);
     const lim = Math.max(1, limit ?? 20);
     const qq = encodeSearch(q || undefined);
-    return `lc:list:${c}:${i}:${s}:${kindSeg}:${off}:${lim}:${qq}`;
+    return `lc:list:${c}:${i}:${s}:${kindSeg}:${d}:${off}:${lim}:${qq}`;
   },
   listIndex: (
     companyId: string | null | undefined,
     inboxId?: string | null,
     status?: string | null,
     kind?: string | null,
+    departmentId?: string | null,
   ) => {
     const c = safeSegment(companyId || "", "x");
     const i = safeSegment(inboxId || "", "*");
     const s = safeSegment((status || "ALL").toUpperCase(), "ALL");
     const kindSeg = safeSegment((kind || "ALL").toUpperCase(), "ALL");
-    return `lc:list:set:${c}:${i}:${s}:${kindSeg}`;
+    const d = safeSegment(departmentId || "", "*");
+    return `lc:list:set:${c}:${i}:${s}:${kindSeg}:${d}`;
   },
   chat: (chatId: string) => `lc:chat:${chatId}`,
   chatLookup: (inboxId: string, remoteId: string) => 

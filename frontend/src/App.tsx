@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Login } from './pages/login'
 import { Dash } from './pages/dashboard'
 import { SalesFunnel } from './pages/funil-vendas'
@@ -12,6 +12,7 @@ import ConfiguracoesPage from './pages/configuracoes'
 import GaleriaPage from './pages/galeria'
 import AdminPage from './pages/admin'
 import InviteAcceptPage from './pages/convite'
+import SubscriptionPage from './pages/subscription'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
 
@@ -21,6 +22,7 @@ function App() {
     <ThemeProvider>
       <BrowserRouter>
       <Routes>
+        <Route path='/' element={<Navigate to="/dashboard" replace />}/>
         <Route path='/login' element={<Login/>}/>
         <Route path='/dashboard' element={<RequireAuth><Dash/></RequireAuth>}/>
         <Route path="/funil" element={<RequireAuth><SalesFunnel /></RequireAuth>} />
@@ -32,6 +34,7 @@ function App() {
         <Route path='/galeria' element={<RequireAuth><GaleriaPage/></RequireAuth>}/>
         <Route path='/configuracoes' element={<RequireAuth><ConfiguracoesPage/></RequireAuth>}/>
         <Route path='/admin' element={<RequireAuth><AdminPage/></RequireAuth>}/>
+        <Route path='/subscription' element={<RequireAuth><SubscriptionPage/></RequireAuth>}/>
         <Route path='/convite' element={<InviteAcceptPage/>}/>
         
 

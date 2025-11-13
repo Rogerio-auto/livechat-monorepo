@@ -48,11 +48,31 @@ export function mapLead(form: LeadForm) {
 
 export function registerLeadRoutes(app: express.Application) {
   // List
-  app.get("/leads", requireAuth, async (_req, res) => {
+  app.get("/leads", requireAuth, async (req: any, res) => {
+    const companyId = req.user?.company_id;
+    console.log('[GET /leads] 🔍 Request from user:', {
+      userId: req.user?.id,
+      email: req.user?.email,
+      companyId: companyId,
+    });
+    
+    if (!companyId) {
+      console.log('[GET /leads] ❌ Missing company_id');
+      return res.status(400).json({ error: "Missing company context" });
+    }
+    
     const { data, error } = await supabaseAdmin
       .from("leads")
       .select("*")
+      .eq("company_id", companyId)
       .order("created_at", { ascending: false });
+    
+    console.log('[GET /leads] 📊 Query result:', {
+      companyId,
+      count: data?.length || 0,
+      error: error?.message,
+    });
+    
     if (error) return res.status(500).json({ error: error.message });
     const mapped = (data ?? []).map((r: any) => ({
       id: r.id,
@@ -91,12 +111,18 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Statistics endpoint
-  app.get("/api/leads/stats", requireAuth, async (_req, res) => {
+  app.get("/api/leads/stats", requireAuth, async (req: any, res) => {
     try {
-      // Get all leads
+      const companyId = req.user?.company_id;
+      if (!companyId) {
+        return res.status(400).json({ error: "Missing company context" });
+      }
+      
+      // Get all leads for this company
       const { data: allLeads, error: leadsError } = await supabaseAdmin
         .from("leads")
-        .select("id, status_client, created_at, kanban_column_id, customer_id");
+        .select("id, status_client, created_at, kanban_column_id, customer_id")
+        .eq("company_id", companyId);
       
       if (leadsError) throw leadsError;
 
@@ -176,6 +202,11 @@ export function registerLeadRoutes(app: express.Application) {
   app.get("/leads/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params as { id: string };
+      const companyId = req.user?.company_id;
+      if (!companyId) {
+        return res.status(400).json({ error: "Missing company context" });
+      }
+      
       const { data, error } = await supabaseAdmin
         .from("leads")
         .select(`
@@ -190,6 +221,7 @@ export function registerLeadRoutes(app: express.Application) {
           created_at, updated_at
         `)
         .eq("id", id)
+        .eq("company_id", companyId)
         .maybeSingle();
       if (error) return res.status(500).json({ error: error.message });
       if (!data) return res.status(404).json({ error: "Lead não encontrado" });
@@ -203,12 +235,18 @@ export function registerLeadRoutes(app: express.Application) {
   app.get("/leads/by-customer/:customerId", requireAuth, async (req: any, res) => {
     try {
       const { customerId } = req.params as { customerId: string };
+      const companyId = req.user?.company_id;
+      if (!companyId) {
+        return res.status(400).json({ error: "Missing company context" });
+      }
+      
       const selectColumns =
         "id, name, email, phone, cpf, rg, city, state, customer_id, kanban_column_id";
       const { data: leadByCustomer, error: leadByCustomerErr } = await supabaseAdmin
         .from("leads")
         .select(selectColumns)
         .eq("customer_id", customerId)
+        .eq("company_id", companyId)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -219,6 +257,7 @@ export function registerLeadRoutes(app: express.Application) {
         .from("leads")
         .select(selectColumns)
         .eq("id", customerId)
+        .eq("company_id", companyId)
         .maybeSingle();
       if (leadByIdErr) return res.status(500).json({ error: leadByIdErr.message });
       if (leadById) return res.json(leadById);
@@ -227,6 +266,7 @@ export function registerLeadRoutes(app: express.Application) {
         .from("customers")
         .select("id, name, email, phone")
         .eq("id", customerId)
+        .eq("company_id", companyId)
         .maybeSingle();
       if (customerErr) return res.status(500).json({ error: customerErr.message });
       if (customer) {
@@ -245,9 +285,18 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Create lead
-  app.post("/leads", requireAuth, async (req, res) => {
+  app.post("/leads", requireAuth, async (req: any, res) => {
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(400).json({ error: "Missing company context" });
+    }
+    
     const payload = mapLead(req.body);
     if (!payload.name) return res.status(400).json({ error: "Campo 'nome' é obrigatório" });
+    
+    // Garantir que o lead pertence à empresa do usuário
+    payload.company_id = companyId;
+    
     await supabaseAdmin.from("leads").insert([payload]).select("*").single().then(({ data, error }) => {
       if (error) return res.status(500).json({ error: error.message });
       return res.status(201).json(data);
@@ -255,13 +304,19 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Update lead
-  app.put("/leads/:id", requireAuth, async (req, res) => {
+  app.put("/leads/:id", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(400).json({ error: "Missing company context" });
+    }
+    
     const payload = mapLead(req.body);
     const { data, error } = await supabaseAdmin
       .from("leads")
       .update(payload)
       .eq("id", id)
+      .eq("company_id", companyId)
       .select()
       .single();
     if (error) return res.status(500).json({ error: error.message });
@@ -269,9 +324,18 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Delete lead
-  app.delete("/leads/:id", requireAuth, async (req, res) => {
+  app.delete("/leads/:id", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
-    const { error } = await supabaseAdmin.from("leads").delete().eq("id", id);
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(400).json({ error: "Missing company context" });
+    }
+    
+    const { error } = await supabaseAdmin
+      .from("leads")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId);
     if (error) return res.status(500).json({ error: error.message });
     return res.status(204).send();
   });
@@ -284,6 +348,11 @@ export function registerLeadRoutes(app: express.Application) {
   app.get("/customers/:id", requireAuth, async (req: any, res) => {
     try {
       const { id } = req.params as { id: string };
+      const companyId = req.user?.company_id;
+      if (!companyId) {
+        return res.status(400).json({ error: "Missing company context" });
+      }
+      
       const { data, error } = await supabaseAdmin
         .from("leads")
         .select(`
@@ -298,6 +367,7 @@ export function registerLeadRoutes(app: express.Application) {
           created_at, updated_at
         `)
         .eq("customer_id", id)
+        .eq("company_id", companyId)
         .limit(1);
       
       if (error) {

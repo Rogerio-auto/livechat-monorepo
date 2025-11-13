@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Sidebar from "../Sidbars/sidebar";
+import { TrialBanner } from "../../components/subscription/TrialBanner";
 import { KPICard, formatTime } from "./KPICard";
 import { AlertsPanel } from "./AlertsPanel";
 import { ChartContainer, LineChartComponent, BarChartComponent, PieChartComponent } from "./Charts";
@@ -44,6 +45,7 @@ export function DashboardNew() {
   return (
     <>
       <Sidebar />
+      <TrialBanner />
       <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/30 transition-colors duration-300">
         <div className="h-screen overflow-auto p-6">
           <div className="w-full space-y-6">

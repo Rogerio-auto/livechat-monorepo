@@ -20,6 +20,38 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>7 Sion - Soluções</title>
+    
+    <!-- Script inline para evitar flash do tema (DEVE ser executado ANTES do React carregar) -->
+    <script>
+      (function() {
+        try {
+          // 1. Tentar ler do localStorage (último tema usado)
+          var lastTheme = localStorage.getItem('sion:theme:last');
+          
+          // 2. Se não tiver, detectar preferência do sistema operacional
+          if (!lastTheme) {
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            lastTheme = prefersDark ? 'dark' : 'light';
+          }
+          
+          // 3. Aplicar tema IMEDIATAMENTE antes de qualquer renderização
+          if (lastTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+            document.documentElement.dataset.theme = 'dark';
+            document.documentElement.classList.add('theme-dark');
+            document.documentElement.classList.remove('theme-light');
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.dataset.theme = 'light';
+            document.documentElement.classList.add('theme-light');
+            document.documentElement.classList.remove('theme-dark');
+          }
+        } catch (e) {
+          // Fallback: se der erro, usa tema claro
+          console.error('Error initializing theme:', e);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { API, fetchJson, getAccessToken } from "../../utils/api";
+import { PlansSection } from "./PlansSection";
 
 export type CompanyForm = {
   empresa: string;
@@ -31,6 +32,7 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
   const dirty = useMemo(() => JSON.stringify(form) !== JSON.stringify(baseline), [form, baseline]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showPlans, setShowPlans] = useState(false);
   
   // Verificar se o usuário tem permissão para editar informações sensíveis
   const isAdmin = useMemo(() => {
@@ -229,28 +231,37 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
         </div>
       </div>
 
-  <div className="p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+      <div className="space-y-4">
+        <button
+          onClick={() => setShowPlans(!showPlans)}
+          className="w-full p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300 hover:shadow-lg"
+        >
+          <div className="flex items-start justify-between flex-wrap gap-4">
+            <div className="text-left">
+              <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+                Planos e Assinatura
+              </div>
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                Clique para {showPlans ? "ocultar" : "ver"} planos disponíveis e gerenciar sua assinatura
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <svg 
+                className={`w-5 h-5 text-blue-600 dark:text-blue-400 transition-transform ${showPlans ? "rotate-180" : ""}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-              Plano atual
-            </div>
-            <div className="text-sm text-gray-700 dark:text-gray-300">
-              Recursos variam conforme plano. Entre em contato para upgrade.
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button className="px-4 py-2 rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition font-medium disabled:opacity-60" disabled>
-              Gerenciar pagamento
-            </button>
-            <button className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium transition shadow-md disabled:opacity-60" disabled>
-              Ver planos
-            </button>
-          </div>
-        </div>
+        </button>
+
+        {showPlans && <PlansSection />}
       </div>
 
       <div className="flex gap-3 pt-2">

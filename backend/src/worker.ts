@@ -43,6 +43,7 @@ import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.ru
 import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause, tryLock as bufferTryLock, releaseLock as bufferReleaseLock } from "./services/buffer.ts";
 import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer, getMediaBucket } from "../src/lib/storage.ts";
 import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
+import { incrementUsage, checkLimit } from "../src/services/subscriptions.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -2822,6 +2823,15 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         provider: 'WAHA',
         hasDraft: !!job?.draftId
       });
+    } else {
+      console.log("[worker][WAHA] ✅ Socket emitted successfully:", {
+        event: "socket.livechat.inbound",
+        chatId,
+        inboxId: job.inboxId,
+        messageId: mappedMessage.id,
+        hasChatSummary: !!chatSummary,
+        companyId: job.companyId
+      });
     }
   } catch (error) {
     console.warn("[WAHA][worker] failed to publish socket inbound message", error);
@@ -3236,6 +3246,34 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   const inboxId = String(job?.inboxId || "");
   if (!inboxId) throw new Error("WAHA outbound sem inboxId");
 
+  // Check message limit (soft warning)
+  if (job.companyId) {
+    try {
+  const limitCheck = await checkLimit(job.companyId, "messages_per_month");
+      if (!limitCheck.allowed) {
+        console.warn("[worker][outbound][WAHA] ⚠️  MESSAGE LIMIT REACHED", {
+          companyId: job.companyId,
+          limit: limitCheck.limit,
+          current: limitCheck.current,
+          remaining: limitCheck.remaining,
+        });
+        // Continua enviando (soft limit) mas registra warning
+      } else if (limitCheck.remaining !== undefined && limitCheck.remaining < 50) {
+        console.warn("[worker][outbound][WAHA] ⚠️  APPROACHING MESSAGE LIMIT", {
+          companyId: job.companyId,
+          limit: limitCheck.limit,
+          current: limitCheck.current,
+          remaining: limitCheck.remaining,
+        });
+      }
+    } catch (error) {
+      console.warn("[worker][outbound][WAHA] failed to check message limit", {
+        companyId: job.companyId,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+  }
+
   const payload = job?.payload ?? {};
   const internalChatId = job?.chatId
     ? String(job.chatId)
@@ -3620,6 +3658,22 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     externalId: externalId || null,
     remoteChatId,
   });
+
+  // Track message usage for subscription limits
+  if (job.companyId && externalId) {
+    try {
+      await incrementUsage(job.companyId, "messages_sent", 1);
+      console.log("[worker][outbound][WAHA] usage tracked", {
+        companyId: job.companyId,
+        metric: "messages_sent",
+      });
+    } catch (error) {
+      console.warn("[worker][outbound][WAHA] failed to track message usage", {
+        companyId: job.companyId,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+  }
 
   if (chatIdForStatus) {
     setTimeout(() => {

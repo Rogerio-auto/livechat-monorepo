@@ -4,6 +4,7 @@ import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import type { EventClickArg } from "@fullcalendar/core";
 import Sidebar from "../componets/Sidbars/sidebar";
 import { API, fetchJson } from "../utils/api";
 import { 
@@ -708,7 +709,7 @@ export function CalendarioPage() {
                   datesSet={handleDatesSet}
                   editable={true}
                   selectable={true}
-                  eventClick={(info) => {
+                  eventClick={(info: EventClickArg) => {
                     setSelectedEvent({
                       id: info.event.id,
                       title: info.event.title,

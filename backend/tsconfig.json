@@ -6,7 +6,6 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "esModuleInterop": true,
-    "allowImportingTsExtensions": true,
     "noEmit": false,
     "forceConsistentCasingInFileNames": true,
     "strict": true,

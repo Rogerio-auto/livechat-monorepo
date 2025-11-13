@@ -46,8 +46,13 @@ Write-Host ""
 Write-Host "✅ Fazendo commit..." -ForegroundColor Green
 
 $commitMessage = @"
-chore: prepare project for production deployment
+chore: fix Docker build errors and prepare for production deployment
 
+- Fix Docker build failure in VPS
+  * Remove postinstall script that tried to access onboarding directory
+  * Add --ignore-scripts flag to npm ci in Dockerfiles
+  * Simplify backend production stage to install only backend deps
+  
 - Fix build configuration (tsconfig, package.json)
   * Remove tsc --noEmit from build script (tsup handles it)
   * Update tsconfig to use NodeNext module system
@@ -61,7 +66,7 @@ chore: prepare project for production deployment
   * README.md - Main project documentation
   * DEPLOY.md - Complete deployment guide
   * QUICK_DEPLOY.md - Quick deployment checklist
-  * COMMIT_CHECKLIST.md - Pre-commit verification
+  * DOCKER_FIX.md - Docker build error resolution
   
 - Add CI/CD pipeline
   * GitHub Actions workflow for automated testing
@@ -82,7 +87,7 @@ chore: prepare project for production deployment
 All builds tested and working:
 ✓ Backend build: OK (tsup - 211ms)
 ✓ Frontend build: OK (vite - 22.13s)
-✓ Docker builds: OK
+✓ Docker builds: Ready for VPS
 ✓ No TypeScript errors
 "@
 

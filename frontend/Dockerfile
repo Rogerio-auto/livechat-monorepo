@@ -6,8 +6,8 @@ WORKDIR /monorepo
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
 
-# Install all dependencies (monorepo aware)
-RUN npm ci
+# Install all dependencies (monorepo aware, skip postinstall scripts)
+RUN npm ci --ignore-scripts
 
 # Copy frontend source files
 COPY frontend ./frontend/

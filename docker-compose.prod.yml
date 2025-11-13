@@ -13,7 +13,8 @@ volumes:
 services:
   api:
     build:
-      context: ./backend
+      context: .
+      dockerfile: ./backend/Dockerfile
     env_file:
       - ./backend/.env
     environment:
@@ -33,7 +34,8 @@ services:
 
   worker-inbound:
     build:
-      context: ./backend
+      context: .
+      dockerfile: ./backend/Dockerfile
     env_file:
       - ./backend/.env
     command: ["node", "dist/worker.js", "inbound"]
@@ -48,7 +50,8 @@ services:
 
   worker-outbound:
     build:
-      context: ./backend
+      context: .
+      dockerfile: ./backend/Dockerfile
     env_file:
       - ./backend/.env
     command: ["node", "dist/worker.js", "outbound"]
@@ -63,7 +66,8 @@ services:
 
   worker-campaigns:
     build:
-      context: ./backend
+      context: .
+      dockerfile: ./backend/Dockerfile
     env_file:
       - ./backend/.env
     command: ["node", "dist/worker.campaigns.js"]
@@ -76,7 +80,8 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: .
+      dockerfile: ./frontend/Dockerfile
     env_file:
       - ./frontend/.env.production
     depends_on:

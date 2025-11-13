@@ -1,17 +1,24 @@
 FROM node:20-alpine AS build
-WORKDIR /app
+WORKDIR /monorepo
 
+# Copy root package files (monorepo workspace)
 COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+
+# Install all dependencies (including workspace dependencies)
 RUN npm ci
 
-COPY . .
-RUN npm run build
+# Copy frontend source
+COPY frontend ./frontend/
+
+# Build frontend
+RUN npm run build:frontend
 
 FROM nginx:1.27-alpine
 WORKDIR /usr/share/nginx/html
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist ./
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /monorepo/frontend/dist ./
 
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

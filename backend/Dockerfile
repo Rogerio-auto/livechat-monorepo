@@ -22,14 +22,20 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Copy backend package files
-COPY backend/package*.json ./
+# Copy root package files (needed for workspace resolution)
+COPY package*.json ./
 
-# Install ONLY backend production dependencies (ignore workspace)
-RUN npm ci --omit=dev --ignore-scripts
+# Copy backend package files
+COPY backend/package*.json ./backend/
+
+# Install ONLY backend production dependencies using workspace
+RUN npm ci --omit=dev --ignore-scripts --workspace=backend
 
 # Copy built artifacts from build stage
-COPY --from=build /monorepo/backend/dist ./dist
+COPY --from=build /monorepo/backend/dist ./backend/dist
+
+# Set working directory to backend
+WORKDIR /app/backend
 
 EXPOSE 5000
 CMD ["node", "dist/index.js"]

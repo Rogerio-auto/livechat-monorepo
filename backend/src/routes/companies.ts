@@ -1,7 +1,7 @@
 import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin, supabaseAnon } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 
 // Middleware para verificar se é ADMIN
@@ -168,5 +168,210 @@ export function registerCompanyRoutes(app: express.Application) {
       return res.status(500).json({ error: e?.message || "company update error" });
     }
   });
-}
 
+  // DELETE company permanently (ADMIN only with password verification)
+  app.delete("/api/admin/companies/:companyId/delete", requireAuth, requireAdmin, async (req: any, res) => {
+    try {
+      const { companyId } = req.params;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ error: "Senha é obrigatória para confirmar a exclusão" });
+      }
+
+      // Verificar senha do admin
+      const authUserId = req.user.id;
+      const { data: adminUser } = await supabaseAdmin
+        .from("users")
+        .select("email")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+
+      if (!adminUser?.email) {
+        return res.status(404).json({ error: "Usuário administrador não encontrado" });
+      }
+
+      // Tentar fazer login com as credenciais para validar senha
+      const { error: authError } = await supabaseAnon.auth.signInWithPassword({
+        email: adminUser.email,
+        password: password,
+      });
+
+      if (authError) {
+        return res.status(401).json({ error: "Senha incorreta" });
+      }
+
+      // Verificar se a empresa existe
+      const { data: company, error: companyError } = await supabaseAdmin
+        .from("companies")
+        .select("id, name")
+        .eq("id", companyId)
+        .maybeSingle();
+
+      if (companyError || !company) {
+        return res.status(404).json({ error: "Empresa não encontrada" });
+      }
+
+      console.log(`[ADMIN DELETE] Iniciando exclusão da empresa: ${company.name} (${companyId})`);
+
+      // Buscar todos os usuários da empresa
+      const { data: users } = await supabaseAdmin
+        .from("users")
+        .select("user_id, email")
+        .eq("company_id", companyId);
+
+      // Deletar usuários da autenticação do Supabase
+      if (users && users.length > 0) {
+        console.log(`[ADMIN DELETE] Deletando ${users.length} usuários da autenticação...`);
+        for (const user of users) {
+          try {
+            await supabaseAdmin.auth.admin.deleteUser(user.user_id);
+            console.log(`[ADMIN DELETE] Usuário deletado: ${user.email}`);
+          } catch (err) {
+            console.error(`[ADMIN DELETE] Erro ao deletar usuário ${user.email}:`, err);
+          }
+        }
+      }
+
+      // Deletar chats e mensagens relacionadas
+      console.log(`[ADMIN DELETE] Deletando chats e mensagens...`);
+      const { data: chats } = await supabaseAdmin
+        .from("chats")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (chats && chats.length > 0) {
+        const chatIds = chats.map(c => c.id);
+        
+        // Deletar mensagens dos chats
+        await supabaseAdmin
+          .from("messages")
+          .delete()
+          .in("chat_id", chatIds);
+        
+        // Deletar chats
+        await supabaseAdmin
+          .from("chats")
+          .delete()
+          .eq("company_id", companyId);
+      }
+
+      // Deletar agentes e suas ferramentas
+      console.log(`[ADMIN DELETE] Deletando agentes...`);
+      const { data: agents } = await supabaseAdmin
+        .from("agents")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (agents && agents.length > 0) {
+        const agentIds = agents.map(a => a.id);
+        
+        // Deletar ferramentas dos agentes
+        await supabaseAdmin
+          .from("agent_tools")
+          .delete()
+          .in("agent_id", agentIds);
+        
+        // Deletar agentes
+        await supabaseAdmin
+          .from("agents")
+          .delete()
+          .eq("company_id", companyId);
+      }
+
+      // Deletar inboxes
+      console.log(`[ADMIN DELETE] Deletando inboxes...`);
+      await supabaseAdmin
+        .from("inboxes")
+        .delete()
+        .eq("company_id", companyId);
+
+      // Deletar departamentos e times
+      console.log(`[ADMIN DELETE] Deletando departamentos e times...`);
+      const { data: departments } = await supabaseAdmin
+        .from("departments")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (departments && departments.length > 0) {
+        const deptIds = departments.map(d => d.id);
+        
+        // Deletar times
+        await supabaseAdmin
+          .from("teams")
+          .delete()
+          .in("department_id", deptIds);
+        
+        // Deletar departamentos
+        await supabaseAdmin
+          .from("departments")
+          .delete()
+          .eq("company_id", companyId);
+      }
+
+      // Deletar campanhas
+      console.log(`[ADMIN DELETE] Deletando campanhas...`);
+      await supabaseAdmin
+        .from("campaigns")
+        .delete()
+        .eq("company_id", companyId);
+
+      // Deletar boards do kanban
+      console.log(`[ADMIN DELETE] Deletando boards...`);
+      const { data: boards } = await supabaseAdmin
+        .from("boards")
+        .select("id")
+        .eq("company_id", companyId);
+
+      if (boards && boards.length > 0) {
+        const boardIds = boards.map(b => b.id);
+        
+        // Deletar cards
+        await supabaseAdmin
+          .from("cards")
+          .delete()
+          .in("board_id", boardIds);
+        
+        // Deletar boards
+        await supabaseAdmin
+          .from("boards")
+          .delete()
+          .eq("company_id", companyId);
+      }
+
+      // Deletar usuários da tabela users
+      console.log(`[ADMIN DELETE] Deletando registros de usuários...`);
+      await supabaseAdmin
+        .from("users")
+        .delete()
+        .eq("company_id", companyId);
+
+      // Por último, deletar a empresa
+      console.log(`[ADMIN DELETE] Deletando empresa...`);
+      const { error: deleteError } = await supabaseAdmin
+        .from("companies")
+        .delete()
+        .eq("id", companyId);
+
+      if (deleteError) {
+        console.error(`[ADMIN DELETE] Erro ao deletar empresa:`, deleteError);
+        return res.status(500).json({ error: deleteError.message });
+      }
+
+      console.log(`[ADMIN DELETE] ✅ Empresa ${company.name} deletada com sucesso`);
+
+      // Emitir evento via socket
+      try {
+        getIO()?.emit("company:deleted", { companyId, companyName: company.name });
+      } catch {}
+
+      return res.json({ 
+        success: true, 
+        message: `Empresa ${company.name} e todos os dados relacionados foram deletados permanentemente` 
+      });
+    } catch (e: any) {
+      console.error(`[ADMIN DELETE] Erro geral:`, e);
+      return res.status(500).json({ error: e?.message || "Erro ao deletar empresa" });
+    }
+  });
+}

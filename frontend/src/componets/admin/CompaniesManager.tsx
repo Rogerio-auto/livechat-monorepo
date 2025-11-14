@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FiUsers, FiCalendar, FiActivity, FiMail, FiPhone, FiPackage } from "react-icons/fi";
+import { FiUsers, FiCalendar, FiActivity, FiMail, FiPhone, FiPackage, FiTrash2, FiAlertTriangle } from "react-icons/fi";
 
 type Company = {
   id: string;
@@ -20,6 +20,10 @@ export function CompaniesManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -39,6 +43,46 @@ export function CompaniesManager() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteCompany = async () => {
+    if (!selectedCompany) return;
+    
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      const res = await fetch(`${API}/api/admin/companies/${selectedCompany.id}/delete`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: deletePassword }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Erro ao deletar empresa");
+      }
+
+      // Recarregar lista de empresas
+      await loadCompanies();
+      
+      // Fechar modais
+      setDeleteModalOpen(false);
+      setSelectedCompany(null);
+      setDeletePassword("");
+      setDeleteError(null);
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const openDeleteModal = () => {
+    setDeleteModalOpen(true);
+    setDeletePassword("");
+    setDeleteError(null);
   };
 
   if (loading) {
@@ -291,6 +335,106 @@ export function CompaniesManager() {
                     })}
                   </span>
                 </div>
+              </div>
+
+              {/* Botão de Deletar Empresa */}
+              <div className="pt-4 border-t border-red-500/20">
+                <button
+                  onClick={openDeleteModal}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium"
+                >
+                  <FiTrash2 />
+                  Deletar Empresa Permanentemente
+                </button>
+                <p className="text-xs text-red-400 mt-2 text-center">
+                  ⚠️ Esta ação irá deletar todos os dados da empresa, usuários, inboxes e agentes.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Deleção */}
+      {deleteModalOpen && selectedCompany && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60 p-4">
+          <div className="config-modal rounded-2xl shadow-2xl max-w-md w-full border-2 border-red-500/30">
+            <div className="flex items-center justify-center gap-3 bg-red-600 text-white p-6 rounded-t-2xl">
+              <FiAlertTriangle className="text-3xl" />
+              <h3 className="text-xl font-bold">ATENÇÃO: Ação Irreversível</h3>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                <p className="text-sm font-semibold text-red-700 dark:text-red-400 mb-2">
+                  Você está prestes a deletar:
+                </p>
+                <p className="text-lg font-bold config-heading">{selectedCompany.name}</p>
+                <p className="text-xs config-text-muted mt-1">ID: {selectedCompany.id}</p>
+              </div>
+
+              <div className="space-y-2 text-sm config-text-muted">
+                <p className="font-semibold text-red-600 dark:text-red-400">Esta ação irá deletar permanentemente:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>{selectedCompany._count?.users || 0} usuário(s)</li>
+                  <li>{selectedCompany._count?.inboxes || 0} inbox(es)</li>
+                  <li>{selectedCompany._count?.agents || 0} agente(s) IA</li>
+                  <li>Todos os chats, mensagens e dados relacionados</li>
+                </ul>
+              </div>
+
+              <div className="pt-4 border-t config-divider space-y-3">
+                <label className="block">
+                  <span className="text-sm font-semibold config-heading mb-2 block">
+                    Digite sua senha de ADMIN para confirmar:
+                  </span>
+                  <input
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Sua senha de administrador"
+                    className="w-full px-4 py-2 rounded-lg border config-input"
+                    disabled={deleteLoading}
+                    autoFocus
+                  />
+                </label>
+
+                {deleteError && (
+                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-500/30 rounded-lg p-3">
+                    <p className="text-sm text-red-700 dark:text-red-400">{deleteError}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  onClick={() => {
+                    setDeleteModalOpen(false);
+                    setDeletePassword("");
+                    setDeleteError(null);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors font-medium"
+                  disabled={deleteLoading}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleDeleteCompany}
+                  disabled={!deletePassword || deleteLoading}
+                  className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  {deleteLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Deletando...
+                    </>
+                  ) : (
+                    <>
+                      <FiTrash2 />
+                      Confirmar Deleção
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

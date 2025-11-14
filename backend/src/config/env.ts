@@ -33,3 +33,6 @@ export const JWT_COOKIE_DOMAIN = process.env.JWT_COOKIE_DOMAIN || undefined;
 export const DOCS_BUCKET = process.env.DOCS_BUCKET || "documents";
 
 export const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "";
+
+// URL do frontend para redirects (onboarding, etc)
+export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";

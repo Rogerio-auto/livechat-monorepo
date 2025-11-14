@@ -9,6 +9,8 @@ import { OnboardingStep4 } from "./step4";
 import { FaSpinner } from "react-icons/fa";
 import type { TeamSize } from "../../types/onboarding";
 
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
 export function OnboardingPage() {
   const { status, loading, fetchStatus, saveStep1, saveStep2, saveStep3 } = useOnboarding();
   const [currentStep, setCurrentStep] = useState(1);
@@ -39,7 +41,7 @@ export function OnboardingPage() {
     setError(null);
 
     try {
-      const response = await fetch("/api/onboarding/signup-complete", {
+      const response = await fetch(`${API_BASE}/api/onboarding/signup-complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -124,7 +126,7 @@ export function OnboardingPage() {
   // Step 6: Seleção de plano (APÓS onboarding)
   const handlePlanSelection = async (planId: string) => {
     try {
-      const res = await fetch(`/api/onboarding/save-plan`, {
+      const res = await fetch(`${API_BASE}/api/onboarding/save-plan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

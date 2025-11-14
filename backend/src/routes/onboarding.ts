@@ -2,7 +2,7 @@ import type { Application } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.ts";
+import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN, FRONTEND_URL } from "../config/env.ts";
 
 // Tipos e schemas
 const IndustryEnum = z.enum(["education", "accounting", "clinic", "retail", "events", "law"]);
@@ -297,7 +297,7 @@ export function registerOnboardingRoutes(app: Application) {
         user: publicUser,
         company: company,
         access_token: accessToken,
-        redirect_url: "http://localhost:3000/dashboard", // Frontend do sistema na porta 3000
+        redirect_url: `${FRONTEND_URL}/dashboard`, // URL dinâmica baseada no ambiente
         message: "Cadastro realizado com sucesso! Redirecionando...",
       });
     } catch (error: any) {
@@ -809,7 +809,7 @@ export function registerOnboardingRoutes(app: Application) {
         success: true,
         message: "Plano salvo com sucesso!",
         plan: planEnum,
-        redirect_url: "https://app.7sion.com/dashboard"
+        redirect_url: `${FRONTEND_URL}/dashboard`
       });
     } catch (error: any) {
       console.error("Erro ao salvar plano:", error);

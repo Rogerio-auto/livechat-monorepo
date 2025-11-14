@@ -14,10 +14,11 @@ export function useOnboardingStatus() {
   const checkStatus = async () => {
     try {
       setLoading(true);
-      // Usar URL relativa - o proxy do Vite vai encaminhar para http://localhost:5000
+      // Usar VITE_API_URL para garantir que funciona em produção
+      const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
       const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
       const headers = devCompany && import.meta.env.DEV ? { "X-Company-Id": devCompany } : undefined;
-      const res = await fetch("/api/onboarding/status", {
+      const res = await fetch(`${API}/api/onboarding/status`, {
         credentials: "include",
         headers,
       });

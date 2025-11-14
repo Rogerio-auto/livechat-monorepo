@@ -16,10 +16,11 @@ export function RequireAuth({ children }: Props) {
     let mounted = true;
     (async () => {
       try {
-        // Usar URL relativa - o proxy do Vite vai encaminhar para http://localhost:5000
+        // Usar VITE_API_URL para garantir que funciona em produção
+        const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
         const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
         const headers = devCompany && import.meta.env.DEV ? { 'X-Company-Id': devCompany } : undefined;
-        const res = await fetch('/auth/me', { credentials: 'include', headers });
+        const res = await fetch(`${API}/auth/me`, { credentials: 'include', headers });
         if (!mounted) return;
         if (res.ok) setStatus('ok');
         else {

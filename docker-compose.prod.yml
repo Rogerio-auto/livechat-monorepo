@@ -111,7 +111,7 @@ services:
     depends_on:
       - api
     ports:
-      - "3002:80"
+      - "3003:80"
     networks:
       - internal
     restart: unless-stopped

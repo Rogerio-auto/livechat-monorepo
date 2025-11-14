@@ -2,7 +2,7 @@ import type { Application } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE } from "../config/env.ts";
+import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.ts";
 
 // Tipos e schemas
 const IndustryEnum = z.enum(["education", "accounting", "clinic", "retail", "events", "law"]);
@@ -283,6 +283,7 @@ export function registerOnboardingRoutes(app: Application) {
           httpOnly: true,
           secure: JWT_COOKIE_SECURE,
           sameSite: "lax",
+          domain: JWT_COOKIE_DOMAIN,
           path: "/",
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
@@ -463,6 +464,7 @@ export function registerOnboardingRoutes(app: Application) {
           httpOnly: true,
           secure: JWT_COOKIE_SECURE,
           sameSite: "lax",
+          domain: JWT_COOKIE_DOMAIN,
           path: "/",
           maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dias
         });

@@ -28,6 +28,7 @@ export const SUPABASE_MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || "chat-
 
 export const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || "sb_access_token";
 export const JWT_COOKIE_SECURE = String(process.env.JWT_COOKIE_SECURE) === "true";
+export const JWT_COOKIE_DOMAIN = process.env.JWT_COOKIE_DOMAIN || undefined;
 
 export const DOCS_BUCKET = process.env.DOCS_BUCKET || "documents";
 

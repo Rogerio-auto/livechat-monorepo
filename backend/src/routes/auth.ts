@@ -2,7 +2,7 @@ import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAnon, supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE } from "../config/env.ts";
+import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.ts";
 import { getIO } from "../lib/io.ts";
 
 export function registerAuthRoutes(app: express.Application) {
@@ -28,6 +28,7 @@ export function registerAuthRoutes(app: express.Application) {
       httpOnly: true,
       secure: JWT_COOKIE_SECURE,
       sameSite: "lax",
+      domain: JWT_COOKIE_DOMAIN,
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -35,7 +36,10 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   app.post("/logout", (_req, res) => {
-    res.clearCookie(JWT_COOKIE_NAME, { path: "/" });
+    res.clearCookie(JWT_COOKIE_NAME, { 
+      path: "/",
+      domain: JWT_COOKIE_DOMAIN 
+    });
     return res.json({ ok: true });
   });
 

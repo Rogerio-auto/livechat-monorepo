@@ -815,6 +815,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
               type,
               view_status,
               media_url,
+              caption,
               remote_participant_id,
               remote_sender_id,
               remote_sender_name,
@@ -845,6 +846,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
         type: row.type ?? "TEXT",
         is_private: false,
         media_url: row.media_url ?? null,
+        caption: row.caption ?? null,
         remote_participant_id: row.remote_participant_id ?? null,
         remote_sender_id: row.remote_sender_id ?? null,
         remote_sender_name: row.remote_sender_name ?? null,
@@ -1633,6 +1635,7 @@ async function handleMetaInboundMessages(args: {
           view_status: "DRAFT",
           delivery_status: null,
           is_private: false,
+          caption: caption ?? null,
           replied_message_id: repliedMessageId,
           remote_participant_id: remoteParticipantId,
           remote_sender_id: metaContext.participantId ?? participantWaId ?? null,
@@ -1849,6 +1852,7 @@ async function handleMetaInboundMessages(args: {
       type: string | null;
       view_status: string | null;
       media_url: string | null;
+      caption: string | null;
       remote_participant_id: string | null;
       remote_sender_id: string | null;
       remote_sender_name: string | null;
@@ -1858,7 +1862,7 @@ async function handleMetaInboundMessages(args: {
       replied_message_id: string | null;
     }>(
       `select id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url,
-              created_at, type, view_status, media_url, remote_participant_id, remote_sender_id,
+              created_at, type, view_status, media_url, caption, remote_participant_id, remote_sender_id,
               remote_sender_name, remote_sender_phone, remote_sender_avatar_url,
               remote_sender_is_admin, replied_message_id
          from public.chat_messages where id = $1`,
@@ -1878,6 +1882,7 @@ async function handleMetaInboundMessages(args: {
       type: msgRow.type ?? "TEXT",
       is_private: false,
       media_url: buildProxyUrl(msgRow.media_url) ?? null,
+      caption: msgRow.caption ?? null,
       remote_participant_id: msgRow.remote_participant_id ?? null,
       remote_sender_id: msgRow.remote_sender_id ?? null,
       remote_sender_name: msgRow.remote_sender_name ?? null,

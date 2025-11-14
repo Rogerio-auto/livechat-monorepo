@@ -133,10 +133,10 @@ export function MessageBubble({
         id: m.id,
         type: messageType as "IMAGE" | "VIDEO" | "DOCUMENT",
         url: mediaUrl,
-        caption: textBody || null,
+        caption: caption || null,
       },
     ];
-  }, [mediaUrl, messageType, m.id, textBody]);
+  }, [mediaUrl, messageType, m.id, caption]);
 
   const resolvedMediaItems = useMemo(() => {
     if (mediaItems && mediaItems.length > 0) return mediaItems;
@@ -201,11 +201,11 @@ export function MessageBubble({
         )}
         <img
           src={mediaUrl}
-          alt={caption || textBody || "Imagem"}
+          alt={caption || "Imagem"}
           className="max-h-72 w-full rounded-xl object-contain cursor-pointer"
           onClick={openLightbox}
         />
-        {caption && <p className="mt-2 text-xs opacity-90">{caption}</p>}
+        {caption && <p className="mt-2 text-xs opacity-90 whitespace-pre-wrap break-words">{caption}</p>}
       </div>
     );
   } else if (mediaUrl && messageType === "VIDEO") {

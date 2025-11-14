@@ -416,6 +416,7 @@ type InsertedInboundMessage = {
   chat_id: string;
   content: string;
   type: string | null;
+  caption?: string | null;
   view_status: string | null;
   created_at: string;
   remote_participant_id?: string | null;
@@ -1486,6 +1487,7 @@ export async function insertInboundMessage(args: {
     chat_id: result.message.chat_id,
     content: result.message.content,
     type: result.message.type,
+    caption: result.message.caption ?? null,
     view_status: result.message.view_status,
     created_at: result.message.created_at,
     remote_participant_id: result.message.remote_participant_id ?? null,

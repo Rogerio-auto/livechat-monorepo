@@ -2,6 +2,7 @@ import express from "express";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
+import { NotificationService } from "../services/NotificationService.ts";
 
 export function registerProposalRoutes(app: express.Application) {
   // List proposals
@@ -221,6 +222,33 @@ export function registerProposalRoutes(app: express.Application) {
 
       const { error } = await supabaseAdmin.from("proposals").update({ status }).eq("id", id);
       if (error) return res.status(500).json({ error: error.message });
+      
+      // 🔔 Enviar notificação se proposta foi aceita
+      if (status.toUpperCase() === "ACCEPTED") {
+        try {
+          const { data: proposal } = await supabaseAdmin
+            .from("proposals")
+            .select("id, customer_id, customers(name)")
+            .eq("id", id)
+            .maybeSingle();
+
+          const customerName = (proposal as any)?.customers?.name || "Cliente";
+          
+          await NotificationService.create({
+            title: "🎉 Proposta Aceita!",
+            message: `${customerName} aceitou a proposta #${id.substring(0, 8)}`,
+            type: "PROPOSAL_ACCEPTED",
+            userId: authUserId,
+            companyId: companyId,
+            data: { proposalId: id, customerName },
+            actionUrl: `/dashboard/propostas/${id}`,
+          });
+          console.log("[PATCH /proposals/:id/status] 🔔 Notificação PROPOSAL_ACCEPTED enviada");
+        } catch (notifError) {
+          console.warn("[PATCH /proposals/:id/status] ⚠️ Erro ao enviar notificação:", notifError);
+        }
+      }
+      
       try {
         getIO()?.emit("proposals:changed", { type: "updated", id });
       } catch {}

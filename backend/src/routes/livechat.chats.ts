@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import express from "express";
 import multer from "multer";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
-import { EX_APP, publish } from "../queue/rabbit.ts"; // <??" padroniza ??oqueue???
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { NotificationService } from "../services/NotificationService.js";
+import { EX_APP, publish } from "../queue/rabbit.js"; // <??" padroniza ??oqueue???
 import {
   redis,
   rGet,
@@ -16,12 +17,12 @@ import {
   rememberMessageCacheKey,
   rememberListCacheKey,
   clearListCacheIndexes,
-} from "../lib/redis.ts";
-import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.ts";
-import { normalizeMsisdn } from "../util.ts";
-import { getAgent as getRuntimeAgent } from "../services/agents.runtime.ts";
-import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.ts";
-import messagesRouter from "./livechat.messages.ts";
+} from "../lib/redis.js";
+import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.js";
+import { normalizeMsisdn } from "../util.js";
+import { getAgent as getRuntimeAgent } from "../services/agents.runtime.js";
+import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.js";
+import messagesRouter from "./livechat.messages.js";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -1256,6 +1257,50 @@ export function registerLivechatChatRoutes(app: express.Application) {
         });
         
         io.to(`chat:${chatId}`).emit("message:new", mapped);
+
+        // 🔔 Enviar notificação se mensagem for do CUSTOMER
+        if (isFromCustomer && companyId) {
+          try {
+            // Buscar agentes atribuídos ao chat para notificar
+            const { data: chatData } = await supabaseAdmin
+              .from("chats")
+              .select("assignee_agent")
+              .eq("id", chatId)
+              .maybeSingle();
+
+            if (chatData?.assignee_agent) {
+              // Buscar user_id do agente através do inbox_users
+              const { data: linkData } = await supabaseAdmin
+                .from("inbox_users")
+                .select("user_id")
+                .eq("id", chatData.assignee_agent)
+                .maybeSingle();
+
+              if (linkData?.user_id) {
+                // 👀 Verificar se o agente está visualizando o chat
+                const chatViewers = (req.app.locals.io as any)?._chatViewers;
+                const isViewingChat = chatViewers?.get(chatId)?.has(linkData.user_id);
+                
+                if (isViewingChat) {
+                  console.log("[POST /livechat/messages] 👁️ Agente já está visualizando o chat, notificação suprimida:", linkData.user_id);
+                } else {
+                  await NotificationService.create({
+                    title: `💬 ${senderName || "Cliente"}`,
+                    message: text.substring(0, 100) + (text.length > 100 ? "..." : ""),
+                    type: "CHAT_MESSAGE",
+                    userId: linkData.user_id,
+                    companyId: companyId as string,
+                    data: { chatId, messageId: inserted.id },
+                    actionUrl: `/dashboard/livechat?chat=${chatId}`,
+                  });
+                  console.log("[POST /livechat/messages] 🔔 Notificação enviada para agente:", linkData.user_id);
+                }
+              }
+            }
+          } catch (notifError) {
+            console.warn("[POST /livechat/messages] ⚠️ Erro ao enviar notificação:", notifError);
+          }
+        }
       }
 
       if (isWahaProvider) {

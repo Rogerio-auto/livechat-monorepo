@@ -9,58 +9,58 @@ import path from "node:path";                 // ✅ use node:path
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
-import { EX_APP, publish, consume, Q_SOCKET_LIVECHAT } from "./queue/rabbit.ts";
-import { metaWebhookGet, metaWebhookPost } from "./routes/metawebhook.ts";
-import { registerSendMessageRoutes } from "./routes/sendMessage.ts";
-import { listWebhookEvents } from "./routes/adminwebhooks.ts";
+import { EX_APP, publish, consume, Q_SOCKET_LIVECHAT } from "./queue/rabbit.js";
+import { metaWebhookGet, metaWebhookPost } from "./routes/metawebhook.js";
+import { registerSendMessageRoutes } from "./routes/sendMessage.js";
+import { listWebhookEvents } from "./routes/adminwebhooks.js";
 import {
   getBoardIdForCompany,
   ensureLeadCustomerChat,
   ensureGroupChat,
   insertInboundMessage,
-} from "./services/meta/store.ts";
-import { setIO, getIO } from "./lib/io.ts";
-import { registerLivechatChatRoutes } from "./routes/livechat.chats.ts";
-import { getRedis, rGet, rSet, redis, k } from "./lib/redis.ts";
-import { registerLivechatContactsRoutes } from "./routes/livechat.contacts.ts";
-import { registerKanbanRoutes } from "./routes/kanban.ts";
-import { registerSettingsUsersRoutes } from "./routes/settings.users.ts";
-import { registerSettingsInboxesRoutes } from "./routes/settings.inboxes.ts";
-import { registerOpenAIIntegrationRoutes } from "./routes/integrations.openai.ts";
-import { registerAgentsRoutes } from "./routes/agents.ts";
-import { registerAgentTemplatesRoutes } from "./routes/agents.templates.ts";
-import { registerAgentTemplatesAdminRoutes } from "./routes/agents.templates.admin.ts";
-import { registerCompanyRoutes } from "./routes/companies.ts";
-import { registerKnowledgeBaseRoutes } from "./routes/knowledge.base.ts";
-import templateToolsRouter from "./routes/agents.templates.tools.ts";
-import toolsAdminRouter from "./routes/tools.admin.ts";
-import uploadRouter from "./routes/upload.ts";
-import mediaRouter from "./routes/media.ts";
-import { registerMetaTemplatesRoutes } from "./routes/meta.templates.ts";
-import filesRoute from "./server/files.route.ts";
-import { startSocketRelay } from "./socket.relay.ts";
-import { startLivechatSocketBridge } from "./socket/bridge.livechat.ts";
-import { registerCampaignRoutes } from "./routes/livechat.campaigns.ts";
-import { registerCampaignSegmentsRoutes } from "./routes/livechat.campaigns.segments.ts";
-import { registerCampaignFollowupsRoutes } from "./routes/livechat.campaigns.followups.ts";
-import { registerCampaignUploadsRoutes } from "./routes/livechat.campaigns.uploads.ts";
-import { registerMediaLibraryRoutes } from "./routes/livechat.mediaLibrary.ts";
-import { registerCampaignWorker } from "./worker.campaigns.ts";
-import { registerWAHARoutes } from "./routes/waha.ts";
-import mediaProxyRouter from "./routes/media.proxy.ts";
-import { registerDepartmentsRoutes } from "./routes/departments.ts";
-import { registerTeamsRoutes } from "./routes/teams.ts";
-import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.ts";
-import { registerDashboardRoutes } from "./routes/dashboard.ts";
-import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.ts";
-import { normalizeMsisdn } from "./util.ts";
-import { registerCalendarRoutes } from "./routes/calendar.ts";
-import { registerLeadRoutes } from "./routes/leads.ts";
-import { registerProductRoutes } from "./routes/products.ts";
-import { registerAuthRoutes } from "./routes/auth.ts";
-import { registerLivechatTagsRoutes } from "./routes/livechat.tags.ts";
-import { registerOnboardingRoutes } from "./routes/onboarding.ts";
-import { registerSubscriptionRoutes } from "./routes/subscriptions.ts";
+} from "./services/meta/store.js";
+import { setIO, getIO } from "./lib/io.js";
+import { registerLivechatChatRoutes } from "./routes/livechat.chats.js";
+import { getRedis, rGet, rSet, redis, k } from "./lib/redis.js";
+import { registerLivechatContactsRoutes } from "./routes/livechat.contacts.js";
+import { registerKanbanRoutes } from "./routes/kanban.js";
+import { registerSettingsUsersRoutes } from "./routes/settings.users.js";
+import { registerSettingsInboxesRoutes } from "./routes/settings.inboxes.js";
+import { registerOpenAIIntegrationRoutes } from "./routes/integrations.openai.js";
+import { registerAgentsRoutes } from "./routes/agents.js";
+import { registerAgentTemplatesRoutes } from "./routes/agents.templates.js";
+import { registerAgentTemplatesAdminRoutes } from "./routes/agents.templates.admin.js";
+import { registerCompanyRoutes } from "./routes/companies.js";
+import { registerKnowledgeBaseRoutes } from "./routes/knowledge.base.js";
+import templateToolsRouter from "./routes/agents.templates.tools.js";
+import toolsAdminRouter from "./routes/tools.admin.js";
+import uploadRouter from "./routes/upload.js";
+import mediaRouter from "./routes/media.js";
+import { registerMetaTemplatesRoutes } from "./routes/meta.templates.js";
+import filesRoute from "./server/files.route.js";
+import { startSocketRelay } from "./socket.relay.js";
+import { startLivechatSocketBridge } from "./socket/bridge.livechat.js";
+import { registerCampaignRoutes } from "./routes/livechat.campaigns.js";
+import { registerCampaignSegmentsRoutes } from "./routes/livechat.campaigns.segments.js";
+import { registerCampaignFollowupsRoutes } from "./routes/livechat.campaigns.followups.js";
+import { registerCampaignUploadsRoutes } from "./routes/livechat.campaigns.uploads.js";
+import { registerMediaLibraryRoutes } from "./routes/livechat.mediaLibrary.js";
+import { registerCampaignWorker } from "./worker.campaigns.js";
+import { registerWAHARoutes } from "./routes/waha.js";
+import mediaProxyRouter from "./routes/media.proxy.js";
+import { registerDepartmentsRoutes } from "./routes/departments.js";
+import { registerTeamsRoutes } from "./routes/teams.js";
+import { syncGlobalWahaApiKey } from "./services/waha/syncGlobalApiKey.js";
+import { registerDashboardRoutes } from "./routes/dashboard.js";
+import { WAHA_PROVIDER, wahaFetch, fetchWahaChatPicture, fetchWahaContactPicture } from "./services/waha/client.js";
+import { normalizeMsisdn } from "./util.js";
+import { registerCalendarRoutes } from "./routes/calendar.js";
+import { registerLeadRoutes } from "./routes/leads.js";
+import { registerProductRoutes } from "./routes/products.js";
+import { registerAuthRoutes } from "./routes/auth.js";
+import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
+import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -624,6 +624,10 @@ app.get("/auth/me", requireAuth, (req: any, res) => {
 // ✅ Register auth routes from modular file (VERSION 2.0 with role support)
 registerAuthRoutes(app);
 
+// ===== Notification routes =====
+import { registerNotificationRoutes } from "./routes/notifications.js";
+registerNotificationRoutes(app);
+
 // ===== Queue test/example routes =====
 // Enfileira abertura de chat (worker processa)
 app.post("/queue/livechat/start-chat", requireAuth, async (req: any, res) => {
@@ -953,27 +957,66 @@ app.locals.io = io;
 setIO(io);
 startSocketRelay(io);
 
+// Track which users are viewing which chats (for smart notifications)
+const chatViewers = new Map<string, Set<string>>(); // chatId -> Set<userId>
+(io as any)._chatViewers = chatViewers; // expose to routes
+
 io.on("connection", (socket) => {
   console.log("[RT] client connected:", socket.id);
 
-  socket.on("join", (payload: { chatId?: string }) => {
+  socket.on("join", async (payload: { chatId?: string }) => {
     const chatId = payload?.chatId;
     if (chatId) {
       socket.join(`chat:${chatId}`);
-      console.log("[RT] socket joined chat", { socketId: socket.id, chatId });
+      
+      // Track user presence for smart notifications
+      const userId = await socketAuthUserId(socket);
+      if (userId) {
+        if (!chatViewers.has(chatId)) {
+          chatViewers.set(chatId, new Set());
+        }
+        chatViewers.get(chatId)!.add(userId);
+        console.log("[RT] socket joined chat", { socketId: socket.id, chatId, userId, viewersCount: chatViewers.get(chatId)!.size });
+      } else {
+        console.log("[RT] socket joined chat (no auth)", { socketId: socket.id, chatId });
+      }
     }
   });
 
-  socket.on("leave", (payload: { chatId?: string }) => {
+  socket.on("leave", async (payload: { chatId?: string }) => {
     const chatId = payload?.chatId;
     if (chatId) {
       socket.leave(`chat:${chatId}`);
-      console.log("[RT] socket left chat", { socketId: socket.id, chatId });
+      
+      // Remove from presence tracking
+      const userId = await socketAuthUserId(socket);
+      if (userId && chatViewers.has(chatId)) {
+        chatViewers.get(chatId)!.delete(userId);
+        if (chatViewers.get(chatId)!.size === 0) {
+          chatViewers.delete(chatId); // cleanup empty sets
+        }
+        console.log("[RT] socket left chat", { socketId: socket.id, chatId, userId });
+      } else {
+        console.log("[RT] socket left chat (no auth)", { socketId: socket.id, chatId });
+      }
     }
   });
 
-  socket.on("disconnect", (reason) => {
+  socket.on("disconnect", async (reason) => {
     console.log("[RT] client disconnected:", socket.id, reason);
+    
+    // Cleanup user from all chat rooms on disconnect
+    const userId = await socketAuthUserId(socket);
+    if (userId) {
+      for (const [chatId, viewers] of chatViewers.entries()) {
+        if (viewers.has(userId)) {
+          viewers.delete(userId);
+          if (viewers.size === 0) {
+            chatViewers.delete(chatId);
+          }
+        }
+      }
+    }
   });
 
   // Load tags for a chat

@@ -2,6 +2,7 @@ import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { NotificationService } from "../services/NotificationService.ts";
 
 type LeadForm = {
   tipoPessoa?: string; cpf?: string; nome?: string; rg?: string; orgao?: string;
@@ -297,10 +298,26 @@ export function registerLeadRoutes(app: express.Application) {
     // Garantir que o lead pertence à empresa do usuário
     payload.company_id = companyId;
     
-    await supabaseAdmin.from("leads").insert([payload]).select("*").single().then(({ data, error }) => {
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(201).json(data);
-    });
+    const { data, error } = await supabaseAdmin.from("leads").insert([payload]).select("*").single();
+    if (error) return res.status(500).json({ error: error.message });
+
+    // 🔔 Enviar notificação de novo lead
+    try {
+      await NotificationService.create({
+        title: "🎯 Novo Lead Capturado",
+        message: `${data.name}${data.phone ? ` - ${data.phone}` : ""}`,
+        type: "NEW_LEAD",
+        userId: req.user.id,
+        companyId: companyId,
+        data: { leadId: data.id, leadName: data.name, leadPhone: data.phone },
+        actionUrl: `/dashboard/leads/${data.id}`,
+      });
+      console.log("[POST /leads] 🔔 Notificação NEW_LEAD enviada");
+    } catch (notifError) {
+      console.warn("[POST /leads] ⚠️ Erro ao enviar notificação:", notifError);
+    }
+
+    return res.status(201).json(data);
   });
 
   // Update lead

@@ -2025,6 +2025,12 @@ const scrollToBottom = useCallback(
       try {
         const res = await fetch(`${API}/livechat/chats/${chatId}/messages?${params.toString()}`, {
           credentials: "include",
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+          },
         });
         const headerBefore = res.headers.get("X-Next-Before");
         const textBody = await res.text();
@@ -2279,19 +2285,28 @@ const scrollToBottom = useCallback(
       messagesRequestRef.current = null;
       return;
     }
+    
+    // CORREÇÃO: Sempre carregar mensagens frescas do servidor ao trocar de chat
+    // Não confiar no cache para evitar mensagens desatualizadas
     const cached = messagesCache.get(chatId);
-    const hasCache = Array.isArray(cached);
+    const hasCache = Array.isArray(cached) && cached.length > 0;
+    
+    // Mostrar cache apenas se tiver, mas sempre revalidar
     if (hasCache && cached) {
       setMessages(cached);
       scrollToBottom();
     } else {
       setMessages([]);
     }
+    
     const meta = messagesMetaRef.current[chatId];
     setMessagesHasMore(meta?.hasMore ?? true);
     setIsFetchingOlderMessages(false);
     let disposed = false;
-    setMessagesLoading(!hasCache);
+    
+    // Sempre mostrar loading ao trocar de chat para indicar que está revalidando
+    setMessagesLoading(true);
+    
     loadMessages(chatId, { reset: true })
       .catch(() => { })
       .finally(() => {

@@ -1900,6 +1900,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
   app.get("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
     
+    // ✅ CORREÇÃO: Desabilitar cache do navegador para mensagens
+    // O cache do Redis é suficiente e mais controlável
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    
     const limitParam = Number(req.query.limit);
     const limit = Number.isFinite(limitParam)
       ? Math.max(1, Math.min(100, Math.trunc(limitParam)))

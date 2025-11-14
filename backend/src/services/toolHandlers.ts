@@ -180,6 +180,29 @@ async function handleInternalDB(
     return { success: true, data };
   }
 
+  // ====== SPECIAL CASE: List Departments (READ-ONLY) ======
+  if (table === "departments" && action === "select") {
+    if (!context.companyId) {
+      throw new Error("companyId is required to list departments");
+    }
+
+    // Auto-filtrar apenas departamentos da empresa do agente
+    const { data, error } = await supabaseAdmin
+      .from("departments")
+      .select("id, name, description, color, icon")
+      .eq("company_id", context.companyId)
+      .eq("is_active", true)
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.error("[toolHandlers] list_departments error:", error);
+      throw new Error(`Failed to list departments: ${error.message}`);
+    }
+
+    console.log(`[toolHandlers] Listed ${data?.length || 0} departments for company ${context.companyId}`);
+    return { success: true, data: data || [] };
+  }
+
   // ====== WRITE operations: validate allowed_columns.write ======
   if (action === "insert" || action === "update" || action === "upsert") {
     const writeColumns = (allowed_columns?.write as string[]) || [];
@@ -271,6 +294,56 @@ async function handleInternalDB(
       finalParams.company_id = context.companyId;
     }
 
+    // ====== SPECIAL CASE: Transfer to Department (SECURITY VALIDATION) ======
+    if (table === "chats" && action === "update" && finalParams.department_id) {
+      if (!context.companyId) {
+        throw new Error("companyId is required to transfer to department");
+      }
+
+      // SECURITY: Validate that department belongs to the same company as the agent
+      const { data: dept, error: deptError } = await supabaseAdmin
+        .from("departments")
+        .select("id, company_id, name")
+        .eq("id", finalParams.department_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (deptError) {
+        console.error("[toolHandlers] transfer_to_department validation error:", deptError);
+        throw new Error(`Failed to validate department: ${deptError.message}`);
+      }
+
+      if (!dept) {
+        throw new Error(`Department not found or inactive: ${finalParams.department_id}`);
+      }
+
+      if (dept.company_id !== context.companyId) {
+        console.error("[toolHandlers] SECURITY: Attempt to transfer to department from different company", {
+          agentCompanyId: context.companyId,
+          departmentCompanyId: dept.company_id,
+          departmentId: finalParams.department_id,
+          chatId: context.chatId
+        });
+        throw new Error("Security violation: Cannot transfer to department from another company");
+      }
+
+      console.log(`[toolHandlers] Transferring chat ${context.chatId} to department ${dept.name} (${dept.id})`);
+
+      // Set default routing metadata
+      if (!finalParams.routed_at) {
+        finalParams.routed_at = new Date().toISOString();
+      }
+      
+      // Store the reason in routing_reason field
+      if (finalParams.reason) {
+        finalParams.routing_reason = finalParams.reason;
+        delete finalParams.reason; // Remove 'reason' as it's not a column in chats table
+      }
+
+      // Log to chat_routing_history after successful update
+      // We'll do this after the update succeeds (see below)
+    }
+
     // 6. Execute operation
     if (action === "insert") {
       const { data, error } = await supabaseAdmin.from(table).insert(finalParams).select();
@@ -301,6 +374,29 @@ async function handleInternalDB(
         .eq(filterColumn, idValue)
         .select();
       if (error) throw new Error(`DB update error: ${error.message}`);
+
+      // ====== POST-UPDATE: Log department transfer to routing history ======
+      if (table === "chats" && finalParams.department_id && data && data.length > 0) {
+        try {
+          const chat = data[0];
+          await supabaseAdmin
+            .from("chat_routing_history")
+            .insert({
+              chat_id: chat.id,
+              from_department_id: null, // Could track previous department if needed
+              to_department_id: finalParams.department_id,
+              routed_by_type: "AI_AGENT",
+              routed_by_id: context.agentId,
+              reason: finalParams.routing_reason || "Transferred by AI agent",
+              priority: 0
+            });
+          
+          console.log(`[toolHandlers] Logged routing history for chat ${chat.id} to department ${finalParams.department_id}`);
+        } catch (historyError) {
+          console.warn("[toolHandlers] Failed to log routing history:", historyError);
+          // Don't fail the operation if logging fails
+        }
+      }
 
       // ====== SYNC LOGIC: customers <-> leads ======
       // If sync_to_leads is enabled and we're updating customers, sync to related lead

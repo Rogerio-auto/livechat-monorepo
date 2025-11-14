@@ -967,23 +967,25 @@ function getPushName(value: any): string | null {
   );
 }
 
-function extractContentAndType(m: any): { content: string; type: string } {
+function extractContentAndType(m: any): { content: string; type: string; caption: string | null } {
   const t = String(m?.type || "text").toLowerCase();
 
   switch (t) {
     case "text":
-      return { content: String(m?.text?.body ?? ""), type: "TEXT" };
+      return { content: String(m?.text?.body ?? ""), type: "TEXT", caption: null };
     case "image":
       return {
         content: m?.image?.caption ? `[IMAGE] ${m.image.caption}` : "[IMAGE]",
         type: "IMAGE",
+        caption: m?.image?.caption ? String(m.image.caption) : null,
       };
     case "audio":
-      return { content: "[AUDIO]", type: "AUDIO" };
+      return { content: "[AUDIO]", type: "AUDIO", caption: null };
     case "video":
       return {
         content: m?.video?.caption ? `[VIDEO] ${m.video.caption}` : "[VIDEO]",
         type: "VIDEO",
+        caption: m?.video?.caption ? String(m.video.caption) : null,
       };
     case "document":
       return {
@@ -991,18 +993,20 @@ function extractContentAndType(m: any): { content: string; type: string } {
           ? `[DOCUMENT] ${m.document.filename}`
           : "[DOCUMENT]",
         type: "DOCUMENT",
+        caption: m?.document?.caption ? String(m.document.caption) : null,
       };
     case "sticker":
-      return { content: "[STICKER]", type: "STICKER" };
+      return { content: "[STICKER]", type: "STICKER", caption: null };
     case "location":
       return {
         content: `[LOCATION] ${m?.location?.latitude},${m?.location?.longitude}`,
         type: "LOCATION",
+        caption: null,
       };
     case "contacts":
-      return { content: "[CONTACTS]", type: "CONTACTS" };
+      return { content: "[CONTACTS]", type: "CONTACTS", caption: null };
     default:
-      return { content: `[${t.toUpperCase()}]`, type: t.toUpperCase() };
+      return { content: `[${t.toUpperCase()}]`, type: t.toUpperCase(), caption: null };
   }
 }
 
@@ -1555,7 +1559,7 @@ async function handleMetaInboundMessages(args: {
       });
     }
 
-    const { content, type } = extractContentAndType(m);
+    const { content, type, caption } = extractContentAndType(m);
     
     // Parse timestamp corretamente (pode vir como number ou string)
     let createdAt: Date | null = null;
@@ -1654,6 +1658,7 @@ async function handleMetaInboundMessages(args: {
       externalId: wamid,
       content,
       type,
+      caption,
       remoteParticipantId,
       remoteSenderId: metaContext.participantId ?? participantWaId ?? null,
       remoteSenderName: metaContext.participantName ?? pushname ?? null,

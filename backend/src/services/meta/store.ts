@@ -468,6 +468,9 @@ type UpsertChatMessageArgs = {
     // 🔄 Device tracking
     sentFromDevice?: 'web' | 'whatsapp' | null;
   
+  // 📝 Caption for media messages
+  caption?: string | null;
+  
   createdAt?: string | Date | null;
   remoteParticipantId?: string | null;
   remoteSenderId?: string | null;
@@ -1198,14 +1201,14 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
              media_url, media_sha256,
                sent_from_device,
              remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone,
-             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, created_at,
+             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, caption, created_at,
              company_id, inbox_id)
           values
             ($1, $2, $3, $4, $5, $6, $7,
              $8, $9, $10, $11,
              $12, $13,
                $14,
-               $15, $16, $17, $18, $19, $20, $21, coalesce($22::timestamptz, now()),
+               $15, $16, $17, $18, $19, $20, $21, $22, coalesce($23::timestamptz, now()),
                (select company_id from public.chats where id = $1 limit 1),
                (select inbox_id from public.chats where id = $1 limit 1))
           on conflict (chat_id, external_id) do update
@@ -1227,6 +1230,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
                 remote_sender_avatar_url   = coalesce(excluded.remote_sender_avatar_url,   public.chat_messages.remote_sender_avatar_url),
                 remote_sender_is_admin     = coalesce(excluded.remote_sender_is_admin,     public.chat_messages.remote_sender_is_admin),
                 replied_message_id         = coalesce(excluded.replied_message_id,         public.chat_messages.replied_message_id),
+                caption                    = coalesce(excluded.caption,                    public.chat_messages.caption),
                 updated_at  = now()
           returning id,
                     chat_id,
@@ -1272,6 +1276,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.remoteSenderAvatarUrl ?? null,
           typeof args.remoteSenderIsAdmin === "boolean" ? args.remoteSenderIsAdmin : null,
           args.repliedMessageId ?? null,
+          args.caption ?? null,
           createdAtIso,
         ],
       );
@@ -1435,6 +1440,7 @@ export async function insertInboundMessage(args: {
   externalId: string;
   content: string;
   type?: "TEXT" | string;
+  caption?: string | null;
   remoteParticipantId?: string | null;
   remoteSenderId?: string | null;
   remoteSenderName?: string | null;
@@ -1452,6 +1458,7 @@ export async function insertInboundMessage(args: {
     content: args.content,
     type: args.type ?? "TEXT",
     viewStatus: "Pending",
+    caption: args.caption ?? null,
     remoteParticipantId: args.remoteParticipantId ?? null,
     remoteSenderId: args.remoteSenderId ?? null,
     remoteSenderName: args.remoteSenderName ?? null,

@@ -79,12 +79,33 @@ const server = http.createServer(app);
 // (opcional, mas recomendado se estiver atrás de proxy)
 app.set("trust proxy", 1);
 
-// CORS primeiro (antes de qualquer rota/estático)
-app.use(cors({
-  origin: (origin, cb) => cb(null, true),  // libera tudo (ajuste se precisar)
-  credentials: true,
-}));
+// ===== CONFIGURAÇÃO DE CORS (ANTES DE TUDO) =====
+const FRONTEND_ORIGINS = Array.from(
+  new Set([
+    ...(process.env.FRONTEND_ORIGIN || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3002", // onboarding dev
+    "http://127.0.0.1:3002",
+  ]),
+);
+
+console.log("[CORS] Allowed origins:", FRONTEND_ORIGINS);
+
+app.use(
+  cors({
+    origin: FRONTEND_ORIGINS,
+    credentials: true,
+  }),
+);
+
+// ===== PARSERS =====
 app.use(cookieParser());
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // Configurar express-session para onboarding
 app.use(session({
@@ -97,10 +118,6 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000, // 24 horas
   }
 }));
-
-// body parsers genéricos (suas rotas de upload usam multer, então ok)
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // === Arquivos locais ===
 const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
@@ -222,16 +239,6 @@ function getColIdFromTagRow(row: Record<string, unknown> | null | undefined): st
 
 // ===== Config =====
 const PORT = Number(process.env.PORT_BACKEND || 5000);
-const FRONTEND_ORIGINS = Array.from(
-  new Set([
-    ...(process.env.FRONTEND_ORIGIN || "")
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean),
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-  ]),
-);
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY!;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -239,18 +246,7 @@ const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || "sb_access_token";
 const JWT_COOKIE_SECURE = String(process.env.JWT_COOKIE_SECURE) === "true";
 const AVATAR_CACHE_TTL = Number(process.env.CACHE_TTL_AVATAR ?? 24 * 60 * 60);
 
-// ===== Middlewares =====
-app.use(
-  cors({
-    origin: FRONTEND_ORIGINS,
-    credentials: true,
-  }),
-);
-app.use(express.json({ limit: "100mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
-// (opcional) assets est?ticos se precisar
+// (opcional) assets estáticos se precisar
 // app.use(express.static("assets"));
 
 // ===== Supabase clients =====
@@ -947,7 +943,7 @@ app.post("/products/bulk-upsert", requireAuth, async (req, res) => {
 
 const io = new SocketIOServer(server, {
   cors: {
-    origin: FRONTEND_ORIGINS,
+    origin: FRONTEND_ORIGINS, // Usa a constante definida no início
     methods: ["GET", "POST"],
     credentials: true,              // <- importante para withCredentials
   }

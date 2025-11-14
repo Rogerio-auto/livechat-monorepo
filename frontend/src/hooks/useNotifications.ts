@@ -53,13 +53,29 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || API_URL;
 
 // Cache de áudio para melhor performance
 const audioCache: Record<SoundType, HTMLAudioElement> = {} as any;
+let audioInitialized = false;
 
 function preloadSound(type: SoundType) {
   if (audioCache[type]) return;
   
-  const audio = new Audio(`/sounds/notification-${type}.mp3`);
-  audio.preload = "auto";
-  audioCache[type] = audio;
+  try {
+    const audio = new Audio(`/sounds/notification-${type}.mp3`);
+    audio.preload = "auto";
+    audio.volume = 0.7; // Volume um pouco mais baixo
+    
+    // Verificar se o áudio carregou corretamente
+    audio.addEventListener('canplaythrough', () => {
+      console.log(`[Notifications] ✅ Som ${type} carregado com sucesso`);
+    });
+    
+    audio.addEventListener('error', (e) => {
+      console.error(`[Notifications] ❌ Erro ao carregar som ${type}:`, e);
+    });
+    
+    audioCache[type] = audio;
+  } catch (err) {
+    console.error(`[Notifications] ❌ Erro ao criar áudio ${type}:`, err);
+  }
 }
 
 function playSound(type: SoundType) {
@@ -67,16 +83,56 @@ function playSound(type: SoundType) {
   
   try {
     if (!audioCache[type]) {
+      console.log(`[Notifications] Carregando som ${type}...`);
       preloadSound(type);
     }
     
     const audio = audioCache[type];
+    if (!audio) {
+      console.warn(`[Notifications] ⚠️ Áudio ${type} não disponível`);
+      return;
+    }
+    
     audio.currentTime = 0;
-    audio.play().catch(err => {
-      console.warn("[Notifications] Não foi possível reproduzir som:", err);
+    
+    // Tentar reproduzir com tratamento de erro melhorado
+    const playPromise = audio.play();
+    
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log(`[Notifications] 🔊 Som ${type} reproduzido com sucesso`);
+        })
+        .catch(err => {
+          // Se falhar por permissão, avisar usuário
+          if (err.name === 'NotAllowedError') {
+            console.warn("[Notifications] ⚠️ Usuário precisa interagir com a página para permitir sons");
+          } else {
+            console.warn("[Notifications] ⚠️ Não foi possível reproduzir som:", err);
+          }
+        });
+    }
+  } catch (err) {
+    console.warn("[Notifications] ❌ Erro ao reproduzir som:", err);
+  }
+}
+
+// Função para inicializar áudio após interação do usuário
+function initializeAudio() {
+  if (audioInitialized) return;
+  
+  try {
+    // Criar um áudio silencioso para desbloquear
+    const silentAudio = new Audio();
+    silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+    silentAudio.play().then(() => {
+      audioInitialized = true;
+      console.log("[Notifications] 🔊 Áudio inicializado com sucesso");
+    }).catch(() => {
+      console.log("[Notifications] ⚠️ Aguardando interação do usuário para habilitar sons");
     });
   } catch (err) {
-    console.warn("[Notifications] Erro ao reproduzir som:", err);
+    console.warn("[Notifications] Erro ao inicializar áudio:", err);
   }
 }
 
@@ -86,11 +142,27 @@ export function useNotifications() {
   const [loading, setLoading] = useState(true);
   const [socket, setSocket] = useState<Socket | null>(null);
 
-  // Preload dos sons mais comuns
+  // Preload dos sons mais comuns e inicializar áudio
   useEffect(() => {
+    // Inicializar áudio após primeira interação
+    const handleFirstInteraction = () => {
+      initializeAudio();
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+    };
+    
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('keydown', handleFirstInteraction);
+    
+    // Preload dos sons
     ["default", "message", "success", "warning", "error", "urgent"].forEach(type => {
       preloadSound(type as SoundType);
     });
+    
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('keydown', handleFirstInteraction);
+    };
   }, []);
 
   // Buscar notificações não lidas

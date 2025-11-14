@@ -961,8 +961,15 @@ startSocketRelay(io);
 const chatViewers = new Map<string, Set<string>>(); // chatId -> Set<userId>
 (io as any)._chatViewers = chatViewers; // expose to routes
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   console.log("[RT] client connected:", socket.id);
+
+  // Automatically join user to their personal notification room
+  const userId = await socketAuthUserId(socket);
+  if (userId) {
+    socket.join(`user:${userId}`);
+    console.log("[RT] socket joined user room", { socketId: socket.id, userId });
+  }
 
   socket.on("join", async (payload: { chatId?: string }) => {
     const chatId = payload?.chatId;

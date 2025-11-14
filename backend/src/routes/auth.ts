@@ -4,6 +4,8 @@ import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAnon, supabaseAdmin } from "../lib/supabase.ts";
 import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.ts";
 import { getIO } from "../lib/io.ts";
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
+import { randomUUID } from "crypto";
 
 export function registerAuthRoutes(app: express.Application) {
   console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');
@@ -215,6 +217,203 @@ export function registerAuthRoutes(app: express.Application) {
       return res.json(resp);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "profile update error" });
+    }
+  });
+
+  // Request password reset
+  app.post("/auth/forgot-password", async (req, res) => {
+    try {
+      const { email } = req.body || {};
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email é obrigatório" });
+      }
+
+      // Buscar usuário pelo email
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('[forgot-password] Error listing users:', authError);
+        // Por segurança, sempre retornar sucesso mesmo se o usuário não existir
+        return res.json({ 
+          ok: true, 
+          message: "Se o email existir em nossa base, você receberá instruções para redefinir sua senha." 
+        });
+      }
+
+      const user = authUser.users.find((u) => u.email === email);
+      
+      if (!user) {
+        // Por segurança, não revelar se o email existe ou não
+        return res.json({ 
+          ok: true, 
+          message: "Se o email existir em nossa base, você receberá instruções para redefinir sua senha." 
+        });
+      }
+
+      // Buscar nome do usuário
+      const { data: userData } = await supabaseAdmin
+        .from("users")
+        .select("name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      // Gerar token único
+      const resetToken = randomUUID();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+      // Salvar token no banco
+      const { error: insertError } = await supabaseAdmin
+        .from("password_reset_tokens")
+        .insert({
+          user_id: user.id,
+          token: resetToken,
+          expires_at: expiresAt.toISOString(),
+        });
+
+      if (insertError) {
+        console.error('[forgot-password] Error saving token:', insertError);
+        return res.status(500).json({ error: "Erro ao processar solicitação" });
+      }
+
+      // Enviar email
+      const emailResult = await sendPasswordResetEmail(
+        email,
+        resetToken,
+        userData?.name || email.split('@')[0]
+      );
+
+      if (!emailResult.success) {
+        console.error('[forgot-password] Error sending email:', emailResult.error);
+        return res.status(500).json({ error: "Erro ao enviar email de recuperação" });
+      }
+
+      return res.json({ 
+        ok: true, 
+        message: "Se o email existir em nossa base, você receberá instruções para redefinir sua senha." 
+      });
+    } catch (e: any) {
+      console.error('[forgot-password] Error:', e);
+      return res.status(500).json({ error: e?.message || "Erro ao processar solicitação" });
+    }
+  });
+
+  // Verify reset token
+  app.get("/auth/verify-reset-token/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({ error: "Token é obrigatório" });
+      }
+
+      // Buscar token no banco
+      const { data: tokenData, error: tokenError } = await supabaseAdmin
+        .from("password_reset_tokens")
+        .select("*")
+        .eq("token", token)
+        .maybeSingle();
+
+      if (tokenError || !tokenData) {
+        return res.status(400).json({ error: "Token inválido" });
+      }
+
+      // Verificar se o token já foi usado
+      if (tokenData.used_at) {
+        return res.status(400).json({ error: "Token já foi utilizado" });
+      }
+
+      // Verificar se o token expirou
+      if (new Date(tokenData.expires_at) < new Date()) {
+        return res.status(400).json({ error: "Token expirado" });
+      }
+
+      return res.json({ ok: true, valid: true });
+    } catch (e: any) {
+      console.error('[verify-reset-token] Error:', e);
+      return res.status(500).json({ error: e?.message || "Erro ao verificar token" });
+    }
+  });
+
+  // Reset password with token
+  app.post("/auth/reset-password", async (req, res) => {
+    try {
+      const { token, newPassword, confirmPassword } = req.body || {};
+
+      if (!token || !newPassword || !confirmPassword) {
+        return res.status(400).json({ error: "Todos os campos são obrigatórios" });
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: "As senhas não coincidem" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ error: "A senha deve ter no mínimo 6 caracteres" });
+      }
+
+      // Buscar token no banco
+      const { data: tokenData, error: tokenError } = await supabaseAdmin
+        .from("password_reset_tokens")
+        .select("*")
+        .eq("token", token)
+        .maybeSingle();
+
+      if (tokenError || !tokenData) {
+        return res.status(400).json({ error: "Token inválido" });
+      }
+
+      // Verificar se o token já foi usado
+      if (tokenData.used_at) {
+        return res.status(400).json({ error: "Token já foi utilizado" });
+      }
+
+      // Verificar se o token expirou
+      if (new Date(tokenData.expires_at) < new Date()) {
+        return res.status(400).json({ error: "Token expirado. Solicite um novo link de recuperação." });
+      }
+
+      // Atualizar senha do usuário
+      const { error: updateError } = await (supabaseAdmin as any).auth.admin.updateUserById(
+        tokenData.user_id,
+        { password: newPassword }
+      );
+
+      if (updateError) {
+        console.error('[reset-password] Error updating password:', updateError);
+        return res.status(500).json({ error: "Erro ao atualizar senha" });
+      }
+
+      // Marcar token como usado
+      await supabaseAdmin
+        .from("password_reset_tokens")
+        .update({ used_at: new Date().toISOString() })
+        .eq("token", token);
+
+      // Buscar email e nome do usuário para enviar confirmação
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(tokenData.user_id);
+      
+      if (authUser?.user?.email) {
+        const { data: userData } = await supabaseAdmin
+          .from("users")
+          .select("name")
+          .eq("user_id", tokenData.user_id)
+          .maybeSingle();
+
+        // Enviar email de confirmação (não bloquear a resposta se falhar)
+        sendPasswordChangedEmail(
+          authUser.user.email,
+          userData?.name || authUser.user.email.split('@')[0]
+        ).catch((e) => console.error('[reset-password] Error sending confirmation email:', e));
+      }
+
+      return res.json({ 
+        ok: true, 
+        message: "Senha alterada com sucesso! Você já pode fazer login com sua nova senha." 
+      });
+    } catch (e: any) {
+      console.error('[reset-password] Error:', e);
+      return res.status(500).json({ error: e?.message || "Erro ao redefinir senha" });
     }
   });
 }

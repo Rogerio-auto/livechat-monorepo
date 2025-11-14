@@ -73,16 +73,16 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
 
   const highlightItems = [
     {
-      title: "Ativação guiada",
-      description: "Receba recomendações do nosso time para configurar canais, agentes e automações.",
+      title: "Atendimento Multicanal",
+      description: "Integre WhatsApp, Instagram e outros canais em uma única plataforma unificada.",
     },
     {
-      title: "Dados centralizados",
-      description: "Cadastre empresa e equipe para liberar dashboards, funis e campanhas inteligentes.",
+      title: "Gestão de Equipe",
+      description: "Organize departamentos, distribua conversas automaticamente e monitore performance em tempo real.",
     },
     {
-      title: "Experiência moderna",
-      description: "Visual leve, responsivo e preparado automaticamente para tema claro ou escuro.",
+      title: "Campanhas e Automação",
+      description: "Envie mensagens em massa, automatize respostas e acompanhe resultados com relatórios detalhados.",
     },
   ];
 
@@ -110,10 +110,10 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
 
           <div className="space-y-3">
             <h1 className="text-4xl font-semibold leading-tight theme-heading">
-              Bem-vindo! Vamos preparar seu ambiente completo em poucos minutos
+              Transforme seu atendimento ao cliente
             </h1>
             <p className="max-w-xl text-sm theme-text-muted">
-              Integre dados do seu time, personalize o assistente inteligente e conecte-se a clientes desde o primeiro acesso.
+              Centralize conversas do WhatsApp, Instagram e outros canais. Gerencie sua equipe, automatize campanhas e acompanhe métricas em tempo real.
             </p>
           </div>
 
@@ -154,9 +154,9 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
               <FaPhone />
             </span>
             <div>
-              <p className="font-semibold theme-heading">Suporte humano disponível</p>
+              <p className="font-semibold theme-heading">Sistema completo de livechat</p>
               <p className="theme-text-muted">
-                Nosso time acompanha a ativação em horário comercial via WhatsApp e e-mail.
+                Atendimento em tempo real, histórico de conversas, transferência entre agentes e muito mais.
               </p>
             </div>
           </div>
@@ -177,9 +177,9 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
           >
             <FaRocket className="text-2xl" />
           </div>
-          <h2 className="text-2xl font-semibold theme-heading">Dados para liberar seu painel</h2>
+          <h2 className="text-2xl font-semibold theme-heading">Crie sua conta grátis</h2>
           <p className="text-xs theme-text-muted">
-            Preencha os campos abaixo e iniciaremos o seu ambiente de trabalho.
+            Comece a gerenciar seus atendimentos em poucos minutos.
           </p>
         </div>
 
@@ -202,7 +202,7 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
                 Dados do responsável
               </p>
               <p className="text-xs theme-text-muted">
-                Essas credenciais serão usadas para o primeiro acesso ao sistema.
+                Suas credenciais de acesso à plataforma de atendimento.
               </p>
             </header>
 

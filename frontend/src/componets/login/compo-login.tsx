@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../../assets/icon.png";
 import { useNavigate } from "react-router-dom";
+import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
 const API =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -10,6 +11,7 @@ export function CLogin() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [remember, setRemember] = useState(!!localStorage.getItem("remember_email"));
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -141,9 +143,13 @@ export function CLogin() {
               />
               <span className="text-gray-600 dark:text-gray-400">Lembrar-me</span>
             </label>
-            <a href="#" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition">
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition"
+            >
               Esqueceu a senha?
-            </a>
+            </button>
           </div>
 
           {/* Login Button */}
@@ -182,12 +188,18 @@ export function CLogin() {
           {/* Sign Up */}
           <p className="mt-6 text-center text-sm text-gray-600 dark:text-gray-400">
             É novo por aqui?{" "}
-            <a href="#" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold transition">
+            <a href="https://account.7sion.com" className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-semibold transition">
               Cadastre-se
             </a>
           </p>
         </form>
       </div>
+
+      {/* Modal de recuperação de senha */}
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
     </div>
   );
 }

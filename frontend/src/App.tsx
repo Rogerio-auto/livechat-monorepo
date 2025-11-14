@@ -13,6 +13,7 @@ import GaleriaPage from './pages/galeria'
 import AdminPage from './pages/admin'
 import InviteAcceptPage from './pages/convite'
 import SubscriptionPage from './pages/subscription'
+import { ResetPassword } from './pages/reset-password'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
 
@@ -24,6 +25,7 @@ function App() {
       <Routes>
         <Route path='/' element={<Navigate to="/dashboard" replace />}/>
         <Route path='/login' element={<Login/>}/>
+        <Route path='/reset-password' element={<ResetPassword/>}/>
         <Route path='/dashboard' element={<RequireAuth><Dash/></RequireAuth>}/>
         <Route path="/funil" element={<RequireAuth><SalesFunnel /></RequireAuth>} />
         <Route path='/clientes' element={<RequireAuth><ClientesPage /></RequireAuth>}/>

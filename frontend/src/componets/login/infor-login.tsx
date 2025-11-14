@@ -11,7 +11,7 @@ export function InfLogin() {
             Bem-vindo à <span className="text-blue-600 dark:text-blue-400">7 SION</span>
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-400">
-            Energia inteligente para um futuro sustentável
+            Plataforma completa de atendimento ao cliente
           </p>
         </div>
 
@@ -19,36 +19,36 @@ export function InfLogin() {
         <div className="space-y-4 mt-8">
           <div className="flex items-start gap-4 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-              <i className="fas fa-bolt text-blue-600 dark:text-blue-400"></i>
+              <i className="fas fa-comments text-blue-600 dark:text-blue-400"></i>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Gestão Inteligente</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Atendimento Multicanal</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Monitore e controle seu sistema de energia em tempo real
+                WhatsApp, Instagram e outros canais em uma única plataforma
               </p>
             </div>
           </div>
 
           <div className="flex items-start gap-4 p-4 rounded-2xl bg-green-500/5 border border-green-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
-              <i className="fas fa-leaf text-green-600 dark:text-green-400"></i>
+              <i className="fas fa-users text-green-600 dark:text-green-400"></i>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Sustentabilidade</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Gestão de Equipe</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Contribua para um futuro mais verde e sustentável
+                Organize departamentos e distribua conversas automaticamente
               </p>
             </div>
           </div>
 
           <div className="flex items-start gap-4 p-4 rounded-2xl bg-purple-500/5 border border-purple-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
-              <i className="fas fa-chart-line text-purple-600 dark:text-purple-400"></i>
+              <i className="fas fa-rocket text-purple-600 dark:text-purple-400"></i>
             </div>
             <div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Relatórios Detalhados</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-1">Campanhas Inteligentes</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Acompanhe métricas e otimize seu consumo
+                Envie mensagens em massa e acompanhe resultados em tempo real
               </p>
             </div>
           </div>
@@ -85,18 +85,6 @@ export function InfLogin() {
               <i className="fab fa-youtube text-lg"></i>
             </a>
           </div>
-        </div>
-
-        {/* Linha inferior */}
-        <div className="flex items-center justify-between pt-6 border-t border-gray-200 dark:border-gray-700">
-          <span className="text-sm text-gray-600 dark:text-gray-400">
-            <span className="font-semibold text-gray-900 dark:text-white">Rogério Viana</span>
-          </span>
-          <img
-            src={Logo}
-            alt="7 SION"
-            className="h-10 w-auto object-contain opacity-80"
-          />
         </div>
       </div>
     </div>

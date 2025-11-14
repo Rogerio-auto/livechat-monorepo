@@ -18,6 +18,7 @@ import {
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
 import { PlanBadge } from "../../components/subscription/PlanBadge";
+import { NotificationBell } from "../../components/notifications/NotificationBell";
 
 type Profile = {
   id: string;
@@ -147,12 +148,18 @@ export default function Sidebar() {
     <aside className="fixed top-0 left-0 z-50 h-screen w-16 overflow-hidden bg-[var(--color-sidebar-bg)] text-[var(--color-sidebar-text)] shadow-[0_12px_30px_-15px_rgba(8,12,20,0.9)] transition-all duration-300 ease-in-out group hover:w-72">
       <div className="relative flex h-full flex-col">
         <div className="border-b border-[color:var(--color-sidebar-border)] px-3 pb-3 pt-4">
-          <div className="flex items-center gap-3">
-            <img src={Logo} alt="logo" className="h-8 w-auto object-contain" />
-            <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <div className="font-semibold leading-tight text-[var(--color-sidebar-text)]">
-                {profile?.companyName || "Sua Empresa"}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <img src={Logo} alt="logo" className="h-8 w-auto object-contain" />
+              <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                <div className="font-semibold leading-tight text-[var(--color-sidebar-text)]">
+                  {profile?.companyName || "Sua Empresa"}
+                </div>
               </div>
+            </div>
+            {/* Notification Bell - sempre visível */}
+            <div className="ml-auto">
+              <NotificationBell />
             </div>
           </div>
           <div className="mt-3 flex items-center gap-3">

@@ -1,50 +1,65 @@
 import { useState } from 'react';
-import { NotificationService } from '../../services/NotificationService';
 import { Bell, Volume2, VolumeX, Download } from 'lucide-react';
 
 const SOUND_TYPES = ['default', 'success', 'warning', 'error', 'message', 'urgent'];
 
-const EXAMPLE_NOTIFICATIONS = [
+type NotificationType = 
+  | 'CHAT_MESSAGE'
+  | 'NEW_LEAD' 
+  | 'PROPOSAL_ACCEPTED'
+  | 'TASK_OVERDUE'
+  | 'CAMPAIGN_COMPLETED'
+  | 'PAYMENT_RECEIVED'
+  | 'SYSTEM_ALERT';
+
+interface TestNotification {
+  title: string;
+  message: string;
+  type: NotificationType;
+  category: string;
+}
+
+const EXAMPLE_NOTIFICATIONS: TestNotification[] = [
   {
     title: '💬 Nova mensagem',
     message: 'João Silva: Olá! Preciso de ajuda',
-    type: 'CHAT_MESSAGE' as const,
+    type: 'CHAT_MESSAGE',
     category: 'chat',
   },
   {
     title: '🎯 Novo Lead',
     message: 'Lead capturado: Maria Santos - Interesse em produto X',
-    type: 'NEW_LEAD' as const,
+    type: 'NEW_LEAD',
     category: 'lead',
   },
   {
     title: '🎉 Proposta Aceita',
     message: 'Cliente ABC aceitou a proposta #1234',
-    type: 'PROPOSAL_ACCEPTED' as const,
+    type: 'PROPOSAL_ACCEPTED',
     category: 'proposal',
   },
   {
     title: '⚠️ Tarefa Atrasada',
     message: 'A tarefa "Ligar para cliente" está 2 dias atrasada',
-    type: 'TASK_OVERDUE' as const,
+    type: 'TASK_OVERDUE',
     category: 'task',
   },
   {
     title: '📢 Campanha Finalizada',
     message: 'Campanha "Black Friday" enviada para 1.500 contatos',
-    type: 'CAMPAIGN_COMPLETED' as const,
+    type: 'CAMPAIGN_COMPLETED',
     category: 'campaign',
   },
   {
     title: '💰 Pagamento Recebido',
     message: 'Pagamento de R$ 2.500,00 confirmado',
-    type: 'PAYMENT_RECEIVED' as const,
+    type: 'PAYMENT_RECEIVED',
     category: 'payment',
   },
   {
     title: '🚨 Alerta do Sistema',
     message: 'Servidor com alta utilização de CPU (95%)',
-    type: 'SYSTEM_ALERT' as const,
+    type: 'SYSTEM_ALERT',
     category: 'system',
   },
 ];

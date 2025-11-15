@@ -14,11 +14,9 @@ type LeadForm = {
 };
 
 export function mapLead(form: LeadForm) {
-  return {
-    personType: form.tipoPessoa ?? null,
-    phone: form.telefone,
+  const mapped: any = {
     cpf: form.cpf ?? null,
-    name: form.nome,
+    name: form.nome ?? null,
     rg: form.rg ?? null,
     rgOrgao: form.orgao ?? null,
     birthDate: form.dataNascimento ? new Date(form.dataNascimento).toISOString() : null,
@@ -44,7 +42,17 @@ export function mapLead(form: LeadForm) {
     notes: form.observacoes ?? null,
     statusClient: form.status ?? "Ativo",
     kanban_column_id: (form.kanban_column_id || form.etapa) ?? null,
-  } as any;
+  };
+  
+  // personType e phone são obrigatórios apenas no CREATE, não no UPDATE
+  if (form.tipoPessoa !== undefined) {
+    mapped.personType = form.tipoPessoa ?? null;
+  }
+  if (form.telefone !== undefined) {
+    mapped.phone = form.telefone ?? null;
+  }
+  
+  return mapped;
 }
 
 export function registerLeadRoutes(app: express.Application) {
@@ -329,7 +337,11 @@ export function registerLeadRoutes(app: express.Application) {
       return res.status(400).json({ error: "Missing company context" });
     }
     
+    console.log("[PUT /leads/:id] Received payload:", JSON.stringify(req.body, null, 2));
+    
     const payload = mapLead(req.body);
+    
+    console.log("[PUT /leads/:id] Mapped payload:", JSON.stringify(payload, null, 2));
     
     // Atualizar lead
     const { data, error } = await supabaseAdmin
@@ -340,7 +352,12 @@ export function registerLeadRoutes(app: express.Application) {
       .select()
       .single();
       
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error("[PUT /leads/:id] Update error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    console.log("[PUT /leads/:id] Updated successfully:", { id, name: data?.name });
     
     // Se o lead tem customer_id, atualizar também a tabela customers
     // (excluindo phone, msisdn e lid conforme solicitado)

@@ -77,14 +77,26 @@ export function ClientesPage() {
           fetchJson<LeadStats>(`${API}/api/leads/stats`),
           fetchJson<{ id?: string | null }>(`${API}/kanban/my-board`).catch(() => null),
         ]);
+        console.log('[CLIENTES] 📊 Stats recebido:', {
+          active: statsData.active,
+          inactive: statsData.inactive,
+          full: statsData
+        });
+        console.log('[CLIENTES] 👥 Clientes recebidos:', clientesData.length);
+        console.log('[CLIENTES] 🎯 Board ID:', board?.id);
+        
         setClientes(clientesData);
         setFilteredClientes(clientesData);
         setStats(statsData);
         if (board?.id) {
-          const { data: cols } = await fetchJson<{ data: KanbanColumn[] }>(
-            `${API}/kanban/${board.id}/columns`
+          const cols = await fetchJson<KanbanColumn[]>(
+            `${API}/kanban/boards/${board.id}/columns`
           );
+          console.log('[CLIENTES] 📋 Colunas carregadas:', cols);
+          console.log('[CLIENTES] 🔍 Exemplo de cliente com kanban:', clientesData[0]);
           setColumns(cols || []);
+        } else {
+          console.log('[CLIENTES] ⚠️ Nenhum board encontrado');
         }
       } catch (err) {
         console.error("Failed to load clientes:", err);

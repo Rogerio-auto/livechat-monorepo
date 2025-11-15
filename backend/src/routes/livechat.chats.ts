@@ -648,11 +648,35 @@ export function registerLivechatChatRoutes(app: express.Application) {
               async () =>
                 await supabaseAdmin
                   .from("leads")
-                  .select("id, name, phone")
+                  .select("id, name, phone, kanban_column_id")
                   .in("id", customerIds),
             )
           : Promise.resolve({ data: [], error: null, count: null } as const),
       ]);
+
+      // Buscar nomes das colunas do kanban
+      const kanbanColumnIds = toUuidArray(
+        (leadsResp.data || []).map((lead: any) => lead.kanban_column_id).filter(Boolean)
+      );
+      const kanbanColumnsResp = kanbanColumnIds.length
+        ? await traceSupabase(
+            "kanban_columns.names",
+            "kanban_columns",
+            queryLog,
+            async () =>
+              await supabaseAdmin
+                .from("kanban_columns")
+                .select("id, name")
+                .in("id", kanbanColumnIds),
+          )
+        : { data: [], error: null, count: null };
+
+      const kanbanColumnNames: Record<string, string> = {};
+      if (kanbanColumnsResp.data) {
+        for (const col of kanbanColumnsResp.data as any[]) {
+          if (col?.id) kanbanColumnNames[col.id] = col.name || null;
+        }
+      }
 
       let avatarByRemote: Record<string, string | null> = {};
       if (remoteIdSet.size > 0 && companyId) {
@@ -852,10 +876,26 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }
       }
 
+      // Mapear stage_id e stage_name dos leads
+      const leadStages: Record<string, { stage_id: string | null; stage_name: string | null }> = {};
+      for (const row of (((leadsResp as any).data || []) as any[])) {
+        const id = String(row.id);
+        const columnId = row.kanban_column_id;
+        leadStages[id] = {
+          stage_id: columnId || null,
+          stage_name: columnId ? kanbanColumnNames[columnId] || null : null,
+        };
+      }
+
       for (const chat of items as any[]) {
         const display = customerDisplay[String(chat.customer_id)] || null;
         chat.customer_name = display?.name || null;
         chat.customer_phone = display?.phone || null;
+
+        // Adicionar stage_id e stage_name do lead
+        const leadStage = leadStages[String(chat.customer_id)] || null;
+        chat.stage_id = leadStage?.stage_id || null;
+        chat.stage_name = leadStage?.stage_name || null;
 
         const remoteKey =
           (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||

@@ -131,7 +131,7 @@ export function registerLeadRoutes(app: express.Application) {
       // Get all leads for this company
       const { data: allLeads, error: leadsError } = await supabaseAdmin
         .from("leads")
-        .select("id, status_client, created_at, kanban_column_id, customer_id")
+        .select('id, "statusClient", status_client, created_at, kanban_column_id, customer_id')
         .eq("company_id", companyId);
       
       if (leadsError) throw leadsError;
@@ -144,9 +144,10 @@ export function registerLeadRoutes(app: express.Application) {
 
       // Calculate basic metrics
       const total = leads.length;
-      const active = leads.filter((l: any) => 
-        (l.status_client || "").toLowerCase() === "ativo"
-      ).length;
+      const active = leads.filter((l: any) => {
+        const status = (l.statusClient || l.status_client || "").toLowerCase();
+        return status === "ativo";
+      }).length;
       const inactive = total - active;
 
       const newThisMonth = leads.filter((l: any) => 

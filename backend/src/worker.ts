@@ -2309,10 +2309,17 @@ async function processMediaInBackground(args: {
     try {
       const io = getIO();
       if (io) {
+        // Buscar o caption da mensagem para enviar no evento
+        const messageData = await db.oneOrNone<{ caption: string | null }>(
+          'SELECT caption FROM public.chat_messages WHERE id = $1',
+          [messageId]
+        );
+        
         io.to(`chat:${chatId}`).emit("message:media-ready", {
           messageId,
           media_url: buildProxyUrl(publicUrl),
           media_storage_path: mediaInfo.storagePath,
+          caption: messageData?.caption ?? null,
         });
         
         io.emit("chat:updated", {
@@ -2320,7 +2327,7 @@ async function processMediaInBackground(args: {
           last_message_media_url: buildProxyUrl(publicUrl),
         });
         
-        console.log('[WAHA][background] 📡 Socket events emitted:', { messageId, chatId });
+        console.log('[WAHA][background] 📡 Socket events emitted:', { messageId, chatId, hasCaption: !!messageData?.caption });
       } else {
         console.warn('[WAHA][background] ⚠️ Socket.IO not available, skipping real-time update');
       }
@@ -2685,6 +2692,17 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
       : null;
 
+  // Extract caption from message (WAHA sends caption in body for media messages)
+  const caption = hasMedia && body && body !== `[${messageType}]` ? body : null;
+  
+  console.log('[WAHA][worker] 📝 Caption extraction:', {
+    hasMedia,
+    body,
+    messageType,
+    extractedCaption: caption,
+    messageId
+  });
+
   // ========== STEP 1: INSERT MESSAGE WITHOUT MEDIA (FAST PATH) ==========
   const upsertResult = await upsertChatMessage({
     chatId,
@@ -2694,6 +2712,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     type: messageType,
     viewStatus: ackStatus ?? null,
     sentFromDevice,
+    caption: caption,
     // No media yet - will be updated in background
     mediaStoragePath: null,
     mediaPublicUrl: null,
@@ -2786,6 +2805,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     type: upsertResult.message.type ?? messageType,
     is_private: false,
     media_url: buildProxyUrl(upsertResult.message.media_url) ?? null,
+    caption: caption ?? null,
     remote_sender_id: upsertResult.message.remote_sender_id ?? null,
     remote_sender_name: upsertResult.message.remote_sender_name ?? null,
     remote_sender_phone: upsertResult.message.remote_sender_phone ?? null,

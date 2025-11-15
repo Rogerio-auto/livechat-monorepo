@@ -1538,11 +1538,16 @@ const scrollToBottom = useCallback(
       if (!payload?.messageId || !payload?.media_url) return;
       console.log('[livechat] Media ready:', payload);
       
-      // Atualiza mensagem no cache
+      // Atualiza mensagem no cache incluindo caption
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === payload.messageId
-            ? { ...msg, media_url: payload.media_url, media_storage_path: payload.media_storage_path }
+            ? { 
+                ...msg, 
+                media_url: payload.media_url, 
+                media_storage_path: payload.media_storage_path,
+                caption: payload.caption ?? msg.caption,
+              }
             : msg
         )
       );

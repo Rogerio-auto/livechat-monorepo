@@ -179,6 +179,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
 
         const mapped = (data || []).map((c) => ({
             id: c.id,
+            name: c.name,
             title: c.name,
             color: c.color || "#6B7280",
             position: c.position,

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { API, fetchJson } from "../../utils/api";
 import { Input, Button } from "../../components/ui";
+import { useToast } from "../../hooks/useToast";
+import ToastContainer from "../common/ToastContainer";
 
 type AgentRow = {
   id: string;
@@ -22,6 +24,7 @@ export default function AgentesPanel() {
   const [loading, setLoading] = useState(false);
   const [newAgent, setNewAgent] = useState<NewAgentForm>({ name: "", email: "", role: "AGENT" });
   const inflight = useRef(false);
+  const { toasts, showToast, dismissToast } = useToast();
 
   const loadAgents = async () => {
     if (inflight.current) return;
@@ -41,27 +44,66 @@ export default function AgentesPanel() {
   }, []);
 
   const saveAgent = async (id: string, patch: Partial<AgentRow>) => {
-    await fetchJson(`${API}/settings/users/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(patch),
-    });
-    setAgents((prev) => prev.map((agent) => (agent.id === id ? { ...agent, ...patch } : agent)));
+    try {
+      await fetchJson(`${API}/settings/users/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      setAgents((prev) => prev.map((agent) => (agent.id === id ? { ...agent, ...patch } : agent)));
+      showToast("Colaborador atualizado com sucesso!", "success");
+    } catch (e: any) {
+      showToast(e?.message || "Erro ao atualizar colaborador", "error");
+    }
   };
 
   const removeAgent = async (id: string) => {
-    await fetchJson(`${API}/settings/users/${id}`, { method: "DELETE" });
-    setAgents((prev) => prev.filter((agent) => agent.id !== id));
+    try {
+      await fetchJson(`${API}/settings/users/${id}`, { method: "DELETE" });
+      setAgents((prev) => prev.filter((agent) => agent.id !== id));
+      showToast("Colaborador removido com sucesso!", "success");
+    } catch (e: any) {
+      showToast(e?.message || "Erro ao remover colaborador", "error");
+    }
   };
 
   const createAgent = async () => {
-    if (!newAgent.name || !newAgent.email) return;
-    const payload = { name: newAgent.name, email: newAgent.email, role: newAgent.role };
-    const created = await fetchJson<AgentRow>(`${API}/settings/users`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    setAgents((prev) => [created, ...prev]);
-    setNewAgent({ name: "", email: "", role: "AGENT" });
+    if (!newAgent.name || !newAgent.email) {
+      showToast("Preencha nome e email do colaborador", "warning");
+      return;
+    }
+    
+    try {
+      const payload = { name: newAgent.name, email: newAgent.email, role: newAgent.role };
+      const created = await fetchJson<AgentRow>(`${API}/settings/users`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setAgents((prev) => [created, ...prev]);
+      setNewAgent({ name: "", email: "", role: "AGENT" });
+      showToast("Colaborador criado com sucesso! Email de convite enviado.", "success");
+    } catch (e: any) {
+      // Verificar se é erro de limite atingido
+      const errorData = e?.data || {};
+      if (errorData.code === "LIMIT_REACHED") {
+        showToast(
+          errorData.message || `Limite de ${errorData.limit} colaboradores atingido. Faça upgrade do seu plano para adicionar mais usuários.`,
+          "error"
+        );
+      } else {
+        showToast(e?.message || "Erro ao criar colaborador", "error");
+      }
+    }
+  };
+
+  const resendInvite = async (userId: string, userEmail: string) => {
+    try {
+      await fetchJson(`${API}/settings/users/${userId}/resend-invite`, {
+        method: "POST",
+      });
+      showToast(`Convite reenviado para ${userEmail} com sucesso!`, "success");
+    } catch (e: any) {
+      showToast(e?.message || "Erro ao reenviar convite", "error");
+    }
   };
 
   return (
@@ -119,10 +161,10 @@ export default function AgentesPanel() {
 
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-colors duration-300">
         <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-3 grid grid-cols-12 gap-4 text-xs uppercase tracking-wide text-gray-600 dark:text-gray-400 font-semibold">
-          <div className="col-span-4">Nome</div>
-          <div className="col-span-4">Email</div>
+          <div className="col-span-3">Nome</div>
+          <div className="col-span-3">Email</div>
           <div className="col-span-2">Função</div>
-          <div className="col-span-2 text-right">Ações</div>
+          <div className="col-span-4 text-right">Ações</div>
         </div>
         {loading && <div className="px-6 py-8 text-center text-gray-600 dark:text-gray-400">Carregando...</div>}
         {!loading && agents.length === 0 && (
@@ -130,14 +172,14 @@ export default function AgentesPanel() {
         )}
         {!loading && agents.map((agent) => (
           <div key={agent.id} className="px-6 py-4 grid grid-cols-12 gap-4 items-center border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
-            <div className="col-span-4">
+            <div className="col-span-3">
               <Input
                 value={agent.name}
                 onChange={(e) => saveAgent(agent.id, { name: e.target.value })}
                 autoComplete="off"
               />
             </div>
-            <div className="col-span-4">
+            <div className="col-span-3">
               <Input
                 type="email"
                 value={agent.email}
@@ -157,7 +199,18 @@ export default function AgentesPanel() {
                 <option value="MANAGER">Gestor</option>
               </select>
             </div>
-            <div className="col-span-2 text-right">
+            <div className="col-span-4 text-right flex gap-2 justify-end">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => resendInvite(agent.id, agent.email)}
+                title="Reenviar email de convite"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Reenviar Convite
+              </Button>
               <Button
                 variant="danger"
                 size="sm"
@@ -169,6 +222,7 @@ export default function AgentesPanel() {
           </div>
         ))}
       </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </section>
   );
 }

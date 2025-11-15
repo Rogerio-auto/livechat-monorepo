@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/requireAuth.ts";
 import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
-import { FRONTEND_ORIGINS } from "../config/env.ts";
+import { ONBOARDING_URL } from "../config/env.ts";
 
 const ROLE_VALUES = ["AGENT", "SUPERVISOR", "TECHNICIAN", "MANAGER"] as const;
 const ROLE_ARRAY = [...ROLE_VALUES];
@@ -13,9 +13,7 @@ const USERS_SELECT =
 const INVITE_REDIRECT_PATH = "/convite";
 const INVITE_REDIRECT_TO =
   process.env.SUPABASE_INVITE_REDIRECT ||
-  (FRONTEND_ORIGINS[0]
-    ? `${FRONTEND_ORIGINS[0].replace(/\/$/, "")}${INVITE_REDIRECT_PATH}`
-    : "");
+  `${ONBOARDING_URL.replace(/\/$/, "")}${INVITE_REDIRECT_PATH}`;
 
 type Role = (typeof ROLE_VALUES)[number];
 
@@ -277,6 +275,50 @@ export function registerSettingsUsersRoutes(app: Application) {
     } catch (e: any) {
       const status = Number(e?.status) || 500;
       const message = e?.message || "user update error";
+      return res.status(status).json({ error: message });
+    }
+  });
+
+  app.post("/settings/users/:id/resend-invite", requireAuth, async (req: any, res) => {
+    try {
+      const { companyId } = await fetchActorContext(req);
+      const { id } = req.params as { id: string };
+
+      // Buscar usuário
+      const { data: user, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id, company_id, user_id, email, name")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (userError) {
+        return res.status(500).json({ error: userError.message });
+      }
+      if (!user || user.company_id !== companyId) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      // Reenviar convite usando o Supabase Admin
+      const inviteOptions: Record<string, any> = {
+        data: { name: user.name, company_id: companyId },
+      };
+      if (INVITE_REDIRECT_TO) {
+        inviteOptions.redirectTo = INVITE_REDIRECT_TO;
+      }
+
+      const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        user.email,
+        inviteOptions,
+      );
+
+      if (inviteError) {
+        return res.status(400).json({ error: inviteError.message });
+      }
+
+      return res.json({ success: true, message: "Convite reenviado com sucesso" });
+    } catch (e: any) {
+      const status = Number(e?.status) || 500;
+      const message = e?.message || "Erro ao reenviar convite";
       return res.status(status).json({ error: message });
     }
   });

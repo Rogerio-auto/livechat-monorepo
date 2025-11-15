@@ -82,7 +82,10 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}): Promise
 
   if (!res.ok) {
     const msg = (data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`;
-    throw new Error(msg);
+    const error: any = new Error(msg);
+    error.data = data; // Anexar dados completos do erro para uso posterior
+    error.status = res.status;
+    throw error;
   }
   return data as T;
 }

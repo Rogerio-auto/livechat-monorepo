@@ -262,43 +262,12 @@ export function registerOnboardingRoutes(app: Application) {
 
       console.log("[signup-complete] ✅ Usuário criado em public.users");
 
-      // ============ ETAPA 4: LOGIN AUTOMÁTICO ============
-      console.log("[signup-complete] 4️⃣ Fazendo login automático...");
-      const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        console.error("[signup-complete] ⚠️ Erro ao fazer login (não crítico):", signInError);
-      }
-
-      let accessToken = null;
-      if (signInData?.session) {
-        accessToken = signInData.session.access_token;
-        console.log("[signup-complete] ✅ Token JWT gerado");
-        
-        // Setar cookie HTTP-only
-        res.cookie(JWT_COOKIE_NAME, accessToken, {
-          httpOnly: true,
-          secure: JWT_COOKIE_SECURE,
-          sameSite: "lax",
-          domain: JWT_COOKIE_DOMAIN,
-          path: "/",
-          maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
-      }
-
       console.log("[signup-complete] 🎉 Cadastro completo realizado com sucesso!");
       return res.json({
         success: true,
         user_id: publicUser.id,
         company_id: company.id,
-        user: publicUser,
-        company: company,
-        access_token: accessToken,
-        redirect_url: `${FRONTEND_URL}/dashboard`, // URL dinâmica baseada no ambiente
-        message: "Cadastro realizado com sucesso! Redirecionando...",
+        message: "Cadastro realizado com sucesso! Faça login para acessar o sistema.",
       });
     } catch (error: any) {
       console.error("[signup-complete] 💥 Erro inesperado:", error);

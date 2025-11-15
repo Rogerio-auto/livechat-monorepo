@@ -11,7 +11,6 @@ import ProdutosPage from './pages/produtos'
 import ConfiguracoesPage from './pages/configuracoes'
 import GaleriaPage from './pages/galeria'
 import AdminPage from './pages/admin'
-import InviteAcceptPage from './pages/convite'
 import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
 import { RequireAuth } from './componets/auth/RequireAuth'
@@ -37,7 +36,6 @@ function App() {
         <Route path='/configuracoes' element={<RequireAuth><ConfiguracoesPage/></RequireAuth>}/>
         <Route path='/admin' element={<RequireAuth><AdminPage/></RequireAuth>}/>
         <Route path='/subscription' element={<RequireAuth><SubscriptionPage/></RequireAuth>}/>
-        <Route path='/convite' element={<InviteAcceptPage/>}/>
         
 
       </Routes>

@@ -12,7 +12,7 @@ import type { TeamSize } from "../../types/onboarding";
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 export function OnboardingPage() {
-  const { status, loading, fetchStatus, saveStep1, saveStep2, saveStep3 } = useOnboarding();
+  const { status, loading, saveStep1, saveStep2, saveStep3 } = useOnboarding();
   const [currentStep, setCurrentStep] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -69,14 +69,8 @@ export function OnboardingPage() {
 
       console.log("✅ Conta criada com sucesso:", result);
       
-      // Redirecionar para o dashboard (o modal de onboarding vai aparecer lá)
-      if (result.redirect_url) {
-        window.location.href = result.redirect_url;
-      } else {
-        // Fallback: buscar status e continuar no fluxo atual
-        await fetchStatus();
-        setCurrentStep(2);
-      }
+      // Redirecionar para o login para autenticação manual
+      window.location.href = "https://app.7sion.com/login";
     } catch (err: any) {
       console.error("❌ Erro ao criar conta:", err);
       setError(err.message);
@@ -137,10 +131,10 @@ export function OnboardingPage() {
         throw new Error("Erro ao salvar plano");
       }
 
-      const result = await res.json();
+      await res.json();
       
-      // Redirecionar para o dashboard
-      window.location.href = result.redirect_url || "https://app.7sion.com/dashboard";
+      // Redirecionar para o login para autenticação manual
+      window.location.href = "https://app.7sion.com/login";
     } catch (err: any) {
       setError(err.message);
     }

@@ -95,6 +95,14 @@ export function checkResourceLimit(resource: keyof PlanLimits) {
 
   const limitCheck = await checkLimit(companyId, resource);
       
+      console.log(`[checkResourceLimit] ${resource}:`, {
+        companyId,
+        allowed: limitCheck.allowed,
+        limit: limitCheck.limit,
+        current: limitCheck.current,
+        remaining: limitCheck.remaining
+      });
+      
       if (!limitCheck.allowed) {
         return res.status(403).json({
           error: `Limit reached for ${resource}`,
@@ -102,7 +110,8 @@ export function checkResourceLimit(resource: keyof PlanLimits) {
           resource,
           limit: limitCheck.limit,
           current: limitCheck.current,
-          remaining: limitCheck.remaining
+          remaining: limitCheck.remaining,
+          message: `Você atingiu o limite de ${limitCheck.limit} ${resource === 'users' ? 'colaboradores' : resource}. Atualmente você tem ${limitCheck.current} ${resource === 'users' ? 'colaboradores' : resource} cadastrados.`
         });
       }
 

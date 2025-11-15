@@ -77,6 +77,7 @@ export function registerLeadRoutes(app: express.Application) {
     if (error) return res.status(500).json({ error: error.message });
     const mapped = (data ?? []).map((r: any) => ({
       id: r.id,
+      nome: r.name,
       name: r.name,
       cpf: r.cpf,
       email: r.email,
@@ -84,13 +85,13 @@ export function registerLeadRoutes(app: express.Application) {
       kanban_column_id: r.kanban_column_id,
       tipoPessoa: r.person_type,
       rg: r.rg,
-      orgao: r.rg_orgao,
-      dataNascimento: r.birth_date,
+      orgao: r.rgOrgao,
+      dataNascimento: r.birthDate,
       mae: r.mother,
       pai: r.father,
       sexo: r.gender,
-      naturalidade: r.birth_place,
-      estadoCivil: r.marital_status,
+      naturalidade: r.birthPlace,
+      estadoCivil: r.maritalStatus,
       conjuge: r.spouse,
       cep: r.cep,
       rua: r.street,
@@ -100,9 +101,9 @@ export function registerLeadRoutes(app: express.Application) {
       uf: r.state,
       cidade: r.city,
       celular: r.cellphone,
-      celularAlternativo: r.alt_cellphone,
+      celularAlternativo: r.altCellphone,
       telefone: r.telephone,
-      telefoneAlternativo: r.alt_telephone,
+      telefoneAlternativo: r.altTelephone,
       site: r.site,
       observacoes: r.notes,
       createdAt: r.created_at,
@@ -329,6 +330,8 @@ export function registerLeadRoutes(app: express.Application) {
     }
     
     const payload = mapLead(req.body);
+    
+    // Atualizar lead
     const { data, error } = await supabaseAdmin
       .from("leads")
       .update(payload)
@@ -336,7 +339,49 @@ export function registerLeadRoutes(app: express.Application) {
       .eq("company_id", companyId)
       .select()
       .single();
+      
     if (error) return res.status(500).json({ error: error.message });
+    
+    // Se o lead tem customer_id, atualizar também a tabela customers
+    // (excluindo phone, msisdn e lid conforme solicitado)
+    if (data?.customer_id) {
+      const customerPayload: any = {};
+      
+      // Dados gerais permitidos
+      if (payload.name) customerPayload.name = payload.name;
+      if (payload.email !== undefined) customerPayload.email = payload.email;
+      if (payload.cpf !== undefined) customerPayload.cpf_cnpj = payload.cpf;
+      if (payload.birthDate !== undefined) customerPayload.birth_date = payload.birthDate;
+      
+      // Endereço
+      const addressParts = [
+        payload.street,
+        payload.number,
+        payload.complement,
+        payload.neighborhood,
+      ].filter(Boolean);
+      if (addressParts.length > 0) {
+        customerPayload.address = addressParts.join(", ");
+      }
+      if (payload.city !== undefined) customerPayload.city = payload.city;
+      if (payload.state !== undefined) customerPayload.state = payload.state;
+      if (payload.cep !== undefined) customerPayload.zip_code = payload.cep;
+      
+      // Atualizar customer se tiver algum dado
+      if (Object.keys(customerPayload).length > 0) {
+        const { error: custError } = await supabaseAdmin
+          .from("customers")
+          .update(customerPayload)
+          .eq("id", data.customer_id)
+          .eq("company_id", companyId);
+          
+        if (custError) {
+          console.error("[leads/:id PUT] Failed to sync customer:", custError);
+          // Não retorna erro, apenas loga
+        }
+      }
+    }
+    
     return res.json(data);
   });
 

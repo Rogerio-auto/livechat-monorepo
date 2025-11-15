@@ -108,22 +108,23 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
 
   const sanitize = (d: any) => {
     const payload: any = {
-      name: d.nome?.trim() || "",
+      nome: d.nome?.trim() || "",
       cpf: unformatCPF(d.cpf),
       email: d.email?.trim() || "",
       status: d.status || "ativo",
       kanban_column_id: d.kanban_column_id || null,
+      tipoPessoa: d.tipoPessoa || null,
     };
 
     // Campos opcionais - só adiciona se tiver valor
     if (d.rg) payload.rg = d.rg.trim();
     if (d.orgao) payload.orgao = d.orgao.trim();
-    if (d.dataNascimento) payload.data_nascimento = toISODate(d.dataNascimento);
+    if (d.dataNascimento) payload.dataNascimento = toISODate(d.dataNascimento);
     if (d.mae) payload.mae = d.mae.trim();
     if (d.pai) payload.pai = d.pai.trim();
     if (d.sexo) payload.sexo = d.sexo.trim();
     if (d.naturalidade) payload.naturalidade = d.naturalidade.trim();
-    if (d.estadoCivil) payload.estado_civil = d.estadoCivil.trim();
+    if (d.estadoCivil) payload.estadoCivil = d.estadoCivil.trim();
     if (d.conjuge) payload.conjuge = d.conjuge.trim();
     if (d.cep) payload.cep = unformatCEP(d.cep);
     if (d.rua) payload.rua = d.rua.trim();
@@ -133,12 +134,11 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
     if (d.uf) payload.uf = normUF(d.uf);
     if (d.cidade) payload.cidade = d.cidade.trim();
     if (d.celular) payload.celular = unformatPhoneBR(d.celular);
-    if (d.celularAlternativo) payload.celular_alternativo = unformatPhoneBR(d.celularAlternativo);
+    if (d.celularAlternativo) payload.celularAlternativo = unformatPhoneBR(d.celularAlternativo);
     if (d.telefone) payload.telefone = unformatPhoneBR(d.telefone);
-    if (d.telefoneAlternativo) payload.telefone_alternativo = unformatPhoneBR(d.telefoneAlternativo);
+    if (d.telefoneAlternativo) payload.telefoneAlternativo = unformatPhoneBR(d.telefoneAlternativo);
     if (d.site) payload.site = d.site.trim();
     if (d.observacoes) payload.observacoes = d.observacoes.trim();
-    if (d.tipoPessoa) payload.tipo_pessoa = d.tipoPessoa;
 
     return payload;
   };

@@ -45,8 +45,8 @@ export function DashboardNew() {
   return (
     <>
       <Sidebar />
-      <TrialBanner />
       <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/30 transition-colors duration-300">
+        <TrialBanner />
         <div className="h-screen overflow-auto p-6">
           <div className="w-full space-y-6">
             <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-2xl">

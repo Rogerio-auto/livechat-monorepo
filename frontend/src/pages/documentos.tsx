@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import Sidebar from "../componets/Sidbars/sidebar";
 import { useLocation } from "react-router-dom";
 import ProposalForm from "../componets/propostas/ProposalForm";
 
@@ -280,8 +279,6 @@ export default function DocumentosPage() {
   }, [createDoc?.step, createDoc?.type]);
 
   return (
-    <>
-      <Sidebar />
       <div
         className="ml-16 min-h-screen p-8"
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
@@ -646,7 +643,6 @@ export default function DocumentosPage() {
           </div>
         )}
       </div>
-    </>
   );
 }
 

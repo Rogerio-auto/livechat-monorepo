@@ -205,8 +205,6 @@ export function ClientesPage() {
   };
 
   return (
-    <>
-      <Sidebar />
   <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
         <div className="h-screen overflow-auto p-6">
           <div className="w-full space-y-6">
@@ -572,6 +570,5 @@ export function ClientesPage() {
           </div>
         )}
       </div>
-    </>
   );
 }

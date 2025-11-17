@@ -1,7 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { FaPlus, FaTimes, FaUser, FaEnvelope, FaPhoneAlt, FaTag, FaEdit, FaCamera } from "react-icons/fa";
-import Sidebar from "../componets/Sidbars/sidebar";
 import { NewColumnForm } from "../componets/funil/NewColumnForm";
 import type { Column, Card, LeadListItem } from "./funil/types";
 import { LeadPicker } from "../componets/funil/LeadPicker";
@@ -674,13 +673,10 @@ export function SalesFunnel() {
   // Se precisa configurar, mostrar apenas o modal (sem verificar boardId)
   if (needsSetup) {
     return (
-      <>
-        <Sidebar />
         <KanbanSetupModal 
           onComplete={handleCreateBoard}
           isLoading={isCreatingBoard}
         />
-      </>
     );
   }
   
@@ -695,8 +691,6 @@ export function SalesFunnel() {
 
   // ===== RENDER =====
   return (
-    <>
-      <Sidebar />
       
       <div
         className="relative ml-16 min-h-screen flex-1 transition-colors"
@@ -1265,7 +1259,6 @@ export function SalesFunnel() {
           </div>
         )}
       </div>
-    </>
   );
 
 }

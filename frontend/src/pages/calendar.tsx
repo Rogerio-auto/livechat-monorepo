@@ -5,7 +5,6 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { EventClickArg } from "@fullcalendar/core";
-import Sidebar from "../componets/Sidbars/sidebar";
 import { API, fetchJson } from "../utils/api";
 import { 
   FaCalendarAlt, FaUser, FaBuilding, FaCog, FaLock, FaPlus, 
@@ -393,9 +392,7 @@ export function CalendarioPage() {
   }, [eventos, activeView, selectedCalendars, filterEventType, filterStatus, personalCalendars, companyCalendars, userProfile]);
 
   return (
-    <>
-      <Sidebar />
-      <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
+    <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
         <div className="h-screen overflow-auto p-6">
           <div className="max-w-[1600px] mx-auto space-y-6">
             {/* Card principal com todo o conteúdo */}
@@ -1395,6 +1392,5 @@ export function CalendarioPage() {
         )}
 
       </div>
-    </>
   );
 }

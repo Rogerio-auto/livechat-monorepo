@@ -1,6 +1,7 @@
 import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
+import { requireInboxAccess } from "../middlewares/requireInboxAccess.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 
@@ -58,7 +59,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // Inboxes do usuário autenticado
-  app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
+  app.get("/livechat/inboxes/my", requireAuth, requireInboxAccess, async (req: any, res) => {
     try {
       const authUserId = req.user.id as string;
 
@@ -107,7 +108,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // List all inboxes of current user's company with stats
-  app.get('/livechat/inboxes/stats', requireAuth, async (req: any, res) => {
+  app.get('/livechat/inboxes/stats', requireAuth, requireInboxAccess, async (req: any, res) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
@@ -154,7 +155,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // List all inboxes of current user's company
-  app.get('/livechat/inboxes', requireAuth, async (req: any, res) => {
+  app.get('/livechat/inboxes', requireAuth, requireInboxAccess, async (req: any, res) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });

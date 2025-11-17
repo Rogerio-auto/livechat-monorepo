@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { FiUpload, FiImage, FiVideo, FiFileText, FiMusic } from "react-icons/fi";
-import Sidebar from "../componets/Sidbars/sidebar";
 import MediaUploader from "../components/gallery/MediaUploader";
 import MediaGrid from "../components/gallery/MediaGrid";
 import MediaFilters from "../components/gallery/MediaFilters";
@@ -72,8 +71,6 @@ export default function GaleriaPage() {
   };
 
   return (
-    <>
-      <Sidebar />
       <div
         className="ml-16 min-h-screen p-6"
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
@@ -228,6 +225,5 @@ export default function GaleriaPage() {
           />
         )}
       </div>
-    </>
   );
 }

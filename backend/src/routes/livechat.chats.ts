@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 import express from "express";
 import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO } from "../lib/io.js";
 import { NotificationService } from "../services/NotificationService.js";
@@ -352,7 +353,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   app.use("/livechat/messages", messagesRouter);
 
   // Listar chats (com cache)
-  app.get("/livechat/chats", requireAuth, async (req: any, res) => {
+  app.get("/livechat/chats", requireAuth, requireInboxAccess, async (req: any, res) => {
     const reqLabel = `livechat.chats#${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     console.time(reqLabel);
     const handlerStart = performance.now();

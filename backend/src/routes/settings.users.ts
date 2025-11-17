@@ -371,4 +371,171 @@ export function registerSettingsUsersRoutes(app: Application) {
       return res.status(status).json({ error: message });
     }
   });
+
+  // Get user's inbox access
+  app.get("/settings/users/:id/inboxes", requireAuth, async (req: any, res) => {
+    try {
+      const { companyId } = await fetchActorContext(req);
+      const { id } = req.params as { id: string };
+
+      // Verify user belongs to same company
+      const { data: user, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id, company_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (userError) {
+        return res.status(500).json({ error: userError.message });
+      }
+      if (!user || user.company_id !== companyId) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      // Get inbox_users links
+      const { data: links, error: linksError } = await supabaseAdmin
+        .from("inbox_users")
+        .select("inbox_id, can_read, can_write, can_manage")
+        .eq("user_id", id);
+
+      if (linksError) {
+        return res.status(500).json({ error: linksError.message });
+      }
+
+      return res.json(links || []);
+    } catch (e: any) {
+      const status = Number(e?.status) || 500;
+      const message = e?.message || "inbox access list error";
+      return res.status(status).json({ error: message });
+    }
+  });
+
+  // Add user to inbox
+  app.post("/settings/users/:id/inboxes", requireAuth, async (req: any, res) => {
+    try {
+      const { companyId } = await fetchActorContext(req);
+      const { id } = req.params as { id: string };
+      const { inbox_id, can_read = true, can_write = true, can_manage = false } = req.body || {};
+
+      if (!inbox_id) {
+        return res.status(400).json({ error: "inbox_id é obrigatório" });
+      }
+
+      // Verify user belongs to same company
+      const { data: user, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id, company_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (userError) {
+        return res.status(500).json({ error: userError.message });
+      }
+      if (!user || user.company_id !== companyId) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      // Verify inbox belongs to same company
+      const { data: inbox, error: inboxError } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, company_id")
+        .eq("id", inbox_id)
+        .maybeSingle();
+
+      if (inboxError) {
+        return res.status(500).json({ error: inboxError.message });
+      }
+      if (!inbox || inbox.company_id !== companyId) {
+        return res.status(404).json({ error: "Caixa de entrada não encontrada" });
+      }
+
+      // Check if already exists
+      const { data: existing } = await supabaseAdmin
+        .from("inbox_users")
+        .select("user_id, inbox_id")
+        .eq("user_id", id)
+        .eq("inbox_id", inbox_id)
+        .maybeSingle();
+
+      if (existing) {
+        return res.status(409).json({ error: "Usuário já tem acesso a esta caixa de entrada" });
+      }
+
+      // Create inbox_users link
+      const { data: link, error: linkError } = await supabaseAdmin
+        .from("inbox_users")
+        .insert([{
+          user_id: id,
+          inbox_id,
+          can_read,
+          can_write,
+          can_manage,
+        }])
+        .select("inbox_id, can_read, can_write, can_manage")
+        .single();
+
+      if (linkError) {
+        return res.status(500).json({ error: linkError.message });
+      }
+
+      return res.status(201).json(link);
+    } catch (e: any) {
+      const status = Number(e?.status) || 500;
+      const message = e?.message || "inbox access add error";
+      return res.status(status).json({ error: message });
+    }
+  });
+
+  // Remove user from inbox
+  app.delete("/settings/users/:id/inboxes/:inboxId", requireAuth, async (req: any, res) => {
+    try {
+      const { companyId } = await fetchActorContext(req);
+      const { id, inboxId } = req.params as { id: string; inboxId: string };
+
+      // Verify user belongs to same company
+      const { data: user, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("id, company_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (userError) {
+        return res.status(500).json({ error: userError.message });
+      }
+      if (!user || user.company_id !== companyId) {
+        return res.status(404).json({ error: "Usuário não encontrado" });
+      }
+
+      // Verify inbox belongs to same company
+      const { data: inbox, error: inboxError } = await supabaseAdmin
+        .from("inboxes")
+        .select("id, company_id")
+        .eq("id", inboxId)
+        .maybeSingle();
+
+      if (inboxError) {
+        return res.status(500).json({ error: inboxError.message });
+      }
+      if (!inbox || inbox.company_id !== companyId) {
+        return res.status(404).json({ error: "Caixa de entrada não encontrada" });
+      }
+
+      // Delete inbox_users link
+      const { error: deleteError } = await supabaseAdmin
+        .from("inbox_users")
+        .delete()
+        .eq("user_id", id)
+        .eq("inbox_id", inboxId);
+
+      if (deleteError) {
+        return res.status(500).json({ error: deleteError.message });
+      }
+
+      return res.status(204).send();
+    } catch (e: any) {
+      const status = Number(e?.status) || 500;
+      const message = e?.message || "inbox access remove error";
+      return res.status(status).json({ error: message });
+    }
+  });
 }

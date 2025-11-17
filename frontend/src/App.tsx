@@ -15,6 +15,7 @@ import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
+import { AppLayout } from './componets/layout/AppLayout'
 
 
 function App() {
@@ -25,17 +26,21 @@ function App() {
         <Route path='/' element={<Navigate to="/dashboard" replace />}/>
         <Route path='/login' element={<Login/>}/>
         <Route path='/reset-password' element={<ResetPassword/>}/>
-        <Route path='/dashboard' element={<RequireAuth><Dash/></RequireAuth>}/>
-        <Route path="/funil" element={<RequireAuth><SalesFunnel /></RequireAuth>} />
-        <Route path='/clientes' element={<RequireAuth><ClientesPage /></RequireAuth>}/>
-        <Route path='/documentos' element={<RequireAuth><DocumentosPage/></RequireAuth>}/>
-        <Route path='/calendario' element={<RequireAuth><CalendarioPage/></RequireAuth>}/>
-        <Route path='/livechat' element={<RequireAuth><LiveChatPage/></RequireAuth>}/>
-        <Route path='/produtos' element={<RequireAuth><ProdutosPage/></RequireAuth>}/>
-        <Route path='/galeria' element={<RequireAuth><GaleriaPage/></RequireAuth>}/>
-        <Route path='/configuracoes' element={<RequireAuth><ConfiguracoesPage/></RequireAuth>}/>
-        <Route path='/admin' element={<RequireAuth><AdminPage/></RequireAuth>}/>
-        <Route path='/subscription' element={<RequireAuth><SubscriptionPage/></RequireAuth>}/>
+        
+        {/* Rotas com sidebar compartilhada */}
+        <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
+          <Route path='/dashboard' element={<Dash/>}/>
+          <Route path="/funil" element={<SalesFunnel />} />
+          <Route path='/clientes' element={<ClientesPage />}/>
+          <Route path='/documentos' element={<DocumentosPage/>}/>
+          <Route path='/calendario' element={<CalendarioPage/>}/>
+          <Route path='/livechat' element={<LiveChatPage/>}/>
+          <Route path='/produtos' element={<ProdutosPage/>}/>
+          <Route path='/galeria' element={<GaleriaPage/>}/>
+          <Route path='/configuracoes' element={<ConfiguracoesPage/>}/>
+          <Route path='/admin' element={<AdminPage/>}/>
+          <Route path='/subscription' element={<SubscriptionPage/>}/>
+        </Route>
         
 
       </Routes>

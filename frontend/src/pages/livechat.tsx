@@ -102,6 +102,10 @@ export default function LiveChatPage() {
   const [inboxId, setInboxId] = useState<string>("");
   const [showFirstInboxWizard, setShowFirstInboxWizard] = useState(false);
   const [inboxesLoading, setInboxesLoading] = useState(true);
+  const [isCheckingWizard, setIsCheckingWizard] = useState(true);
+  const [hasInboxAccess, setHasInboxAccess] = useState<boolean | null>(null);
+  const [accessCheckError, setAccessCheckError] = useState<string | null>(null);
+  const [socketReady, setSocketReady] = useState(false);
   const [currentChat, setCurrentChat] = useState<Chat | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -1444,6 +1448,16 @@ const scrollToBottom = useCallback(
     const s = io(API, { withCredentials: true });
     socketRef.current = s;
 
+    s.on("connect", () => {
+      console.log("[Socket] Connected");
+      setSocketReady(true);
+    });
+
+    s.on("disconnect", () => {
+      console.log("[Socket] Disconnected");
+      setSocketReady(false);
+    });
+
     const onMessageNew = (m: Message) => {
       appendMessageToCache(m);
       logSendLatency(m.chat_id ?? null, m.id ?? null, m.view_status ?? null);
@@ -2437,28 +2451,79 @@ const scrollToBottom = useCallback(
     };
   }, []);
 
-  // Verificar se deve mostrar wizard de primeira inbox
+  // Check inbox access and wizard
   useEffect(() => {
-    let cancelled = false;
-    
-    const checkWizard = async () => {
-      try {
-        const result = await fetchJson<{ showWizard: boolean }>(`${API}/livechat/inboxes/should-show-wizard`);
-        if (!cancelled && result.showWizard) {
-          console.log("[Livechat] Deve mostrar wizard de primeira inbox");
-          setShowFirstInboxWizard(true);
-        }
-      } catch (err) {
-        console.error("[Livechat] Erro ao verificar wizard:", err);
-      }
-    };
+    if (!socketReady) return;
 
-    checkWizard();
-    
+    let alive = true;
+    setIsCheckingWizard(true);
+    setAccessCheckError(null);
+
+    (async () => {
+      try {
+        // First check if user has access to any inbox
+        const myInboxesRes = await fetch(`${API}/livechat/inboxes/my`, {
+          credentials: "include",
+        });
+        
+        if (!myInboxesRes.ok) {
+          if (myInboxesRes.status === 403) {
+            const errorData = await myInboxesRes.json().catch(() => ({}));
+            if (alive) {
+              setHasInboxAccess(false);
+              setAccessCheckError(
+                errorData.reason || 
+                "Você não tem acesso a nenhuma caixa de entrada. Entre em contato com o administrador."
+              );
+            }
+            return;
+          }
+          throw new Error("Failed to check inbox access");
+        }
+
+        const inboxes = await myInboxesRes.json();
+        
+        if (alive) {
+          if (!inboxes || inboxes.length === 0) {
+            setHasInboxAccess(false);
+            setAccessCheckError(
+              "Você não está vinculado a nenhuma caixa de entrada. Entre em contato com o administrador."
+            );
+            return;
+          }
+          
+          setHasInboxAccess(true);
+          
+          // Now check wizard status
+          try {
+            const wizardRes = await fetch(`${API}/livechat/inboxes/should-show-wizard`, {
+              credentials: "include",
+            });
+            if (wizardRes.ok) {
+              const data = await wizardRes.json();
+              if (alive) {
+                setShowFirstInboxWizard(data.shouldShow || false);
+              }
+            }
+          } catch (wizardError) {
+            console.error("Error checking wizard:", wizardError);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking inbox access:", error);
+        if (alive) {
+          setHasInboxAccess(false);
+          setAccessCheckError("Erro ao verificar acesso às caixas de entrada.");
+        }
+      } finally {
+        if (alive) setIsCheckingWizard(false);
+      }
+    })();
+
     return () => {
-      cancelled = true;
+      alive = false;
     };
-  }, []);
+  }, [socketReady]);
 
 
 
@@ -3035,13 +3100,98 @@ const scrollToBottom = useCallback(
   };
 
 
+  // Loading state while checking access
+  if (isCheckingWizard) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user has no inbox access, show blocked state
+  if (hasInboxAccess === false) {
+    return (
+      <div className="relative h-screen overflow-hidden">
+        {/* Blurred background */}
+        <div className="absolute inset-0 bg-gray-100 dark:bg-gray-900 backdrop-blur-xl" style={{ filter: 'blur(8px)' }}>
+          <div className="h-full w-full opacity-30">
+            <div className="flex h-full">
+              <div className="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700"></div>
+              <div className="flex-1 bg-gray-50 dark:bg-gray-900"></div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Alert overlay */}
+        <div className="relative z-10 flex items-center justify-center h-full px-4">
+          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-red-200 dark:border-red-900 p-8">
+            <div className="text-center">
+              {/* Icon */}
+              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                <svg
+                  className="h-8 w-8 text-red-600 dark:text-red-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              
+              {/* Title */}
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                Acesso Negado
+              </h3>
+              
+              {/* Message */}
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                {accessCheckError || "Você não tem acesso a nenhuma caixa de entrada."}
+              </p>
+              
+              {/* Info box */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>O que fazer?</strong><br />
+                  Entre em contato com o administrador da sua empresa para solicitar acesso às caixas de entrada do livechat.
+                </p>
+              </div>
+              
+              {/* Actions */}
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={() => window.location.reload()}
+                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors duration-200"
+                >
+                  Recarregar página
+                </button>
+                <button
+                  onClick={() => window.history.back()}
+                  className="w-full px-4 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-medium rounded-lg transition-colors duration-200"
+                >
+                  Voltar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <>
-      <Sidebar />
-      <div
-        className="ml-16 min-h-screen transition-colors duration-300"
-        style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
-      >
+    <div
+      className="ml-16 min-h-screen transition-colors duration-300"
+      style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
+    >
         <div className="grid h-[calc(100vh-4rem)] grid-cols-12 gap-4">
           <div className="col-span-2">
             <LivechatMenu section={section} onChange={setSection} />
@@ -3284,7 +3434,7 @@ const scrollToBottom = useCallback(
           )}
 
 
-          {section === "all" || section === "unanswered" ? (
+          {(section === "all" || section === "unanswered") && (
             <Card padding="md" className="col-span-6 flex flex-col relative min-h-screen max-h-screen">
               <ChatHeader
                 apiBase={API}
@@ -3472,24 +3622,28 @@ const scrollToBottom = useCallback(
                 />
               </div>
             </Card>
-          ) : section === "labels" ? (
+          )}
+
+          {section === "labels" && (
             <Card padding="lg" className="col-span-10">
               <LabelsManager apiBase={API} />
             </Card>
-          ) : section === "contacts" ? (
+          )}
+
+          {section === "contacts" && (
             <div className="col-span-10">
               <ContactsCRM apiBase={API} socket={socketRef.current} />
             </div>
-          ) :  section === "campaigns" && (
+          )}
+
+          {section === "campaigns" && (
             <Card padding="md" className="col-span-10 flex flex-col min-h-screen max-h-screen">
               <CampaignsPanel apiBase={API} />
             </Card>
           )}
         </div>
-      </div>
 
       {/* Modal de privado */}
-      <div>
         {isPrivateOpen && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
@@ -3580,7 +3734,6 @@ const scrollToBottom = useCallback(
             </div>
           </div>
         )}
-      </div>
 
       {/* Wizard de primeira inbox */}
       {showFirstInboxWizard && (
@@ -3606,8 +3759,7 @@ const scrollToBottom = useCallback(
           }}
         />
       )}
-    </>
-
+    </div>
   );
 }
 

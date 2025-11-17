@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "../componets/Sidbars/sidebar";
 import * as XLSX from "xlsx";
 import { FaEdit, FaTrash } from "react-icons/fa";
 
@@ -249,8 +248,6 @@ export function ProdutosPage() {
   const endIdx = Math.min(total, startIdx + products.length);
 
   return (
-    <>
-      <Sidebar />
       <div
         className="ml-16 min-h-screen p-6"
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
@@ -728,7 +725,6 @@ export function ProdutosPage() {
           </div>
         )}
       </div>
-    </>
   );
 }
 

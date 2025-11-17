@@ -23,12 +23,12 @@ import type {
 
 // ======= PALETA (SION) =======
 const SECTIONS = [
-  { id: "empresa", title: "Empresa", subtitle: "Dados e plano ativo" },
+  { id: "empresa", title: "Empresa", subtitle: "Dados e plano ativo", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
   { id: "perfil", title: "Perfil", subtitle: "Seu nome, avatar e senha" },
-  { id: "inboxes", title: "Caixas de entrada", subtitle: "Canais conectados" },
-  { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes" },
+  { id: "inboxes", title: "Caixas de entrada", subtitle: "Canais conectados", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
+  { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
   { id: "ia", title: "IA", subtitle: "Agentes e modelos" },
-  { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes" },
+  { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
   { id: "departamentos", title: "Departamentos", subtitle: "Organizar em departamentos", restrictTo: ["ADMIN", "MANAGER"] },
   { id: "times", title: "Times", subtitle: "Gerenciar equipes e horários", restrictTo: ["ADMIN", "MANAGER"] },
   { id: "calendarios", title: "Calendários", subtitle: "Gerenciar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
@@ -777,9 +777,6 @@ export default function ConfiguracoesPage() {
   }, [selectedCalendarForPermissions]);
 
   return (
-    <>
-      <Sidebar />
-      {/* Fundo com gradiente moderno - tema adaptativo */}
   <div className="config-page ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
         <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
           {/* Sidebar de navegação */}
@@ -1252,7 +1249,6 @@ export default function ConfiguracoesPage() {
             )}
           </div>
         </div>
-      </div>
 
       {/* MODAL ESCOLHER TIPO DE CONEXÃO */}
       {providerPickerOpen && (
@@ -1614,7 +1610,7 @@ export default function ConfiguracoesPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

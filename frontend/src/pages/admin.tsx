@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import Sidebar from "../componets/Sidbars/sidebar";
 import SettingsNav from "../componets/settings/SettingsNav";
 import { ToolsAdminPanel } from "../componets/tools/ToolsAdminPanel";
 import TemplatesAdminPanel from "../componets/agents/TemplatesAdminPanel";
@@ -86,7 +85,6 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page ml-16 min-h-screen bg-(--color-bg) text-(--color-text) transition-colors duration-300">
-      <Sidebar />
       
       <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
         {/* Sidebar de navegação */}

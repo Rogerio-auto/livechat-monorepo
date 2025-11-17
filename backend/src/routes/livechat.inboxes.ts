@@ -5,6 +5,58 @@ import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 
 export function registerLivechatInboxesRoutes(app: express.Application) {
+  // Verificar se deve mostrar wizard de primeira inbox
+  app.get("/livechat/inboxes/should-show-wizard", requireAuth, async (req: any, res) => {
+    try {
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from('users')
+        .select('company_id')
+        .eq('user_id', req.user.id)
+        .maybeSingle();
+      
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const companyId = (urow as any)?.company_id;
+      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
+
+      // Verificar flag first_inbox_setup da empresa
+      const { data: company, error: companyErr } = await supabaseAdmin
+        .from('companies')
+        .select('first_inbox_setup')
+        .eq('id', companyId)
+        .maybeSingle();
+      
+      if (companyErr) return res.status(500).json({ error: companyErr.message });
+      
+      // Se a flag já é true, não mostrar wizard
+      if (company?.first_inbox_setup === true) {
+        return res.json({ showWizard: false });
+      }
+
+      // Se a flag é false/null, verificar se tem inboxes
+      const { data: inboxes, error: inboxErr } = await supabaseAdmin
+        .from('inboxes')
+        .select('id')
+        .eq('company_id', companyId)
+        .limit(1);
+      
+      if (inboxErr) return res.status(500).json({ error: inboxErr.message });
+      
+      // Se tem inbox mas flag não está setada, atualizar flag
+      if (inboxes && inboxes.length > 0) {
+        await supabaseAdmin
+          .from('companies')
+          .update({ first_inbox_setup: true })
+          .eq('id', companyId);
+        return res.json({ showWizard: false });
+      }
+
+      // Não tem inbox e flag não está setada, mostrar wizard
+      return res.json({ showWizard: true });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || 'wizard check error' });
+    }
+  });
+
   // Inboxes do usuário autenticado
   app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
     try {
@@ -191,6 +243,16 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
             .upsert([{ user_id: actorLocalUserId, inbox_id: (inbox as any).id, can_read: true, can_write: true, can_manage: true }], { onConflict: 'user_id,inbox_id' });
         }
       } catch {}
+
+      // Marcar first_inbox_setup como true (primeira inbox configurada)
+      try {
+        await supabaseAdmin
+          .from('companies')
+          .update({ first_inbox_setup: true })
+          .eq('id', companyId);
+      } catch (e) {
+        console.error('Error updating first_inbox_setup:', e);
+      }
 
       try { getIO()?.emit('inbox:created', { companyId, inbox }); } catch {}
       return res.status(201).json(inbox);

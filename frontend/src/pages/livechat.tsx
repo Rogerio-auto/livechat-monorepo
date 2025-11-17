@@ -2406,11 +2406,6 @@ const scrollToBottom = useCallback(
           if (resp?.ok) {
             const inboxList = resp.data || [];
             setInboxes(inboxList);
-            // Se não tem nenhuma inbox, mostrar wizard
-            if (inboxList.length === 0) {
-              console.log("[Livechat] Nenhuma inbox encontrada, mostrando wizard");
-              setShowFirstInboxWizard(true);
-            }
           } else {
             setInboxes([]);
           }
@@ -2422,11 +2417,6 @@ const scrollToBottom = useCallback(
               setInboxesLoading(false);
               const inboxList = rows || [];
               setInboxes(inboxList);
-              // Se não tem nenhuma inbox, mostrar wizard
-              if (inboxList.length === 0) {
-                console.log("[Livechat] Nenhuma inbox encontrada, mostrando wizard");
-                setShowFirstInboxWizard(true);
-              }
             }
           })
           .catch(() => {
@@ -2444,6 +2434,29 @@ const scrollToBottom = useCallback(
     return () => {
       cancelled = true;
       s?.off("connect", onConnect);
+    };
+  }, []);
+
+  // Verificar se deve mostrar wizard de primeira inbox
+  useEffect(() => {
+    let cancelled = false;
+    
+    const checkWizard = async () => {
+      try {
+        const result = await fetchJson<{ showWizard: boolean }>(`${API}/livechat/inboxes/should-show-wizard`);
+        if (!cancelled && result.showWizard) {
+          console.log("[Livechat] Deve mostrar wizard de primeira inbox");
+          setShowFirstInboxWizard(true);
+        }
+      } catch (err) {
+        console.error("[Livechat] Erro ao verificar wizard:", err);
+      }
+    };
+
+    checkWizard();
+    
+    return () => {
+      cancelled = true;
     };
   }, []);
 

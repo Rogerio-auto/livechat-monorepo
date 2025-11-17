@@ -103,14 +103,11 @@ export default function ConvitePage() {
       
       if (updateError) throw updateError;
 
-      // Fazer logout após criar senha
-      await supabase.auth.signOut();
-      
       setSuccess(true);
       
-      // Redirecionar para login após 2 segundos
+      // Redirecionar para dashboard (sessão já está validada)
       setTimeout(() => {
-        window.location.href = "https://app.7sion.com/login";
+        window.location.href = "https://app.7sion.com/dashboard";
       }, 2000);
       
     } catch (err: any) {
@@ -237,7 +234,7 @@ export default function ConvitePage() {
               <div>
                 <p className="text-sm font-medium text-emerald-800">Senha criada com sucesso!</p>
                 <p className="text-sm text-emerald-700 mt-1">
-                  Redirecionando para o login...
+                  Redirecionando para o dashboard...
                 </p>
               </div>
             </div>

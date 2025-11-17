@@ -95,72 +95,72 @@ export function ResetPassword() {
   };
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300 flex items-center justify-center p-6">
+    <main className="min-h-screen bg-linear-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
-        <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+        <div className="rounded-2xl bg-white p-8 shadow-xl border border-gray-100 space-y-6">
           {/* Logo */}
-          <div className="flex justify-center mb-8">
-            <div className="h-20 w-20 rounded-full bg-blue-500/10 flex items-center justify-center overflow-hidden ring-2 ring-blue-500/20">
-              <img src={Icon} alt="Logo" className="h-16 w-16 object-contain" />
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-linear-to-br from-emerald-500 to-teal-600 rounded-full flex items-center justify-center overflow-hidden">
+              <img src={Icon} alt="Logo" className="h-12 w-12 object-contain" />
             </div>
           </div>
 
           {verifying ? (
-            <div className="text-center py-8">
-              <FaSpinner className="animate-spin text-4xl text-blue-600 dark:text-blue-400 mx-auto mb-4" />
-              <p className="text-gray-600 dark:text-gray-400">Verificando token...</p>
+            <div className="flex flex-col items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+              <p className="text-sm text-gray-600 mt-4">Verificando token...</p>
             </div>
           ) : !tokenValid ? (
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 mb-4">
-                <FaExclamationTriangle className="text-3xl text-red-600 dark:text-red-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <FaExclamationTriangle className="text-3xl text-red-600" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Token Inválido</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">{error}</p>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Token Inválido</h1>
+              <p className="text-sm text-gray-600 mb-6">{error}</p>
               <button
                 onClick={() => navigate("/")}
-                className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 transition-all duration-200"
+                className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-teal-600 py-3 font-semibold text-white hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl"
               >
                 Voltar para o Login
               </button>
             </div>
           ) : success ? (
             <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4">
-                <FaCheckCircle className="text-4xl text-green-600 dark:text-green-400" />
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-100 mb-4">
+                <FaCheckCircle className="text-4xl text-emerald-600" />
               </div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Senha Alterada!</h1>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Senha Alterada!</h1>
+              <p className="text-sm text-gray-600 mb-6">
                 Sua senha foi alterada com sucesso. Você será redirecionado para o login...
               </p>
-              <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                <FaSpinner className="animate-spin" />
+              <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-500"></div>
                 Redirecionando...
               </div>
             </div>
           ) : (
             <>
               {/* Título */}
-              <div className="text-center mb-8">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                  Nova Senha
+              <header className="space-y-2 text-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Redefinir Senha
                 </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+                <p className="text-sm text-gray-600">
                   Crie uma nova senha segura para sua conta
                 </p>
-              </div>
+              </header>
 
               {/* Form */}
-              <form className="space-y-5" onSubmit={handleSubmit}>
+              <form className="space-y-4" onSubmit={handleSubmit}>
                 {error && (
-                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm">
+                  <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                     {error}
                   </div>
                 )}
 
                 {/* Nova senha */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Nova Senha
                   </label>
                   <div className="relative">
@@ -172,19 +172,19 @@ export function ResetPassword() {
                       placeholder="••••••••"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                       required
                       minLength={6}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-xs text-gray-500">
                     Mínimo de 6 caracteres
                   </p>
                 </div>
 
                 {/* Confirmar senha */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     Confirmar Senha
                   </label>
                   <div className="relative">
@@ -196,7 +196,7 @@ export function ResetPassword() {
                       placeholder="••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                       required
                       minLength={6}
                     />
@@ -207,11 +207,11 @@ export function ResetPassword() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-xl bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 transition-all duration-200 hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+                  className="w-full rounded-xl bg-linear-to-r from-emerald-600 to-teal-600 py-3 font-semibold text-white hover:from-emerald-700 hover:to-teal-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
-                      <FaSpinner className="animate-spin" />
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                       Alterando senha...
                     </span>
                   ) : (
@@ -222,7 +222,7 @@ export function ResetPassword() {
                 <button
                   type="button"
                   onClick={() => navigate("/")}
-                  className="w-full text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  className="w-full text-sm text-gray-600 hover:text-gray-900 transition-colors mt-4"
                 >
                   Voltar para o login
                 </button>

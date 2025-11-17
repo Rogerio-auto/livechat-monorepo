@@ -130,7 +130,9 @@ export async function sendPasswordResetEmail(
   userName?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const resetLink = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+    // Usar URL de produção ao invés de FRONTEND_URL (que pode ser localhost)
+    const resetUrl = process.env.APP_URL || 'https://app.7sion.com';
+    const resetLink = `${resetUrl}/reset-password?token=${resetToken}`;
     
     const info = await transporter.sendMail({
       from: EMAIL_FROM,

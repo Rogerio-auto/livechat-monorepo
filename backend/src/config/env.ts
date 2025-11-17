@@ -37,3 +37,4 @@ export const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || "";
 // URL do frontend para redirects (onboarding, etc)
 export const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 export const ONBOARDING_URL = process.env.ONBOARDING_URL || "http://localhost:3002";
+export const APP_URL = process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";

@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/requireAuth.ts";
 import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
-import { ONBOARDING_URL } from "../config/env.ts";
+import { APP_URL } from "../config/env.ts";
 
 const ROLE_VALUES = ["AGENT", "SUPERVISOR", "TECHNICIAN", "MANAGER"] as const;
 const ROLE_ARRAY = [...ROLE_VALUES];
@@ -13,7 +13,7 @@ const USERS_SELECT =
 const INVITE_REDIRECT_PATH = "/convite";
 const INVITE_REDIRECT_TO =
   process.env.SUPABASE_INVITE_REDIRECT ||
-  `${ONBOARDING_URL.replace(/\/$/, "")}${INVITE_REDIRECT_PATH}`;
+  `${APP_URL.replace(/\/$/, "")}${INVITE_REDIRECT_PATH}`;
 
 type Role = (typeof ROLE_VALUES)[number];
 

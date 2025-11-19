@@ -3,6 +3,7 @@ import Sidebar from "../Sidbars/sidebar";
 import { TrialBanner } from "../../components/subscription/TrialBanner";
 import { KPICard, formatTime } from "./KPICard";
 import { AlertsPanel } from "./AlertsPanel";
+import { TasksWidget } from "../../components/tasks/TasksWidget";
 import { ChartContainer, LineChartComponent, BarChartComponent, PieChartComponent } from "./Charts";
 import {
   useDashboardOverview,
@@ -189,6 +190,11 @@ function OverviewTab() {
             <AlertsPanel alerts={alerts} loading={alertsLoading} />
           </div>
         </div>
+      </div>
+
+      {/* Tasks Widget */}
+      <div className="col-span-12 lg:col-span-4">
+        <TasksWidget />
       </div>
 
       {/* Conversas Recentes */}

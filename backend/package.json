@@ -15,7 +15,9 @@
     "worker:watch": "tsx watch src/worker.ts",
     "test:waha": "tsx scripts/wahaOutboundSmoke.ts",
     "test:tool:name": "tsx scripts/testUpdateCustomerName.ts",
-    "test:tool": "tsx scripts/testTool.ts"
+    "test:tool": "tsx scripts/testTool.ts",
+    "test:followup": "tsx scripts/testAutoAgentFollowup.ts",
+    "test:followup:manual": "tsx scripts/testFollowupManual.ts"
   },
   "keywords": [],
   "author": "",

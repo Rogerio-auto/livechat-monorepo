@@ -89,3 +89,34 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}): Promise
   }
   return data as T;
 }
+
+/**
+ * API client helper para requisições HTTP
+ */
+export const api = {
+  async get<T>(endpoint: string): Promise<T> {
+    const url = `${API}${endpoint}`;
+    return fetchJson<T>(url, { method: "GET" });
+  },
+
+  async post<T>(endpoint: string, body?: any): Promise<T> {
+    const url = `${API}${endpoint}`;
+    return fetchJson<T>(url, {
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  },
+
+  async put<T>(endpoint: string, body?: any): Promise<T> {
+    const url = `${API}${endpoint}`;
+    return fetchJson<T>(url, {
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  },
+
+  async delete<T>(endpoint: string): Promise<T> {
+    const url = `${API}${endpoint}`;
+    return fetchJson<T>(url, { method: "DELETE" });
+  },
+};

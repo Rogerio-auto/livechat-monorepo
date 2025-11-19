@@ -61,6 +61,8 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
+import { registerTaskRoutes } from "./routes/tasks.js";
+import { registerAutomationRulesRoutes } from "./routes/automationRules.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -3295,6 +3297,8 @@ registerMediaLibraryRoutes(app);
 
 registerWAHARoutes(app);
 registerDashboardRoutes(app);
+registerTaskRoutes(app);
+registerAutomationRulesRoutes(app);
 
 // Media proxy for encrypted URLs (CORS-safe)
 app.use("/media", mediaProxyRouter);

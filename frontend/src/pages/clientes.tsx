@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../componets/Sidbars/sidebar";
 import { ClienteForm } from "../componets/clientes/ClienteForm";
+import { ClienteDetailsModal } from "../components/customers/ClienteDetailsModal";
 import { formatCPF } from "../utils/format";
 import { API } from "../utils/api";
 
@@ -49,6 +50,7 @@ export function ClientesPage() {
   const [stats, setStats] = useState<LeadStats | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
+  const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,6 +86,12 @@ export function ClientesPage() {
         });
         console.log('[CLIENTES] 👥 Clientes recebidos:', clientesData.length);
         console.log('[CLIENTES] 🎯 Board ID:', board?.id);
+        console.log('[CLIENTES] 🔍 Exemplo de cliente (verificar customer_id):', {
+          id: clientesData[0]?.id,
+          name: clientesData[0]?.name,
+          customer_id: clientesData[0]?.customer_id,
+          hasCustomerId: !!clientesData[0]?.customer_id
+        });
         
         setClientes(clientesData);
         setFilteredClientes(clientesData);
@@ -432,7 +440,23 @@ export function ClientesPage() {
                             {columns.find((c) => c.id === cliente.kanban_column_id)?.name || "-"}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                title="Ver detalhes e tarefas"
+                                onClick={() => setSelectedCliente(cliente)}
+                                className="rounded-lg p-2 text-purple-600 dark:text-purple-400 transition-colors duration-150 hover:bg-purple-500/10"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  viewBox="0 0 24 24"
+                                  fill="currentColor"
+                                  className="h-5 w-5"
+                                >
+                                  <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                                  <path fillRule="evenodd" d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z" clipRule="evenodd" />
+                                </svg>
+                              </button>
                               <button
                                 type="button"
                                 title="Criar proposta"
@@ -568,6 +592,14 @@ export function ClientesPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Modal de Detalhes */}
+        {selectedCliente && (
+          <ClienteDetailsModal
+            cliente={selectedCliente}
+            onClose={() => setSelectedCliente(null)}
+          />
         )}
       </div>
   );

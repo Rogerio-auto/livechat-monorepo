@@ -133,8 +133,31 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing company context" });
     }
 
+    // Buscar o ID da tabela public.users
+    let publicUserId: string | null = null;
+    try {
+      const { data: publicUser, error: publicUserError } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", supaUser.id)
+        .maybeSingle();
+      
+      if (publicUserError) {
+        console.error("[requireAuth] Error fetching public user id:", publicUserError);
+      }
+      
+      if (publicUser?.id) {
+        publicUserId = publicUser.id;
+      } else {
+        console.warn("[requireAuth] No public user found for auth user:", supaUser.id);
+      }
+    } catch (error) {
+      console.error("[requireAuth] Exception fetching public user id:", error);
+    }
+
     (req as any).user = {
-      id: supaUser.id,
+      id: supaUser.id, // ID do Supabase Auth (mantido para compatibilidade)
+      public_user_id: publicUserId, // ID da tabela public.users
       email:
         profile?.email ??
         (typeof meta.email === "string" ? meta.email : undefined) ??
@@ -157,6 +180,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     
     console.log("[requireAuth] 🔑 User authenticated:", {
       authUserId: supaUser.id,
+      publicUserId,
       email: (req as any).user.email,
       company_id: companyId,
       role: profile?.role,

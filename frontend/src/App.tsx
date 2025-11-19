@@ -13,6 +13,8 @@ import GaleriaPage from './pages/galeria'
 import AdminPage from './pages/admin'
 import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
+import { TarefasPage } from './pages/tarefas'
+import { AutomationRulesPage } from './pages/AutomationRulesPage'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
 import { AppLayout } from './componets/layout/AppLayout'
@@ -32,6 +34,8 @@ function App() {
           <Route path='/dashboard' element={<Dash/>}/>
           <Route path="/funil" element={<SalesFunnel />} />
           <Route path='/clientes' element={<ClientesPage />}/>
+          <Route path='/tarefas' element={<TarefasPage />}/>
+          <Route path='/automacao' element={<AutomationRulesPage />}/>
           <Route path='/documentos' element={<DocumentosPage/>}/>
           <Route path='/calendario' element={<CalendarioPage/>}/>
           <Route path='/livechat' element={<LiveChatPage/>}/>

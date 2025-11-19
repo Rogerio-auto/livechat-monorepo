@@ -11,6 +11,9 @@ import { CardImageGallery } from "../componets/funil/CardImageGallery";
 import { useImageUpload, type UploadedPhoto } from "../hooks/useImageUpload";
 import { useNavigate } from "react-router-dom";
 import { KanbanSetupModal } from "../componets/funil/KanbanSetupModal";
+import { TaskModal } from "../components/tasks/TaskModal";
+import { LeadTaskBadge } from "../components/tasks/LeadTaskBadge";
+import type { CreateTaskInput } from "../types/tasks";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -87,6 +90,10 @@ export function SalesFunnel() {
   // Estados para fotos
   const [showPhotoCapture, setShowPhotoCapture] = useState(false);
   const [cardPhotos, setCardPhotos] = useState<UploadedPhoto[]>([]);
+
+  // Estados para tarefas
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskForLeadId, setTaskForLeadId] = useState<string | null>(null);
 
   const onColumnCreated = useCallback((col: Column) => {
     setColumns((prev) => [...prev, col].sort((a, b) => a.position - b.position));
@@ -663,6 +670,28 @@ export function SalesFunnel() {
     setCardPhotos(photos);
   };
 
+  const handleCreateTaskForLead = (leadId: string) => {
+    setTaskForLeadId(leadId);
+    setShowTaskModal(true);
+  };
+
+  const handleTaskSubmit = async (data: CreateTaskInput) => {
+    try {
+      await fetchJson(`${API}/api/tasks`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...data,
+          related_lead_id: taskForLeadId,
+        }),
+      });
+      setShowTaskModal(false);
+      setTaskForLeadId(null);
+    } catch (error) {
+      console.error("Falha ao criar tarefa:", error);
+      throw error;
+    }
+  };
+
   const selectedProposal = useMemo(() => {
     if (!selectedProposalId) return null;
     return leadProposals.find((p) => p.id === selectedProposalId) || null;
@@ -948,6 +977,16 @@ export function SalesFunnel() {
                                 </span>
                               )}
                             </div>
+
+                            {/* Badge de Tarefas */}
+                            {lead.leadId && (
+                              <div className="mt-2">
+                                <LeadTaskBadge
+                                  leadId={lead.leadId}
+                                  onCreateTask={() => handleCreateTaskForLead(lead.leadId!)}
+                                />
+                              </div>
+                            )}
                           </button>
 
                           {showAfter && <div className="h-2 rounded-lg bg-emerald-400/70 shadow-[0_0_0_2px_rgba(16,185,129,0.4)]" />}
@@ -1258,6 +1297,17 @@ export function SalesFunnel() {
             </div>
           </div>
         )}
+
+        {/* Task Modal */}
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => {
+            setShowTaskModal(false);
+            setTaskForLeadId(null);
+          }}
+          onSubmit={handleTaskSubmit}
+          initialData={taskForLeadId ? { related_lead_id: taskForLeadId } : undefined}
+        />
       </div>
   );
 

@@ -14,6 +14,8 @@ import {
   FaMoon,
   FaShieldAlt,
   FaImages,
+  FaTasks,
+  FaCogs,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
@@ -55,6 +57,18 @@ const links: SidebarLink[] = [
     icon: <FaUsers />,
     label: "Clientes",
     isActive: (path) => path.startsWith("/clientes"),
+  },
+  {
+    to: "/tarefas",
+    icon: <FaTasks />,
+    label: "Tarefas",
+    isActive: (path) => path.startsWith("/tarefas"),
+  },
+  {
+    to: "/automacao",
+    icon: <FaCogs />,
+    label: "Automação",
+    isActive: (path) => path.startsWith("/automacao"),
   },
   {
     to: "/produtos",

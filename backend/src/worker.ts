@@ -5214,6 +5214,20 @@ async function tickCampaigns() {
   }
 }
 
+// Task reminders - roda a cada 5 minutos
+import { checkAndSendReminders } from "./jobs/taskReminders.js";
+setInterval(checkAndSendReminders, 5 * 60_000); // 5 minutos
+
+// Auto-criação de tarefas - roda a cada 6 horas
+import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";
+setInterval(runAutoTaskCreation, 6 * 60 * 60_000); // 6 horas
+runAutoTaskCreation(); // Executar imediatamente na inicialização
+
+// Auto-follow-up de agentes - roda a cada 2 minutos
+import { runAutoAgentFollowup } from "./jobs/autoAgentFollowup.js";
+setInterval(runAutoAgentFollowup, 2 * 60_000); // 2 minutos
+runAutoAgentFollowup().catch(err => console.error("[worker] autoAgentFollowup init error:", err));
+
 // roda a cada 60s
 setInterval(tickCampaigns, 60_000);
 setInterval(syncWahaGroupMetadata, 300_000);

@@ -14,6 +14,9 @@ import {
   FaMapMarkerAlt, FaUsers, FaSave, FaBan, FaPalette, FaEnvelope,
   FaFacebook, FaInstagram, FaTwitter, FaGlobe, FaHome
 } from "react-icons/fa";
+import { Task } from "../types/tasks";
+import { TaskModal } from "../components/tasks/TaskModal";
+import { io, Socket } from "socket.io-client";
 
 type Agent = { id: string; name: string };
 type Customer = { id: string; name: string };
@@ -31,7 +34,11 @@ type Event = {
   start: string;
   end: string;
   backgroundColor?: string;
+  allDay?: boolean;
   extendedProps: {
+    type?: "event" | "task";
+    taskId?: string;
+    task?: Task;
     description?: string;
     event_type?: string;
     status?: string;
@@ -61,6 +68,7 @@ type UserProfile = {
 export function CalendarioPage() {
   const navigate = useNavigate();
   const [eventos, setEventos] = useState<Event[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [customerQuery, setCustomerQuery] = useState("");
@@ -74,6 +82,11 @@ export function CalendarioPage() {
   const [loadingCustomer, setLoadingCustomer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Task modal state
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [taskPrefilledDate, setTaskPrefilledDate] = useState<Date | null>(null);
   
   // Navbar states
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -144,6 +157,16 @@ export function CalendarioPage() {
     }
   };
 
+  const loadTasks = async () => {
+    try {
+      const resp = await fetchJson<{ tasks: Task[]; total: number }>(`${API}/api/tasks`);
+      // Filtrar apenas tasks com due_date
+      setTasks((resp?.tasks || []).filter(t => t.due_date));
+    } catch (e: any) {
+      console.error("Failed to load tasks:", e);
+    }
+  };
+
   const loadCustomerData = async (customerId: string) => {
     setLoadingCustomer(true);
     try {
@@ -179,6 +202,7 @@ export function CalendarioPage() {
       const ok = await requireAuth();
       if (!ok) return;
       await loadCalendars();
+      await loadTasks(); // Carregar tasks com due_date
       try {
         const list = await fetchJson<Agent[]>(`${API}/users/agents-supervisors`);
         setAgents(list || []);
@@ -187,6 +211,30 @@ export function CalendarioPage() {
       }
     })();
   }, [navigate]);
+
+  // Socket.io para recarregar tasks em tempo real
+  useEffect(() => {
+    const socket: Socket = io(API);
+
+    socket.on("task:created", () => {
+      console.log("[Calendar] Task created, reloading tasks");
+      loadTasks();
+    });
+
+    socket.on("task:updated", () => {
+      console.log("[Calendar] Task updated, reloading tasks");
+      loadTasks();
+    });
+
+    socket.on("task:deleted", () => {
+      console.log("[Calendar] Task deleted, reloading tasks");
+      loadTasks();
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (showViewEventModal && selectedEvent) {
@@ -357,39 +405,82 @@ export function CalendarioPage() {
   const personalCalendars = calendars.filter(c => c.type === "PERSONAL");
   const companyCalendars = calendars.filter(c => c.type !== "PERSONAL");
   
+  // Transformar tasks em eventos do calendário
+  const taskEvents = useMemo(() => {
+    return tasks.map(task => {
+      // Definir cor baseado no status
+      let backgroundColor = "#8B5CF6"; // purple-600 (default)
+      if (task.status === "COMPLETED") {
+        backgroundColor = "#10B981"; // green-500
+      } else if (task.status === "IN_PROGRESS") {
+        backgroundColor = "#F59E0B"; // amber-500
+      } else if (task.priority === "HIGH") {
+        backgroundColor = "#EF4444"; // red-500
+      } else if (task.priority === "MEDIUM") {
+        backgroundColor = "#F59E0B"; // amber-500
+      }
+
+      return {
+        id: `task-${task.id}`,
+        title: `📋 ${task.title}`,
+        start: task.due_date!,
+        end: task.due_date!,
+        backgroundColor,
+        allDay: true,
+        extendedProps: {
+          type: "task" as const,
+          taskId: task.id,
+          task: task,
+        },
+      };
+    });
+  }, [tasks]);
+  
   const filteredEvents = useMemo(() => {
-    let filtered = eventos;
+    // Combinar eventos normais e tasks
+    let filtered = [...eventos, ...taskEvents];
     
     // Filter by view type
     if (activeView === "personal" && userProfile) {
-      filtered = filtered.filter(e => 
-        personalCalendars.some(c => e.extendedProps.calendar_name === c.name)
-      );
+      filtered = filtered.filter(e => {
+        // Tasks não têm calendar_name, então sempre mostrar
+        if (e.extendedProps.type === "task") return true;
+        return personalCalendars.some(c => (e.extendedProps as any).calendar_name === c.name);
+      });
     } else if (activeView === "team") {
-      filtered = filtered.filter(e => 
-        companyCalendars.some(c => e.extendedProps.calendar_name === c.name)
-      );
+      filtered = filtered.filter(e => {
+        // Tasks não têm calendar_name, então sempre mostrar
+        if (e.extendedProps.type === "task") return true;
+        return companyCalendars.some(c => (e.extendedProps as any).calendar_name === c.name);
+      });
     }
     
-    // Filter by selected calendars
+    // Filter by selected calendars (não filtrar tasks)
     if (selectedCalendars.length > 0) {
-      filtered = filtered.filter(e => 
-        selectedCalendars.includes(e.extendedProps.calendar_name || "")
-      );
+      filtered = filtered.filter(e => {
+        if (e.extendedProps.type === "task") return true;
+        return selectedCalendars.includes((e.extendedProps as any).calendar_name || "");
+      });
     }
     
-    // Filter by event type
+    // Filter by event type (não aplicar a tasks)
     if (filterEventType !== "all") {
-      filtered = filtered.filter(e => e.extendedProps.event_type === filterEventType);
+      filtered = filtered.filter(e => {
+        if (e.extendedProps.type === "task") return true;
+        return (e.extendedProps as any).event_type === filterEventType;
+      });
     }
     
-    // Filter by status
+    // Filter by status (não aplicar a tasks)
     if (filterStatus !== "all") {
-      filtered = filtered.filter(e => e.extendedProps.status === filterStatus);
+      filtered = filtered.filter(e => {
+        if (e.extendedProps.type === "task") return true;
+        return (e.extendedProps as any).status === filterStatus;
+      });
     }
     
     return filtered;
-  }, [eventos, activeView, selectedCalendars, filterEventType, filterStatus, personalCalendars, companyCalendars, userProfile]);
+  }, [eventos, taskEvents, activeView, selectedCalendars, filterEventType, filterStatus, personalCalendars, companyCalendars, userProfile]);
 
   return (
     <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
@@ -411,13 +502,26 @@ export function CalendarioPage() {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openNewEvent()}
-                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-700 hover:shadow-lg"
-                >
-                  + Novo Evento
-                </button>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTask(null);
+                      setTaskPrefilledDate(null);
+                      setShowTaskModal(true);
+                    }}
+                    className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-purple-700 hover:shadow-lg flex items-center gap-2"
+                  >
+                    <FaTasks /> Nova Tarefa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openNewEvent()}
+                    className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-700 hover:shadow-lg"
+                  >
+                    + Novo Evento
+                  </button>
+                </div>
               </div>
 
               {/* Navbar de Filtros e Funcionalidades */}
@@ -707,13 +811,23 @@ export function CalendarioPage() {
                   editable={true}
                   selectable={true}
                   eventClick={(info: EventClickArg) => {
+                    const extendedProps = info.event.extendedProps as Event["extendedProps"];
+                    
+                    // Se for uma task, abrir TaskModal
+                    if (extendedProps.type === "task" && extendedProps.task) {
+                      setSelectedTask(extendedProps.task);
+                      setShowTaskModal(true);
+                      return;
+                    }
+                    
+                    // Se for um evento, abrir modal de evento
                     setSelectedEvent({
                       id: info.event.id,
                       title: info.event.title,
                       start: info.event.startStr,
                       end: info.event.endStr,
                       backgroundColor: info.event.backgroundColor,
-                      extendedProps: info.event.extendedProps,
+                      extendedProps: extendedProps,
                     });
                     setIsEditingEvent(false);
                     setShowViewEventModal(true);
@@ -1389,6 +1503,45 @@ export function CalendarioPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Task Modal */}
+        {showTaskModal && (
+          <TaskModal
+            isOpen={showTaskModal}
+            onClose={() => {
+              setShowTaskModal(false);
+              setSelectedTask(null);
+              setTaskPrefilledDate(null);
+              loadTasks(); // Recarregar tasks quando fechar
+            }}
+            onSubmit={async (data) => {
+              try {
+                if (selectedTask) {
+                  // Atualizar task existente
+                  await fetchJson(`${API}/tasks/${selectedTask.id}`, {
+                    method: "PUT",
+                    body: JSON.stringify(data),
+                  });
+                } else {
+                  // Criar nova task
+                  await fetchJson(`${API}/tasks`, {
+                    method: "POST",
+                    body: JSON.stringify(data),
+                  });
+                }
+                await loadTasks(); // Recarregar tasks
+                setShowTaskModal(false);
+                setSelectedTask(null);
+                setTaskPrefilledDate(null);
+              } catch (e: any) {
+                console.error("Error saving task:", e);
+                throw e;
+              }
+            }}
+            initialData={selectedTask || undefined}
+            prefilledData={taskPrefilledDate ? { due_date: taskPrefilledDate.toISOString() } : undefined}
+          />
         )}
 
       </div>

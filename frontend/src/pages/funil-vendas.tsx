@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { KanbanSetupModal } from "../componets/funil/KanbanSetupModal";
 import { TaskModal } from "../components/tasks/TaskModal";
 import { LeadTaskBadge } from "../components/tasks/LeadTaskBadge";
-import type { CreateTaskInput } from "../types/tasks";
+import type { CreateTaskInput, UpdateTaskInput } from "../types/tasks";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 

@@ -14,6 +14,7 @@ type Cliente = {
   status: string;
   kanban_column_id?: string;
   createdAt?: string;
+  customer_id?: string;
 };
 
 type KanbanColumn = { id: string; name: string };

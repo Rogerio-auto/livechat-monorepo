@@ -675,7 +675,7 @@ export function SalesFunnel() {
     setShowTaskModal(true);
   };
 
-  const handleTaskSubmit = async (data: CreateTaskInput) => {
+  const handleTaskSubmit = async (data: CreateTaskInput | UpdateTaskInput) => {
     try {
       await fetchJson(`${API}/api/tasks`, {
         method: "POST",
@@ -1306,7 +1306,7 @@ export function SalesFunnel() {
             setTaskForLeadId(null);
           }}
           onSubmit={handleTaskSubmit}
-          initialData={taskForLeadId ? { related_lead_id: taskForLeadId } : undefined}
+          prefilledData={taskForLeadId ? { related_lead_id: taskForLeadId } : undefined}
         />
       </div>
   );

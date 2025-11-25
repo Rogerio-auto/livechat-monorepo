@@ -117,7 +117,7 @@ export default function ConvitePage() {
   };
 
   const goToLogin = () => {
-    window.location.href = "https://app.7sion.com/login";
+    window.location.href = "https://app.7sion.com/";
   };
 
   return (

@@ -69,8 +69,8 @@ export function OnboardingPage() {
 
       console.log("✅ Conta criada com sucesso:", result);
       
-      // Redirecionar para o login para autenticação manual
-      window.location.href = "https://app.7sion.com/login";
+      // Redirecionar para a raiz - React Router fará o redirecionamento correto
+      window.location.href = "https://app.7sion.com/";
     } catch (err: any) {
       console.error("❌ Erro ao criar conta:", err);
       setError(err.message);
@@ -133,8 +133,8 @@ export function OnboardingPage() {
 
       await res.json();
       
-      // Redirecionar para o login para autenticação manual
-      window.location.href = "https://app.7sion.com/login";
+      // Redirecionar para a raiz - React Router fará o redirecionamento correto
+      window.location.href = "https://app.7sion.com/";
     } catch (err: any) {
       setError(err.message);
     }

@@ -59,7 +59,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // Inboxes do usuário autenticado
-  app.get("/livechat/inboxes/my", requireAuth, requireInboxAccess, async (req: any, res) => {
+  app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
     try {
       const authUserId = req.user.id as string;
 

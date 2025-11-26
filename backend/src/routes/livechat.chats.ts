@@ -1251,6 +1251,52 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
       insertedId = inserted?.id ?? null;
 
+      const io = getIO();
+
+      // ✅ AUTO-ASSIGN: Se agente enviar mensagem em chat sem assignee, atribui automaticamente
+      if (!isFromCustomer && senderSupabaseId) {
+        try {
+          const { data: chatData } = await supabaseAdmin
+            .from("chats")
+            .select("assignee_id")
+            .eq("id", chatId)
+            .maybeSingle();
+          
+          if (chatData && !chatData.assignee_id) {
+            // Chat sem assignee, atribuir ao agente que está enviando
+            const { error: assignError } = await supabaseAdmin
+              .from("chats")
+              .update({ 
+                assignee_id: senderSupabaseId,
+                updated_at: nowIso
+              })
+              .eq("id", chatId);
+            
+            if (!assignError) {
+              console.log("[POST /livechat/messages] ✅ Auto-assigned chat to agent:", {
+                chatId,
+                agentId: senderSupabaseId,
+                agentName: senderName,
+              });
+              
+              // Emitir evento de atribuição via socket
+              if (io) {
+                io.to(`chat:${chatId}`).emit("chat:assigned", {
+                  chatId,
+                  assignee_id: senderSupabaseId,
+                  assignee_name: senderName,
+                  assignee_avatar_url: senderAvatarUrl,
+                });
+              }
+            } else {
+              console.warn("[POST /livechat/messages] ⚠️ Failed to auto-assign:", assignError);
+            }
+          }
+        } catch (autoAssignError) {
+          console.warn("[POST /livechat/messages] ⚠️ Auto-assign error:", autoAssignError);
+        }
+      }
+
       await supabaseAdmin
         .from("chats")
         .update({ 
@@ -1274,7 +1320,6 @@ export function registerLivechatChatRoutes(app: express.Application) {
         }, 0);
       };
 
-      const io = getIO();
       if (io) {
         const mapped = {
           id: inserted.id,

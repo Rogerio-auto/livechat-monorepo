@@ -426,6 +426,10 @@ type InsertedInboundMessage = {
   remote_sender_avatar_url?: string | null;
   remote_sender_is_admin?: boolean | null;
   replied_message_id?: string | null;
+  // ✅ Campos de mídia
+  media_url?: string | null;
+  media_public_url?: string | null;
+  media_storage_path?: string | null;
 };
 
 type InsertedOutboundMessage = {

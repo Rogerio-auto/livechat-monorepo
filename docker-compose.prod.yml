@@ -64,6 +64,22 @@ services:
     volumes:
       - waha-media:/waha-media:ro  # Mount WAHA media directory as read-only
 
+  worker-media:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    env_file:
+      - ./backend/.env.production
+    command: ["node", "dist/worker.js", "inbound-media"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - internal
+    volumes:
+      - waha-media:/waha-media:ro  # Mount WAHA media directory as read-only
+
   worker-campaigns:
     build:
       context: .

@@ -2318,6 +2318,7 @@ async function processMediaInBackground(args: {
         io.to(`chat:${chatId}`).emit("message:media-ready", {
           messageId,
           media_url: buildProxyUrl(publicUrl),
+          media_public_url: publicUrl,
           media_storage_path: mediaInfo.storagePath,
           caption: messageData?.caption ?? null,
         });
@@ -2805,6 +2806,8 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     type: upsertResult.message.type ?? messageType,
     is_private: false,
     media_url: buildProxyUrl(upsertResult.message.media_url) ?? null,
+    media_public_url: upsertResult.message.media_public_url ?? null,
+    media_storage_path: upsertResult.message.media_storage_path ?? null,
     caption: caption ?? null,
     remote_sender_id: upsertResult.message.remote_sender_id ?? null,
     remote_sender_name: upsertResult.message.remote_sender_name ?? null,

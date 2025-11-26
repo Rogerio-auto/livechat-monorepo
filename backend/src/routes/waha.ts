@@ -1664,14 +1664,19 @@ export function registerWAHARoutes(app: Express) {
     if (!companyId) return res.status(400).json({ error: "companyId ausente" });
 
     try {
+      console.log("[WAHA] /sendText - Fetching creds for inbox:", inboxId);
       const creds = await getDecryptedCredsForInbox(inboxId);
       if (!creds || creds.provider !== WAHA_PROVIDER) {
+        console.warn("[WAHA] /sendText - Invalid inbox:", { inboxId, provider: creds?.provider });
         return res.status(400).json({ error: "Inbox não é WAHA ou não encontrada." });
       }
+      console.log("[WAHA] /sendText - Creds OK for inbox:", inboxId);
 
       // Generate draft ID first to avoid race conditions
       const draftId = clientDraftId || randomUUID();
+      console.log("[WAHA] /sendText - Generated draftId:", draftId);
 
+      console.log("[WAHA] /sendText - Persisting draft message...");
       const draft = await persistDraftMessage({
         companyId, chatId: chatId ?? null, inboxId, to,
         kind: "text", content, 
@@ -1681,6 +1686,7 @@ export function registerWAHARoutes(app: Express) {
         draftId, // Pass the draft ID
       });
       const senderId = draft?.sender_id || null;
+      console.log("[WAHA] /sendText - Draft persisted:", { draftId, senderId });
 
       const payload: Record<string, unknown> = {
         to,
@@ -1690,6 +1696,7 @@ export function registerWAHARoutes(app: Express) {
         draftId,  // Use the draft ID, not a random one
       };
 
+      console.log("[WAHA] /sendText - Publishing to RabbitMQ...", { exchange: EX_APP, routingKey: "outbound.request" });
       await publish(EX_APP, "outbound.request", {
         jobType: "outbound.request",
         provider: WAHA_PROVIDER,
@@ -1700,11 +1707,18 @@ export function registerWAHARoutes(app: Express) {
         senderId,  // Pass sender ID to worker
         payload,
       });
+      console.log("[WAHA] /sendText - Published to RabbitMQ successfully");
 
       await invalidateCompanyChatLists(companyId);
+      console.log("[WAHA] /sendText - Success, returning draftId:", draftId);
       res.json({ ok: true, draftId });
     } catch (e) {
-      console.error("[WAHA] /sendText failed:", e);
+      console.error("[WAHA] /sendText failed:", {
+        error: e instanceof Error ? e.message : String(e),
+        stack: e instanceof Error ? e.stack : undefined,
+        inboxId,
+        companyId,
+      });
       res.status(500).json({ error: "Falha ao enfileirar envio de mensagem WAHA." });
     }
   });

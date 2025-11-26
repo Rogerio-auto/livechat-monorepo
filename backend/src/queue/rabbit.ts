@@ -145,14 +145,24 @@ export async function publish(
   payload: unknown,
   opts: Options.Publish = {}
 ): Promise<void> {
-  const ch = await getChannel();
-  const buf = Buffer.from(JSON.stringify(payload));
-  const ok = ch.publish(exchange, routingKey, buf, {
-    contentType: "application/json",
-    persistent: true,
-    ...opts,
-  });
-  if (!ok) console.warn("[Rabbit] publish backpressure", { exchange, routingKey });
+  try {
+    const ch = await getChannel();
+    const buf = Buffer.from(JSON.stringify(payload));
+    const ok = ch.publish(exchange, routingKey, buf, {
+      contentType: "application/json",
+      persistent: true,
+      ...opts,
+    });
+    if (!ok) console.warn("[Rabbit] publish backpressure", { exchange, routingKey });
+  } catch (error) {
+    console.error("[Rabbit] publish failed:", {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      exchange,
+      routingKey,
+    });
+    throw error; // Re-throw to let caller handle it
+  }
 }
 
 /** Helper de consumo. */

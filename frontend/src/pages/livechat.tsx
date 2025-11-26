@@ -1549,7 +1549,7 @@ const scrollToBottom = useCallback(
 
     // Listener para atualiza��o de m�dia em background
     const onMediaReady = (payload: any) => {
-      if (!payload?.messageId || !payload?.media_url) return;
+      if (!payload?.messageId || (!payload?.media_url && !payload?.media_storage_path && !payload?.media_public_url)) return;
       console.log('[livechat] Media ready:', payload);
       
       // Atualiza mensagem no cache incluindo caption
@@ -1558,8 +1558,9 @@ const scrollToBottom = useCallback(
           msg.id === payload.messageId
             ? { 
                 ...msg, 
-                media_url: payload.media_url, 
-                media_storage_path: payload.media_storage_path,
+                media_url: payload.media_url ?? msg.media_url, 
+                media_public_url: payload.media_public_url ?? msg.media_public_url,
+                media_storage_path: payload.media_storage_path ?? msg.media_storage_path,
                 caption: payload.caption ?? msg.caption,
               }
             : msg

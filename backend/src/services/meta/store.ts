@@ -1100,12 +1100,12 @@ export async function ensureLeadCustomerChat(args: {
     if (!chat) {
       try {
         chat = await tx.one<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
-            `insert into public.chats (inbox_id, customer_id, company_id, status, last_message_at, external_id, chat_type)
-           values ($1, $2, (select company_id from public.inboxes where id = $1 limit 1), 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'))
+            `insert into public.chats (inbox_id, customer_id, company_id, status, last_message_at, external_id, chat_type, name, phone)
+           values ($1, $2, (select company_id from public.inboxes where id = $1 limit 1), 'AI', now(), $3, coalesce($4::public.chat_type, 'CONTACT'), $5, $6)
            returning id, external_id, chat_type, remote_id`,
-          [args.inboxId, customer!.id, externalIdCandidate ?? null, "CONTACT"],
+          [args.inboxId, customer!.id, externalIdCandidate ?? null, "CONTACT", args.participantName ?? args.remoteSenderName ?? null, msisdn ?? null],
         );
-        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id, externalId: externalIdCandidate });
+        console.log("[META][store] chat created", { chatId: chat.id, inboxId: args.inboxId, customerId: customer!.id, externalId: externalIdCandidate, name: args.participantName, phone: msisdn });
       } catch (error: any) {
         if (String(error?.code) === "23505") {
           // Conflict: retry with external_id filter
@@ -1151,6 +1151,26 @@ export async function ensureLeadCustomerChat(args: {
         updated = true;
         console.log("[META][store] chat external_id backfilled", { chatId: chat.id, externalId: externalIdCandidate });
       }
+      
+      // Atualizar nome e telefone se estiverem vazios
+      const participantName = args.participantName ?? args.remoteSenderName ?? null;
+      if (participantName || msisdn) {
+        const nameUpdated = await tx.one<{ updated: boolean }>(
+          `update public.chats
+              set name = coalesce(name, $2),
+                  phone = coalesce(phone, $3),
+                  updated_at = now()
+            where id = $1
+              and (name is null or name = '' or phone is null or phone = '')
+            returning (name = $2 or phone = $3) as updated`,
+          [chat.id, participantName, msisdn],
+        );
+        if (nameUpdated.updated) {
+          updated = true;
+          console.log("[META][store] chat name/phone backfilled", { chatId: chat.id, name: participantName, phone: msisdn });
+        }
+      }
+      
       const chatTypeUpper = chat.chat_type ? String(chat.chat_type).toUpperCase() : null;
       if (!chatTypeUpper) {
         await tx.none(

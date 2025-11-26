@@ -1235,13 +1235,38 @@ const scrollToBottom = useCallback(
       const chatId = normalized.chat_id;
       const existing = messagesCache.get(chatId) ?? [];
       
+      const normalizedExternalId = (normalized as any).external_id;
+      
       // Find existing message by ID, client_draft_id, or external_id (for draft replacement)
       const index = existing.findIndex(
-        (item) =>
-          item.id === normalized.id ||
-          (normalized.client_draft_id && item.client_draft_id === normalized.client_draft_id) ||
-          ((normalized as any).external_id && (item as any).external_id === (normalized as any).external_id && item.id?.startsWith('draft-')),
+        (item) => {
+          // Match by message ID
+          if (item.id === normalized.id) return true;
+          
+          // Match by client_draft_id
+          if (normalized.client_draft_id && item.client_draft_id === normalized.client_draft_id) return true;
+          
+          // Match by external_id for META draft replacement
+          // Draft has id like "draft-wamid.HBg..." and external_id "wamid.HBg..."
+          // Confirmed message has UUID id and same external_id
+          if (normalizedExternalId && (item as any).external_id === normalizedExternalId) {
+            // If item is a draft (starts with "draft-"), replace it with confirmed
+            if (item.id?.startsWith('draft-')) return true;
+          }
+          
+          return false;
+        }
       );
+      
+      // If normalized is a draft and we found a confirmed message with same external_id, ignore the draft
+      if (index >= 0 && normalized.id?.startsWith('draft-') && !existing[index].id?.startsWith('draft-')) {
+        console.log('[LiveChat] Ignoring duplicate draft, confirmed message already exists', {
+          draftId: normalized.id,
+          confirmedId: existing[index].id,
+          externalId: normalizedExternalId
+        });
+        return;
+      }
       
       let updated: Message[];
       if (index >= 0) {

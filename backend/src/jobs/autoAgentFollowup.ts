@@ -69,7 +69,7 @@ async function findIdleChats(): Promise<IdleChat[]> {
       LIMIT 50
     `;
 
-    const idleChats = await db.manyOrNone<IdleChat>(query);
+    const idleChats = await db.any<IdleChat>(query);
 
     if (!idleChats || idleChats.length === 0) {
       console.log("[AutoAgentFollowup] ℹ️  Nenhum chat ocioso encontrado");

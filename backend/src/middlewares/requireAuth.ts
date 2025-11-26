@@ -2,8 +2,10 @@ import type { Request, Response, NextFunction } from "express";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { JWT_COOKIE_NAME } from "../config/env.ts";
+import { rGet, rSet } from "../lib/redis.ts";
 
 const isDev = process.env.NODE_ENV !== "production";
+const AUTH_CACHE_TTL = 300; // 5 minutos
 
 type UserCompanyRow = {
   company_id?: string | null;
@@ -96,6 +98,23 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (!token) token = (req as any).cookies?.[JWT_COOKIE_NAME];
     if (!token) return res.status(401).json({ error: "Not authenticated" });
 
+    // ✅ Cache de autenticação por token hash
+    const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
+    const cacheKey = `auth:token:${tokenHash}`;
+    
+    try {
+      const cached = await rGet(cacheKey);
+      if (cached) {
+        const authData = JSON.parse(cached);
+        (req as any).user = authData.user;
+        (req as any).profile = authData.profile;
+        console.log("[requireAuth] 🚀 Cache HIT:", { userId: authData.user.id });
+        return next();
+      }
+    } catch (cacheError) {
+      console.warn("[requireAuth] Cache read error:", cacheError);
+    }
+
     const { data, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !data?.user) return res.status(401).json({ error: "Invalid token" });
     const supaUser = data.user;
@@ -133,26 +152,28 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing company context" });
     }
 
-    // Buscar o ID da tabela public.users
+    // Buscar o ID da tabela public.users + theme_preference
     let publicUserId: string | null = null;
+    let themePreference: string = "system";
     try {
       const { data: publicUser, error: publicUserError } = await supabaseAdmin
         .from("users")
-        .select("id")
+        .select("id, theme_preference")
         .eq("user_id", supaUser.id)
         .maybeSingle();
       
       if (publicUserError) {
-        console.error("[requireAuth] Error fetching public user id:", publicUserError);
+        console.error("[requireAuth] Error fetching public user data:", publicUserError);
       }
       
       if (publicUser?.id) {
         publicUserId = publicUser.id;
+        themePreference = publicUser.theme_preference || "system";
       } else {
         console.warn("[requireAuth] No public user found for auth user:", supaUser.id);
       }
     } catch (error) {
-      console.error("[requireAuth] Exception fetching public user id:", error);
+      console.error("[requireAuth] Exception fetching public user data:", error);
     }
 
     (req as any).user = {
@@ -176,6 +197,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         supaUser.email,
       company_id: companyId ?? null,
       role: profile?.role ?? "USER", // Default USER se não encontrar
+      theme_preference: themePreference, // ✅ Incluir theme no profile
     };
     
     console.log("[requireAuth] 🔑 User authenticated:", {
@@ -185,6 +207,20 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       company_id: companyId,
       role: profile?.role,
     });
+    
+    // ✅ Salvar no cache por 5 minutos
+    try {
+      await rSet(
+        cacheKey,
+        JSON.stringify({
+          user: (req as any).user,
+          profile: (req as any).profile,
+        }),
+        AUTH_CACHE_TTL
+      );
+    } catch (cacheError) {
+      console.warn("[requireAuth] Cache write error:", cacheError);
+    }
     
     next();
   } catch (e: any) {

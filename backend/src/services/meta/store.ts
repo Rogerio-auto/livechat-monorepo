@@ -1497,6 +1497,10 @@ export async function insertInboundMessage(args: {
     remote_sender_avatar_url: result.message.remote_sender_avatar_url ?? null,
     remote_sender_is_admin: result.message.remote_sender_is_admin ?? null,
     replied_message_id: result.message.replied_message_id ?? null,
+    // ✅ Campos de mídia (inicialmente null, preenchidos por worker-media depois)
+    media_url: result.message.media_url ?? null,
+    media_public_url: result.message.media_public_url ?? null,
+    media_storage_path: result.message.media_storage_path ?? null,
   };
 }
 

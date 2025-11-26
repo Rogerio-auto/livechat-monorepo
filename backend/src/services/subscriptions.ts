@@ -1,4 +1,7 @@
 import db from "../pg.ts";
+import { rGet, rSet } from "../lib/redis.ts";
+
+const SUBSCRIPTION_CACHE_TTL = 300; // 5 minutos
 
 // ========== TYPES ==========
 export interface Plan {
@@ -102,6 +105,18 @@ export interface LimitCheckResult {
  * Obter subscription atual da empresa (com dados do plano)
  */
 export async function getSubscription(companyId: string): Promise<SubscriptionWithPlan | null> {
+  // ✅ Tentar cache primeiro
+  const cacheKey = `subscription:${companyId}`;
+  try {
+    const cached = await rGet<SubscriptionWithPlan>(cacheKey);
+    if (cached) {
+      console.log("[subscriptions] 🚀 Cache HIT:", companyId);
+      return cached;
+    }
+  } catch (cacheError) {
+    console.warn("[subscriptions] Cache read error:", cacheError);
+  }
+
   const row = await db.oneOrNone<Subscription & { plan: string }>(
     `SELECT 
       s.*,
@@ -115,10 +130,20 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
 
   if (!row) return null;
 
-  return {
+  const result = {
     ...row,
     plan: typeof row.plan === "string" ? JSON.parse(row.plan) : row.plan,
   } as SubscriptionWithPlan;
+
+  // ✅ Salvar no cache
+  try {
+    await rSet(cacheKey, JSON.stringify(result), SUBSCRIPTION_CACHE_TTL);
+    console.log("[subscriptions] 💾 Cached:", companyId);
+  } catch (cacheError) {
+    console.warn("[subscriptions] Cache write error:", cacheError);
+  }
+
+  return result;
 }
 
 /**
@@ -471,6 +496,15 @@ export async function changePlan(companyId: string, newPlanId: string): Promise<
       cancel_at_period_end = FALSE;`,
     [newPlanId, companyId]
   );
+
+  // ✅ Invalidar cache
+  try {
+    const { redis } = await import("../lib/redis.ts");
+    await redis.del(`subscription:${companyId}`);
+    console.log("[subscriptions] Cache invalidated after plan change:", companyId);
+  } catch (error) {
+    console.warn("[subscriptions] Failed to invalidate cache:", error);
+  }
 }
 
 /**

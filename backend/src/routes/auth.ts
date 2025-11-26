@@ -6,6 +6,7 @@ import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config
 import { getIO } from "../lib/io.ts";
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
 import { randomUUID } from "crypto";
+import { redis } from "../lib/redis.ts";
 
 export function registerAuthRoutes(app: express.Application) {
   console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');
@@ -53,29 +54,13 @@ export function registerAuthRoutes(app: express.Application) {
     const user = req.user || {};
     const profile = req.profile || {};
     
-    // Buscar preferência de tema do banco
-    let theme_preference = "system";
-    try {
-      const { data: userData } = await supabaseAdmin
-        .from("users")
-        .select("theme_preference")
-        .eq("user_id", user.id || profile.id)
-        .maybeSingle();
-      
-      if (userData?.theme_preference) {
-        theme_preference = userData.theme_preference;
-      }
-    } catch (e) {
-      console.error('[/auth/me] Error fetching theme preference:', e);
-    }
-    
     const response = { 
       id: user.id || profile.id,
       email: user.email || profile.email,
       role: profile.role || "USER",
       company_id: user.company_id || profile.company_id,
       name: profile.name || user.name || user.email,
-      theme_preference,
+      theme_preference: profile.theme_preference || "system", // ✅ Já vem do cache do requireAuth
     };
     
     console.log('[/auth/me] 📤 Response:', response);
@@ -101,6 +86,20 @@ export function registerAuthRoutes(app: express.Application) {
       if (error) {
         console.error('[/auth/me/theme] Error updating theme:', error);
         return res.status(500).json({ error: error.message });
+      }
+
+      // ✅ Invalidar cache de autenticação para forçar refresh
+      try {
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith("Bearer ")) {
+          const token = authHeader.slice(7);
+          const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
+          const cacheKey = `auth:token:${tokenHash}`;
+          await redis.del(cacheKey);
+          console.log('[/auth/me/theme] Cache invalidated:', cacheKey);
+        }
+      } catch (cacheError) {
+        console.warn('[/auth/me/theme] Failed to invalidate cache:', cacheError);
       }
 
       return res.json({ ok: true, theme_preference });

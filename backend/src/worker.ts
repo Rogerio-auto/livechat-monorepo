@@ -2063,6 +2063,34 @@ async function handleInboundMediaJob(job: InboundMediaJobPayload): Promise<void>
       );
 
       console.log("[META][inbound.media] 💾 Database updated", { messageId });
+
+      // ✅ Emitir evento Socket.IO para atualizar frontend em tempo real
+      try {
+        const io = getIO();
+        if (io && chatId) {
+          // Buscar caption da mensagem
+          const messageData = await db.oneOrNone<{ caption: string | null }>(
+            'SELECT caption FROM public.chat_messages WHERE id = $1',
+            [messageId]
+          );
+          
+          io.to(`chat:${chatId}`).emit("message:media-ready", {
+            messageId,
+            media_url: buildProxyUrl(uploadResult.publicUrl),
+            media_public_url: uploadResult.publicUrl,
+            media_storage_path: uploadResult.path,
+            caption: messageData?.caption ?? null,
+          });
+          
+          console.log('[META][inbound.media] 📡 Socket event emitted:', { 
+            messageId, 
+            chatId, 
+            hasCaption: !!messageData?.caption 
+          });
+        }
+      } catch (socketError) {
+        console.warn('[META][inbound.media] ⚠️ Failed to emit socket event:', socketError);
+      }
     } catch (err) {
       console.error("[inbound.media] media handling error:", (err as any)?.message || err);
       throw err;

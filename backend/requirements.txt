@@ -1,0 +1,14 @@
+# Gerador de Propostas Python - Dependências
+# Instalação: pip install -r requirements.txt
+
+# Template DOCX (Jinja2)
+docxtpl==0.16.7
+
+# Geração de gráficos
+matplotlib==3.8.2
+
+# Manipulação de documentos Word
+python-docx==1.1.0
+
+# Processamento de imagens
+Pillow==10.1.0

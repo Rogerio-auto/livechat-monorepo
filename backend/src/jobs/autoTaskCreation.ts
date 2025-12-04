@@ -285,13 +285,13 @@ async function createFollowUpTask(lead: InactiveLead): Promise<void> {
 
     // Emitir evento Socket.io
     const io = getIO();
-    io.emit("task:created", {
+    io.to(`company:${lead.company_id}`).emit("task:created", {
       task,
       companyId: lead.company_id,
     });
 
     if (task.assigned_to) {
-      io.emit("task:assigned", {
+      io.to(`company:${lead.company_id}`).emit("task:assigned", {
         taskId: task.id,
         assignedTo: task.assigned_to,
         task,
@@ -350,13 +350,13 @@ async function createEventPrepTask(event: UpcomingEvent): Promise<void> {
 
     // Emitir evento Socket.io
     const io = getIO();
-    io.emit("task:created", {
+    io.to(`company:${event.company_id}`).emit("task:created", {
       task,
       companyId: event.company_id,
     });
 
     if (task.assigned_to) {
-      io.emit("task:assigned", {
+      io.to(`company:${event.company_id}`).emit("task:assigned", {
         taskId: task.id,
         assignedTo: task.assigned_to,
         task,

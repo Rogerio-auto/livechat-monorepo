@@ -5,6 +5,7 @@ import { SalesFunnel } from './pages/funil-vendas'
 import { ClientesPage } from './pages/clientes'
 import { PropostaPage } from './pages/orcamento'
 import DocumentosPage from './pages/documentos'
+import TemplatesPage from './pages/templates'
 import { CalendarioPage } from './pages/calendar'
 import LiveChatPage from './pages/livechat'
 import ProdutosPage from './pages/produtos'
@@ -37,6 +38,7 @@ function App() {
           <Route path='/tarefas' element={<TarefasPage />}/>
           <Route path='/automacao' element={<AutomationRulesPage />}/>
           <Route path='/documentos' element={<DocumentosPage/>}/>
+          <Route path='/templates' element={<TemplatesPage/>}/>
           <Route path='/calendario' element={<CalendarioPage/>}/>
           <Route path='/livechat' element={<LiveChatPage/>}/>
           <Route path='/produtos' element={<ProdutosPage/>}/>

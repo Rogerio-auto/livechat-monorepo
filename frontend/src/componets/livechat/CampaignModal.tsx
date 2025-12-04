@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { FiX, FiSave, FiPlay, FiPause, FiUsers, FiMessageSquare, FiCheckCircle, FiAlertCircle, FiClock, FiBarChart2, FiTrash2, FiChevronRight, FiChevronLeft } from "react-icons/fi";
+import { FiX, FiSave, FiPlay, FiPause, FiUsers, FiMessageSquare, FiCheckCircle, FiAlertCircle, FiClock, FiBarChart2, FiTrash2, FiChevronRight, FiChevronLeft, FiUpload } from "react-icons/fi";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import type { Campaign } from "../../types/types";
 import TemplatePicker from "./TemplatePicker";
+import CampaignUploadRecipientsModal from "./CampaignUploadRecipientsModal";
 
 type Inbox = { id: string; name?: string; provider?: string };
 type Template = { id: string; name: string; kind: string };
@@ -63,6 +64,7 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [previewCount, setPreviewCount] = useState<number | null>(null);
   const [commitInfo, setCommitInfo] = useState<string | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -587,6 +589,15 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
                   <FiCheckCircle className="w-4 h-4 mr-1" />
                   {loading ? "..." : "Materializar Audiência"}
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowUploadModal(true)}
+                  disabled={loading}
+                >
+                  <FiUpload className="w-4 h-4 mr-1" />
+                  Enviar Lista
+                </Button>
               </div>
             </Card>
           )}
@@ -622,6 +633,18 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
           </div>
         </div>
       </div>
+
+      {/* Upload Modal */}
+      <CampaignUploadRecipientsModal
+        apiBase={apiBase}
+        campaignId={campaign.id}
+        open={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onSuccess={() => {
+          setShowUploadModal(false);
+          loadStats(); // Reload stats after upload
+        }}
+      />
     </div>
   );
 }

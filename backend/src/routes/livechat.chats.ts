@@ -1937,13 +1937,25 @@ export function registerLivechatChatRoutes(app: express.Application) {
         department_color: departmentPayloadColor,
         department_icon: departmentPayloadIcon,
       });
-      io.emit("chat:updated", {
-        chatId: id,
-        department_id: updatedRow?.department_id ?? null,
-        department_name: departmentPayloadName,
-        department_color: departmentPayloadColor,
-        department_icon: departmentPayloadIcon,
-      });
+      
+      const chatCompanyId = (updatedRow as any)?.company_id;
+      if (chatCompanyId) {
+        io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+          chatId: id,
+          department_id: updatedRow?.department_id ?? null,
+          department_name: departmentPayloadName,
+          department_color: departmentPayloadColor,
+          department_icon: departmentPayloadIcon,
+        });
+      } else {
+        io.emit("chat:updated", {
+          chatId: id,
+          department_id: updatedRow?.department_id ?? null,
+          department_name: departmentPayloadName,
+          department_color: departmentPayloadColor,
+          department_icon: departmentPayloadIcon,
+        });
+      }
     }
 
     return res.json({
@@ -2408,13 +2420,25 @@ export function registerLivechatChatRoutes(app: express.Application) {
           client_draft_id: clientDraftId,
         };
         io.to(`chat:${chatId}`).emit("message:new", mapped);
-        io.emit("chat:updated", {
-          chatId,
-          inboxId: (chat as any).inbox_id,
-          last_message: String(text),
-          last_message_at: nowIso,
-          last_message_from: mapped.sender_type,
-        });
+        
+        const chatCompanyId = (chat as any)?.company_id;
+        if (chatCompanyId) {
+          io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+            chatId,
+            inboxId: (chat as any).inbox_id,
+            last_message: String(text),
+            last_message_at: nowIso,
+            last_message_from: mapped.sender_type,
+          });
+        } else {
+          io.emit("chat:updated", {
+            chatId,
+            inboxId: (chat as any).inbox_id,
+            last_message: String(text),
+            last_message_at: nowIso,
+            last_message_from: mapped.sender_type,
+          });
+        }
       }
 
       // Se for AGENTE -> manda para a fila outbound
@@ -3080,7 +3104,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       // 1. Get chat details to determine provider
       const { data: chat, error: chatError } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id")
+        .select("id, inbox_id, company_id")
         .eq("id", chatId)
         .maybeSingle();
 
@@ -3198,16 +3222,30 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           // Emit chat updated with unread_count = 0
-          io.emit("chat:updated", {
-            chatId,
-            unread_count: 0,
-          });
+          const chatCompanyId = chat.company_id;
+          if (chatCompanyId) {
+            io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+              chatId,
+              unread_count: 0,
+            });
 
-          io.emit("chat:read", {
-            chatId,
-            inboxId: chat.inbox_id,
-            timestamp: new Date().toISOString(),
-          });
+            io.to(`company:${chatCompanyId}`).emit("chat:read", {
+              chatId,
+              inboxId: chat.inbox_id,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            io.emit("chat:updated", {
+              chatId,
+              unread_count: 0,
+            });
+
+            io.emit("chat:read", {
+              chatId,
+              inboxId: chat.inbox_id,
+              timestamp: new Date().toISOString(),
+            });
+          }
 
           console.log("[READ_RECEIPTS][livechat/mark-read] Socket events emitted", {
             chatId,
@@ -3302,16 +3340,30 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           // Emit chat updated with unread_count = 0
-          io.emit("chat:updated", {
-            chatId,
-            unread_count: 0,
-          });
+          const chatCompanyId = chat.company_id;
+          if (chatCompanyId) {
+            io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+              chatId,
+              unread_count: 0,
+            });
 
-          io.emit("chat:read", {
-            chatId,
-            inboxId: chat.inbox_id,
-            timestamp: new Date().toISOString(),
-          });
+            io.to(`company:${chatCompanyId}`).emit("chat:read", {
+              chatId,
+              inboxId: chat.inbox_id,
+              timestamp: new Date().toISOString(),
+            });
+          } else {
+            io.emit("chat:updated", {
+              chatId,
+              unread_count: 0,
+            });
+
+            io.emit("chat:read", {
+              chatId,
+              inboxId: chat.inbox_id,
+              timestamp: new Date().toISOString(),
+            });
+          }
 
           console.log("[READ_RECEIPTS][livechat/mark-read] Socket events emitted", {
             chatId,

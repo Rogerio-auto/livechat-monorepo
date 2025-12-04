@@ -19,6 +19,8 @@ import {
 import db from "../src/pg.ts";
 import { normalizeMsisdn } from "../src/util.ts";
 import { getIO } from "./lib/io.ts";
+import { runWithDistributedLock } from "./lib/distributedLock.ts";
+import { ensureSingleWorkerInstance } from "./lib/singleInstance.ts";
 import {
   saveWebhookEvent,
   updateMessageStatusByExternalId,
@@ -1620,6 +1622,7 @@ async function handleMetaInboundMessages(args: {
       await emitSocketWithRetry("socket.livechat.inbound", {
         kind: "livechat.inbound.message",
         chatId,
+        companyId,
         message: {
           id: `draft-${wamid}`, // Temporary ID
           chat_id: chatId,
@@ -1680,6 +1683,7 @@ async function handleMetaInboundMessages(args: {
       await emitSocketWithRetry("socket.livechat.inbound", {
         kind: "livechat.inbound.message",
         chatId,
+        companyId,
         message: {
           ...inserted,
           view_status: "DELIVERED", // Update from DRAFT to DELIVERED
@@ -1907,6 +1911,7 @@ async function handleMetaInboundMessages(args: {
       const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
         kind: "livechat.inbound.message",
         chatId,
+        companyId,
         inboxId: inboxIdForSocket,
         message: mappedMessage,
         chatUpdate: chatSummary
@@ -2568,6 +2573,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           await publishApp("socket.livechat.status", {
             kind: "livechat.message.status",
             chatId,
+            companyId: job.companyId,
             messageId: existingMessage.id,
             externalId: messageId,
             view_status: ackStatus,
@@ -2786,6 +2792,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       await publishApp("socket.livechat.status", {
         kind: "livechat.message.status",
         chatId,
+        companyId: job.companyId,
         messageId: upsertResult.message.id,
         externalId: messageId,
         view_status: ackStatus,
@@ -2853,6 +2860,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
       kind: "livechat.inbound.message",
       chatId,
+      companyId: job.companyId,
       inboxId: job.inboxId,
       message: mappedMessage,
       chatUpdate: chatSummary
@@ -2923,6 +2931,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId,
+      companyId: job.companyId,
       messageId: mappedMessage.id,
       externalId: messageId,
       view_status: ackStatus,
@@ -3280,6 +3289,7 @@ async function handleWahaAck(job: WahaInboundPayload, payload: any) {
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId: statusUpdate.chatId,
+      companyId: job.companyId,
       messageId: statusUpdate.messageId,
       externalId: messageId,
       view_status: statusUpdate.viewStatus,
@@ -3643,6 +3653,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     const socketSuccess = await emitSocketWithRetry("socket.livechat.outbound", {
       kind: "livechat.outbound.message",
       chatId: mapped.chat_id,
+      companyId: job.companyId,
       inboxId,
       message: mapped,
       chatUpdate: chatSummary
@@ -3670,6 +3681,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
     await publishApp("socket.livechat.status", {
       kind: "livechat.message.status",
       chatId: chatIdForStatus,
+      companyId: job.companyId,
       messageId: messageIdForStatus,
       externalId: externalId || null,
       view_status: viewStatus,
@@ -4251,6 +4263,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         await publishApp("socket.livechat.status", {
           kind: "livechat.message.status",
           chatId,
+          companyId: job.companyId,
           messageId: messageId || (upsert?.message?.id || null),
           externalId: wamid || null,
           view_status: "Sent",
@@ -4417,6 +4430,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         await publishApp("socket.livechat.status", {
           kind: "livechat.message.status",
           chatId,
+          companyId: job.companyId,
           messageId: job.messageId || upsert?.message?.id || null,
           externalId: wamid || null,
           view_status: "Sent",
@@ -4453,6 +4467,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           const socketSuccess = await emitSocketWithRetry("socket.livechat.outbound", {
             kind: "livechat.outbound.message",
             chatId: mapped.chat_id,
+            companyId: job.companyId,
             inboxId,
             message: mapped,
             chatUpdate: chatSummary
@@ -4533,6 +4548,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
             await publishApp("socket.livechat.status", {
               kind: "livechat.message.status",
               chatId: chatIdPayload,
+              companyId: job.companyId,
               messageId: messageIdPayload,
               externalId: (job as any)?.externalId ?? null,
               view_status: "Error",
@@ -4567,6 +4583,9 @@ async function startOutboundWorkers(count: number, prefetch: number): Promise<vo
 }
 
 async function main(): Promise<void> {
+  // 🔒 Garante que apenas 1 instância do worker está rodando
+  await ensureSingleWorkerInstance();
+
   const target = (process.argv[2] ?? "all").toLowerCase();
 
   // Ajuste de concorr??ncia via env:
@@ -4610,6 +4629,7 @@ async function syncWahaGroupMetadata(): Promise<void> {
         where (ch.kind = 'GROUP' or ch.remote_id like '%@g.us')
           and ib.provider = $1
           and ch.remote_id is not null
+          and (ib.waha_status IS NULL OR ib.waha_status NOT IN ('FAILED', 'STOPPED', 'CLOSED', 'LOGGED_OUT'))
         order by ch.updated_at desc
         limit 10`,
       [WAHA_PROVIDER],
@@ -4704,11 +4724,39 @@ async function syncWahaGroupMetadata(): Promise<void> {
 
         await new Promise((resolve) => setTimeout(resolve, 200));
       } catch (error) {
-        console.warn("[WAHA][sync] failed to refresh group metadata", {
-          inboxId: group.inbox_id,
-          remoteId,
-          error,
-        });
+        // Se o erro for de sessão FAILED, marcar inbox como desconectada
+        if (error instanceof Error && error.message?.includes('status":"FAILED"')) {
+          console.warn("[WAHA][sync] Session FAILED detected, marking inbox as disconnected", {
+            inboxId: group.inbox_id,
+            remoteId,
+          });
+          
+          try {
+            await supabaseAdmin
+              .from("inboxes")
+              .update({ 
+                waha_status: "FAILED",
+                waha_last_error: error.message,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", group.inbox_id);
+            
+            console.log("[WAHA][sync] Inbox marked as FAILED, will stop sync attempts", {
+              inboxId: group.inbox_id,
+            });
+          } catch (updateError) {
+            console.error("[WAHA][sync] Failed to update inbox status", {
+              inboxId: group.inbox_id,
+              error: updateError,
+            });
+          }
+        } else {
+          console.warn("[WAHA][sync] failed to refresh group metadata", {
+            inboxId: group.inbox_id,
+            remoteId,
+            error,
+          });
+        }
       }
     }
   } catch (error) {
@@ -4769,15 +4817,202 @@ async function emitCampaignStats(campaignId: string, companyId?: string | null) 
   }
 }
 
-async function tickCampaigns() {
+/**
+ * Calcula batchSize adaptativo baseado em quality_rating e tier da inbox
+ */
+async function getAdaptiveBatchSize(inboxId: string): Promise<number> {
   try {
-    const now = new Date().toISOString();
-    console.log(`[campaigns] ping ${now}`);
-    // campanhas ativas
-    const { data: camps } = await supabaseAdmin
-  .from("campaigns")
-	.select("id, name, company_id, inbox_id, rate_limit_per_minute, start_at, end_at, status, send_windows, timezone")
-  .in("status", ["SCHEDULED","RUNNING"]);
+    const { data: inbox } = await supabaseAdmin
+      .from("inboxes")
+      .select("meta_quality_rating, meta_messaging_tier, provider")
+      .eq("id", inboxId)
+      .single();
+
+    if (!inbox) return 3; // Fallback conservador
+
+    // Se não é Meta, usar padrão conservador
+    if (inbox.provider !== "META_CLOUD") {
+      return 3;
+    }
+
+    const quality = inbox.meta_quality_rating || "UNKNOWN";
+    const tier = inbox.meta_messaging_tier || "UNKNOWN";
+
+    // Bloqueio total se RED
+    if (quality === "RED") {
+      console.error(`[campaigns] 🔴 Quality rating RED - inbox ${inboxId} bloqueada`);
+      return 0;
+    }
+
+    // Ultra conservador se YELLOW
+    if (quality === "YELLOW") {
+      console.warn(`[campaigns] 🟡 Quality rating YELLOW - modo conservador`);
+      return 2; // 2 msgs/min
+    }
+
+    // Ajustar por tier se GREEN ou UNKNOWN
+    console.log(`[campaigns] 🟢 Quality rating ${quality}, tier ${tier}`);
+    
+    switch (tier) {
+      case "TIER_1K":
+        return 3; // 3 msgs/min = 180/hora = 4.320/dia (com folga)
+      case "TIER_10K":
+        return 5; // 5 msgs/min = 300/hora = 7.200/dia
+      case "TIER_100K":
+        return 10; // 10 msgs/min = 600/hora = 14.400/dia
+      case "TIER_UNLIMITED":
+        return 20; // 20 msgs/min = 1.200/hora = 28.800/dia
+      default:
+        return 3; // Conservador por padrão
+    }
+  } catch (error) {
+    console.error(`[campaigns] Erro ao buscar adaptive batch size:`, error);
+    return 3; // Fallback seguro
+  }
+}
+
+/**
+ * Trata erros específicos da Meta API
+ */
+async function handleMetaError(error: any, campaignId: string, recipientId: string): Promise<void> {
+  const errorCode = error?.error?.code || error?.code;
+  const errorMessage = error?.error?.message || error?.message;
+
+  console.error(`[campaigns] Meta Error ${errorCode}: ${errorMessage}`);
+
+  switch (errorCode) {
+    case 130472: // Rate limit exceeded
+      console.warn(`[campaigns] 🚫 RATE LIMIT atingido - pausando campaign=${campaignId} por 5 minutos`);
+      
+      await supabaseAdmin
+        .from("campaigns")
+        .update({
+          status: "PAUSED",
+          paused_at: new Date().toISOString(),
+          pause_reason: "Rate limit exceeded (130472)",
+          resume_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // Resume em 5 min
+        })
+        .eq("id", campaignId);
+      
+      // Emitir alerta via socket
+      await publishApp("socket.campaign.alert", {
+        kind: "campaign.rate_limit",
+        campaignId,
+        severity: "critical",
+        message: "Rate limit atingido - campanha pausada por 5 minutos",
+      });
+      break;
+
+    case 131026: // Recipient cannot be sender (fora janela 24h)
+      console.warn(`[campaigns] ⏰ Fora da janela 24h: recipient=${recipientId}`);
+      
+      await supabaseAdmin
+        .from("campaign_deliveries")
+        .update({
+          status: "FAILED",
+          error_message: "Fora da janela de 24h para iniciar conversa",
+        })
+        .eq("campaign_id", campaignId)
+        .eq("recipient_id", recipientId);
+      break;
+
+    case 131047: // Re-engagement message required
+      console.warn(`[campaigns] 🔄 Re-engagement necessário: recipient=${recipientId}`);
+      
+      await supabaseAdmin
+        .from("campaign_deliveries")
+        .update({
+          status: "FAILED",
+          error_message: "Re-engagement necessário (usuário inativo >24h)",
+        })
+        .eq("campaign_id", campaignId)
+        .eq("recipient_id", recipientId);
+      break;
+
+    case 131051: // Message undeliverable (blocked)
+      console.warn(`[campaigns] 🚫 Bloqueado pelo usuário: recipient=${recipientId}`);
+      
+      await supabaseAdmin
+        .from("campaign_deliveries")
+        .update({
+          status: "FAILED",
+          error_message: "Bloqueado pelo usuário (131051)",
+        })
+        .eq("campaign_id", campaignId)
+        .eq("recipient_id", recipientId);
+      
+      // Incrementar contador de bloqueios
+      const { data: campaign } = await supabaseAdmin
+        .from("campaigns")
+        .select("id, name")
+        .eq("id", campaignId)
+        .single();
+      
+      // Calcular block rate
+      const { data: deliveries } = await supabaseAdmin
+        .from("campaign_deliveries")
+        .select("status, error_message")
+        .eq("campaign_id", campaignId);
+      
+      if (deliveries && deliveries.length > 0) {
+        const total = deliveries.length;
+        const blocked = deliveries.filter(
+          d => d.status === "FAILED" && d.error_message?.includes("131051")
+        ).length;
+        const blockRate = (blocked / total) * 100;
+        
+        console.log(`[campaigns] 📊 Block rate: ${blockRate.toFixed(2)}% (${blocked}/${total})`);
+        
+        // Pausar se block rate > 5%
+        if (blockRate > 5) {
+          console.error(`[campaigns] 🚨 CRÍTICO: Block rate ${blockRate.toFixed(2)}% > 5% - PAUSANDO campanha`);
+          
+          await supabaseAdmin
+            .from("campaigns")
+            .update({
+              status: "PAUSED",
+              paused_at: new Date().toISOString(),
+              pause_reason: `Block rate crítico: ${blockRate.toFixed(2)}%`,
+            })
+            .eq("id", campaignId);
+          
+          // Emitir alerta crítico
+          await publishApp("socket.campaign.alert", {
+            kind: "campaign.high_block_rate",
+            campaignId,
+            severity: "critical",
+            message: `Taxa de bloqueio crítica: ${blockRate.toFixed(2)}% - campanha pausada`,
+            block_rate: blockRate,
+            campaign_name: campaign?.name,
+          });
+        } else if (blockRate > 2) {
+          // Warning se > 2%
+          await publishApp("socket.campaign.alert", {
+            kind: "campaign.warning_block_rate",
+            campaignId,
+            severity: "warning",
+            message: `Taxa de bloqueio em atenção: ${blockRate.toFixed(2)}%`,
+            block_rate: blockRate,
+          });
+        }
+      }
+      break;
+
+    default:
+      console.error(`[campaigns] ❌ Erro não tratado ${errorCode}: ${errorMessage}`);
+  }
+}
+
+async function tickCampaigns() {
+  return runWithDistributedLock("campaigns:tick", async () => {
+    try {
+      const now = new Date().toISOString();
+      console.log(`[campaigns] ping ${now} (Worker PID ${process.pid})`);
+      // campanhas ativas
+      const { data: camps } = await supabaseAdmin
+    .from("campaigns")
+  	.select("id, name, company_id, inbox_id, rate_limit_per_minute, start_at, end_at, status, send_windows, timezone")
+    .in("status", ["SCHEDULED","RUNNING"]);
 
     for (const c of camps || []) {
       if (!c.inbox_id) continue;
@@ -4877,10 +5112,20 @@ async function tickCampaigns() {
         }
       }
 
-      // Rate limiting controlado: 3-4 mensagens por minuto (randomizado)
-      // Como o tick roda a cada 60s, enviamos 3-4 mensagens por execução
-      const batchSize = Math.floor(Math.random() * 2) + 3; // Random entre 3 e 4
+      // ===== ADAPTIVE RATE LIMITING =====
+      // Ajusta batchSize baseado em quality_rating e tier da inbox
+      const batchSize = await getAdaptiveBatchSize(c.inbox_id);
       const limit = batchSize;
+      
+      if (batchSize === 0) {
+        console.error(`[campaigns] 🔴 BLOQUEADO: Quality rating RED - pausando campaign=${c.id}`);
+        await supabaseAdmin
+          .from("campaigns")
+          .update({ status: "PAUSED", paused_at: new Date().toISOString(), pause_reason: "Quality rating RED" })
+          .eq("id", c.id);
+        continue;
+      }
+      
       console.log(`[campaigns] 📊 rate limit: campaign=${c.id} (${c.name || ""}) batchSize=${batchSize} mensagens neste ciclo`);
       
       const { data: step } = await supabaseAdmin
@@ -4927,6 +5172,21 @@ async function tickCampaigns() {
       let messagesSentThisCycle = 0;
       for (const r of recipients || []) {
         console.log(`[campaigns] 🔄 iniciando recipient: campaign=${c.id} recipient=${r.id} phone=${r.phone}`);
+        
+        // **LOCK OTIMISTA**: Marca recipient como processando IMEDIATAMENTE
+        // para evitar que outros ciclos peguem o mesmo recipient
+        const { error: lockError } = await supabaseAdmin
+          .from("campaign_recipients")
+          .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
+          .eq("id", r.id)
+          .is("last_step_sent", null); // Só atualiza se ainda estiver null
+        
+        if (lockError) {
+          console.warn(`[campaigns] ⚠️  falha ao obter lock: recipient=${r.id} - pulando (provavelmente já processado)`);
+          continue;
+        }
+        
+        console.log(`[campaigns] 🔒 lock obtido: recipient=${r.id}`);
         
         // Delay entre mensagens para distribuir ao longo do minuto
         // Com 3-4 mensagens por minuto, dá ~15-20s entre cada
@@ -5072,12 +5332,7 @@ async function tickCampaigns() {
               }
             }
             
-            // Marca progresso local
-            await supabaseAdmin
-              .from("campaign_recipients")
-              .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
-              .eq("id", r.id);
-            
+            // Lock já foi obtido no início do loop, não precisa atualizar novamente
             messagesSentThisCycle++;
             
             // Emite evento via socket para atualizar UI
@@ -5085,6 +5340,7 @@ async function tickCampaigns() {
               await publishApp("socket.livechat.status", {
                 kind: "livechat.message.status",
                 chatId,
+                companyId: c.company_id,
                 messageId,
                 externalId: wamid,
                 view_status: "Sent",
@@ -5099,6 +5355,7 @@ async function tickCampaigns() {
                 await publishApp("socket.livechat.outbound", {
                   kind: "livechat.outbound.message",
                   chatId,
+                  companyId: c.company_id,
                   inboxId: c.inbox_id,
                   message: {
                     id: messageId,
@@ -5179,17 +5436,8 @@ async function tickCampaigns() {
             payload: mediaPayload,
             attempt: 0,
           });
-        }
-
-        // Marca progresso local (step 1 enviado) somente se delivery criado
-        if (createdDeliveryId) {
-          await supabaseAdmin
-            .from("campaign_recipients")
-            .update({ last_step_sent: 1, last_sent_at: new Date().toISOString() })
-            .eq("id", r.id);
-          messagesSentThisCycle++; // Incrementa contador de mensagens enviadas
-        } else {
-          console.warn(`[campaigns] não atualizou last_step_sent (delivery ausente) campaign=${c.id} recipient=${r.id}`);
+          
+          messagesSentThisCycle++; // Incrementa contador (lock já foi obtido no início)
         }
       }
 
@@ -5240,28 +5488,29 @@ async function tickCampaigns() {
         console.log(`[campaigns] ⏳ aguardando processamento: campaign=${c.id} (${c.name || ""}) REMAINING=${remainingRecipients ?? 0} PENDING=${pendDel ?? 0} DONE=${doneDel ?? 0} TOTAL=${totalCount}`);
       }
     }
-  } catch (err) {
-    console.error("[campaigns] tick error:", (err as any)?.message || err);
-  }
+    } catch (err) {
+      console.error("[campaigns] tick error:", (err as any)?.message || err);
+    }
+  }, 50); // TTL de 50 segundos (menor que intervalo de 60s)
 }
 
 // Task reminders - roda a cada 5 minutos
 import { checkAndSendReminders } from "./jobs/taskReminders.js";
-setInterval(checkAndSendReminders, 5 * 60_000); // 5 minutos
+setInterval(() => runWithDistributedLock("task:reminders", checkAndSendReminders, 240), 5 * 60_000);
 
 // Auto-criação de tarefas - roda a cada 6 horas
 import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";
-setInterval(runAutoTaskCreation, 6 * 60 * 60_000); // 6 horas
+setInterval(() => runWithDistributedLock("auto:task", runAutoTaskCreation, 21000), 6 * 60 * 60_000);
 runAutoTaskCreation(); // Executar imediatamente na inicialização
 
 // Auto-follow-up de agentes - roda a cada 2 minutos
 import { runAutoAgentFollowup } from "./jobs/autoAgentFollowup.js";
-setInterval(runAutoAgentFollowup, 2 * 60_000); // 2 minutos
+setInterval(() => runWithDistributedLock("auto:followup", runAutoAgentFollowup, 100), 2 * 60_000);
 runAutoAgentFollowup().catch(err => console.error("[worker] autoAgentFollowup init error:", err));
 
 // roda a cada 60s
 setInterval(tickCampaigns, 60_000);
-setInterval(syncWahaGroupMetadata, 300_000);
+setInterval(() => runWithDistributedLock("sync:groups", syncWahaGroupMetadata, 240), 300_000);
 
 if (!process.env.SKIP_WORKER_AUTOSTART) {
   main().catch((e) => {

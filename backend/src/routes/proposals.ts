@@ -51,6 +51,7 @@ export function registerProposalRoutes(app: express.Application) {
       let customerId: string | null = body.customer_id || null;
       const leadId: string | null = body.lead_id || null;
 
+      // Se não tem customer_id, tentar criar/encontrar a partir do lead_id
       if (!customerId && leadId) {
         try {
           const { data: cust } = await supabaseAdmin
@@ -60,37 +61,43 @@ export function registerProposalRoutes(app: express.Application) {
             .maybeSingle();
           customerId = (cust as any)?.id || null;
         } catch {}
+        
+        // Se ainda não tem customer, criar um a partir do lead
         if (!customerId) {
           const { data: l } = await supabaseAdmin
             .from("leads")
             .select("id, name, email")
             .eq("id", leadId)
             .maybeSingle();
-          const payload: any = {
-            company_id: (urow as any).company_id,
-            name: (l as any)?.name || "Cliente",
-            email: (l as any)?.email || null,
-          };
-          try {
-            payload.lead_id = leadId;
-            const { data: created } = await supabaseAdmin
-              .from("customers")
-              .insert([payload])
-              .select("id")
-              .single();
-            customerId = (created as any)?.id || null;
-          } catch {
-            delete payload.lead_id;
-            const { data: created2 } = await supabaseAdmin
-              .from("customers")
-              .insert([payload])
-              .select("id")
-              .single();
-            customerId = (created2 as any)?.id || null;
+          
+          if (l) {
+            const payload: any = {
+              company_id: (urow as any).company_id,
+              name: (l as any)?.name || "Cliente",
+              email: (l as any)?.email || null,
+            };
+            try {
+              payload.lead_id = leadId;
+              const { data: created } = await supabaseAdmin
+                .from("customers")
+                .insert([payload])
+                .select("id")
+                .single();
+              customerId = (created as any)?.id || null;
+            } catch {
+              delete payload.lead_id;
+              const { data: created2 } = await supabaseAdmin
+                .from("customers")
+                .insert([payload])
+                .select("id")
+                .single();
+              customerId = (created2 as any)?.id || null;
+            }
           }
         }
       }
-      if (!customerId) return res.status(400).json({ error: "customer_id ou lead_id obrigatório" });
+      
+      // customer_id agora é opcional - proposta pode ser criada sem cliente
 
       const now = new Date();
       const pad = (n: number) => n.toString().padStart(2, "0");
@@ -113,6 +120,7 @@ export function registerProposalRoutes(app: express.Application) {
         total_value: Number(body.total_value ?? 0) || 0,
         installments: body.installments ?? 1,
         installment_value: body.installment_value ?? null,
+        valid_days: Number(body.valid_days ?? 30) || 30,
         valid_until: new Date(now.getTime() + (Number(body.valid_days ?? 30) || 30) * 24 * 60 * 60 * 1000)
           .toISOString()
           .slice(0, 10),
@@ -122,6 +130,20 @@ export function registerProposalRoutes(app: express.Application) {
         customer_id: customerId,
         lead_id: leadId,
         created_by_id: (urow as any).id,
+        // Campos de pagamento
+        payment_method: body.payment_method ?? null,
+        payment_terms: body.payment_terms ?? null,
+        // Campos de financiamento (se aplicável)
+        financing_bank: body.financing_bank ?? null,
+        financing_installments: body.financing_installments ?? null,
+        financing_installment_value: body.financing_installment_value ?? null,
+        financing_interest_rate: body.financing_interest_rate ?? null,
+        financing_total_amount: body.financing_total_amount ?? null,
+        financing_entry_value: body.financing_entry_value ?? null,
+        financing_cet: body.financing_cet ?? null,
+        financing_iof: body.financing_iof ?? null,
+        financing_type: body.financing_type ?? null,
+        financing_first_due_date: body.financing_first_due_date ?? null,
       };
 
       const { data, error } = await supabaseAdmin

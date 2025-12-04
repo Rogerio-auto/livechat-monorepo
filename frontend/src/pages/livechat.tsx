@@ -458,17 +458,23 @@ export default function LiveChatPage() {
   }, [chats, chatScope, isGroupChat]);
 
   const chatListItems = useMemo<ChatListItem[]>(() => {
+    console.debug('[livechat] Recalculating chatListItems', { count: filteredChats.length });
     return filteredChats.map((chat) => {
       const normalizedType = (chat.last_message_type || "").toUpperCase();
       const mediaLabel = chat.last_message_media_url
         ? MEDIA_PREVIEW_LABELS[normalizedType] ?? MEDIA_PREVIEW_LABELS.DOCUMENT
         : null;
       const isGroup = isGroupChat(chat);
-      const lastMessageText = mediaLabel
-        ? mediaLabel
-        : chat.last_message
-          ? `${chat.last_message_from === "AGENT" ? "Voc?: " : ""}${chat.last_message}`
-          : null;
+      
+      // Formatar a última mensagem com "Você: " se for do agente
+      let lastMessageText: string | null = null;
+      if (mediaLabel) {
+        lastMessageText = mediaLabel;
+      } else if (chat.last_message) {
+        const prefix = chat.last_message_from === "AGENT" ? "Você: " : "";
+        lastMessageText = `${prefix}${chat.last_message}`;
+      }
+      
       const displayName = (chat.display_name && chat.display_name.trim())
         ? chat.display_name.trim()
         : isGroup
@@ -484,6 +490,7 @@ export default function LiveChatPage() {
         name: displayName,
         last_message: lastMessageText,
         last_message_at: chat.last_message_at ?? chat.created_at ?? null,
+        last_message_from: chat.last_message_from ?? null,
         photo_url: photoUrl,
         isGroup,
         group_size: chat.group_size ?? null,
@@ -955,6 +962,13 @@ const bumpChatToTop = useCallback((update: {
   department_color?: string | null;
   department_icon?: string | null;
 }) => {
+  console.debug('[livechat] 🔄 bumpChatToTop called:', {
+    chatId: update.chatId,
+    last_message: update.last_message,
+    last_message_from: update.last_message_from,
+    last_message_at: update.last_message_at,
+  });
+  
   setChats((prev) => {
     const arr = [...prev];
     const idx = arr.findIndex((c) => c.id === update.chatId);
@@ -1484,15 +1498,31 @@ const scrollToBottom = useCallback(
     });
 
     const onMessageNew = (m: Message) => {
+      console.debug('[Socket] 📨 message:new received:', {
+        chatId: m.chat_id,
+        body: m.body?.substring(0, 50),
+        sender_type: m.sender_type,
+        media_url: m.media_url,
+      });
+      
       appendMessageToCache(m);
       logSendLatency(m.chat_id ?? null, m.id ?? null, m.view_status ?? null);
+      
+      // Determinar last_message_from baseado no sender_type
+      let lastMessageFrom: "CUSTOMER" | "AGENT" | undefined = undefined;
+      if (m.sender_type === "CUSTOMER") {
+        lastMessageFrom = "CUSTOMER";
+      } else if (m.sender_type === "AGENT" || m.sender_type === "AI") {
+        // Tanto AGENT quanto AI são considerados "AGENT" para o chat list
+        lastMessageFrom = "AGENT";
+      }
       
       // Bump chat to top quando receber mensagem nova
       bumpChatToTop({
         chatId: m.chat_id,
         last_message: m.body ?? (m.media_url ? "[MEDIA]" : ""),
         last_message_at: m.created_at,
-        last_message_from: (m.sender_type === "CUSTOMER" || m.sender_type === "AGENT") ? m.sender_type : undefined,
+        last_message_from: lastMessageFrom,
         last_message_type: m.type ?? null,
         last_message_media_url: m.media_url ?? null,
         group_name: Object.prototype.hasOwnProperty.call(m, "group_name") ? (m as any).group_name ?? null : undefined,

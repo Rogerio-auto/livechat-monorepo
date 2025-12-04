@@ -9,6 +9,7 @@ type SocketEvent =
       chatId: string;
       message: any;
       chatUpdate?: any;
+      companyId?: string | null;
     }
   | {
       kind: "livechat.message.status";
@@ -34,7 +35,14 @@ function emitMessage(
   );
 
   if (ev.chatUpdate) {
-    io.emit("chat:updated", ev.chatUpdate);
+    // Emit to company room if companyId provided, otherwise fallback to global (legacy)
+    if (ev.companyId) {
+      io.to(`company:${ev.companyId}`).emit("chat:updated", ev.chatUpdate);
+    } else {
+      // Legacy fallback - unsafe but maintains compatibility
+      console.warn("[socket.relay] chat:updated without companyId - using global broadcast (unsafe)", { chatId: ev.chatId });
+      io.emit("chat:updated", ev.chatUpdate);
+    }
   }
 }
 

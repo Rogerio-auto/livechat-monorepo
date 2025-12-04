@@ -487,11 +487,31 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                         } catch { }
 
                         for (const cid of uniqChatIds) {
-                            io.emit("chat:updated", {
-                                chatId: cid,
-                                assigned_agent_id: effectiveAssignedId,
-                                assigned_agent_name: effectiveAssignedName,
-                            });
+                            // Fetch companyId from chat
+                            let chatCompanyId: string | null = null;
+                            try {
+                                const { data: chatRow } = await supabaseAdmin
+                                    .from("chats")
+                                    .select("company_id")
+                                    .eq("id", cid)
+                                    .maybeSingle();
+                                chatCompanyId = (chatRow as any)?.company_id || null;
+                            } catch { }
+                            
+                            if (chatCompanyId) {
+                                io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+                                    chatId: cid,
+                                    assigned_agent_id: effectiveAssignedId,
+                                    assigned_agent_name: effectiveAssignedName,
+                                });
+                            } else {
+                                // Legacy fallback
+                                io.emit("chat:updated", {
+                                    chatId: cid,
+                                    assigned_agent_id: effectiveAssignedId,
+                                    assigned_agent_name: effectiveAssignedName,
+                                });
+                            }
                         }
                     } catch { }
                 } catch { }
@@ -841,11 +861,31 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                             } catch { }
 
                             for (const cid of uniqChatIds) {
-                                io.emit("chat:updated", {
-                                    chatId: cid,
-                                    assigned_agent_id: effectiveAssignedId,
-                                    assigned_agent_name: effectiveAssignedName,
-                                });
+                                // Fetch companyId from chat
+                                let chatCompanyId: string | null = null;
+                                try {
+                                    const { data: chatRow } = await supabaseAdmin
+                                        .from("chats")
+                                        .select("company_id")
+                                        .eq("id", cid)
+                                        .maybeSingle();
+                                    chatCompanyId = (chatRow as any)?.company_id || null;
+                                } catch { }
+                                
+                                if (chatCompanyId) {
+                                    io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+                                        chatId: cid,
+                                        assigned_agent_id: effectiveAssignedId,
+                                        assigned_agent_name: effectiveAssignedName,
+                                    });
+                                } else {
+                                    // Legacy fallback
+                                    io.emit("chat:updated", {
+                                        chatId: cid,
+                                        assigned_agent_id: effectiveAssignedId,
+                                        assigned_agent_name: effectiveAssignedName,
+                                    });
+                                }
                             }
                         } catch { }
                     } catch { }

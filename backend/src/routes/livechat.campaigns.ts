@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { warnOnLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
@@ -6,8 +7,26 @@ import { z } from "zod";
 import { publish, EX_APP } from "../queue/rabbit.ts";
 import { rGet, rSet, rDelMatch } from "../lib/redis.ts";
 import { bumpScopeVersion } from "../lib/cache.ts";
+import { validateCampaignSafety } from "../services/campaigns/validation.js";
+import * as db from "../pg.ts";
+
+// Multer for file uploads (max 5MB for recipient lists)
+const upload = multer({ 
+  storage: multer.memoryStorage(), 
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /\.(txt|csv|xlsx|xls)$/i;
+    if (allowed.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Formato não suportado. Use TXT, CSV ou XLSX."));
+    }
+  }
+});
 
 export function registerCampaignRoutes(app: express.Application) {
+  const router = express.Router();
+
 async function resolveCompanyId(req: any): Promise<string> {
   const { data, error } = await supabaseAdmin
     .from("users")
@@ -127,6 +146,37 @@ const insert = {
 
 
   // -------------------------------
+  // VALIDAR CAMPANHA (antes de ativar)
+  // -------------------------------
+  app.get("/livechat/campaigns/:id/validate", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+
+      console.log(`[campaigns] 🔍 Validando campanha ${id}`);
+      
+      const validation = await validateCampaignSafety(id);
+      
+      if (!validation.safe) {
+        console.warn(`[campaigns] ⚠️  Validação falhou:`, validation.critical_issues);
+      } else {
+        console.log(`[campaigns] ✅ Validação passou:`, validation.stats);
+      }
+
+      return res.json(validation);
+    } catch (err) {
+      console.error("[campaigns] Erro ao validar:", err);
+      return res.status(500).json({ 
+        error: err instanceof Error ? err.message : String(err),
+        safe: false,
+        critical_issues: ["Erro interno ao validar campanha"],
+        warnings: [],
+        stats: {},
+      });
+    }
+  });
+
+  // -------------------------------
   // ATUALIZAR CAMPANHA
   // -------------------------------
   app.patch("/livechat/campaigns/:id", requireAuth, async (req: any, res) => {
@@ -134,6 +184,37 @@ const insert = {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;
       const b = req.body || {};
+
+      // Se está tentando ativar campanha (mudando status para RUNNING ou SCHEDULED), validar segurança
+      if (b.status && (b.status === "RUNNING" || b.status === "SCHEDULED")) {
+        console.log(`[campaigns] 🔍 Validando segurança antes de ativar campanha ${id}`);
+        
+        try {
+          const validation = await validateCampaignSafety(id);
+          
+          if (!validation.safe) {
+            console.error(`[campaigns] ❌ Validação falhou:`, validation.critical_issues);
+            return res.status(400).json({
+              error: "Campanha não passou na validação de segurança",
+              critical_issues: validation.critical_issues,
+              warnings: validation.warnings,
+              stats: validation.stats,
+            });
+          }
+          
+          if (validation.warnings.length > 0) {
+            console.warn(`[campaigns] ⚠️  Warnings encontrados:`, validation.warnings);
+          }
+          
+          console.log(`[campaigns] ✅ Validação passou:`, validation.stats);
+        } catch (validationError) {
+          console.error(`[campaigns] ❌ Erro na validação:`, validationError);
+          return res.status(500).json({
+            error: "Erro ao validar campanha",
+            details: validationError instanceof Error ? validationError.message : String(validationError),
+          });
+        }
+      }
 
       // Permite atualizar status opcionalmente
       const patch: any = {};
@@ -1340,8 +1421,55 @@ const insert = {
       }
 
       return res.json(stats);
-    } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "Erro ao buscar estatísticas" });
+    } catch (err) {
+      console.error("[campaigns] Erro ao obter stats:", err);
+      return res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // -------------------------------
+  // MÉTRICAS DA CAMPANHA (campaign_metrics)
+  // -------------------------------
+  app.get("/livechat/campaigns/:id/metrics", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id } = req.params;
+
+      // Buscar métricas da tabela campaign_metrics
+      const { data: metrics, error } = await supabaseAdmin
+        .from("campaign_metrics")
+        .select("*")
+        .eq("campaign_id", id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[campaigns] Erro ao buscar métricas:", error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      // Se não existir métricas ainda, retornar valores zerados
+      if (!metrics) {
+        return res.json({
+          campaign_id: id,
+          messages_sent: 0,
+          messages_delivered: 0,
+          messages_read: 0,
+          messages_failed: 0,
+          messages_blocked: 0,
+          delivery_rate: 0,
+          read_rate: 0,
+          response_rate: 0,
+          block_rate: 0,
+          failure_rate: 0,
+          health_status: "UNKNOWN",
+          last_calculated_at: null,
+        });
+      }
+
+      return res.json(metrics);
+    } catch (err) {
+      console.error("[campaigns] Erro ao obter métricas:", err);
+      return res.status(500).json({ error: String(err) });
     }
   });
 
@@ -1378,4 +1506,279 @@ const insert = {
       return res.status(500).json({ error: e?.message || "Erro ao checar requisitos" });
     }
   });
+
+  // -------------------------------
+  // UPLOAD DE LISTA DE RECIPIENTS (TXT/CSV/XLSX)
+  // -------------------------------
+  app.post(
+    "/livechat/campaigns/:id/upload-recipients", 
+    requireAuth, 
+    warnOnLimit("campaigns"),
+    upload.single("file"),
+    async (req: any, res) => {
+    try {
+      const companyId = await resolveCompanyId(req);
+      const { id: campaignId } = req.params;
+      
+      // Validate campaign exists and belongs to company
+      const { data: campaign, error: campError } = await supabaseAdmin
+        .from("campaigns")
+        .select("id, company_id, inbox_id")
+        .eq("id", campaignId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (campError || !campaign) {
+        return res.status(404).json({ error: "Campanha não encontrada" });
+      }
+      
+      if (!campaign.inbox_id) {
+        return res.status(400).json({ error: "Campanha sem inbox configurada" });
+      }
+      
+      // Check if file was uploaded
+      if (!req.file) {
+        return res.status(400).json({ error: "Nenhum arquivo enviado" });
+      }
+      
+      const { buffer, originalname } = req.file;
+      
+      // Parse file based on extension
+      const { parseRecipientFile } = await import("../services/campaigns/uploadParser.js");
+      const parseResult = await parseRecipientFile(buffer, originalname);
+      
+      if (parseResult.valid.length === 0) {
+        return res.status(400).json({
+          error: "Nenhum número válido encontrado",
+          stats: {
+            total: parseResult.total,
+            valid: 0,
+            invalid: parseResult.invalid.length,
+          },
+          invalid: parseResult.invalid.slice(0, 10), // Return first 10 invalid for debugging
+        });
+      }
+      
+      // Import sync utility
+      const { ensureLeadCustomerChat } = await import("../services/meta/store.js");
+      
+      // Process valid recipients
+      const CHUNK = 1000;
+      let created_customers = 0;
+      let created_leads = 0;
+      let inserted = 0;
+      let skipped_existing = 0;
+      const failed_phones: string[] = [];
+      
+      console.log(`[campaigns] Processing ${parseResult.valid.length} valid recipients for campaign ${campaignId}`);
+      
+      // Prepare recipients to insert
+      const recipientsToInsert: any[] = [];
+      
+      for (const recipient of parseResult.valid) {
+        try {
+          console.log(`[campaigns] Ensuring contact for phone: ${recipient.phone}`);
+          
+          // Try to ensure customer/lead/chat exists
+          const ensured = await ensureLeadCustomerChat({
+            companyId,
+            inboxId: campaign.inbox_id, // Use campaign's inbox
+            phone: recipient.phone,
+            name: recipient.name || null,
+            rawPhone: recipient.phone,
+          });
+          
+          console.log(`[campaigns] Contact ensured: chatId=${ensured.chatId}, customerId=${ensured.customerId}`);
+          
+          // Track if new entities were created
+          if (ensured.customerId && !ensured.existingCustomer) {
+            created_customers++;
+          }
+          
+          // Add to recipients list with resolved customer_id
+          recipientsToInsert.push({
+            campaign_id: campaignId,
+            phone: recipient.phone,
+            name: recipient.name || null,
+            customer_id: ensured.customerId || null,
+            lead_id: null, // Will be resolved by trigger or future sync
+            segment_source: "manual_upload",
+            last_step_sent: 0,
+          });
+        } catch (err: any) {
+          console.error(`[campaigns] Failed to ensure contact for ${recipient.phone}:`, err.message);
+          failed_phones.push(recipient.phone);
+        }
+      }
+      
+      console.log(`[campaigns] Prepared ${recipientsToInsert.length} recipients to insert`);
+      
+      // Batch insert recipients (with duplicate handling)
+      if (recipientsToInsert.length > 0) {
+        for (let i = 0; i < recipientsToInsert.length; i += CHUNK) {
+          const chunk = recipientsToInsert.slice(i, i + CHUNK);
+          
+          console.log(`[campaigns] Inserting chunk ${i / CHUNK + 1}: ${chunk.length} recipients`);
+          
+          const { data: insertedData, error: insertError } = await supabaseAdmin
+            .from("campaign_recipients")
+            .upsert(chunk, {
+              onConflict: "campaign_id,phone",
+              ignoreDuplicates: false, // Update if exists
+            })
+            .select("id");
+          
+          if (insertError) {
+            console.error("[campaigns] Error inserting recipients chunk:", insertError);
+            // Count as failed
+            failed_phones.push(...chunk.map(r => r.phone));
+          } else {
+            const numInserted = insertedData?.length || 0;
+            inserted += numInserted;
+            console.log(`[campaigns] Chunk inserted: ${numInserted} recipients`);
+          }
+        }
+      }
+      
+      console.log(`[campaigns] Upload complete: inserted=${inserted}, failed=${failed_phones.length}, created_customers=${created_customers}`);
+      
+      // Invalidate cache
+      await bumpScopeVersion(`campaigns:${companyId}`);
+      await rDelMatch(`livechat:campaigns:*`);
+      
+      // Check warnings for uploaded recipients
+      const warnings: string[] = [];
+      
+      // 1. Check opt-in status if template is MARKETING
+      try {
+        const { data: campaignWithTemplate } = await supabaseAdmin
+          .from("campaigns")
+          .select(`
+            campaign_steps (
+              message_templates (
+                kind,
+                payload
+              )
+            )
+          `)
+          .eq("id", campaignId)
+          .maybeSingle();
+        
+        const template = campaignWithTemplate?.campaign_steps?.[0]?.message_templates;
+        const payload = template?.payload as any;
+        const templateCategory = payload?.category || template?.kind;
+        
+        if (templateCategory === "MARKETING") {
+          const { countRecipientsWithoutOptIn } = await import("../services/campaigns/optIn.js");
+          const withoutOptIn = await countRecipientsWithoutOptIn(campaignId);
+          
+          if (withoutOptIn > 0) {
+            warnings.push(`${withoutOptIn} recipients sem opt-in para MARKETING (violação LGPD)`);
+          }
+        }
+      } catch (error) {
+        console.warn("[campaigns] Falha ao verificar opt-in:", error);
+      }
+      
+      // 2. Check tier limit
+      try {
+        const { isInboxHealthy } = await import("../services/meta/health.js");
+        const health = await isInboxHealthy(campaign.inbox_id);
+        
+        if (inserted > health.tier_limit) {
+          warnings.push(`Recipients (${inserted}) excedem tier limit (${health.tier_limit})`);
+        } else if (inserted > health.tier_limit * 0.8) {
+          warnings.push(`Recipients próximos do tier limit (${Math.round((inserted / health.tier_limit) * 100)}%)`);
+        }
+        
+        if (health.quality_rating === "YELLOW") {
+          warnings.push("Quality rating YELLOW - envios restritos");
+        } else if (health.quality_rating === "RED") {
+          warnings.push("Quality rating RED - campanhas bloqueadas");
+        }
+      } catch (error) {
+        console.warn("[campaigns] Falha ao verificar health:", error);
+      }
+      
+      return res.json({
+        success: true,
+        stats: {
+          total: parseResult.total,
+          valid: parseResult.valid.length,
+          invalid: parseResult.invalid.length,
+          inserted,
+          skipped_existing,
+          created_customers,
+          created_leads,
+          failed: failed_phones.length,
+        },
+        warnings, // Adicionar warnings ao response
+        invalid_sample: parseResult.invalid.slice(0, 5),
+        failed_phones: failed_phones.slice(0, 10),
+      });
+      
+    } catch (e: any) {
+      console.error("[campaigns] upload-recipients error:", e);
+      return res.status(500).json({ error: e?.message || "Erro ao processar upload" });
+    }
+  });
+
+  /**
+   * POST /api/campaigns/:campaignId/recipients/bulk-optin
+   * Registrar opt-in em lote para todos os recipients de uma campanha
+   */
+  router.post("/:campaignId/recipients/bulk-optin", requireAuth, async (req, res) => {
+    try {
+      const { campaignId } = req.params;
+      const { opt_in_method, opt_in_source } = req.body;
+
+      console.log("[Campaign Bulk Opt-in] 📥 Request received:", {
+        campaignId,
+        method: opt_in_method,
+        source: opt_in_source,
+        body: req.body,
+      });
+
+      if (!opt_in_source?.trim()) {
+        return res.status(400).json({ error: "opt_in_source é obrigatório" });
+      }
+
+      const validMethods = ["FORMULARIO_WEB", "CONVERSA_WHATSAPP", "CHECKOUT", "OUTRO"];
+      if (!validMethods.includes(opt_in_method)) {
+        return res.status(400).json({ error: "opt_in_method inválido" });
+      }
+
+      console.log("[Campaign Bulk Opt-in] ✅ Validação passou, usando SQL direto...");
+
+      // Usar pool PostgreSQL direto (não passa pelo PostgREST com cache)
+      const result = await db.query<{ id: string }>(
+        `UPDATE campaign_recipients
+         SET marketing_opt_in = true,
+             opt_in_date = NOW(),
+             opt_in_method = $1,
+             opt_in_source = $2
+         WHERE campaign_id = $3
+           AND (marketing_opt_in IS NULL OR marketing_opt_in = false)
+         RETURNING id`,
+        [opt_in_method, opt_in_source, campaignId]
+      );
+
+      const count = result.rowCount || 0;
+
+      console.log("[Campaign Bulk Opt-in] ✅ Opt-in registrado para", count, "recipients");
+
+      return res.json({
+        success: true,
+        updated_count: count,
+        method: opt_in_method,
+        source: opt_in_source,
+      });
+    } catch (e: any) {
+      console.error("[Campaign Bulk Opt-in] ❌ FATAL Error:", e);
+      return res.status(500).json({ error: e?.message || "Erro ao registrar opt-in" });
+    }
+  });
+
+  // Registrar router no app
+  app.use("/api/campaigns", router);
 }

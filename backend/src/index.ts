@@ -63,6 +63,10 @@ import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerAutomationRulesRoutes } from "./routes/automationRules.js";
+import { registerDocumentRoutes } from "./routes/documents.js";
+import { registerDocumentTemplateRoutes } from "./routes/document-templates.js";
+import { registerMetaHealthRoutes } from "./routes/meta.health.js";
+import { registerCustomerOptInRoutes } from "./routes/customers.optin.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -161,23 +165,37 @@ async function handleSocketBroadcast(event: any) {
   if (!io) return;
 
   if (event?.kind === "livechat.inbound.message") {
-    const { chatId, message, chatUpdate } = event;
+    const { chatId, message, chatUpdate, companyId } = event;
     if (chatId && message) {
       io.to(`chat:${chatId}`).emit("message:new", message);
     }
     if (chatUpdate) {
-      io.emit("chat:updated", chatUpdate);
+      // Emit to company room if companyId provided, otherwise fallback to global (legacy)
+      if (companyId) {
+        io.to(`company:${companyId}`).emit("chat:updated", chatUpdate);
+      } else {
+        // Legacy fallback - try to extract from chatUpdate or fall back to global
+        console.warn("[SOCKET] chat:updated without companyId - using global broadcast (unsafe)", { chatId });
+        io.emit("chat:updated", chatUpdate);
+      }
     }
     return;
   }
 
   if (event?.kind === "livechat.outbound.message") {
-    const { chatId, message, chatUpdate } = event;
+    const { chatId, message, chatUpdate, companyId } = event;
     if (chatId && message) {
       io.to(`chat:${chatId}`).emit("message:new", message);
     }
     if (chatUpdate) {
-      io.emit("chat:updated", chatUpdate);
+      // Emit to company room if companyId provided, otherwise fallback to global (legacy)
+      if (companyId) {
+        io.to(`company:${companyId}`).emit("chat:updated", chatUpdate);
+      } else {
+        // Legacy fallback
+        console.warn("[SOCKET] chat:updated without companyId - using global broadcast (unsafe)", { chatId });
+        io.emit("chat:updated", chatUpdate);
+      }
     }
     return;
   }
@@ -971,6 +989,22 @@ io.on("connection", async (socket) => {
   if (userId) {
     socket.join(`user:${userId}`);
     console.log("[RT] socket joined user room", { socketId: socket.id, userId });
+    
+    // Join company room for multi-tenancy isolation
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("company_id")
+        .eq("id", userId)
+        .maybeSingle();
+      
+      if (profile?.company_id) {
+        socket.join(`company:${profile.company_id}`);
+        console.log("[RT] socket joined company room", { socketId: socket.id, userId, companyId: profile.company_id });
+      }
+    } catch (error) {
+      console.error("[RT] failed to join company room", { socketId: socket.id, userId, error });
+    }
   }
 
   socket.on("join", async (payload: { chatId?: string }) => {
@@ -3281,6 +3315,8 @@ app.use("/api/upload", uploadRouter);
 app.use("/api/media", mediaRouter);
 registerProductRoutes(app);
 registerMetaTemplatesRoutes(app);
+registerDocumentRoutes(app);
+registerDocumentTemplateRoutes(app);
 // ATENÇÃO: Esses routers aplicam requireAuth globalmente em /api/*
 // Por isso o onboarding precisa estar registrado ANTES
 app.use("/api", templateToolsRouter);
@@ -3299,6 +3335,8 @@ registerWAHARoutes(app);
 registerDashboardRoutes(app);
 registerTaskRoutes(app);
 registerAutomationRulesRoutes(app);
+registerMetaHealthRoutes(app);
+registerCustomerOptInRoutes(app);
 
 // Media proxy for encrypted URLs (CORS-safe)
 app.use("/media", mediaProxyRouter);

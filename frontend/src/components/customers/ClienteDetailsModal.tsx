@@ -1,5 +1,6 @@
 import { FaTimes } from "react-icons/fa";
 import { ClienteTasksSection } from "./ClienteTasksSection";
+import { OptInManagement } from "../campaigns/OptInManagement";
 
 type Cliente = {
   id: string;
@@ -72,6 +73,25 @@ export function ClienteDetailsModal({ cliente, onClose }: ClienteDetailsModalPro
               </p>
             </div>
           </div>
+
+          {/* Divider */}
+          <div className="my-6 border-t border-gray-200 dark:border-gray-700" />
+
+          {/* Opt-in Management */}
+          {cliente.customer_id && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Gerenciamento de Consentimento (LGPD)
+              </h3>
+              <OptInManagement 
+                customer={{
+                  id: cliente.customer_id,
+                  name: cliente.name,
+                  phone: cliente.email || ""
+                }}
+              />
+            </div>
+          )}
 
           {/* Divider */}
           <div className="my-6 border-t border-gray-200 dark:border-gray-700" />

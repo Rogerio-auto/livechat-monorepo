@@ -50,21 +50,15 @@ async function findIdleChats(): Promise<IdleChat[]> {
         cust.name as customer_name,
         cust.phone as customer_phone
       FROM chats c
-      INNER JOIN agents a ON a.company_id = c.company_id 
-        AND a.is_active = true 
+      INNER JOIN agents a ON a.id = c.ai_agent_id 
+        AND a.status = 'ACTIVE' 
         AND a.reply_if_idle_sec > 0
       LEFT JOIN customers cust ON cust.id = c.customer_id
       WHERE c.status = 'AI'
         AND c.last_message_from = 'CUSTOMER'
         AND c.last_message_at IS NOT NULL
+        AND c.ai_agent_id IS NOT NULL
         AND EXTRACT(EPOCH FROM (NOW() - c.last_message_at)) > a.reply_if_idle_sec
-        AND (
-          -- Agente específico da inbox
-          (c.inbox_id IS NOT NULL AND a.inbox_id = c.inbox_id)
-          OR
-          -- Agente padrão da empresa (sem inbox específica)
-          (c.inbox_id IS NULL AND a.inbox_id IS NULL)
-        )
       ORDER BY c.last_message_at ASC
       LIMIT 50
     `;

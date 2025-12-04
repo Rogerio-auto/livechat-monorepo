@@ -1,0 +1,175 @@
+# ==========================================
+# TESTES DO SISTEMA 1.000 MSGS/DIA
+# ==========================================
+# Instruções:
+# 1. Substitua {{baseUrl}}, {{token}}, {{inboxId}}, {{customerId}}, {{campaignId}}
+# 2. Use REST Client (VS Code extension) ou copie para Postman/Insomnia
+# ==========================================
+
+@baseUrl = http://localhost:3000
+@token = Bearer YOUR_JWT_TOKEN_HERE
+@inboxId = YOUR_INBOX_ID_HERE
+@customerId = YOUR_CUSTOMER_ID_HERE
+@campaignId = YOUR_CAMPAIGN_ID_HERE
+
+### ==========================================
+### 1. TESTAR META HEALTH STATUS
+### ==========================================
+
+### 1.1 Obter status de saúde da inbox (com cache)
+GET {{baseUrl}}/api/meta/health/{{inboxId}}
+Authorization: {{token}}
+
+### 1.2 Forçar refresh do status (busca da Meta API)
+GET {{baseUrl}}/api/meta/health/{{inboxId}}?refresh=true
+Authorization: {{token}}
+
+### 1.3 Refresh via POST
+POST {{baseUrl}}/api/meta/health/{{inboxId}}/refresh
+Authorization: {{token}}
+
+### 1.4 Check simples (retorna apenas boolean)
+GET {{baseUrl}}/api/meta/health/{{inboxId}}/check
+Authorization: {{token}}
+
+### ==========================================
+### 2. TESTAR OPT-IN MANAGEMENT
+### ==========================================
+
+### 2.1 Registrar opt-in de um customer
+POST {{baseUrl}}/api/customers/{{customerId}}/opt-in
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "method": "whatsapp",
+  "source": "teste_manual"
+}
+
+### 2.2 Verificar status de opt-in
+GET {{baseUrl}}/api/customers/{{customerId}}/opt-in-status
+Authorization: {{token}}
+
+### 2.3 Registrar opt-out
+POST {{baseUrl}}/api/customers/{{customerId}}/opt-out
+Authorization: {{token}}
+
+### 2.4 Buscar opt-in por telefone
+GET {{baseUrl}}/api/customers/opt-in-status/phone/5511999999999
+Authorization: {{token}}
+
+### 2.5 Registrar opt-in em massa (bulk)
+POST {{baseUrl}}/api/customers/opt-in/bulk
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "phones": [
+    "5511999999999",
+    "5511888888888",
+    "5511777777777"
+  ],
+  "method": "import",
+  "source": "planilha_teste"
+}
+
+### ==========================================
+### 3. TESTAR VALIDAÇÃO DE CAMPANHA
+### ==========================================
+
+### 3.1 Tentar ativar campanha (deve validar segurança)
+PATCH {{baseUrl}}/livechat/campaigns/{{campaignId}}
+Authorization: {{token}}
+Content-Type: application/json
+
+{
+  "status": "RUNNING"
+}
+
+### 3.2 Ver detalhes da campanha
+GET {{baseUrl}}/livechat/campaigns/{{campaignId}}
+Authorization: {{token}}
+
+### ==========================================
+### 4. QUERIES SQL PARA VERIFICAR
+### ==========================================
+
+# Execute no banco de dados para verificar:
+
+# -- Verificar colunas de health nas inboxes
+# SELECT id, name, provider, meta_quality_rating, meta_messaging_tier, meta_tier_limit, meta_health_updated_at 
+# FROM inboxes 
+# WHERE provider = 'META_CLOUD';
+
+# -- Verificar opt-in dos customers
+# SELECT id, name, phone, marketing_opt_in, opt_in_date, opt_in_method, opt_in_source 
+# FROM customers 
+# ORDER BY opt_in_date DESC 
+# LIMIT 10;
+
+# -- Verificar limites diários das campanhas
+# SELECT id, name, status, messages_sent_today, daily_limit, last_reset_at, auto_pause_on_limit 
+# FROM campaigns 
+# WHERE status IN ('RUNNING', 'SCHEDULED') 
+# ORDER BY created_at DESC;
+
+# -- Verificar métricas das campanhas
+# SELECT cm.*, c.name as campaign_name
+# FROM campaign_metrics cm
+# JOIN campaigns c ON c.id = cm.campaign_id
+# ORDER BY cm.measured_at DESC
+# LIMIT 10;
+
+### ==========================================
+### 5. TESTES DE EDGE CASES
+### ==========================================
+
+### 5.1 Tentar ativar campanha SEM opt-in nos recipients
+# (Deve retornar erro crítico: "X recipients sem opt-in")
+
+### 5.2 Tentar ativar campanha com quality_rating RED
+# (Deve retornar erro crítico: "Quality rating RED")
+
+### 5.3 Tentar ativar campanha excedendo tier_limit
+# (Deve retornar erro crítico: "Recipients (X) excedem tier limit (Y)")
+
+### 5.4 Tentar ativar campanha com template não aprovado
+# (Deve retornar erro crítico: "Template não aprovado")
+
+### ==========================================
+### 6. VERIFICAR LOGS DO WORKER
+### ==========================================
+
+# No terminal do worker, procure por:
+# - "🟢 Quality rating GREEN, tier TIER_1K" (adaptive batch size funcionando)
+# - "batchSize=3" ou similar (rate limiting adaptativo)
+# - "🚫 RATE LIMIT atingido" (se testar rate limit)
+# - "🚨 CRÍTICO: Block rate X% > 5%" (se testar block rate)
+
+### ==========================================
+### 7. CENÁRIOS DE TESTE RECOMENDADOS
+### ==========================================
+
+# Teste 1: Campanha Normal (tudo OK)
+# - Inbox com quality GREEN + tier TIER_1K
+# - Todos recipients com opt-in
+# - Menos de 1000 recipients
+# - Template aprovado
+# Resultado esperado: Campanha ativa, worker envia com batchSize=3
+
+# Teste 2: Campanha Bloqueada (quality RED)
+# - Simular inbox com quality RED (alterar no banco)
+# Resultado esperado: Validação retorna erro, worker usa batchSize=0
+
+# Teste 3: Campanha com Warning (recipients sem opt-in)
+# - Criar campanha com alguns recipients sem marketing_opt_in=true
+# Resultado esperado: Validação retorna warning, mas permite ativar se TRANSACTIONAL
+
+# Teste 4: Limite Diário Atingido
+# - Criar campanha com daily_limit=10
+# - Enviar 10 mensagens
+# Resultado esperado: Worker pausa campanha automaticamente
+
+# Teste 5: Opt-out Remove de Campanhas
+# - Registrar opt-out de um customer
+# Resultado esperado: Customer removido de todas campanhas SCHEDULED/RUNNING

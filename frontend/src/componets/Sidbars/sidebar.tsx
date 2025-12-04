@@ -16,6 +16,7 @@ import {
   FaImages,
   FaTasks,
   FaCogs,
+  FaFileAlt,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";

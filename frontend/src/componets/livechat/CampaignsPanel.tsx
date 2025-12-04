@@ -93,6 +93,13 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       ...(init || {}),
     });
     if (!res.ok) {
+      const contentType = res.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
+        const errorData = await res.json().catch(() => ({}));
+        const error: any = new Error(errorData.error || `HTTP ${res.status}`);
+        error.data = errorData;
+        throw error;
+      }
       const msg = await res.text().catch(() => "");
       throw new Error(msg || `HTTP ${res.status}`);
     }
@@ -568,7 +575,14 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       setItems((prev) => prev.map((c) => (c.id === campaign.id ? updated : c)));
       showToast(`Campanha ${newStatus === "PAUSED" ? "pausada" : "retomada"} com sucesso!`, "success");
     } catch (e: any) {
-      showToast(`Falha ao alterar status: ${e?.message || "erro"}`, "error");
+      // Se há dados de validação, mostrar detalhes
+      if (e.data?.critical_issues?.length) {
+        const issues = e.data.critical_issues.join("\n• ");
+        showToast(`❌ Validação falhou:\n• ${issues}`, "error");
+      } else {
+        showToast(`Falha ao alterar status: ${e?.message || "erro"}`, "error");
+      }
+      console.error("[CampaignsPanel] Toggle status error:", e.data || e);
     }
   };
 
@@ -584,7 +598,27 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       setItems((prev) => prev.map((c) => (c.id === campaign.id ? updated : c)));
       showToast(`Campanha agendada e ativada!`, "success");
     } catch (e: any) {
-      showToast(`Falha ao ativar campanha: ${e?.message || "erro"}`, "error");
+      // Se há dados de validação, mostrar detalhes
+      if (e.data?.critical_issues?.length) {
+        const issues = e.data.critical_issues.join("\n• ");
+        showToast(`❌ Não é possível ativar:\n• ${issues}`, "error");
+        
+        // Mostrar também warnings se houver
+        if (e.data?.warnings?.length) {
+          console.warn("[CampaignsPanel] Warnings:", e.data.warnings);
+        }
+        
+        // Mostrar stats para debugging
+        if (e.data?.stats) {
+          console.log("[CampaignsPanel] Validation stats:", e.data.stats);
+        }
+        
+        // Mostrar critical_issues expandido
+        console.error("[CampaignsPanel] Critical issues:", e.data.critical_issues);
+      } else {
+        showToast(`Falha ao ativar campanha: ${e?.message || "erro"}`, "error");
+      }
+      console.error("[CampaignsPanel] Quick activate error:", e.data || e);
     }
   };
 

@@ -58,14 +58,14 @@ export function registerTaskRoutes(app: express.Application) {
       const task = await createTask(input);
 
       // Emitir evento Socket.io
-      io.emit("task:created", {
+      io.to(`company:${companyId}`).emit("task:created", {
         task,
         companyId,
       });
 
       // Se foi atribuída a alguém, emitir evento específico
       if (task.assigned_to) {
-        io.emit("task:assigned", {
+        io.to(`company:${companyId}`).emit("task:assigned", {
           taskId: task.id,
           assignedTo: task.assigned_to,
           task,
@@ -202,14 +202,14 @@ export function registerTaskRoutes(app: express.Application) {
       const task = await updateTask(id, companyId, input);
 
       // Emitir evento Socket.io
-      io.emit("task:updated", {
+      io.to(`company:${companyId}`).emit("task:updated", {
         task,
         companyId,
       });
 
       // Se foi atribuída a alguém novo, emitir evento específico
       if (input.assigned_to && input.assigned_to !== previousTask.assigned_to) {
-        io.emit("task:assigned", {
+        io.to(`company:${companyId}`).emit("task:assigned", {
           taskId: task.id,
           assignedTo: task.assigned_to,
           task,
@@ -219,7 +219,7 @@ export function registerTaskRoutes(app: express.Application) {
 
       // Se foi marcada como completa, emitir evento específico
       if (input.status === "COMPLETED" && previousTask.status !== "COMPLETED") {
-        io.emit("task:completed", {
+        io.to(`company:${companyId}`).emit("task:completed", {
           task,
           companyId,
         });
@@ -247,7 +247,7 @@ export function registerTaskRoutes(app: express.Application) {
       await deleteTask(id, companyId);
 
       // Emitir evento Socket.io
-      io.emit("task:deleted", {
+      io.to(`company:${companyId}`).emit("task:deleted", {
         taskId: id,
         companyId,
       });
@@ -274,7 +274,7 @@ export function registerTaskRoutes(app: express.Application) {
       const task = await completeTask(id, companyId);
 
       // Emitir evento Socket.io
-      io.emit("task:completed", {
+      io.to(`company:${companyId}`).emit("task:completed", {
         task,
         companyId,
       });

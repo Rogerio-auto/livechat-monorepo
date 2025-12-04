@@ -100,6 +100,23 @@ function getInitials(name: string): string {
   );
 }
 
+/**
+ * Decodifica HTML entities para exibir caracteres especiais corretamente
+ * Exemplo: "Ol&#225;" -> "Olá"
+ */
+function decodeHtmlEntities(text: string | null | undefined): string {
+  if (!text) return "";
+  
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = text;
+  const decoded = textarea.value;
+  
+  // Também substituir entidades numéricas hexadecimais e decimais manualmente
+  return decoded
+    .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+}
+
 export default function ChatList({
   chats,
   activeChatId,
@@ -209,7 +226,8 @@ export default function ChatList({
           : "-";
         const initials = getInitials(chat.name);
         const hasPhoto = Boolean(chat.photo_url);
-        const subtitle = chat.secondaryLine ?? chat.last_message;
+        const rawSubtitle = chat.secondaryLine ?? chat.last_message;
+        const subtitle = decodeHtmlEntities(rawSubtitle);
 
         // Find inbox info
         const inbox = inboxes.find((i) => i.id === chat.inbox_id);

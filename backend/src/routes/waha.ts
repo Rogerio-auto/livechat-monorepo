@@ -1928,7 +1928,7 @@ export function registerWAHARoutes(app: Express) {
       // 1. Get chat details to determine external_id (phone number)
       const { data: chat, error: chatError } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id, external_id, customer_id")
+        .select("id, inbox_id, external_id, customer_id, company_id")
         .eq("id", chatId)
         .maybeSingle();
 
@@ -2105,10 +2105,18 @@ export function registerWAHARoutes(app: Express) {
       }
 
       // Emit chat:updated event with unread_count = 0
-      io.emit("chat:updated", {
-        chatId,
-        unread_count: 0,
-      });
+      const chatCompanyId = (chat as any)?.company_id;
+      if (chatCompanyId) {
+        io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+          chatId,
+          unread_count: 0,
+        });
+      } else {
+        io.emit("chat:updated", {
+          chatId,
+          unread_count: 0,
+        });
+      }
 
       console.log("[READ_RECEIPTS][mark-read] Socket events emitted", {
         chatId,

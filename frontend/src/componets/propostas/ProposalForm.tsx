@@ -2,6 +2,7 @@ import { FaTimes, FaSave } from 'react-icons/fa';
 import { useEffect, useMemo, useState } from "react";
 import { LeadPicker } from "../funil/LeadPicker";
 import { ClienteForm } from "../clientes/ClienteForm";
+import { FinancingFields, FinancingData } from "./FinancingFields";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -30,7 +31,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
   const [docType, setDocType] = useState<'PROPOSAL'|'CONTRACT'|'RECEIPT'>('PROPOSAL');
   const [consumo, setConsumo] = useState<string>("");
   const [desconto, setDesconto] = useState<number>(0);
-  const [formaPagamento, setFormaPagamento] = useState<string>("");
+  const [formaPagamento, setFormaPagamento] = useState<string>("A_VISTA");
   const [vendedor, setVendedor] = useState<string>("");
   const [produtos, setProdutos] = useState<Product[]>([]);
   const [query, setQuery] = useState("");
@@ -40,6 +41,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
   const [saving, setSaving] = useState(false);
   const [proposalOptions, setProposalOptions] = useState<ProposalMin[]>([]);
   const [selectedProposalId, setSelectedProposalId] = useState<string>("");
+  const [financing, setFinancing] = useState<FinancingData>({});
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
@@ -89,9 +91,19 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
       if (docType === 'PROPOSAL') {
         if (!selectedLead) return alert('Selecione um cliente');
         if (!produtoSelecionado) return alert('Selecione um produto');
+        
+        // Validar campos obrigatórios de financiamento se aplicável
+        if (formaPagamento === 'FINANCIAMENTO') {
+          if (!financing.bank) return alert('Informe o banco financiador');
+          if (!financing.installments) return alert('Informe o número de parcelas');
+          if (!financing.installment_value) return alert('Informe o valor da parcela');
+          if (!financing.interest_rate) return alert('Informe a taxa de juros');
+        }
+        
         const sysPower = Number(String(produtoSelecionado.power || '').replace(/[^0-9.,-]/g,'').replace(',','.')) || 0;
         const base = (produtoSelecionado.sale_price ?? produtoSelecionado.cost_price ?? 0) as number;
         const total = Math.max(0, base * (1 - Math.max(0, Math.min(100, desconto))/100));
+        
         const payload: any = {
           lead_id: selectedLead.id,
           title: produtoSelecionado.name,
@@ -100,6 +112,20 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
           panel_quantity: 1,
           description: formaPagamento ? `Forma de pagamento: ${formaPagamento}; Desconto: ${desconto}%` : undefined,
           valid_days: 30,
+          payment_method: formaPagamento,
+          // Campos de financiamento
+          ...(formaPagamento === 'FINANCIAMENTO' && {
+            financing_bank: financing.bank,
+            financing_installments: financing.installments,
+            financing_installment_value: financing.installment_value,
+            financing_interest_rate: financing.interest_rate,
+            financing_total_amount: financing.total_amount,
+            financing_entry_value: financing.entry_value,
+            financing_cet: financing.cet,
+            financing_iof: financing.iof,
+            financing_type: financing.type,
+            financing_first_due_date: financing.first_due_date,
+          })
         };
         const data = await fetchJson<{ id: string }>(`${API}/proposals`, { method: 'POST', body: JSON.stringify(payload) });
         onSaved?.(data.id);
@@ -197,20 +223,31 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium">Forma de pagamento</label>
-              <select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)} className="mt-1 border rounded-lg p-2 w-full">
-                <option value="">Selecione</option>
-                <option value="Pix">Pix</option>
-                <option value="Boleto">Boleto</option>
-                <option value="Cartao">Cart?o</option>
-                <option value="Parcelado">Parcelado</option>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Forma de pagamento</label>
+              <select 
+                value={formaPagamento} 
+                onChange={(e) => setFormaPagamento(e.target.value)} 
+                className="mt-1 border border-gray-300 dark:border-gray-600 rounded-lg p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="A_VISTA">À Vista</option>
+                <option value="PARCELADO_DIRETO">Parcelado Direto</option>
+                <option value="FINANCIAMENTO">Financiamento Bancário</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium">Desconto (%)</label>
-              <input type="number" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} className="mt-1 border rounded-lg p-2 w-full" placeholder="Ex: 10" />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Desconto (%)</label>
+              <input type="number" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} className="mt-1 border border-gray-300 dark:border-gray-600 rounded-lg p-2 w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" placeholder="Ex: 10" />
             </div>
           </div>
+
+          {/* Mostrar campos de financiamento apenas se selecionado */}
+          {formaPagamento === 'FINANCIAMENTO' && (
+            <FinancingFields 
+              value={financing} 
+              onChange={setFinancing}
+              disabled={saving}
+            />
+          )}
 
           {produtoSelecionado && (
             <div className="bg-white p-4 rounded-xl ring-1 ring-emerald-200 shadow-sm">
@@ -248,8 +285,8 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
 
       {showLeadModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl">
-            <div className="flex items-center justify-between mb-2">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+            <div className="flex items-center justify-between mb-2 sticky top-0 bg-white pb-2 z-10">
               <h3 className="font-semibold text-zinc-800">{leadModeNew ? 'Cadastrar novo cliente' : 'Selecionar cliente'}</h3>
               <button className="text-zinc-500 hover:text-zinc-800" onClick={() => { setShowLeadModal(false); setLeadModeNew(false); }}>x</button>
             </div>

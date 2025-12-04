@@ -67,7 +67,7 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
   // Enviar notificação in-app via Socket.io
   if (channels.includes("IN_APP")) {
     // Emitir para a empresa toda
-    io.emit("notification", notification);
+    io.to(`company:${task.company_id}`).emit("notification", notification);
 
     // Se tem responsável, emitir para ele especificamente
     if (task.assigned_to) {
@@ -75,7 +75,7 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
     }
 
     // Emitir evento específico de lembrete de tarefa
-    io.emit("task:reminder", {
+    io.to(`company:${task.company_id}`).emit("task:reminder", {
       task,
       notification,
       companyId: task.company_id,

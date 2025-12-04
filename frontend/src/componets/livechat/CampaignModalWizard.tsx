@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FiX, FiSave, FiPlay, FiPause, FiUsers, FiCheckCircle, FiAlertCircle, FiClock, FiBarChart2, FiChevronRight, FiChevronLeft, FiSettings, FiTarget } from "react-icons/fi";
+import { FiX, FiSave, FiPlay, FiPause, FiUsers, FiCheckCircle, FiAlertCircle, FiClock, FiBarChart2, FiChevronRight, FiChevronLeft, FiSettings, FiTarget, FiUpload } from "react-icons/fi";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -8,6 +8,10 @@ import TemplatePicker from "./TemplatePicker";
 import FunnelStageSelector from "./FunnelStageSelector";
 import TagSelector from "./TagSelector";
 import DynamicWindowsEditor from "./DynamicWindowsEditor";
+import CampaignUploadRecipientsModal from "./CampaignUploadRecipientsModal";
+import { MetaHealthStatus } from "../../components/campaigns/MetaHealthStatus";
+import { CampaignValidationAlert } from "../../components/campaigns/CampaignValidationAlert";
+import { CampaignMetricsDashboard } from "../../components/campaigns/CampaignMetricsDashboard";
 
 type Inbox = { id: string; name?: string; provider?: string };
 type Template = { id: string; name: string; kind: string };
@@ -38,6 +42,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showValidation, setShowValidation] = useState(false);
+  const [validation, setValidation] = useState<any>(null);
   
   // Step 1: Dados básicos
   const [form, setForm] = useState({
@@ -82,6 +88,13 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
   const [previewItems, setPreviewItems] = useState<Array<{ name?: string | null; phone: string; idade?: number | null; kanban_column_id?: string | null; created_at?: string }>>([]);
   const [showPreviewList, setShowPreviewList] = useState(false);
   const [commitInfo, setCommitInfo] = useState<string | null>(null);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showBulkOptIn, setShowBulkOptIn] = useState(false);
+  const [bulkOptInForm, setBulkOptInForm] = useState({
+    method: "FORMULARIO_WEB",
+    source: "",
+  });
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -96,6 +109,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
           if (Array.isArray(steps) && steps.length > 0) {
             initialTemplateId = steps[0].template_id || "";
             setForm(f => ({ ...f, template_id: initialTemplateId }));
+            const tmpl = templates.find(t => t.id === initialTemplateId);
+            if (tmpl) setSelectedTemplate(tmpl);
           }
         })
         .catch(() => {});
@@ -175,6 +190,15 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       console.warn("Não foi possível carregar estatísticas");
     }
   };
+
+  // Sincronizar selectedTemplate quando template_id mudar
+  useEffect(() => {
+    if (form.template_id) {
+      const tmpl = templates.find(t => t.id === form.template_id);
+      setSelectedTemplate(tmpl || null);
+    }
+  }, [form.template_id, templates]);
+
   // helpers para datetime-local conversão correta local <-> ISO
   function isoToLocalInput(iso?: string | null) {
     if (!iso) return "";
@@ -401,6 +425,11 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
 
       // 2. Se template foi selecionado, criar/atualizar step
       if (form.template_id && updated.id) {
+        console.log("[CampaignWizard] 📝 Criando campaign_step:", {
+          campaign_id: updated.id,
+          template_id: form.template_id,
+        });
+
         const stepRes = await fetch(`${apiBase}/livechat/campaigns/${updated.id}/steps`, {
           method: "POST",
           credentials: "include",
@@ -414,8 +443,22 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
         });
 
         if (!stepRes.ok) {
-          console.warn("Aviso: Não foi possível salvar o step, mas a campanha foi atualizada.");
+          const errorData = await stepRes.json().catch(() => ({}));
+          console.error("[CampaignWizard] ❌ Falha ao criar step:", {
+            status: stepRes.status,
+            error: errorData,
+          });
+          
+          // Mostrar erro ao usuário
+          setError(`Campanha salva, mas falha ao configurar template: ${errorData.error || 'Erro desconhecido'}`);
+          
+          // Mesmo assim considerar sucesso parcial
+          onSaved(updated);
+          return;
         }
+
+        const stepData = await stepRes.json();
+        console.log("[CampaignWizard] ✅ Step criado com sucesso:", stepData);
       }
 
       onSaved(updated);
@@ -444,6 +487,77 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       }
     } catch (e: any) {
       setError("Falha ao alterar status");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmActivation = async () => {
+    if (!campaign) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/livechat/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "RUNNING" }),
+        credentials: "include",
+      });
+
+      if (!response.ok) throw new Error("Falha ao ativar campanha");
+
+      const updated = await response.json();
+      setShowValidation(false);
+      if (onSaved) {
+        onSaved(updated);
+      }
+    } catch (e: any) {
+      setError("Falha ao ativar campanha");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkOptIn = async () => {
+    if (!campaign?.id || !bulkOptInForm.source.trim()) {
+      setError("Preencha a fonte do opt-in");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`${apiBase}/api/campaigns/${campaign.id}/recipients/bulk-optin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          opt_in_method: bulkOptInForm.method,
+          opt_in_source: bulkOptInForm.source,
+        }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || "Erro ao registrar opt-in em lote");
+      }
+
+      const result = await response.json();
+      setCommitInfo(`✅ Opt-in registrado para ${result.updated_count || 0} recipients`);
+      setShowBulkOptIn(false);
+      
+      // Recarregar validação
+      if (validation) {
+        const valRes = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/validate`, {
+          credentials: "include",
+        });
+        if (valRes.ok) {
+          setValidation(await valRes.json());
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Erro ao registrar opt-in");
     } finally {
       setLoading(false);
     }
@@ -583,6 +697,16 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                 </select>
               </div>
 
+              {/* Meta Health Status */}
+              {form.inbox_id && (
+                <div className="mt-4">
+                  <MetaHealthStatus 
+                    inboxId={form.inbox_id}
+                    showRefreshButton={true}
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Template da mensagem <span className="text-red-500">*</span>
@@ -590,7 +714,11 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                 <TemplatePicker
                   templates={templates}
                   value={form.template_id}
-                  onChange={(templateId) => setForm({ ...form, template_id: templateId })}
+                  onChange={(templateId) => {
+                    setForm({ ...form, template_id: templateId });
+                    const tmpl = templates.find(t => t.id === templateId);
+                    setSelectedTemplate(tmpl || null);
+                  }}
                 />
                 {form.template_id && (
                   <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
@@ -911,9 +1039,24 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
             </div>
           )}
 
-          {/* Step 3: Revisão */}
-          {currentStep === 3 && (
+          {/* Step 4: Revisão e Ativação */}
+          {currentStep === 4 && (
             <div className="space-y-4">
+              {/* Métricas da Campanha (se já estiver rodando) */}
+              {campaign?.id && (campaign.status === "RUNNING" || campaign.status === "COMPLETED" || campaign.status === "PAUSED") && (
+                <Card gradient={false} className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <FiBarChart2 className="w-4 h-4" /> Métricas em Tempo Real
+                  </h3>
+                  <CampaignMetricsDashboard 
+                    campaignId={campaign.id}
+                    autoRefresh={true}
+                    refreshInterval={30}
+                    compact={false}
+                  />
+                </Card>
+              )}
+
               {/* Estatísticas */}
               {stats && (stats.total_recipients > 0 || stats.sent > 0) && (
                 <Card gradient={false} className="p-4 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
@@ -1018,17 +1161,168 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                     {commitInfo}
                   </p>
                 )}
-                <Button
-                  variant="gradient"
-                  size="sm"
-                  onClick={handleCommit}
-                  disabled={loading}
-                  className="w-full"
-                >
-                  <FiCheckCircle className="w-4 h-4 mr-2" />
-                  {loading ? "Processando..." : "Materializar Audiência"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="gradient"
+                    size="sm"
+                    onClick={handleCommit}
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    <FiCheckCircle className="w-4 h-4 mr-2" />
+                    {loading ? "Processando..." : "Materializar Audiência"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUploadModal(true)}
+                    disabled={loading || !campaign?.id}
+                    className="flex-1"
+                  >
+                    <FiUpload className="w-4 h-4 mr-2" />
+                    Enviar Lista
+                  </Button>
+                </div>
+
+                {/* Botão para validar campanha */}
+                {campaign?.id && (
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        setLoading(true);
+                        try {
+                          const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/validate`, {
+                            credentials: "include",
+                          });
+                          if (res.ok) {
+                            const validationResult = await res.json();
+                            setValidation(validationResult);
+                            console.log("[Validation Result]", validationResult);
+                          }
+                        } catch (err) {
+                          console.error("Erro ao validar:", err);
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                      disabled={loading}
+                      className="w-full"
+                    >
+                      <FiCheckCircle className="w-4 h-4 mr-2" />
+                      {loading ? "Validando..." : "Validar Campanha"}
+                    </Button>
+                  </div>
+                )}
               </Card>
+
+              {/* Registrar Opt-in em Lote (LGPD) - Mostrar sempre se houver recipients sem opt-in */}
+              {validation?.stats?.recipients_without_opt_in > 0 && campaign?.id && (
+                <Card 
+                  gradient={false} 
+                  className={`p-4 ${
+                    validation?.stats?.recipients_without_opt_in > 0
+                      ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700"
+                      : "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+                  }`}
+                >
+                  <div className="flex items-start gap-3 mb-3">
+                    {validation?.stats?.recipients_without_opt_in > 0 ? (
+                      <FiAlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                    ) : (
+                      <FiCheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                    )}
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                        {validation?.stats?.recipients_without_opt_in > 0 
+                          ? "⚠️ Opt-in LGPD Necessário"
+                          : "✅ Gestão de Opt-in LGPD"
+                        }
+                      </h3>
+                      {validation?.stats?.recipients_without_opt_in > 0 ? (
+                        <>
+                          <p className="text-xs text-gray-700 dark:text-gray-300 mb-2">
+                            <strong>{validation.stats.recipients_without_opt_in} recipients</strong> ainda não têm consentimento registrado para receber mensagens de MARKETING.
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                            Você pode registrar opt-in em lote para todos os recipients desta campanha de uma só vez.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                          Registre o consentimento LGPD em lote para todos os recipients desta campanha.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {showBulkOptIn ? (
+                    <div className="space-y-3 p-3 bg-white dark:bg-gray-800 rounded border border-yellow-200 dark:border-yellow-800">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Método de Opt-in
+                        </label>
+                        <select
+                          value={bulkOptInForm.method}
+                          onChange={(e) => setBulkOptInForm({ ...bulkOptInForm, method: e.target.value })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        >
+                          <option value="FORMULARIO_WEB">Formulário Web</option>
+                          <option value="CONVERSA_WHATSAPP">Conversa WhatsApp</option>
+                          <option value="CHECKOUT">Checkout/Compra</option>
+                          <option value="OUTRO">Outro</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Fonte/Origem * <span className="text-gray-500">(ex: "Landing Page Black Friday 2025")</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={bulkOptInForm.source}
+                          onChange={(e) => setBulkOptInForm({ ...bulkOptInForm, source: e.target.value })}
+                          placeholder="Descreva a origem do consentimento"
+                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={handleBulkOptIn}
+                          disabled={loading || !bulkOptInForm.source.trim()}
+                          className="flex-1"
+                        >
+                          <FiCheckCircle className="w-4 h-4 mr-2" />
+                          {loading ? "Registrando..." : "Confirmar Opt-in em Lote"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowBulkOptIn(false)}
+                          disabled={loading}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowBulkOptIn(true)}
+                      disabled={loading}
+                      className="w-full"
+                    >
+                      <FiCheckCircle className="w-4 h-4 mr-2" />
+                      Registrar Opt-in em Lote
+                    </Button>
+                  )}
+                </Card>
+              )}
 
               {/* Controle de status */}
               {campaign && (campaign.status === "DRAFT" || campaign.status === "PAUSED" || campaign.status === "RUNNING") && (
@@ -1076,7 +1370,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                   Voltar
                 </Button>
               )}
-              {currentStep < 3 ? (
+              {currentStep < 4 ? (
                 <Button variant="gradient" onClick={handleNextStep}>
                   Próximo
                   <FiChevronRight className="w-4 h-4 ml-1" />
@@ -1095,6 +1389,29 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
           </div>
         </div>
       </div>
+
+      {/* Upload Modal */}
+      {campaign?.id && (
+        <CampaignUploadRecipientsModal
+          apiBase={apiBase}
+          campaignId={campaign.id}
+          open={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          onSuccess={() => {
+            setShowUploadModal(false);
+            loadStats(); // Reload stats after upload
+          }}
+        />
+      )}
+
+      {/* Validation Alert Modal */}
+      <CampaignValidationAlert
+        open={showValidation}
+        onOpenChange={setShowValidation}
+        validation={validation}
+        onProceed={handleConfirmActivation}
+        onCancel={() => setShowValidation(false)}
+      />
     </div>
   );
 }

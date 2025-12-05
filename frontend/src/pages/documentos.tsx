@@ -215,6 +215,7 @@ export default function DocumentosPage() {
     proposal: Proposal;
     templates: any[];
     selectedTemplateId: string;
+    convertToPdf: boolean;
     loading: boolean;
     generating: boolean;
   }>(null);
@@ -250,7 +251,7 @@ export default function DocumentosPage() {
 
   // Open template generation modal and load templates
   const openTemplateGeneration = async (proposal: Proposal, docType: 'PROPOSTA' | 'CONTRATO' | 'RECIBO') => {
-    setGenerateTemplate({ proposal, templates: [], selectedTemplateId: '', loading: true, generating: false });
+    setGenerateTemplate({ proposal, templates: [], selectedTemplateId: '', convertToPdf: true, loading: true, generating: false });
     try {
       const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=${docType}`);
       setGenerateTemplate(prev => prev ? { ...prev, templates, loading: false } : null);
@@ -268,29 +269,41 @@ export default function DocumentosPage() {
     }
     setGenerateTemplate(prev => prev ? { ...prev, generating: true } : null);
     try {
-      const { proposal } = generateTemplate;
+      const { proposal, convertToPdf } = generateTemplate;
       
-      // Generate document usando a nova rota
+      // Usar rota genérica que detecta o tipo de gerador automaticamente
       const result = await fetchJson<{ 
         success: boolean;
         document_id: string;
         download_url: string;
         generated_path: string;
-      }>(`${API}/document-templates/${generateTemplate.selectedTemplateId}/generate-from-proposal`, {
+        pdf_download_url?: string;
+        pdf_path?: string;
+      }>(`${API}/document-templates/${generateTemplate.selectedTemplateId}/generate-document`, {
         method: 'POST',
         body: JSON.stringify({ 
           proposal_id: proposal.id,
-          custom_variables: {} // Variáveis extras se necessário
+          convert_to_pdf: convertToPdf
         }),
       });
 
-      if (result.download_url) {
-        // Download automático do documento gerado
+      // Abrir downloads
+      if (convertToPdf && result.pdf_download_url) {
+        window.open(result.pdf_download_url, '_blank');
+        setTimeout(() => {
+          if (result.download_url) {
+            window.open(result.download_url, '_blank');
+          }
+        }, 500);
+      } else if (result.download_url) {
         window.open(result.download_url, '_blank');
       }
       
       setGenerateTemplate(null);
-      alert('Documento gerado com sucesso!');
+      const msg = convertToPdf && result.pdf_path 
+        ? 'Documento gerado com sucesso! (DOCX + PDF)'
+        : 'Documento gerado com sucesso!';
+      alert(msg);
       load(); // Recarregar lista
     } catch (e: any) {
       alert(e?.message || "Erro ao gerar documento");
@@ -812,6 +825,21 @@ export default function DocumentosPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  {/* Checkbox para converter em PDF */}
+                  <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    <input 
+                      type="checkbox"
+                      id="convertToPdf"
+                      checked={generateTemplate.convertToPdf}
+                      onChange={(e) => setGenerateTemplate(prev => prev ? { ...prev, convertToPdf: e.target.checked } : null)}
+                      className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label htmlFor="convertToPdf" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                      <span className="font-medium">Gerar PDF automaticamente</span>
+                      <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">Além do DOCX, também será gerado um arquivo PDF</span>
+                    </label>
                   </div>
 
                   <div className="flex justify-end gap-2 pt-4 border-t" style={{ borderColor: "var(--color-border)" }}>

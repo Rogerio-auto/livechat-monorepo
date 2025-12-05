@@ -4,7 +4,7 @@ Script para verificar se os dados de fluxo estão sendo gerados corretamente
 from proposal_generator import GeradorPropostaSolar
 
 # Caminho do template
-TEMPLATE = r"C:\Users\roger\Downloads\Proposta 2025 (1).docx"
+TEMPLATE = r"C:\Users\roger\Downloads\Proposta 2025 - CORRIGIDO.docx"
 
 # Criar instância
 gerador = GeradorPropostaSolar(TEMPLATE)

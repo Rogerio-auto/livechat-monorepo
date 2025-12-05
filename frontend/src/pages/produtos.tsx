@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { FaEdit, FaTrash } from "react-icons/fa";
+import { useCompany } from "../hooks/useCompany";
+import { getCatalogConfig, FIELD_LABELS, isFieldVisible, isFieldRequired, type CatalogFieldKey } from "../config/catalog-config";
 
 // =============================
 // Tipos
@@ -93,6 +95,8 @@ function parseSpecs(specs: unknown): string {
 
 export function ProdutosPage() {
   const navigate = useNavigate();
+  const { company } = useCompany();
+  const config = getCatalogConfig(company?.industry);
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -104,6 +108,48 @@ export function ProdutosPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [query, setQuery] = useState("");
+
+  // Helper to format field values for display in table
+  const formatFieldValue = (product: Product, field: string): string => {
+    const value = product[field as keyof Product];
+    
+    if (value === null || value === undefined) return '-';
+    
+    switch (field) {
+      case 'sale_price':
+      case 'cost_price':
+        return typeof value === 'number' 
+          ? value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+          : '-';
+      case 'duration_minutes':
+        return typeof value === 'number' ? `${value} min` : '-';
+      case 'power':
+        return value ? `${value}W` : '-';
+      case 'size':
+        return value ? `${value}m²` : '-';
+      case 'specs':
+        return parseSpecs(String(value));
+      case 'is_active':
+        return value ? 'Ativo' : 'Inativo';
+      case 'billing_type':
+        const billingLabels: Record<string, string> = {
+          'one_time': 'Pagamento Único',
+          'hourly': 'Por Hora',
+          'monthly': 'Mensal',
+          'session': 'Por Sessão'
+        };
+        return billingLabels[String(value)] || String(value);
+      case 'item_type':
+        const typeLabels: Record<string, string> = {
+          'PRODUCT': 'Produto',
+          'SERVICE': 'Serviço',
+          'SUBSCRIPTION': 'Assinatura'
+        };
+        return typeLabels[String(value)] || String(value);
+      default:
+        return String(value);
+    }
+  };
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const summaryMetrics = useMemo(() => {
@@ -261,8 +307,8 @@ export function ProdutosPage() {
         >
           <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-2xl font-semibold theme-heading">Produtos</h2>
-              <p className="theme-text-muted text-sm">Gerencie seu catálogo, preços e importações</p>
+              <h2 className="text-2xl font-semibold theme-heading">{config.labels.pageTitle}</h2>
+              <p className="theme-text-muted text-sm">{config.labels.pageDescription}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -273,24 +319,26 @@ export function ProdutosPage() {
                   setShowForm(true);
                 }}
               >
-                + Novo Produto
+                {config.labels.addButton}
               </button>
-              <label
-                className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-xl border cursor-pointer theme-surface-muted"
-                style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
-              >
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFile(f);
-                    e.currentTarget.value = "";
-                  }}
-                />
-                Importar XLSX
-              </label>
+              {config.features.xlsxImport && (
+                <label
+                  className="inline-flex items-center gap-2 px-3 py-2 text-sm rounded-xl border cursor-pointer theme-surface-muted"
+                  style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
+                >
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFile(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                  Importar XLSX
+                </label>
+              )}
             </div>
           </div>
 
@@ -387,10 +435,12 @@ export function ProdutosPage() {
                 style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)" }}
               >
                 <tr className="theme-text-muted text-xs uppercase tracking-wide">
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Nome do Produto</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Descrição</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Preço de Venda</th>
-                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Preço de Custo</th>
+                  {config.tableColumns.map((col) => (
+                    <th key={col} className="py-3 px-4 font-semibold whitespace-nowrap">
+                      {FIELD_LABELS[col]}
+                    </th>
+                  ))}
+                  <th className="py-3 px-4 font-semibold whitespace-nowrap">Ações</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -400,63 +450,66 @@ export function ProdutosPage() {
                     className="border-t transition-colors hover:bg-sky-50/50 dark:hover:bg-white/5"
                     style={{ borderColor: "color-mix(in srgb, var(--color-border) 70%, transparent)" }}
                   >
-                    <td className="py-3 px-4 max-w-[360px]">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="block truncate font-medium theme-heading" title={p.name}>
-                          {p.name}
-                        </span>
-                        <div className="flex items-center gap-2 opacity-60 transition hover:opacity-100">
-                          <button
-                            className="p-1 rounded-md theme-surface-muted border"
-                            style={{ borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)" }}
-                            title="Editar"
-                            onClick={() => {
-                              setEditing(p);
-                              setForm({ ...p });
-                              setShowForm(true);
-                            }}
+                    {config.tableColumns.map((col) => (
+                      <td 
+                        key={col} 
+                        className={`py-3 px-4 ${col === 'name' ? 'max-w-[360px]' : col === 'description' || col === 'specs' ? 'max-w-[520px]' : ''}`}
+                      >
+                        {col === 'name' ? (
+                          <span className="block truncate font-medium theme-heading" title={p.name}>
+                            {p.name}
+                          </span>
+                        ) : col === 'sale_price' ? (
+                          <span className="font-medium" style={{ color: "var(--color-highlight-strong)" }}>
+                            {formatFieldValue(p, col)}
+                          </span>
+                        ) : (
+                          <span 
+                            className={`block truncate ${col === 'description' || col === 'specs' ? 'theme-text-muted' : ''}`}
+                            title={formatFieldValue(p, col)}
                           >
-                            <FaEdit />
-                          </button>
-                          <button
-                            className="p-1 rounded-md border border-transparent text-rose-600 hover:bg-rose-100 transition dark:text-rose-200 dark:hover:bg-rose-500/20"
-                            title="Excluir"
-                            onClick={async () => {
-                              if (!p.id) return alert("Produto sem id");
-                              if (!confirm("Excluir este produto?")) return;
-                              try {
-                                await fetchJson(`${API}/api/products/${p.id}`, { method: "DELETE" });
-                                setProducts((prev) => prev.filter((x) => x.id !== p.id));
-                              } catch (e: any) {
-                                alert(e?.message || "Erro ao excluir");
-                              }
-                            }}
-                          >
-                            <FaTrash />
-                          </button>
-                        </div>
+                            {formatFieldValue(p, col)}
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2 opacity-60 transition hover:opacity-100">
+                        <button
+                          className="p-1 rounded-md theme-surface-muted border"
+                          style={{ borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)" }}
+                          title="Editar"
+                          onClick={() => {
+                            setEditing(p);
+                            setForm({ ...p });
+                            setShowForm(true);
+                          }}
+                        >
+                          <FaEdit />
+                        </button>
+                        <button
+                          className="p-1 rounded-md border border-transparent text-rose-600 hover:bg-rose-100 transition dark:text-rose-200 dark:hover:bg-rose-500/20"
+                          title="Excluir"
+                          onClick={async () => {
+                            if (!p.id) return alert("Produto sem id");
+                            if (!confirm("Excluir este produto?")) return;
+                            try {
+                              await fetchJson(`${API}/api/products/${p.id}`, { method: "DELETE" });
+                              setProducts((prev) => prev.filter((x) => x.id !== p.id));
+                            } catch (e: any) {
+                              alert(e?.message || "Erro ao excluir");
+                            }
+                          }}
+                        >
+                          <FaTrash />
+                        </button>
                       </div>
-                    </td>
-                    <td className="py-3 px-4 max-w-[520px]">
-                      <span className="block truncate theme-text-muted" title={parseSpecs(p.specs)}>
-                        {parseSpecs(p.specs)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-medium" style={{ color: "var(--color-highlight-strong)" }}>
-                      {p.sale_price != null
-                        ? p.sale_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                        : "-"}
-                    </td>
-                    <td className="py-3 px-4 theme-text-muted">
-                      {p.cost_price != null
-                        ? p.cost_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                        : "-"}
                     </td>
                   </tr>
                 ))}
                 {total === 0 && !loading && (
                   <tr>
-                    <td className="py-6 px-4 theme-text-muted" colSpan={4}>
+                    <td className="py-6 px-4 theme-text-muted" colSpan={config.tableColumns.length + 1}>
                       Nenhum produto encontrado.
                     </td>
                   </tr>
@@ -534,138 +587,282 @@ export function ProdutosPage() {
               >
                 x
               </button>
-              <h3 className="text-lg font-semibold theme-heading mb-4">{editing ? "Editar Produto" : "Novo Produto"}</h3>
+              <h3 className="text-lg font-semibold theme-heading mb-4">
+                {editing ? `Editar ${config.labels.itemName}` : config.labels.addButton}
+              </h3>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1 theme-heading">Nome*</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.name || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="Nome do produto/serviço"
-                  />
-                </div>
+                {/* Nome - sempre visível */}
+                {isFieldVisible('name', company?.industry) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.name}{isFieldRequired('name', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.name || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                      placeholder={config.placeholders.name}
+                      required={isFieldRequired('name', company?.industry)}
+                    />
+                  </div>
+                )}
                 
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Tipo*</label>
-                  <select
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.item_type || "PRODUCT"}
-                    onChange={(e) => setForm((f) => ({ ...f, item_type: e.target.value as ItemType }))}
-                  >
-                    <option value="PRODUCT">📦 Produto</option>
-                    <option value="SERVICE">🛠️ Serviço</option>
-                    <option value="SUBSCRIPTION">🔄 Assinatura</option>
-                  </select>
-                </div>
+                {/* Tipo de Item */}
+                {isFieldVisible('item_type', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.item_type}{isFieldRequired('item_type', company?.industry) && ' *'}
+                    </label>
+                    <select
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.item_type || config.itemTypeOptions[0]?.value || "PRODUCT"}
+                      onChange={(e) => setForm((f) => ({ ...f, item_type: e.target.value as ItemType }))}
+                      required={isFieldRequired('item_type', company?.industry)}
+                    >
+                      {config.itemTypeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">ID (planilha)</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.external_id || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, external_id: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">SKU</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.sku || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                    placeholder="Código SKU"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Unidade</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.unit || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1 theme-heading">Descrição</label>
-                  <textarea
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.description || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                    rows={2}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Preço de Custo</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.cost_price ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Preço de Venda</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.sale_price ?? ""}
-                    onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Marca</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.brand || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Agrupamento</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.grouping || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, grouping: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Potência</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.power || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, power: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Tamanho</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.size || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Fornecedor</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.supplier || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1 theme-heading">Situação</label>
-                  <input
-                    className="config-input w-full rounded-lg px-3 py-2"
-                    value={form.status || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1 theme-heading">Especificações</label>
-                  <textarea
-                    className="config-input w-full rounded-lg px-3 py-2 min-h-20"
-                    value={form.specs || ""}
-                    onChange={(e) => setForm((f) => ({ ...f, specs: e.target.value }))}
-                  />
-                </div>
+                {/* SKU */}
+                {isFieldVisible('sku', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.sku}{isFieldRequired('sku', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.sku || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                      placeholder="Código SKU"
+                      required={isFieldRequired('sku', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Unidade */}
+                {isFieldVisible('unit', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.unit}{isFieldRequired('unit', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.unit || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}
+                      placeholder={config.placeholders.unit}
+                      required={isFieldRequired('unit', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Descrição */}
+                {isFieldVisible('description', company?.industry) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.description}{isFieldRequired('description', company?.industry) && ' *'}
+                    </label>
+                    <textarea
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.description || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                      placeholder={config.placeholders.description}
+                      rows={2}
+                      required={isFieldRequired('description', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Preço de Custo */}
+                {isFieldVisible('cost_price', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.cost_price}{isFieldRequired('cost_price', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.cost_price ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+                      placeholder="0.00"
+                      required={isFieldRequired('cost_price', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Preço de Venda */}
+                {isFieldVisible('sale_price', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.sale_price}{isFieldRequired('sale_price', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.sale_price ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, sale_price: e.target.value }))}
+                      placeholder="0.00"
+                      required={isFieldRequired('sale_price', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Duração (minutos) */}
+                {isFieldVisible('duration_minutes', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.duration_minutes}{isFieldRequired('duration_minutes', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      type="number"
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.duration_minutes ?? ""}
+                      onChange={(e) => setForm((f) => ({ ...f, duration_minutes: e.target.value ? Number(e.target.value) : undefined }))}
+                      placeholder="Ex: 60"
+                      required={isFieldRequired('duration_minutes', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Tipo de Cobrança */}
+                {isFieldVisible('billing_type', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.billing_type}{isFieldRequired('billing_type', company?.industry) && ' *'}
+                    </label>
+                    <select
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.billing_type || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, billing_type: e.target.value }))}
+                      required={isFieldRequired('billing_type', company?.industry)}
+                    >
+                      <option value="">Selecione...</option>
+                      <option value="one_time">Pagamento Único</option>
+                      <option value="hourly">Por Hora</option>
+                      <option value="monthly">Mensal</option>
+                      <option value="session">Por Sessão</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Marca */}
+                {isFieldVisible('brand', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.brand}{isFieldRequired('brand', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.brand || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                      placeholder="Ex: Canadian Solar"
+                      required={isFieldRequired('brand', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Agrupamento */}
+                {isFieldVisible('grouping', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.grouping}{isFieldRequired('grouping', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.grouping || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, grouping: e.target.value }))}
+                      placeholder="Ex: Painéis, Inversores"
+                      required={isFieldRequired('grouping', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Potência */}
+                {isFieldVisible('power', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.power}{isFieldRequired('power', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.power || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, power: e.target.value }))}
+                      placeholder="Ex: 550W"
+                      required={isFieldRequired('power', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Tamanho */}
+                {isFieldVisible('size', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.size}{isFieldRequired('size', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.size || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, size: e.target.value }))}
+                      placeholder="Ex: 120m²"
+                      required={isFieldRequired('size', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Fornecedor */}
+                {isFieldVisible('supplier', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.supplier}{isFieldRequired('supplier', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.supplier || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, supplier: e.target.value }))}
+                      placeholder="Nome do fornecedor"
+                      required={isFieldRequired('supplier', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Status */}
+                {isFieldVisible('status', company?.industry) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.status}{isFieldRequired('status', company?.industry) && ' *'}
+                    </label>
+                    <input
+                      className="config-input w-full rounded-lg px-3 py-2"
+                      value={form.status || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                      placeholder="Ex: Disponível, Esgotado"
+                      required={isFieldRequired('status', company?.industry)}
+                    />
+                  </div>
+                )}
+
+                {/* Especificações */}
+                {isFieldVisible('specs', company?.industry) && (
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1 theme-heading">
+                      {FIELD_LABELS.specs}{isFieldRequired('specs', company?.industry) && ' *'}
+                    </label>
+                    <textarea
+                      className="config-input w-full rounded-lg px-3 py-2 min-h-20"
+                      value={form.specs || ""}
+                      onChange={(e) => setForm((f) => ({ ...f, specs: e.target.value }))}
+                      placeholder={config.placeholders.specs}
+                      required={isFieldRequired('specs', company?.industry)}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="mt-5 flex justify-end gap-3">

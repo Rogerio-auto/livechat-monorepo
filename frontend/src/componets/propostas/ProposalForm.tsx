@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LeadPicker } from "../funil/LeadPicker";
 import { ClienteForm } from "../clientes/ClienteForm";
 import { FinancingFields, FinancingData } from "./FinancingFields";
+import { calculateSolarData, formatSolarDataForAPI, type KitData, type SolarData } from "../../utils/solarDataExtractor";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -16,7 +17,10 @@ type Product = {
   power?: string | null;
   brand?: string | null;
   specs?: string | null;
+  size?: string | null;
 };
+
+type ExtendedProduct = Product & KitData;
 
  type ProposalMin = { id: string; number: string; title: string; total_value: number; lead_id?: string | null; customer_id?: string };
 
@@ -42,6 +46,8 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
   const [proposalOptions, setProposalOptions] = useState<ProposalMin[]>([]);
   const [selectedProposalId, setSelectedProposalId] = useState<string>("");
   const [financing, setFinancing] = useState<FinancingData>({});
+  const [solarData, setSolarData] = useState<SolarData | null>(null);
+  const [autoGenerate, setAutoGenerate] = useState<boolean>(false);
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
@@ -85,6 +91,62 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
 
   const produtoSelecionado = useMemo(() => produtos.find((p) => p.id === produto) || null, [produto, produtos]);
 
+  // Calcular dados solares automaticamente quando kit for selecionado
+  useEffect(() => {
+    console.log("[ProposalForm] useEffect disparado");
+    console.log("[ProposalForm] produtoSelecionado:", produtoSelecionado);
+    
+    if (!produtoSelecionado) {
+      console.log("[ProposalForm] Nenhum produto selecionado");
+      setSolarData(null);
+      return;
+    }
+
+    console.log("[ProposalForm] Produto selecionado:", {
+      name: produtoSelecionado.name,
+      power: produtoSelecionado.power,
+      size: produtoSelecionado.size,
+      specs: produtoSelecionado.specs?.substring(0, 50)
+    });
+
+    // Verificar se é um kit solar (tem power e size)
+    if (!produtoSelecionado.power || !produtoSelecionado.size) {
+      console.log("[ProposalForm] ⚠️ Produto SEM power ou size - não é kit solar");
+      console.log("[ProposalForm] power:", produtoSelecionado.power);
+      console.log("[ProposalForm] size:", produtoSelecionado.size);
+      setSolarData(null);
+      return;
+    }
+
+    console.log("[ProposalForm] ✅ Produto é kit solar - calculando dados...");
+
+    // Calcular valor total para payback
+    const base = (produtoSelecionado.sale_price ?? produtoSelecionado.cost_price ?? 0) as number;
+    const total = Math.max(0, base * (1 - Math.max(0, Math.min(100, desconto))/100));
+
+    console.log("[ProposalForm] Valor base:", base);
+    console.log("[ProposalForm] Desconto:", desconto);
+    console.log("[ProposalForm] Valor total:", total);
+
+    // Calcular consumo mensal do cliente (se informado)
+    const monthlyConsumption = consumo ? parseFloat(consumo) : undefined;
+
+    // Criar objeto KitData
+    const kitData: KitData = {
+      name: produtoSelecionado.name,
+      power: produtoSelecionado.power,
+      size: produtoSelecionado.size || "0",
+      specs: produtoSelecionado.specs,
+      sale_price: produtoSelecionado.sale_price,
+    };
+
+    // Calcular todos os dados solares
+    const calculated = calculateSolarData(kitData, total, monthlyConsumption);
+    setSolarData(calculated);
+
+    console.log("[ProposalForm] ✅ Dados solares calculados:", calculated);
+  }, [produtoSelecionado, desconto, consumo]);
+
   const salvar = async () => {
     try {
       setSaving(true);
@@ -109,7 +171,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
           title: produtoSelecionado.name,
           total_value: total,
           system_power: sysPower,
-          panel_quantity: 1,
+          panel_quantity: solarData?.solar_num_panels || 1,
           description: formaPagamento ? `Forma de pagamento: ${formaPagamento}; Desconto: ${desconto}%` : undefined,
           valid_days: 30,
           payment_method: formaPagamento,
@@ -125,9 +187,69 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
             financing_iof: financing.iof,
             financing_type: financing.type,
             financing_first_due_date: financing.first_due_date,
-          })
+          }),
+          // Campos solares calculados automaticamente
+          ...(solarData && formatSolarDataForAPI(solarData))
         };
+
+        console.log("[ProposalForm] ====================================");
+        console.log("[ProposalForm] PAYLOAD FINAL:");
+        console.log("[ProposalForm] solarData existe?", !!solarData);
+        console.log("[ProposalForm] solarData:", solarData);
+        console.log("[ProposalForm] Payload completo:", JSON.stringify(payload, null, 2));
+        console.log("[ProposalForm] ====================================");
+        
         const data = await fetchJson<{ id: string }>(`${API}/proposals`, { method: 'POST', body: JSON.stringify(payload) });
+        
+        // Se checkbox de gerar documento estiver marcado, gerar automaticamente
+        if (autoGenerate) {
+          console.log("[ProposalForm] 📄 Gerando documento automaticamente para proposta:", data.id);
+          try {
+            // Buscar templates disponíveis
+            const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=PROPOSAL`);
+            if (templates && templates.length > 0) {
+              const firstTemplate = templates[0];
+              console.log("[ProposalForm] ✅ Template encontrado:", firstTemplate.name);
+              
+              // Gerar documento usando o primeiro template
+              const result = await fetchJson<{
+                success: boolean;
+                document_id: string;
+                download_url: string;
+                generated_path: string;
+                pdf_download_url?: string;
+                pdf_path?: string;
+              }>(`${API}/document-templates/${firstTemplate.id}/generate-document`, {
+                method: 'POST',
+                body: JSON.stringify({ 
+                  proposal_id: data.id,
+                  convert_to_pdf: true
+                }),
+              });
+              
+              console.log("[ProposalForm] ✅ Documento gerado:", result);
+              
+              // Abrir downloads
+              if (result.pdf_download_url) {
+                window.open(result.pdf_download_url, '_blank');
+                setTimeout(() => {
+                  if (result.download_url) {
+                    window.open(result.download_url, '_blank');
+                  }
+                }, 500);
+              } else if (result.download_url) {
+                window.open(result.download_url, '_blank');
+              }
+            } else {
+              console.warn("[ProposalForm] ⚠️ Nenhum template encontrado");
+              alert("Proposta salva, mas nenhum template foi encontrado para gerar o documento.");
+            }
+          } catch (docError: any) {
+            console.error("[ProposalForm] ❌ Erro ao gerar documento:", docError);
+            alert(`Proposta salva com sucesso, mas houve erro ao gerar o documento: ${docError?.message || 'Erro desconhecido'}`);
+          }
+        }
+        
         onSaved?.(data.id);
         onClose?.();
         return;
@@ -216,6 +338,57 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
             </div>
           </div>
 
+          {/* Resumo dos dados solares calculados */}
+          {solarData && (
+            <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-4 rounded-xl ring-2 ring-emerald-300 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">☀️</span>
+                <div className="font-semibold text-emerald-900">Dados Solares Calculados</div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                <div className="bg-white/70 p-2 rounded-lg">
+                  <div className="text-xs text-emerald-700 font-medium">Potência Total</div>
+                  <div className="text-emerald-900 font-semibold">{solarData.solar_total_power.toFixed(2)} kWp</div>
+                </div>
+                {solarData.solar_num_panels && (
+                  <div className="bg-white/70 p-2 rounded-lg">
+                    <div className="text-xs text-emerald-700 font-medium">Painéis</div>
+                    <div className="text-emerald-900 font-semibold">{solarData.solar_num_panels} unidades</div>
+                  </div>
+                )}
+                {solarData.solar_monthly_production && (
+                  <div className="bg-white/70 p-2 rounded-lg">
+                    <div className="text-xs text-emerald-700 font-medium">Geração Mensal</div>
+                    <div className="text-emerald-900 font-semibold">{solarData.solar_monthly_production} kWh</div>
+                  </div>
+                )}
+                {solarData.solar_area_needed && (
+                  <div className="bg-white/70 p-2 rounded-lg">
+                    <div className="text-xs text-emerald-700 font-medium">Área Necessária</div>
+                    <div className="text-emerald-900 font-semibold">{solarData.solar_area_needed} m²</div>
+                  </div>
+                )}
+                {solarData.solar_savings_value && (
+                  <div className="bg-white/70 p-2 rounded-lg">
+                    <div className="text-xs text-emerald-700 font-medium">Economia Mensal</div>
+                    <div className="text-emerald-900 font-semibold">
+                      {solarData.solar_savings_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </div>
+                  </div>
+                )}
+                {solarData.solar_payback_years && (
+                  <div className="bg-white/70 p-2 rounded-lg">
+                    <div className="text-xs text-emerald-700 font-medium">Payback</div>
+                    <div className="text-emerald-900 font-semibold">{solarData.solar_payback_years} anos</div>
+                  </div>
+                )}
+              </div>
+              <div className="mt-2 text-xs text-emerald-700">
+                ✅ Estes dados serão incluídos automaticamente na proposta
+              </div>
+            </div>
+          )}
+
           <div className="bg-zinc-50 p-4 rounded-xl ring-1 ring-zinc-200 text-sm text-zinc-800">
             <div className="font-medium mb-2">Vendedor responsavel</div>
             <div>{vendedor || '-'}</div>
@@ -275,6 +448,23 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
           ) : (
             <div className="text-emerald-900/80">Selecione um cliente para listar propostas.</div>
           )}
+        </div>
+      )}
+
+      {/* Checkbox para gerar documento automaticamente (apenas para PROPOSAL) */}
+      {docType === 'PROPOSAL' && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50/60 border border-emerald-200">
+          <input 
+            type="checkbox"
+            id="autoGenerateDoc"
+            checked={autoGenerate}
+            onChange={(e) => setAutoGenerate(e.target.checked)}
+            className="w-4 h-4 text-emerald-600 bg-emerald-100 border-emerald-300 rounded focus:ring-emerald-500 focus:ring-2"
+          />
+          <label htmlFor="autoGenerateDoc" className="text-sm text-emerald-800 cursor-pointer select-none">
+            <span className="font-medium">Gerar e baixar documento automaticamente</span>
+            <span className="block text-xs text-emerald-700/80 mt-0.5">Após salvar, o documento será gerado em DOCX e PDF</span>
+          </label>
         </div>
       )}
 

@@ -28,7 +28,7 @@ export function registerCompanyRoutes(app: express.Application) {
     try {
       const { data: companies, error } = await supabaseAdmin
         .from("companies")
-        .select("id, name, email, phone, address, created_at")
+        .select("id, name, email, phone, address, industry, created_at")
         .order("created_at", { ascending: false });
       
       if (error) return res.status(500).json({ error: error.message });
@@ -87,7 +87,7 @@ export function registerCompanyRoutes(app: express.Application) {
       const { data: comp, error: cerr } = await supabaseAdmin
         .from("companies")
         .select(
-          "id, name, cnpj, email, phone, address, city, state, zip_code, logo, plan, is_active, created_at, updated_at"
+          "id, name, cnpj, email, phone, address, city, state, zip_code, logo, plan, is_active, industry, team_size, created_at, updated_at"
         )
         .eq("id", companyId)
         .maybeSingle();

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useOnboarding } from "../../hooks/useOnboarding";
 import { INDUSTRIES } from "../../types/onboarding";
 import type { Industry } from "../../types/onboarding";
-import { FaGraduationCap, FaChartLine, FaHospital, FaShoppingCart, FaCalendarAlt, FaBalanceScale, FaCheck } from "react-icons/fa";
+import { FaGraduationCap, FaChartLine, FaHospital, FaSolarPanel, FaHardHat, FaHome, FaCalendarAlt, FaBalanceScale, FaCheck } from "react-icons/fa";
 
 interface Step1Props {
   onNext: () => void;
@@ -12,7 +12,9 @@ const iconMap = {
   FaGraduationCap,
   FaChartLine,
   FaHospital,
-  FaShoppingCart,
+  FaSolarPanel,
+  FaHardHat,
+  FaHome,
   FaCalendarAlt,
   FaBalanceScale,
 };

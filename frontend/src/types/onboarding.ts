@@ -1,12 +1,14 @@
 // Tipos para o sistema de onboarding
 
 export type Industry = 
-  | "education"    // Educação
-  | "accounting"   // Contabilidade
-  | "clinic"       // Clínicas
-  | "retail"       // Varejo
-  | "events"       // Eventos
-  | "law";         // Advocacia
+  | "education"      // Educação
+  | "accounting"     // Contabilidade
+  | "clinic"         // Clínicas
+  | "solar_energy"   // Energia Solar
+  | "construction"   // Construção Civil
+  | "real_estate"    // Imobiliária
+  | "events"         // Eventos
+  | "law";           // Advocacia
 
 export type TeamSize = "1-5" | "6-15" | "16-50" | "50+";
 
@@ -95,12 +97,28 @@ export const INDUSTRIES: IndustryMetadata[] = [
     features: ["Agendamento de consultas", "Cadastro de procedimentos", "Lembretes automáticos"],
   },
   {
-    id: "retail",
-    name: "Varejo",
-    icon: "FaShoppingCart",
+    id: "solar_energy",
+    name: "Energia Solar",
+    icon: "FaSolarPanel",
     color: "#F59E0B", // amber-500
-    description: "Lojas e comércios",
-    features: ["Catálogo de produtos", "Controle de estoque", "Geração de orçamentos"],
+    description: "Empresas de energia solar fotovoltaica",
+    features: ["Propostas com cálculos", "Simulações de economia", "Projetos personalizados"],
+  },
+  {
+    id: "construction",
+    name: "Construção Civil",
+    icon: "FaHardHat",
+    color: "#FB923C", // orange-400
+    description: "Construtoras e engenharia civil",
+    features: ["Orçamentos de obras", "Controle de projetos", "Gestão de contratos"],
+  },
+  {
+    id: "real_estate",
+    name: "Imobiliária",
+    icon: "FaHome",
+    color: "#14B8A6", // teal-500
+    description: "Imobiliárias e corretoras",
+    features: ["Catálogo de imóveis", "Agendamento de visitas", "Propostas comerciais"],
   },
   {
     id: "events",

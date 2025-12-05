@@ -4,7 +4,7 @@ Script avançado para análise detalhada e correção manual guiada
 import zipfile
 import re
 
-TEMPLATE = r"C:\Users\roger\Downloads\Proposta 2025 (1).docx"
+TEMPLATE = r"C:\Users\roger\Downloads\Proposta 2025 - CORRIGIDO.docx"
 
 print("🔍 ANÁLISE DETALHADA DAS TAGS\n")
 print("=" * 80)

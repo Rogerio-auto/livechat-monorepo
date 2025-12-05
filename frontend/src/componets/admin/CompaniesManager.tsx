@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import { FiUsers, FiCalendar, FiActivity, FiMail, FiPhone, FiPackage, FiTrash2, FiAlertTriangle } from "react-icons/fi";
+import { FiUsers, FiCalendar, FiActivity, FiMail, FiPhone, FiPackage, FiTrash2, FiAlertTriangle, FiEdit2, FiRefreshCw, FiSearch, FiX, FiFilter } from "react-icons/fi";
+import { IndustryBadge } from "./IndustryBadge";
+import { EditIndustryModal } from "./EditIndustryModal";
+import { Industry } from "../../types/onboarding";
+import { INDUSTRY_OPTIONS } from "../../config/industry-config";
 
 type Company = {
   id: string;
@@ -7,6 +11,7 @@ type Company = {
   email: string | null;
   phone: string | null;
   address: string | null;
+  industry: Industry | null;
   created_at: string;
   _count?: {
     users: number;
@@ -24,11 +29,55 @@ export function CompaniesManager() {
   const [deletePassword, setDeletePassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [urlKey, setUrlKey] = useState(0); // Para forçar re-render quando URL muda
+  
+  // Estados para filtros e busca
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedIndustries, setSelectedIndustries] = useState<Industry[]>([]);
 
   const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
+  // Detectar parâmetro editIndustry na URL
+  const params = new URLSearchParams(window.location.search);
+  const editIndustryId = params.get("editIndustry");
+  const editingCompany = editIndustryId ? companies.find((c) => c.id === editIndustryId) : null;
+
+  // Filtrar empresas
+  const filteredCompanies = companies.filter((company) => {
+    // Filtro de busca (nome ou email)
+    const matchesSearch = 
+      searchQuery === "" ||
+      company.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (company.email?.toLowerCase() || "").includes(searchQuery.toLowerCase());
+    
+    // Filtro de industry
+    const matchesIndustry = 
+      selectedIndustries.length === 0 ||
+      (company.industry && selectedIndustries.includes(company.industry));
+    
+    return matchesSearch && matchesIndustry;
+  });
+
+  // Sincronizar filtros com URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const search = params.get("search") || "";
+    const industries = params.get("industries")?.split(",").filter(Boolean) as Industry[] || [];
+    
+    setSearchQuery(search);
+    setSelectedIndustries(industries);
+  }, [urlKey]);
+
   useEffect(() => {
     loadCompanies();
+
+    // Escutar mudanças na URL (botão voltar do browser)
+    const handlePopState = () => {
+      setUrlKey(prev => prev + 1); // Força re-render
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const loadCompanies = async () => {
@@ -83,6 +132,68 @@ export function CompaniesManager() {
     setDeleteModalOpen(true);
     setDeletePassword("");
     setDeleteError(null);
+  };
+
+  // Helper para fechar o modal de edição de industry
+  const closeEditIndustryModal = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("editIndustry");
+    window.history.pushState({}, "", url);
+    setUrlKey(prev => prev + 1); // Força re-render
+  };
+
+  // Helper para recarregar dados após edição bem-sucedida
+  const handleEditIndustrySuccess = async () => {
+    await loadCompanies();
+    // Recarregar também os detalhes da empresa se a modal estiver aberta
+    if (selectedCompany) {
+      const updatedCompany = companies.find((c) => c.id === selectedCompany.id);
+      if (updatedCompany) {
+        setSelectedCompany(updatedCompany);
+      }
+    }
+  };
+
+  // Atualizar URL com filtros
+  const updateUrlFilters = (search: string, industries: Industry[]) => {
+    const url = new URL(window.location.href);
+    
+    if (search) {
+      url.searchParams.set("search", search);
+    } else {
+      url.searchParams.delete("search");
+    }
+    
+    if (industries.length > 0) {
+      url.searchParams.set("industries", industries.join(","));
+    } else {
+      url.searchParams.delete("industries");
+    }
+    
+    window.history.pushState({}, "", url);
+  };
+
+  // Handler para busca
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    updateUrlFilters(value, selectedIndustries);
+  };
+
+  // Handler para filtro de industry
+  const toggleIndustryFilter = (industry: Industry) => {
+    const newIndustries = selectedIndustries.includes(industry)
+      ? selectedIndustries.filter((i) => i !== industry)
+      : [...selectedIndustries, industry];
+    
+    setSelectedIndustries(newIndustries);
+    updateUrlFilters(searchQuery, newIndustries);
+  };
+
+  // Limpar todos os filtros
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedIndustries([]);
+    updateUrlFilters("", []);
   };
 
   if (loading) {
@@ -152,6 +263,85 @@ export function CompaniesManager() {
         </div>
       </div>
 
+      {/* Filtros e Busca */}
+      <div className="config-card rounded-2xl p-6">
+        <div className="space-y-4">
+          {/* Busca */}
+          <div className="relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar por nome ou email..."
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="w-full pl-10 pr-10 py-2 rounded-lg border config-input"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => handleSearchChange("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <FiX />
+              </button>
+            )}
+          </div>
+
+          {/* Filtros de Nicho */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <FiFilter className="text-gray-400" />
+                <span className="text-sm font-semibold config-heading">Filtrar por Nicho:</span>
+              </div>
+              {(selectedIndustries.length > 0 || searchQuery) && (
+                <button
+                  onClick={clearFilters}
+                  className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                >
+                  <FiX className="text-xs" />
+                  Limpar Filtros
+                </button>
+              )}
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              {INDUSTRY_OPTIONS.map((industry) => {
+                const isSelected = selectedIndustries.includes(industry.value);
+                const Icon = industry.icon;
+                
+                return (
+                  <button
+                    key={industry.value}
+                    onClick={() => toggleIndustryFilter(industry.value)}
+                    className={`
+                      flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all
+                      ${isSelected
+                        ? `${industry.color.bg} ${industry.color.text} ${industry.color.border} border-2`
+                        : "border-2 border-gray-200 dark:border-gray-700 config-text-muted hover:border-gray-300 dark:hover:border-gray-600"
+                      }
+                    `}
+                  >
+                    <Icon className="text-base" />
+                    {industry.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Contador de resultados */}
+          <div className="text-sm config-text-muted">
+            {filteredCompanies.length === companies.length ? (
+              <span>Mostrando todas as {companies.length} empresas</span>
+            ) : (
+              <span>
+                Mostrando {filteredCompanies.length} de {companies.length} empresas
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Lista de Empresas */}
       <div className="config-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -160,6 +350,9 @@ export function CompaniesManager() {
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">
                   Empresa
+                </th>
+                <th className="px-6 py-4 text-left font-semibold">
+                  Nicho
                 </th>
                 <th className="px-6 py-4 text-left font-semibold">
                   Contato
@@ -179,7 +372,29 @@ export function CompaniesManager() {
               </tr>
             </thead>
             <tbody className="divide-y divide-(--color-border)">
-              {companies.map((company) => (
+              {filteredCompanies.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <FiSearch className="text-4xl config-text-muted" />
+                      <p className="text-sm config-text-muted">
+                        {searchQuery || selectedIndustries.length > 0
+                          ? "Nenhuma empresa encontrada com os filtros aplicados"
+                          : "Nenhuma empresa cadastrada"}
+                      </p>
+                      {(searchQuery || selectedIndustries.length > 0) && (
+                        <button
+                          onClick={clearFilters}
+                          className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        >
+                          Limpar Filtros
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredCompanies.map((company) => (
                 <tr
                   key={company.id}
                   className="hover:bg-(--color-surface-muted) transition-colors cursor-pointer"
@@ -201,6 +416,9 @@ export function CompaniesManager() {
                         )}
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <IndustryBadge industry={company.industry} size="sm" />
                   </td>
                   <td className="px-6 py-4">
                     <div className="space-y-1">
@@ -240,7 +458,8 @@ export function CompaniesManager() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>
@@ -269,6 +488,78 @@ export function CompaniesManager() {
             </div>
 
             <div className="p-6 space-y-6">
+              {/* Nicho da Empresa */}
+              <div>
+                <h4 className="text-sm font-semibold config-heading mb-3">
+                  Nicho da Empresa
+                </h4>
+                <div className="flex items-center justify-between">
+                  <IndustryBadge industry={selectedCompany.industry} size="md" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const url = new URL(window.location.href);
+                      url.searchParams.set('editIndustry', selectedCompany.id);
+                      window.history.pushState({}, '', url);
+                      setUrlKey(prev => prev + 1); // Força re-render
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    <FiEdit2 />
+                    Editar Nicho
+                  </button>
+                </div>
+              </div>
+
+              {/* Ações Rápidas */}
+              <div>
+                <h4 className="text-sm font-semibold config-heading mb-3">
+                  Ações Rápidas
+                </h4>
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    
+                    if (!selectedCompany.industry) {
+                      alert('⚠️ Esta empresa não possui nicho configurado. Configure primeiro antes de aplicar configurações.');
+                      return;
+                    }
+                    
+                    if (!confirm(`Re-aplicar configurações do nicho ${selectedCompany.industry}? Isso irá sobrescrever as configurações atuais.`)) {
+                      return;
+                    }
+                    try {
+                      const res = await fetch(`${API}/api/admin/companies/${selectedCompany.id}/apply-industry-config`, {
+                        method: 'POST',
+                        credentials: 'include',
+                      });
+                      if (!res.ok) {
+                        const error = await res.json();
+                        throw new Error(error.error);
+                      }
+                      alert('✅ Configurações aplicadas com sucesso!');
+                    } catch (err: any) {
+                      alert(`Erro: ${err.message}`);
+                    }
+                  }}
+                  disabled={!selectedCompany.industry}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm rounded-lg transition-colors ${
+                    selectedCompany.industry
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  <FiRefreshCw />
+                  Re-aplicar Configurações do Nicho
+                </button>
+                <p className="text-xs config-text-muted mt-2">
+                  {selectedCompany.industry 
+                    ? 'ℹ️ Isso irá criar/atualizar campos customizados, módulos habilitados e templates do nicho.'
+                    : '⚠️ Configure o nicho primeiro para poder aplicar as configurações.'
+                  }
+                </p>
+              </div>
+
               {/* Informações de Contato */}
               <div>
                 <h4 className="text-sm font-semibold config-heading mb-3">
@@ -439,6 +730,15 @@ export function CompaniesManager() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Edição de Industry (via URL) */}
+      {editingCompany && (
+        <EditIndustryModal
+          company={editingCompany}
+          onClose={closeEditIndustryModal}
+          onSuccess={handleEditIndustrySuccess}
+        />
       )}
     </div>
   );

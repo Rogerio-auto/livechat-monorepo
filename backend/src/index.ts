@@ -60,6 +60,7 @@ import { registerProductRoutes } from "./routes/products.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerAdminRoutes } from "./routes/admin.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerAutomationRulesRoutes } from "./routes/automationRules.js";
@@ -3296,6 +3297,7 @@ app.post("/integrations/meta/webhook", metaWebhookPost);
 
 // ONBOARDING (precisa vir ANTES dos routers globais /api que tem requireAuth)
 registerOnboardingRoutes(app);
+registerAdminRoutes(app);
 registerSubscriptionRoutes(app);
 
 // autenticados

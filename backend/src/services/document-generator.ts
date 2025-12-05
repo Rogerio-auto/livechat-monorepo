@@ -33,7 +33,13 @@ export async function generateDocument(
   const { templatePath, outputFileName, companyId, data, customVariables } = options;
 
   try {
-    console.log(`[DocGen] Iniciando geração: ${outputFileName} usando template: ${templatePath}`);
+    console.log(`[DocGen] ========================================`);
+    console.log(`[DocGen] 🚀 INICIANDO GERAÇÃO DE DOCUMENTO`);
+    console.log(`[DocGen] ========================================`);
+    console.log(`[DocGen] Output: ${outputFileName}`);
+    console.log(`[DocGen] Template: ${templatePath}`);
+    console.log(`[DocGen] Company ID: ${companyId}`);
+    console.log(`[DocGen] ========================================`);
 
     // 1. Baixar template do Storage
     const { data: templateFile, error: downloadError } = await supabaseAdmin.storage
@@ -41,29 +47,67 @@ export async function generateDocument(
       .download(templatePath);
 
     if (downloadError || !templateFile) {
-      console.error("[DocGen] Erro ao baixar template:", downloadError);
+      console.error("[DocGen] ❌ Erro ao baixar template:", downloadError);
       return {
         success: false,
         error: `Erro ao baixar template: ${downloadError?.message || "Template não encontrado"}`,
       };
     }
 
+    console.log(`[DocGen] ✅ Template baixado com sucesso (${(await templateFile.arrayBuffer()).byteLength} bytes)`);
     // 2. Converter template para buffer
     const templateBuffer = Buffer.from(await templateFile.arrayBuffer());
 
     // 3. Criar instância do PizZip
-    const zip = new PizZip(templateBuffer);
+    let zip: PizZip;
+    try {
+      zip = new PizZip(templateBuffer);
+      console.log(`[DocGen] ✅ Template descompactado com sucesso`);
+    } catch (zipError: any) {
+      console.error("[DocGen] ❌ Erro ao descompactar template:", zipError);
+      return {
+        success: false,
+        error: `Template corrompido ou inválido: ${zipError.message}`,
+      };
+    }
 
     // 4. Criar instância do Docxtemplater
-    const doc = new Docxtemplater(zip, {
-      paragraphLoop: true,
-      linebreaks: true,
-      delimiters: { start: "{", end: "}" }, // Explicitamente definir delimitadores
-      nullGetter: (part) => {
-        console.log(`[DocGen] Variável não encontrada: ${part}`);
-        return ""; // Retorna string vazia para variáveis não encontradas
-      },
-    });
+    let doc: Docxtemplater;
+    try {
+      doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+        nullGetter: (part) => {
+          console.log(`[DocGen] ⚠️  Variável não encontrada: ${part.value}`);
+          return ""; // Retorna string vazia para variáveis não encontradas
+        },
+      });
+      console.log(`[DocGen] ✅ Docxtemplater inicializado`);
+    } catch (docError: any) {
+      console.error("[DocGen] ❌ Erro ao inicializar docxtemplater:", docError);
+      
+      // Tratar erros específicos do docxtemplater
+      if (docError.properties && docError.properties.errors) {
+        const errors = docError.properties.errors.slice(0, 5); // Mostrar apenas 5 primeiros
+        console.error("[DocGen] Erros no template:");
+        errors.forEach((err: any, idx: number) => {
+          console.error(`  ${idx + 1}. ${err.message} (${err.properties?.explanation || 'sem detalhes'})`);
+        });
+        
+        return {
+          success: false,
+          error: `Template com erros de formatação. Verifique as tags {{ variavel }}. 
+Erros: ${errors.map((e: any) => e.message).join(', ')}. 
+Use o script fix-docx-tags.ts para corrigir.`,
+        };
+      }
+      
+      return {
+        success: false,
+        error: `Erro ao processar template: ${docError.message}`,
+      };
+    }
 
     // 5. Mapear variáveis do sistema
     const systemVariables = mapDocumentVariables(data);
@@ -185,6 +229,15 @@ export async function generateDocumentFromTemplate(
         error: "Template não encontrado ou inativo",
       };
     }
+
+    console.log("[DocGen] ========================================");
+    console.log("[DocGen] 📄 TEMPLATE SELECIONADO");
+    console.log("[DocGen] ========================================");
+    console.log("[DocGen] ID:", templateId);
+    console.log("[DocGen] Nome:", template.name);
+    console.log("[DocGen] Tipo:", template.doc_type);
+    console.log("[DocGen] Caminho:", template.template_path);
+    console.log("[DocGen] ========================================");
 
     // Gerar nome do arquivo
     const timestamp = Date.now();

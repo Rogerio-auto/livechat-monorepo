@@ -5,7 +5,7 @@ import { supabaseAdmin } from "../lib/supabase.ts";
 import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN, FRONTEND_URL } from "../config/env.ts";
 
 // Tipos e schemas
-const IndustryEnum = z.enum(["education", "accounting", "clinic", "retail", "events", "law"]);
+const IndustryEnum = z.enum(["education", "accounting", "clinic", "solar_energy", "construction", "real_estate", "events", "law"]);
 const TeamSizeEnum = z.enum(["1-5", "6-15", "16-50", "50+"]);
 
 const OnboardingStep1Schema = z.object({
@@ -61,16 +61,41 @@ const INDUSTRY_CONFIG = {
     templates: ["confirmacao_consulta", "lembrete_consulta", "pos_consulta"],
     enabled_modules: ["calendar", "scheduling", "reminders"],
   },
-  retail: {
-    agent_name: "Assistente de Vendas",
-    agent_instructions: "Você é um assistente de vendas. Ajude clientes com informações sobre produtos, cálculo de frete, geração de orçamentos e acompanhamento de pedidos.",
+  solar_energy: {
+    agent_name: "Consultor Solar",
+    agent_instructions: "Você é um consultor de energia solar. Ajude clientes com informações sobre sistemas fotovoltaicos, cálculos de economia, financiamento e geração de propostas técnicas.",
     custom_fields: [
-      { key: "forma_pagamento", label: "Forma de Pagamento Preferida", type: "select", options: ["Pix", "Cartão", "Boleto", "Parcelado"] },
-      { key: "ticket_medio", label: "Faixa de Valor", type: "select", options: ["Até R$ 100", "R$ 100-500", "R$ 500-1000", "Acima de R$ 1000"] },
-      { key: "categoria_produto", label: "Categoria de Interesse", type: "text" },
+      { key: "consumo_medio_kwh", label: "Consumo Médio (kWh/mês)", type: "number" },
+      { key: "valor_conta_luz", label: "Valor Médio da Conta", type: "text" },
+      { key: "tipo_instalacao", label: "Tipo de Instalação", type: "select", options: ["Residencial", "Comercial", "Industrial", "Rural"] },
+      { key: "financiamento", label: "Interesse em Financiamento", type: "select", options: ["Sim", "Não", "Talvez"] },
     ],
-    templates: ["novo_produto", "promocao", "status_pedido", "catalogo"],
-    enabled_modules: ["catalog", "quotes", "inventory"],
+    templates: ["proposta_solar", "simulacao_economia", "contrato_instalacao"],
+    enabled_modules: ["quotes", "documents", "catalog"],
+  },
+  construction: {
+    agent_name: "Assistente de Obras",
+    agent_instructions: "Você é um assistente de construção civil. Ajude com orçamentos de obras, cronogramas, especificações técnicas e acompanhamento de projetos.",
+    custom_fields: [
+      { key: "tipo_obra", label: "Tipo de Obra", type: "select", options: ["Residencial", "Comercial", "Industrial", "Reforma", "Acabamento"] },
+      { key: "area_construcao", label: "Área (m²)", type: "number" },
+      { key: "prazo_estimado", label: "Prazo Estimado", type: "select", options: ["Até 3 meses", "3-6 meses", "6-12 meses", "Acima de 1 ano"] },
+      { key: "orcamento", label: "Orçamento Aproximado", type: "text" },
+    ],
+    templates: ["orcamento_obra", "cronograma", "contrato_empreitada"],
+    enabled_modules: ["quotes", "documents", "calendar"],
+  },
+  real_estate: {
+    agent_name: "Corretor Virtual",
+    agent_instructions: "Você é um corretor imobiliário virtual. Ajude clientes a encontrar imóveis, agendar visitas, esclarecer sobre financiamento e documentação necessária.",
+    custom_fields: [
+      { key: "tipo_imovel", label: "Tipo de Imóvel", type: "select", options: ["Apartamento", "Casa", "Terreno", "Comercial", "Rural"] },
+      { key: "finalidade", label: "Finalidade", type: "select", options: ["Compra", "Aluguel", "Venda"] },
+      { key: "faixa_preco", label: "Faixa de Preço", type: "select", options: ["Até R$ 200k", "R$ 200k-500k", "R$ 500k-1M", "Acima de R$ 1M"] },
+      { key: "bairro_preferencia", label: "Bairro/Região de Interesse", type: "text" },
+    ],
+    templates: ["proposta_imovel", "contrato_locacao", "contrato_compra_venda"],
+    enabled_modules: ["catalog", "calendar", "documents"],
   },
   events: {
     agent_name: "Consultor de Eventos",
@@ -149,7 +174,8 @@ export function registerOnboardingRoutes(app: Application) {
         company_phone,
         city,
         state,
-        team_size 
+        team_size,
+        industry // Opcional: se vier do onboarding
       } = req.body;
       
       console.log("[signup-complete] Dados recebidos:", { 
@@ -213,7 +239,8 @@ export function registerOnboardingRoutes(app: Application) {
           city: city || "",
           state: state || "",
           team_size: team_size || null,
-          onboarding_step: 1,
+          industry: industry || 'solar_energy', // Default para solar_energy
+          onboarding_step: industry ? 2 : 1, // Se já tem industry, pula para step 2
           onboarding_completed: false,
           is_active: true,
           plan: "STARTER",
@@ -491,6 +518,7 @@ export function registerOnboardingRoutes(app: Application) {
 
       const { industry } = parsed.data;
 
+      // Atualizar company com industry
       const { error } = await supabaseAdmin
         .from("companies")
         .update({
@@ -502,6 +530,41 @@ export function registerOnboardingRoutes(app: Application) {
         .eq("id", companyId);
 
       if (error) return res.status(500).json({ error: error.message });
+
+      // Aplicar configurações do nicho imediatamente
+      const config = INDUSTRY_CONFIG[industry as keyof typeof INDUSTRY_CONFIG];
+      if (config) {
+        console.log(`[step/1] Aplicando configurações para industry: ${industry}`);
+        
+        // Salvar configurações do nicho
+        const settingsToInsert = [
+          {
+            company_id: companyId,
+            setting_key: "custom_lead_fields",
+            setting_value: config.custom_fields,
+          },
+          {
+            company_id: companyId,
+            setting_key: "enabled_modules",
+            setting_value: config.enabled_modules,
+          },
+          {
+            company_id: companyId,
+            setting_key: "industry_config",
+            setting_value: { industry, templates: config.templates },
+          },
+        ];
+
+        const { error: settingsError } = await supabaseAdmin
+          .from("company_settings")
+          .upsert(settingsToInsert, { onConflict: "company_id,setting_key" });
+
+        if (settingsError) {
+          console.error("[step/1] Erro ao salvar settings:", settingsError);
+        } else {
+          console.log(`[step/1] ✅ Configurações aplicadas com sucesso para ${industry}`);
+        }
+      }
 
       return res.json({ success: true, next_step: 2, industry });
     } catch (error: any) {

@@ -1,3 +1,111 @@
+/* ========================================
+   LIVECHAT THEME ADAPTATION
+   ======================================== */
+.livechat-theme {
+  --color-bg: #f4fbf7;
+  --color-surface: rgba(248, 253, 250, 0.94);
+  --color-surface-muted: rgba(227, 244, 233, 0.85);
+  --color-border: rgba(31, 84, 57, 0.18);
+  --color-primary: #2fb463;
+  --color-primary-strong: #1f8b49;
+  --color-highlight: #74e69e;
+  --color-highlight-strong: #52d67d;
+  --color-text: #0f2418;
+  --color-text-muted: rgba(15, 36, 24, 0.7);
+  --color-overlay: rgba(11, 31, 22, 0.58);
+  --color-card-shadow: rgba(10, 32, 21, 0.25);
+
+  position: relative;
+  background:
+    radial-gradient(120% 120% at 10% 0%, rgba(66, 205, 115, 0.18), transparent 55%),
+    linear-gradient(150deg, rgba(28, 77, 52, 0.06), rgba(11, 31, 22, 0.02));
+}
+
+.livechat-theme::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 120% at 120% 120%, rgba(66, 205, 115, 0.12), transparent 55%);
+  opacity: 0.65;
+}
+
+.livechat-theme > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dark .livechat-theme {
+  --color-bg: #08150c;
+  --color-surface: rgba(23, 44, 32, 0.9);
+  --color-surface-muted: rgba(18, 37, 23, 0.78);
+  --color-border: rgba(137, 255, 192, 0.18);
+  --color-primary: #42cd73;
+  --color-primary-strong: #74e69e;
+  --color-highlight: #8cf7b3;
+  --color-highlight-strong: #b4ffd2;
+  --color-text: rgba(231, 247, 237, 0.94);
+  --color-text-muted: rgba(231, 247, 237, 0.64);
+  --color-overlay: rgba(4, 14, 9, 0.72);
+  --color-card-shadow: rgba(1, 15, 9, 0.65);
+
+  background:
+    radial-gradient(90% 90% at 15% 10%, rgba(66, 205, 115, 0.25), transparent 55%),
+    linear-gradient(145deg, rgba(27, 58, 41, 0.78), rgba(8, 21, 12, 0.88));
+}
+
+.dark .livechat-theme::after {
+  background: radial-gradient(80% 80% at 120% 110%, rgba(66, 205, 115, 0.18), transparent 60%);
+  opacity: 0.7;
+}
+
+.livechat-card {
+  background: linear-gradient(150deg, rgba(248, 253, 250, 0.92), rgba(227, 244, 233, 0.86)) !important;
+  border: 1px solid rgba(31, 84, 57, 0.18) !important;
+  box-shadow: 0 40px 95px -65px rgba(11, 32, 21, 0.55) !important;
+  color: var(--color-text);
+}
+
+.dark .livechat-card {
+  background: linear-gradient(150deg, rgba(27, 58, 41, 0.92), rgba(12, 28, 19, 0.9)) !important;
+  border: 1px solid rgba(137, 255, 192, 0.18) !important;
+  box-shadow: 0 48px 120px -70px rgba(1, 15, 9, 0.75) !important;
+}
+
+.livechat-panel {
+  background: linear-gradient(140deg, rgba(236, 249, 241, 0.82), rgba(210, 236, 224, 0.78));
+  border: 1px solid rgba(31, 84, 57, 0.16);
+  box-shadow: 0 32px 90px -70px rgba(8, 24, 16, 0.55);
+  color: var(--color-text);
+}
+
+.dark .livechat-panel {
+  background: linear-gradient(160deg, rgba(27, 58, 41, 0.82), rgba(12, 25, 17, 0.88));
+  border: 1px solid rgba(137, 255, 192, 0.16);
+  box-shadow: 0 40px 120px -75px rgba(0, 0, 0, 0.85);
+}
+
+.livechat-muted-surface {
+  background: rgba(236, 249, 241, 0.72);
+  border: 1px solid rgba(31, 84, 57, 0.1);
+}
+
+.dark .livechat-muted-surface {
+  background: rgba(24, 52, 36, 0.66);
+  border: 1px solid rgba(137, 255, 192, 0.08);
+}
+
+.livechat-blur-panel {
+  background: linear-gradient(160deg, rgba(248, 253, 250, 0.85), rgba(227, 244, 233, 0.78));
+  border: 1px solid rgba(31, 84, 57, 0.16);
+  box-shadow: 0 32px 90px -70px rgba(11, 32, 21, 0.5);
+}
+
+.dark .livechat-blur-panel {
+  background: linear-gradient(150deg, rgba(27, 58, 41, 0.9), rgba(12, 28, 19, 0.82));
+  border: 1px solid rgba(137, 255, 192, 0.16);
+  box-shadow: 0 40px 120px -75px rgba(0, 0, 0, 0.8);
+}
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark, .dark *));
@@ -7,6 +115,13 @@
    ======================================== */
 :root {
   color-scheme: light;
+  
+  /* Layout tokens */
+  --sidebar-collapsed-width: 4.25rem;
+  --sidebar-expanded-width: 18rem;
+  --app-topbar-height: 4rem;
+  --page-max-width: 1600px;
+  --page-padding-inline: clamp(1rem, 4vw, 2.75rem);
   
   /* Cores de fundo */
   --color-bg: #f5f7ff;
@@ -122,6 +237,30 @@ body {
 }
 
 /* ========================================
+   LAYOUT GLOBAL
+   ======================================== */
+.app-shell {
+  width: 100%;
+  min-height: 100%;
+  padding-inline: var(--page-padding-inline);
+}
+
+.app-shell__inner {
+  width: min(100%, var(--page-max-width));
+  margin-inline: auto;
+}
+
+.app-shell .ml-16 {
+  margin-left: 0 !important;
+}
+
+@media (min-width: 1024px) {
+  .app-shell {
+    padding-inline: clamp(1.5rem, 3vw, 3.5rem);
+  }
+}
+
+/* ========================================
    CLASSES UTILITÁRIAS DE TEMA
    ======================================== */
 .theme-surface {
@@ -156,6 +295,19 @@ body {
 
 .theme-highlight {
   color: var(--color-highlight);
+}
+
+/* ========================================
+   COMPONENTES ESPECÍFICOS
+   ======================================== */
+.sidebar-scroll {
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* ========================================

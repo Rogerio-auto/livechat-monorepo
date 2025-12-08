@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction, type UIEvent } from "react";
+import { createPortal } from "react-dom";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
 import { useNavigate, useLocation } from "react-router-dom";
-import Sidebar from "../componets/Sidbars/sidebar";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
 import LivechatMenu, {
   type LivechatSection,
@@ -16,6 +16,7 @@ import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch } from "react-icon
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
 import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
+import { MentionInput } from "../components/MentionInput";
 import { Button, Card } from "../components/ui";
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -124,8 +125,11 @@ export default function LiveChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
-  const [isPrivateOpen, setIsPrivateOpen] = useState(false);
-  const [privateText, setPrivateText] = useState("");
+  
+  // Private mode toggle state
+  const [isPrivateMode, setIsPrivateMode] = useState(false);
+  const [mentions, setMentions] = useState<string[]>([]);
+  const [companyUsers, setCompanyUsers] = useState<Array<{ id: string; name: string; email?: string; avatar?: string }>>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [chatTags, setChatTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
@@ -615,6 +619,51 @@ export default function LiveChatPage() {
       cancelled = true;
     };
   }, [API, departmentsRefreshKey, fetchJson]);
+
+  // Load company users for mentions
+  useEffect(() => {
+    let cancelled = false;
+    const loadUsers = async () => {
+      try {
+        console.log('[livechat] Loading company users for mentions...');
+        
+        const token = getAccessToken();
+        const headers = new Headers();
+        headers.set("Content-Type", "application/json");
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
+        const res = await fetch(`${API}/api/users/company`, {
+          headers,
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const rows = await res.json();
+        
+        if (cancelled) return;
+        const formatted = Array.isArray(rows)
+          ? rows.map((row: any) => ({
+              id: row.public_user_id || row.user_id || row.id,
+              name: row.name ?? "Sem nome",
+              email: row.email ?? undefined,
+              avatar: row.avatar || row.profile_picture || undefined,
+            }))
+          : [];
+        console.log('[livechat] Company users loaded:', { count: formatted.length, users: formatted });
+        setCompanyUsers(formatted);
+      } catch (error) {
+        console.error("[livechat] Error loading company users:", error);
+        if (!cancelled) setCompanyUsers([]);
+      }
+    };
+    loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [API]);
 
 
 
@@ -1249,6 +1298,15 @@ const scrollToBottom = useCallback(
       const chatId = normalized.chat_id;
       const existing = messagesCache.get(chatId) ?? [];
       
+      console.log('[appendMessageToCache] Adding message:', {
+        id: normalized.id,
+        chatId,
+        is_private: normalized.is_private,
+        type: normalized.type,
+        body: normalized.body?.substring(0, 30),
+        existingCount: existing.length,
+      });
+      
       const normalizedExternalId = (normalized as any).external_id;
       
       // Find existing message by ID, client_draft_id, or external_id (for draft replacement)
@@ -1311,8 +1369,18 @@ const scrollToBottom = useCallback(
       }
       messagesCache.set(chatId, updated);
       if (currentChatIdRef.current === chatId) {
+        console.log('[appendMessageToCache] Updating messages state:', {
+          chatId,
+          currentChatId: currentChatIdRef.current,
+          updatedCount: updated.length,
+        });
         setMessages(updated);
         scrollToBottom();
+      } else {
+        console.log('[appendMessageToCache] Not updating state - different chat:', {
+          messageChatId: chatId,
+          currentChatId: currentChatIdRef.current,
+        });
       }
     },
     [normalizeMessage, scrollToBottom, setMessages, messagesCache],
@@ -1497,12 +1565,29 @@ const scrollToBottom = useCallback(
       setSocketReady(false);
     });
 
+    // Listen for mention notifications
+    s.on("user:mentioned", (data: any) => {
+      console.log("[Socket] 🔔 You were mentioned!", data);
+      
+      // Show browser notification if available
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Você foi mencionado!", {
+          body: "Alguém mencionou você em uma conversa privada",
+          icon: "/favicon.ico",
+        });
+      }
+      
+      // TODO: Add badge or visual indicator in the chat
+    });
+
     const onMessageNew = (m: Message) => {
       console.debug('[Socket] 📨 message:new received:', {
         chatId: m.chat_id,
         body: m.body?.substring(0, 50),
         sender_type: m.sender_type,
         media_url: m.media_url,
+        is_private: m.is_private,
+        type: m.type,
       });
       
       appendMessageToCache(m);
@@ -1623,15 +1708,25 @@ const scrollToBottom = useCallback(
       );
     };
 
-    // Listener para mudan�a de agente de IA
+    // Listener para mudança de agente de IA
     const onAgentChanged = (payload: any) => {
-      if (payload.chatId) {
-        bumpChatToTop({
-          chatId: payload.chatId,
-          ai_agent_id: payload.ai_agent_id,
-          ai_agent_name: payload.ai_agent_name,
-        } as any);
-      }
+      const chatId = payload?.chatId;
+      if (!chatId) return;
+      
+      const update = {
+        chatId,
+        ai_agent_id: payload.ai_agent_id,
+        ai_agent_name: payload.ai_agent_name,
+      } as any;
+
+      bumpChatToTop(update);
+      
+      // Atualizar currentChat e selectedChat se for o chat atual
+      setCurrentChat((prev) => (prev && prev.id === chatId ? { ...prev, ...update } : prev));
+      setSelectedChat((prev) => (prev && prev.id === chatId ? { ...prev, ...update } : prev));
+      
+      // Atualizar na lista de chats
+      setChats((prev) => prev.map((chat) => (chat.id === chatId ? { ...chat, ...update } : chat)));
     };
 
     const onDepartmentChanged = (payload: any) => {
@@ -2395,10 +2490,6 @@ const scrollToBottom = useCallback(
     };
   }, [currentChat?.id, loadMessages, messagesCache]);
 
-
-
-
-
   useEffect(() => {
     if (!currentChat?.id) {
       setChatTags([]);
@@ -2739,15 +2830,50 @@ const scrollToBottom = useCallback(
     if (!currentChat) return;
     const trimmedText = text.trim();
     if (!trimmedText) return;
+    
+    // Se está em modo privado, enviar via socket privado
+    if (isPrivateMode) {
+      const s = socketRef.current;
+      if (s?.connected) {
+        s.emit(
+          "message:private:send",
+          { chatId: currentChat.id, text: trimmedText, mentions },
+          (response: any) => {
+            if (response?.ok === false) {
+              console.error("Erro ao enviar mensagem privada:", response.error);
+            }
+          },
+        );
+        setText("");
+        setMentions([]);
+      }
+      return;
+    }
+    
+    // Modo normal (público)
     const replyId = replyingTo?.id || null;
     setText("");
     setReplyingTo(null);
     await sendMessageToChat(currentChat, trimmedText, replyId);
-  }, [currentChat, text, replyingTo, sendMessageToChat]);
+  }, [currentChat, text, replyingTo, sendMessageToChat, isPrivateMode, mentions]);
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setText(e.target.value);
-  }, []);
+    const newText = e.target.value;
+    setText(newText);
+    
+    // Se está em modo privado, extrair menções
+    if (isPrivateMode && newText.includes('@[')) {
+      const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+      const extractedMentions: string[] = [];
+      let match;
+      while ((match = mentionRegex.exec(newText)) !== null) {
+        extractedMentions.push(match[2]); // match[2] é o user_id
+      }
+      setMentions(extractedMentions);
+    } else if (isPrivateMode) {
+      setMentions([]);
+    }
+  }, [isPrivateMode]);
 
   const retryFailedMessage = useCallback(
     async (message: Message) => {
@@ -3133,29 +3259,6 @@ const scrollToBottom = useCallback(
     [currentChat?.id, chatTags, addTag, removeTag],
   );
 
-
-  const sendPrivate = async () => {
-    if (!currentChat || !privateText.trim()) return;
-    const s = socketRef.current;
-    if (s?.connected) {
-      s.emit(
-        "message:private:send",
-        { chatId: currentChat.id, text: privateText.trim() },
-        () => { },
-      );
-    } else {
-      await fetchJson<Message>(
-        `${API}/livechat/chats/${currentChat.id}/private/messages`,
-        {
-          method: "POST",
-          body: JSON.stringify({ text: privateText.trim() }),
-        },
-      ).catch(() => { });
-    }
-    setPrivateText("");
-  };
-
-
   // Loading state while checking access
   if (isCheckingWizard) {
     return (
@@ -3244,23 +3347,29 @@ const scrollToBottom = useCallback(
   }
 
   return (
-    <div
-      className="ml-16 min-h-screen transition-colors duration-300"
-      style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
-    >
-        <div className="grid h-[calc(100vh-4rem)] grid-cols-12 gap-4">
-          <div className="col-span-2">
-            <LivechatMenu section={section} onChange={setSection} />
+    <section className="livechat-theme flex flex-col gap-6 pb-6 text-[color:var(--color-text)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-3rem)] xl:pb-0 xl:overflow-hidden">
+      <div className="grid flex-1 grid-cols-12 gap-6 xl:gap-8 xl:overflow-hidden">
+        <div className="col-span-12 xl:col-span-2">
+          <div className="livechat-panel rounded-[28px] p-4 shadow-[0_24px_70px_-55px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:sticky xl:top-[calc(var(--app-topbar-height,4rem)+1.5rem)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-3rem)] xl:overflow-hidden">
+            <div className="xl:h-full xl:overflow-y-auto">
+              <LivechatMenu section={section} onChange={setSection} />
+            </div>
           </div>
+        </div>
 
-          {(section === "all" || section === "unanswered") && (
-            <Card padding="md" className="col-span-4 flex flex-col max-h-screen min-h-0">
+        {(section === "all" || section === "unanswered") && (
+          <>
+            <Card
+              gradient={false}
+              padding="md"
+              className="livechat-card col-span-12 xl:col-span-4 flex min-h-[520px] flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+            >
               <div className="shrink-0">
-                <div className="mb-3 flex items-center gap-2">
+                <div className="mb-4 flex items-center gap-2">
                   <div className="relative flex-1">
-                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm opacity-70" />
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[color:var(--color-text-muted)]" />
                     <input
-                      className="config-input w-full rounded-lg pl-9 pr-3 py-2 text-sm"
+                      className="config-input w-full rounded-xl pl-9 pr-3 py-2 text-sm"
                       placeholder="Buscar conversa ou contato"
                       value={q}
                       onChange={(e) => setQ(e.target.value)}
@@ -3270,7 +3379,7 @@ const scrollToBottom = useCallback(
                     <button
                       type="button"
                       onClick={() => setFiltersOpen((prev) => !prev)}
-                      className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                      className="flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-medium transition-colors"
                       style={{
                         backgroundColor: filtersOpen
                           ? "color-mix(in srgb, var(--color-primary) 12%, transparent)"
@@ -3300,7 +3409,7 @@ const scrollToBottom = useCallback(
 
                     {filtersOpen && (
                       <div
-                        className="absolute right-0 z-40 mt-2 w-64 rounded-lg border shadow-lg"
+                        className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border shadow-2xl"
                         style={{
                           backgroundColor: "var(--color-surface)",
                           borderColor: "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)",
@@ -3313,7 +3422,7 @@ const scrollToBottom = useCallback(
                             <button
                               type="button"
                               onClick={() => setFiltersOpen(false)}
-                              className="rounded p-1 text-xs hover:opacity-80"
+                              className="rounded p-1 text-xs transition-opacity hover:opacity-80"
                             >
                               <FiX size={14} />
                             </button>
@@ -3378,7 +3487,7 @@ const scrollToBottom = useCallback(
                           <button
                             type="button"
                             onClick={resetFilters}
-                            className="rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide hover:opacity-80"
+                            className="rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide transition-opacity hover:opacity-80"
                             style={{ color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}
                           >
                             Limpar filtros
@@ -3386,7 +3495,7 @@ const scrollToBottom = useCallback(
                           <button
                             type="button"
                             onClick={() => setFiltersOpen(false)}
-                            className="rounded-lg px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
+                            className="rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide"
                             style={{
                               backgroundColor: "var(--color-primary)",
                               color: "var(--color-on-primary)",
@@ -3404,7 +3513,7 @@ const scrollToBottom = useCallback(
                   <button
                     type="button"
                     onClick={() => setChatScope("conversations")}
-                    className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
+                    className="rounded-full px-3 py-1.5 text-sm font-semibold transition-colors border"
                     style={{
                       backgroundColor:
                         chatScope === "conversations"
@@ -3425,7 +3534,7 @@ const scrollToBottom = useCallback(
                   <button
                     type="button"
                     onClick={() => setChatScope("groups")}
-                    className="px-3 py-1.5 rounded-full text-sm transition-colors border hover:opacity-95"
+                    className="rounded-full px-3 py-1.5 text-sm font-semibold transition-colors border"
                     style={{
                       backgroundColor:
                         chatScope === "groups"
@@ -3449,8 +3558,7 @@ const scrollToBottom = useCallback(
               <div
                 ref={chatsListRef}
                 onScroll={handleChatsScroll}
-                className="
-              flex-1 min-h-0 overflow-y-auto divide-y-0
+                className="livechat-muted-surface flex-1 min-h-0 overflow-y-auto rounded-2xl p-2
               scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
@@ -3459,7 +3567,7 @@ const scrollToBottom = useCallback(
             "
               >
                 {chatListItems.length === 0 ? (
-                  <div className="p-3 text-sm theme-text-muted">
+                  <div className="p-4 text-sm theme-text-muted text-center">
                     {isChatsLoading
                       ? "Carregando chats..."
                       : chatScope === "groups"
@@ -3482,16 +3590,17 @@ const scrollToBottom = useCallback(
                 )}
                 {chatListItems.length > 0 && !hasMoreChats && !isChatsLoading && (
                   <div className="p-3 text-xs theme-text-muted opacity-60 text-center">
-                    {chatScope === "groups" ? "N?o h? mais grupos." : "N?o h? mais conversas."}
+                    {chatScope === "groups" ? "Não há mais grupos." : "Não há mais conversas."}
                   </div>
                 )}
               </div>
             </Card>
-          )}
 
-
-          {(section === "all" || section === "unanswered") && (
-            <Card padding="md" className="col-span-6 flex flex-col relative min-h-screen max-h-screen">
+            <Card
+              gradient={false}
+              padding="md"
+              className="livechat-card col-span-12 xl:col-span-6 flex flex-col overflow-hidden shadow-[0_40px_100px_-70px_rgba(8,12,20,0.88)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+            >
               <ChatHeader
                 apiBase={API}
                 chat={currentChat}
@@ -3516,14 +3625,38 @@ const scrollToBottom = useCallback(
                 onUpdateNote={handleUpdateNote}
                 currentStatus={(currentChat?.status ?? null) as any}
                 statusOptions={CHAT_STATUS_OPTIONS}
-                onChangeStatus={(next) => { if (currentChat) return updateChatStatus(currentChat.id, next); }}
+                onChangeStatus={(next) => {
+                  if (currentChat) return updateChatStatus(currentChat.id, next);
+                }}
+                aiAgentId={currentChat?.ai_agent_id ?? null}
+                aiAgentName={(currentChat as any)?.ai_agent_name ?? null}
+                onAssignAIAgent={async (agentId) => {
+                  if (!currentChat) return;
+                  try {
+                    const response = await fetch(`${API}/livechat/chats/${currentChat.id}/ai-agent`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({ agentId }),
+                    });
+                    if (!response.ok) {
+                      const error = await response.json();
+                      throw new Error(error.error || "Falha ao atribuir agente de IA");
+                    }
+                    const updated = await response.json();
+                    setCurrentChat((prev: any) => prev ? { ...prev, ai_agent_id: updated.ai_agent_id, ai_agent_name: updated.ai_agent_name } : prev);
+                    setSelectedChat((prev: any) => prev ? { ...prev, ai_agent_id: updated.ai_agent_id, ai_agent_name: updated.ai_agent_name } : prev);
+                  } catch (error) {
+                    console.error("[Livechat] Erro ao atribuir agente de IA:", error);
+                    throw error;
+                  }
+                }}
               />
-
 
               <div
                 ref={messagesContainerRef}
                 onScroll={handleMessagesScroll}
-                className="flex-1 overflow-auto space-y-1.5 pr-1
+                className="livechat-muted-surface flex-1 overflow-auto rounded-2xl px-4 py-3 space-y-1.5 pr-2
               scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
@@ -3538,7 +3671,7 @@ const scrollToBottom = useCallback(
                 )}
                 {!isFetchingOlderMessages && !messagesHasMore && messages.length > 0 && (
                   <div className="py-2 text-center text-xs theme-text-muted opacity-70">
-                    N?o h? mais mensagens no hist?rico.
+                    Não há mais mensagens no histórico.
                   </div>
                 )}
                 {messagesLoading && (
@@ -3568,17 +3701,8 @@ const scrollToBottom = useCallback(
                 <div ref={bottomRef} />
               </div>
 
-              {/* Composer */}
-              <div className="mt-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setIsPrivateOpen(true)}
-                  >
-                    Mensagem privada
-                  </Button>
-
+              <div className="livechat-blur-panel mt-4 rounded-2xl p-3 shadow-[0_24px_70px_-65px_rgba(8,12,20,0.85)]">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
                     variant="ghost"
@@ -3593,10 +3717,10 @@ const scrollToBottom = useCallback(
                     size="sm"
                     variant={isRecording ? "danger" : "ghost"}
                     onClick={toggleRecording}
-                    title="Gravar �udio"
-                    aria-label="Gravar �udio"
+                    title="Gravar áudio"
+                    aria-label="Gravar áudio"
                   >
-                    <FiMic className="w-5 h-5" />
+                    <FiMic className="h-5 w-5" />
                   </Button>
 
                   <Button
@@ -3612,7 +3736,7 @@ const scrollToBottom = useCallback(
 
                 {showEmoji && (
                   <div
-                    className="grid w-fit grid-cols-8 gap-1 rounded-lg border p-2 text-xl shadow"
+                    className="mb-3 grid max-w-[260px] grid-cols-8 gap-1 rounded-xl border p-2 text-xl shadow"
                     style={{
                       borderColor: "var(--color-border)",
                       backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 70%, transparent)",
@@ -3623,7 +3747,7 @@ const scrollToBottom = useCallback(
                       .map((e, i) => (
                         <button
                           key={i}
-                          className="hover:scale-110 transition"
+                          className="transition-transform hover:scale-110"
                           onClick={() => addEmoji(e)}
                         >
                           {e}
@@ -3633,12 +3757,12 @@ const scrollToBottom = useCallback(
                 )}
 
                 {replyingTo && (
-                  <div className="mb-2">
-                    <ReplyPreview 
+                  <div className="mb-3">
+                    <ReplyPreview
                       message={{
                         id: replyingTo.id,
-                        content: replyingTo.content || '',
-                        type: replyingTo.type || 'TEXT',
+                        content: replyingTo.content || "",
+                        type: replyingTo.type || "TEXT",
                         sender_name: replyingTo.sender_name || undefined,
                       }}
                       onCancel={() => setReplyingTo(null)}
@@ -3647,9 +3771,36 @@ const scrollToBottom = useCallback(
                 )}
 
                 <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsPrivateMode(!isPrivateMode)}
+                    className={`flex items-center justify-center w-10 h-10 rounded-xl transition-colors ${
+                      isPrivateMode
+                        ? "bg-blue-500 text-white hover:bg-blue-600"
+                        : "bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600"
+                    }`}
+                    title={isPrivateMode ? "Modo Privado Ativo" : "Ativar Modo Privado"}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                  
                   <input
-                    className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
-                    placeholder={isRecording ? "Gravando �udio..." : "Digite sua mensagem..."}
+                    className={`flex-1 rounded-xl px-3 py-2 text-sm ${
+                      isPrivateMode
+                        ? "bg-blue-50 border-2 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500"
+                        : "config-input"
+                    }`}
+                    placeholder={isRecording ? "Gravando áudio..." : isPrivateMode ? "Mensagem privada - use @nome para mencionar" : "Digite sua mensagem..."}
                     value={text}
                     onChange={handleTextChange}
                     onKeyDown={(e) => {
@@ -3660,6 +3811,7 @@ const scrollToBottom = useCallback(
                     }}
                     disabled={isRecording}
                   />
+                  
                   <Button
                     variant="gradient"
                     size="md"
@@ -3678,126 +3830,41 @@ const scrollToBottom = useCallback(
                 />
               </div>
             </Card>
-          )}
+          </>
+        )}
 
           {section === "labels" && (
-            <Card padding="lg" className="col-span-10">
-              <LabelsManager apiBase={API} />
-            </Card>
-          )}
-
-          {section === "contacts" && (
-            <div className="col-span-10">
-              <ContactsCRM apiBase={API} socket={socketRef.current} />
-            </div>
-          )}
-
-          {section === "campaigns" && (
-            <Card padding="md" className="col-span-10 flex flex-col min-h-screen max-h-screen">
-              <CampaignsPanel apiBase={API} />
-            </Card>
-          )}
-        </div>
-
-      {/* Modal de privado */}
-        {isPrivateOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm"
-            style={{ backgroundColor: "var(--color-overlay)" }}
-          >
-            <div
-              className="flex max-h-[80vh] w-[min(640px,95vw)] flex-col rounded-2xl border p-4 transition-colors duration-300"
-              style={{
-                borderColor: "var(--color-border)",
-                backgroundColor: "color-mix(in srgb, var(--color-surface) 98%, transparent)",
-                boxShadow: "0 32px 70px -45px rgba(8, 12, 20, 0.95)",
-              }}
+            <Card
+              gradient={false}
+              padding="lg"
+              className="livechat-card col-span-12 xl:col-span-10 flex min-h-[520px] flex-col shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full xl:overflow-hidden"
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-semibold theme-heading">Conversa privada</div>
-                <button
-                  onClick={() => setIsPrivateOpen(false)}
-                  className="rounded p-2 transition hover:opacity-75"
-                  style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 40%, transparent)" }}
-                >
-                  <FiX className="h-5 w-5 theme-text-muted" />
-                </button>
-              </div>
+            <LabelsManager apiBase={API} />
+          </Card>
+        )}
 
-              {currentChat && (
-                <div className="mb-2 text-sm theme-text-muted">
-                  Agente atribu?do:{" "}
-                  <span className="font-medium theme-heading">
-                    {currentChat.assigned_agent_name || "?"}
-                  </span>
-                </div>
-              )}
-
-              <div className="mb-3 text-xs theme-text-muted">
-                Somente sua equipe v? estas mensagens. Elas tamb?m aparecem no hist?rico do chat, destacadas como privadas.
-              </div>
-
-              <div
-                className="flex-1 space-y-1.5 overflow-auto rounded-lg border p-2 pr-1
-              scrollbar-thin scrollbar-track-transparent
-              [&::-webkit-scrollbar]:w-2
-              [&::-webkit-scrollbar-thumb]:rounded-full
-              [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
-              hover:[&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_22%,var(--color-bg))]
-            "
-                style={{
-                  borderColor: "var(--color-border)",
-                  backgroundColor: "var(--color-bg)",
-                }}
-              >
-                {messages
-                  .filter((m) => m.is_private || m.type === "PRIVATE")
-                  .map((m) => (
-                    <MessageBubble
-                      key={m.id}
-                      m={m}
-                      isAgent={true}
-                      mediaItems={mediaItems}
-                      mediaIndex={mediaIndexById.get(m.id) ?? undefined}
-                      onRetry={retryFailedMessage}
-                      allMessages={messages}
-                      customerName={currentChat?.customer_name || currentChat?.display_name || null}
-                    />
-                  ))}
-              </div>
-
-              <div className="mt-3 flex gap-2">
-                <input
-                  className="config-input flex-1 rounded-lg px-3 py-2 text-sm"
-                  placeholder="Mensagem privada..."
-                  value={privateText}
-                  onChange={(e) => setPrivateText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      sendPrivate();
-                    }
-                  }}
-                />
-                <Button
-                  variant="gradient"
-                  size="md"
-                  onClick={sendPrivate}
-                >
-                  Enviar
-                </Button>
-              </div>
-            </div>
+        {section === "contacts" && (
+            <div className="livechat-card col-span-12 xl:col-span-10 flex min-h-[520px] flex-col rounded-[28px] p-4 shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full xl:overflow-hidden">
+            <ContactsCRM apiBase={API} socket={socketRef.current} />
           </div>
         )}
 
-      {/* Wizard de primeira inbox */}
+        {section === "campaigns" && (
+          <Card
+            gradient={false}
+            padding="md"
+              className="livechat-card col-span-12 xl:col-span-10 flex flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+          >
+            <CampaignsPanel apiBase={API} />
+          </Card>
+        )}
+      </div>
+
       {showFirstInboxWizard && (
-        <FirstInboxWizard 
+        <FirstInboxWizard
           onComplete={() => {
             console.log("[Livechat] Wizard concluído, recarregando inboxes");
             setShowFirstInboxWizard(false);
-            // Recarregar inboxes
             fetchJson<Inbox[]>(`${API}/livechat/inboxes/my`)
               .then((rows) => {
                 setInboxes(rows || []);
@@ -3815,7 +3882,7 @@ const scrollToBottom = useCallback(
           }}
         />
       )}
-    </div>
+    </section>
   );
 }
 

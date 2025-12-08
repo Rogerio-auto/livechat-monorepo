@@ -1,5 +1,4 @@
-import { FiImage, FiLoader } from "react-icons/fi";
-import { useState } from "react";
+import { FiImage } from "react-icons/fi";
 import MediaCard from "./MediaCard";
 
 interface MediaGridProps {
@@ -9,31 +8,37 @@ interface MediaGridProps {
 }
 
 export default function MediaGrid({ media, loading, onRefresh }: MediaGridProps) {
-  if (loading) {
+  const showSkeleton = loading && media.length === 0;
+
+  if (showSkeleton) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <FiLoader className="animate-spin h-8 w-8 text-gray-400" />
-        <span className="ml-2 text-gray-500 dark:text-gray-400">Carregando mídias...</span>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-48 animate-pulse rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
+          />
+        ))}
       </div>
     );
   }
 
-  if (media.length === 0) {
+  if (!loading && media.length === 0) {
     return (
-      <div className="text-center py-12">
-        <FiImage className="mx-auto h-12 w-12 text-gray-400" />
-        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-          Nenhuma mídia encontrada
-        </h3>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Faça upload de imagens, vídeos ou documentos para começar.
-        </p>
+      <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-8 py-16 text-center text-(--color-text-muted)">
+        <FiImage className="h-12 w-12 text-(--color-primary)" />
+        <div>
+          <h3 className="text-base font-semibold text-(--color-text)">Nenhuma mídia encontrada</h3>
+          <p className="mt-1 text-sm">
+            Faça upload de imagens, vídeos ou documentos para começar.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {media.map((item) => (
         <MediaCard key={item.id} media={item} onRefresh={onRefresh} />
       ))}

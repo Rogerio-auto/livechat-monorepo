@@ -10,18 +10,16 @@ import {
   FaBoxOpen,
   FaWhatsapp,
   FaCog,
-  FaSun,
-  FaMoon,
   FaShieldAlt,
   FaImages,
   FaTasks,
   FaCogs,
   FaFileAlt,
+  FaTimes,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
 import { PlanBadge } from "../../components/subscription/PlanBadge";
-import { NotificationBell } from "../../components/notifications/NotificationBell";
 
 type Profile = {
   id: string;
@@ -119,13 +117,18 @@ const adminLinks: SidebarLink[] = [
   },
 ];
 
-export default function Sidebar() {
+type SidebarProps = {
+  mobileOpen?: boolean;
+  onRequestClose?: () => void;
+};
+
+export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarProps = {}) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const API =
     import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
-  const { theme, toggleTheme, registerUserTheme } = useTheme();
+  const { registerUserTheme } = useTheme();
 
   useEffect(() => {
     (async () => {
@@ -153,98 +156,208 @@ export default function Sidebar() {
     } finally {
       registerUserTheme(null);
       navigate("/login");
+      onRequestClose?.();
     }
   };
 
-  const ThemeIcon = theme === "dark" ? FaSun : FaMoon;
-  const themeLabel = theme === "dark" ? "Tema claro" : "Tema escuro";
+  const handleNav = () => onRequestClose?.();
 
   return (
-    <aside className="fixed top-0 left-0 z-50 h-screen w-16 overflow-hidden bg-[var(--color-sidebar-bg)] text-[var(--color-sidebar-text)] shadow-[0_12px_30px_-15px_rgba(8,12,20,0.9)] transition-all duration-300 ease-in-out group hover:w-72">
-      <div className="relative flex h-full flex-col">
-        <div className="border-b border-[color:var(--color-sidebar-border)] px-3 pb-3 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <img src={Logo} alt="logo" className="h-8 w-auto object-contain" />
-              <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <div className="font-semibold leading-tight text-[var(--color-sidebar-text)]">
-                  {profile?.companyName || "Sua Empresa"}
-                </div>
-              </div>
-            </div>
-            {/* Notification Bell - sempre visível */}
-            <div className="ml-auto">
-              <NotificationBell />
-            </div>
-          </div>
-          <div className="mt-3 flex items-center gap-3">
-            <img
-              src={
-                profile?.avatarUrl ||
-                `https://ui-avatars.com/api/?name=${encodeURIComponent(
-                  profile?.name || "User",
-                )}&background=1d4ed8&color=fff`
-              }
-              className="h-9 w-9 rounded-full ring-2 ring-[rgba(56,189,248,0.45)] object-cover"
-            />
-            <div className="opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-              <div className="text-sm font-medium leading-tight text-[var(--color-sidebar-text)]">
-                {profile?.name || "Usuario"}
-              </div>
-              <div className="max-w-[10rem] truncate text-xs text-[var(--color-sidebar-text-muted)]">
-                {profile?.email || ""}
-              </div>
-            </div>
-          </div>
-          
-          {/* Plan Badge */}
-          <div className="mt-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <PlanBadge />
-          </div>
-        </div>
+    <>
+      <aside
+        className="group fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-expanded-width,18rem)] flex-col overflow-hidden border-r border-black/30 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-[0_50px_120px_-60px_rgba(1,15,9,0.8)] lg:flex"
+        style={{ backdropFilter: "blur(8px)" }}
+      >
+        <SidebarContent
+          profile={profile}
+          locationPath={location.pathname}
+          isAdmin={profile?.role?.toUpperCase() === "ADMIN"}
+          logout={logout}
+          onNavigate={handleNav}
+          forceExpanded
+        />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
+      </aside>
 
-        <nav className="flex flex-1 flex-col gap-1 p-2">
-          {links.map((item) => (
-            <SidebarItem
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              label={item.label}
-              active={item.isActive(location.pathname)}
-            />
-          ))}
-          
-          {/* Link Admin - apenas para ADMIN */}
-          {profile && profile.role?.toUpperCase() === "ADMIN" && adminLinks.map((item) => (
-            <SidebarItem
-              key={item.to}
-              to={item.to}
-              icon={item.icon}
-              label={item.label}
-              active={item.isActive(location.pathname)}
-            />
-          ))}
-        </nav>
-
-        <div className="flex flex-col gap-2 border-t border-[color:var(--color-sidebar-border)] p-3">
-          <SidebarItem
-            icon={<ThemeIcon />}
-            label={themeLabel}
-            onClick={toggleTheme}
-          />
+      <div
+        className={`fixed inset-0 z-50 lg:hidden ${
+          mobileOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+      >
+        <div
+          className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
+            mobileOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={onRequestClose}
+          aria-hidden="true"
+        />
+        <aside
+          className={`absolute left-0 top-0 flex h-full w-[min(20rem,82vw)] translate-x-0 flex-col overflow-hidden border-r border-black/25 bg-gradient-to-b from-[#1f4230] via-[#122617] to-[#070f08] text-white shadow-[0_40px_120px_-45px_rgba(0,0,0,0.85)] transition-transform duration-300 ${
+            mobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+          style={{ backdropFilter: "blur(10px)" }}
+        >
           <button
             type="button"
-            onClick={logout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-[var(--color-sidebar-text)] transition-colors duration-150 hover:bg-[var(--color-sidebar-hover)]"
+            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/90 backdrop-blur-md"
+            onClick={onRequestClose}
+            aria-label="Fechar navegação"
           >
-            <FaSignOutAlt className="text-lg text-[var(--color-sidebar-icon)]" />
-            <span className="whitespace-nowrap opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100">
-              Sair
-            </span>
+            <FaTimes />
           </button>
+          <SidebarContent
+            profile={profile}
+            locationPath={location.pathname}
+            isAdmin={profile?.role?.toUpperCase() === "ADMIN"}
+            logout={logout}
+            onNavigate={handleNav}
+            forceExpanded
+          />
+        </aside>
+      </div>
+    </>
+  );
+}
+
+type SidebarContentProps = {
+  profile: Profile | null;
+  locationPath: string;
+  isAdmin?: boolean;
+  logout: () => Promise<void> | void;
+  onNavigate?: () => void;
+  forceExpanded?: boolean;
+};
+
+function SidebarContent({
+  profile,
+  locationPath,
+  isAdmin,
+  logout,
+  onNavigate,
+  forceExpanded,
+}: SidebarContentProps) {
+  const metaLabel = profile?.companyId ? `ID ${profile.companyId}` : "Operações";
+
+  return (
+    <div className="relative flex h-full flex-col">
+      <div className="relative border-b border-white/10 px-4 pb-4 pt-5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 shadow-inner shadow-black/40">
+            <img src={Logo} alt="logo" className="h-7 w-auto" />
+          </div>
+          <div
+            className={`${
+              forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            } transition-opacity duration-300`}
+          >
+            <div className="text-sm font-semibold tracking-wide text-white">
+              {profile?.companyName || "Sua Empresa"}
+            </div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-white/60">
+              {metaLabel}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center gap-3">
+          <img
+            src={
+              profile?.avatarUrl ||
+              `https://ui-avatars.com/api/?name=${encodeURIComponent(
+                profile?.name || "User",
+              )}&background=204A34&color=fff`
+            }
+            className="h-11 w-11 rounded-2xl object-cover ring-2 ring-white/15"
+          />
+          <div
+            className={`${
+              forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            } transition-opacity duration-300`}
+          >
+            <p className="text-sm font-medium text-white">
+              {profile?.name || "Usuário"}
+            </p>
+            <p className="text-xs text-white/70">{profile?.email || ""}</p>
+          </div>
+        </div>
+
+        <div
+          className={`${
+            forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          } mt-4 transition-opacity duration-300`}
+        >
+          <PlanBadge />
         </div>
       </div>
-    </aside>
+
+      <nav className="sidebar-scroll flex flex-1 flex-col gap-1 px-2 py-4">
+        <p
+          className={`${
+            forceExpanded ? "opacity-70" : "opacity-0 group-hover:opacity-70"
+          } px-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-white duration-300`}
+        >
+          Navegação
+        </p>
+        {links.map((item) => (
+          <SidebarItem
+            key={item.to}
+            to={item.to}
+            icon={item.icon}
+            label={item.label}
+            active={item.isActive(locationPath)}
+            forceExpanded={forceExpanded}
+            onNavigate={onNavigate}
+          />
+        ))}
+
+        {isAdmin && (
+          <div className="mt-3 border-t border-white/5 pt-3">
+            <p
+              className={`${
+                forceExpanded ? "opacity-60" : "opacity-0 group-hover:opacity-60"
+              } px-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-white duration-300`}
+            >
+              Controle
+            </p>
+            {adminLinks.map((item) => (
+              <SidebarItem
+                key={item.to}
+                to={item.to}
+                icon={item.icon}
+                label={item.label}
+                active={item.isActive(locationPath)}
+                forceExpanded={forceExpanded}
+                onNavigate={onNavigate}
+              />
+            ))}
+          </div>
+        )}
+      </nav>
+
+      <div className="border-t border-white/10 px-3 py-4">
+        <button
+          type="button"
+          onClick={() => {
+            logout();
+            onNavigate?.();
+          }}
+          className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-white/80 transition-all duration-200 hover:bg-white/10"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-lg text-white">
+            <FaSignOutAlt />
+          </span>
+          <span
+            className={`text-sm font-semibold tracking-wide ${
+              forceExpanded
+                ? "opacity-100"
+                : "-translate-x-2 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+            }`}
+          >
+            Sair
+          </span>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -252,6 +365,8 @@ type ItemBase = {
   icon: ReactNode;
   label: string;
   active?: boolean;
+  forceExpanded?: boolean;
+  onNavigate?: () => void;
 };
 
 type LinkItem = ItemBase & {
@@ -266,51 +381,56 @@ type ButtonItem = ItemBase & {
 
 type ItemProps = LinkItem | ButtonItem;
 
-function SidebarItem({ icon, label, to, active, onClick }: ItemProps) {
+function SidebarItem({ icon, label, to, active, onClick, forceExpanded, onNavigate }: ItemProps) {
   const baseClasses =
-    "flex w-full items-center gap-3 rounded-lg px-3 py-3 transition-colors duration-150";
+    "flex w-full items-center gap-3 rounded-2xl px-3 py-3 transition-all duration-200";
 
   const classes = to
     ? `${baseClasses} ${
         active
-          ? "bg-[var(--color-sidebar-active)] text-[var(--color-sidebar-text)]"
-          : "text-[var(--color-sidebar-text-muted)] hover:bg-[var(--color-sidebar-hover)]"
+          ? "bg-white/10 text-white shadow-[0_18px_35px_-18px_rgba(0,0,0,0.9)] ring-1 ring-white/20"
+          : "text-white/70 hover:bg-white/10"
       }`
-    : `${baseClasses} text-[var(--color-sidebar-text)] hover:bg-[var(--color-sidebar-hover)]`;
+    : `${baseClasses} text-white/80 hover:bg-white/10`;
 
-  const iconColor = active
-    ? "text-[var(--color-highlight)]"
-    : to
-    ? "text-[var(--color-sidebar-icon)]"
-    : "text-[var(--color-highlight)]";
+  const iconColor = active ? "text-[#7bf0b0]" : "text-white";
 
-  const labelColor = to
-    ? active
-      ? "text-[var(--color-sidebar-text)]"
-      : "text-[var(--color-sidebar-text-muted)]"
-    : "text-[var(--color-sidebar-text)]";
+  const labelColor = active ? "text-white" : "text-white/80";
+
+  const labelVisibility = forceExpanded
+    ? "opacity-100 translate-x-0"
+    : "whitespace-nowrap -translate-x-4 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100";
 
   const content = (
     <>
       <span className={`text-lg ${iconColor}`}>{icon}</span>
-      <span
-        className={`whitespace-nowrap -translate-x-2 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100 ${labelColor}`}
-      >
-        {label}
-      </span>
+      <span className={`${labelVisibility} ${labelColor}`}>{label}</span>
     </>
   );
 
   if (to) {
     return (
-      <Link to={to} className={classes}>
+      <Link
+        to={to}
+        className={classes}
+        onClick={() => {
+          onNavigate?.();
+        }}
+      >
         {content}
       </Link>
     );
   }
 
   return (
-    <button type="button" onClick={onClick} className={classes}>
+    <button
+      type="button"
+      onClick={() => {
+        onClick?.();
+        onNavigate?.();
+      }}
+      className={classes}
+    >
       {content}
     </button>
   );

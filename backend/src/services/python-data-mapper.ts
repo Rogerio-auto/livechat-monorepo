@@ -41,6 +41,9 @@ export function mapDatabaseToPython(data: DatabaseData): PythonGeneratorData {
 
   // Montar dados para o Python
   return {
+    // === INFORMAÇÕES DO KIT/PROPOSTA ===
+    title: proposal?.title || "",
+    
     // === DADOS DO CLIENTE ===
     nome: client.name || "",
     doc: client.cpf_cnpj || client.cpf || "",
@@ -72,23 +75,36 @@ export function mapDatabaseToPython(data: DatabaseData): PythonGeneratorData {
     CELULAR_VENDEDOR: seller?.phone || proposal?.seller_phone || "",
 
     // === DADOS DO SISTEMA SOLAR ===
-    valor_investimento: proposal?.total_value || 0,
-    potencia: proposal?.solar_total_power || "",
+    // ⭐ VALOR DO INVESTIMENTO: 
+    // Se houver financiamento: entrada + (parcelas × valor_parcela)
+    // Senão: valor total do kit
+    valor_investimento: proposal?.financing_total_amount 
+      ? (proposal.financing_entry_value || 0) + proposal.financing_total_amount
+      : proposal?.total_value || 0,
+    potencia: proposal?.solar_total_power || 0,
     num_paineis: proposal?.solar_num_panels
       ? String(proposal.solar_num_panels)
-      : "",
-    producao_media: proposal?.solar_monthly_production || "",
-    consumo_medio: proposal?.solar_monthly_consumption || "",
-    tarifa: proposal?.solar_energy_tariff || "",
-    payback_anos: proposal?.solar_payback_years || "",
+      : "0",
+    producao_media: proposal?.solar_monthly_production || 0,
+    consumo_medio: proposal?.solar_monthly_consumption || 0,
+    tarifa: proposal?.solar_energy_tariff || 0.92,
+    payback_anos: proposal?.solar_payback_years || 0,
+    // Economia formatada para exibição
     economia_mensal: proposal?.solar_savings_value
       ? formatMoney(proposal.solar_savings_value)
-      : "",
+      : "R$ 0,00",
     economia_anual: proposal?.solar_annual_savings
       ? formatMoney(proposal.solar_annual_savings)
-      : "",
+      : "R$ 0,00",
+    // Economia sem formatação para cálculos do Python
+    valor_economia_mensal: proposal?.solar_savings_value || 0,
+    // Valores da conta de energia
+    valor_conta_atual: proposal?.solar_current_bill_value || 0,
+    valor_conta_solar: proposal?.solar_future_bill_value || 100,
 
     // === SIMULAÇÕES DE FINANCIAMENTO ===
+    // Valor de entrada (se houver)
+    valor_entrada: proposal?.financing_entry_value || 0,
     simulacoes: proposal?.financing_simulations
       ? proposal.financing_simulations.map((sim: any) => ({
           banco: sim.bank || sim.banco || "",
@@ -116,13 +132,17 @@ export function mapDatabaseToPython(data: DatabaseData): PythonGeneratorData {
     // === DADOS TÉCNICOS ===
     especificacao_painel: proposal?.solar_panel_spec || "",
     especificacao_inversor: proposal?.solar_inverter_spec || "",
-    area_necessaria: proposal?.solar_area_needed || "",
+    // ⭐ ESPECIFICACAO_KIT - Python script espera essa chave exata
+    ESPECIFICACAO_KIT: proposal?.solar_panel_spec || "",
+    // ⭐ AREA_TOTAL - Python script espera 'area' (linha 388 do proposal_generator.py)
+    area: proposal?.solar_area_needed ? `${proposal.solar_area_needed} m²` : "0 m²",
+    area_necessaria: proposal?.solar_area_needed || 0,
     garantia_painel: proposal?.solar_panel_warranty
       ? `${proposal.solar_panel_warranty} anos`
-      : "",
+      : "25 anos",
     garantia_inversor: proposal?.solar_inverter_warranty
       ? `${proposal.solar_inverter_warranty} anos`
-      : "",
+      : "10 anos",
 
     // === LOCALIZAÇÃO ===
     latitude: client.latitude || company?.latitude || "",
@@ -131,9 +151,9 @@ export function mapDatabaseToPython(data: DatabaseData): PythonGeneratorData {
     estado: client.state || company?.state || "",
 
     // === DADOS AMBIENTAIS ===
-    co2_evitado_anual: proposal?.solar_co2_1year || "",
-    co2_evitado_25anos: proposal?.solar_co2_25years || "",
-    arvores_equivalente: proposal?.solar_co2_trees || "",
+    co2_evitado_anual: proposal?.solar_co2_1year || 0,
+    co2_evitado_25anos: proposal?.solar_co2_25years || 0,
+    arvores_equivalente: proposal?.solar_co2_trees || 0,
 
     // === DOCUMENTAÇÃO ===
     num_proposta: proposal?.number || proposal?.id?.substring(0, 8) || "",

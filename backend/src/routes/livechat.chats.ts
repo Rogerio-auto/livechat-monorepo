@@ -447,11 +447,23 @@ export function registerLivechatChatRoutes(app: express.Application) {
         deptSegment,
       );
       const listIndexKey = k.listIndex(companyId, inboxId || null, statusSegment, kindSegment, deptSegment);
+      
+      console.log("[GET /chats] Buscando cache:", { cacheKey, listIndexKey });
+      
       const cachedRaw = await rGet<
         CacheEnvelope<{ items: any[]; total: number }> | { items: any[]; total: number }
       >(cacheKey);
       if (cachedRaw) {
+        console.log("[GET /chats] CACHE HIT - retornando dados do cache");
         const cachedEnvelope = ensureEnvelope(cachedRaw);
+        // Log primeiro chat do cache para debug
+        if (cachedEnvelope.data?.items?.[0]) {
+          console.log("[GET /chats] Primeiro chat do cache:", {
+            id: cachedEnvelope.data.items[0].id,
+            ai_agent_id: cachedEnvelope.data.items[0].ai_agent_id,
+            ai_agent_name: cachedEnvelope.data.items[0].ai_agent_name,
+          });
+        }
         applyConditionalHeaders(res, cachedEnvelope);
         res.setHeader("X-Cache", "HIT");
         if (isFreshRequest(req, cachedEnvelope)) {
@@ -471,6 +483,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         return;
       }
 
+      console.log("[GET /chats] CACHE MISS - buscando do banco");
       res.setHeader("X-Cache", "MISS");
       // debug: cache MISS
 
@@ -1028,8 +1041,21 @@ export function registerLivechatChatRoutes(app: express.Application) {
             new Date().toISOString()
           : new Date().toISOString();
       const envelope = buildCacheEnvelope(payload, lastModifiedIso);
+      
+      console.log("[GET /chats] Salvando no cache:", cacheKey);
+      // Log primeiro chat para debug
+      if (items[0]) {
+        console.log("[GET /chats] Primeiro chat do banco:", {
+          id: items[0].id,
+          ai_agent_id: items[0].ai_agent_id,
+          ai_agent_name: items[0].ai_agent_name,
+        });
+      }
+      
       await rSet(cacheKey, envelope, TTL_LIST);
       await rememberListCacheKey(listIndexKey, cacheKey, TTL_LIST);
+      console.log("[GET /chats] Cache salvo com sucesso");
+      
       try {
         await Promise.all(
           items
@@ -1971,16 +1997,45 @@ export function registerLivechatChatRoutes(app: express.Application) {
     const { id } = req.params as { id: string };
     const { agentId } = req.body || {};
     
+    console.log("[PUT /ai-agent] Iniciando atualização", { chatId: id, agentId });
+    
     // Permitir null para remover agente
     if (agentId !== null && typeof agentId !== "string") {
       return res.status(400).json({ error: "agentId deve ser string ou null" });
     }
 
+    // Pegar company_id do usuário autenticado
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ error: "Empresa não identificada" });
+    }
+    
+    console.log("[PUT /ai-agent] Company ID do usuário:", companyId);
+
+    // Verificar se chat existe e pertence à empresa do usuário (via inbox)
+    const { data: chatData, error: chatError } = await supabaseAdmin
+      .from("chats")
+      .select("id, inbox:inboxes!inner(id, company_id)")
+      .eq("id", id)
+      .eq("inbox.company_id", companyId)
+      .maybeSingle();
+
+    console.log("[PUT /ai-agent] Resultado da query:", { chatData, chatError });
+
+    if (chatError) {
+      console.error("[PUT /ai-agent] Erro ao buscar chat:", { id, error: chatError });
+      return res.status(500).json({ error: "Erro ao buscar chat" });
+    }
+
+    if (!chatData) {
+      console.error("[PUT /ai-agent] Chat não encontrado ou não pertence à empresa:", { id, companyId });
+      return res.status(404).json({ error: "Chat não encontrado ou não pertence à sua empresa" });
+    }
+
+    console.log("[PUT /ai-agent] Chat validado com sucesso");
+
     // Se agentId fornecido, validar se existe e pertence à empresa
     if (agentId) {
-      const companyId = req.user?.company_id;
-      if (!companyId) return res.status(401).json({ error: "Empresa não identificada" });
-
       const { data: agent, error: agentError } = await supabaseAdmin
         .from("agents")
         .select("id, name, status")
@@ -2002,10 +2057,46 @@ export function registerLivechatChatRoutes(app: express.Application) {
       .select("*")
       .single();
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      console.error("[PUT /ai-agent] Erro no update:", error);
+      return res.status(500).json({ error: error.message });
+    }
 
-    // Invalidar cache do chat
-    await rDel(k.chat(id));
+    console.log("[PUT /ai-agent] Chat atualizado no banco:", { chatId: id, ai_agent_id: data.ai_agent_id });
+
+    // Invalidar cache do chat individual
+    try {
+      await rDel(k.chat(id));
+      console.log("[PUT /ai-agent] Cache individual invalidado:", k.chat(id));
+    } catch (delErr) {
+      console.error("[PUT /ai-agent] Erro ao deletar cache individual:", delErr);
+    }
+    
+    // Invalidar todos os caches de listagem dessa empresa
+    console.log("[PUT /ai-agent] Verificando company_id:", companyId);
+    if (companyId) {
+      console.log("[PUT /ai-agent] Entrando no bloco de invalidação de cache");
+      try {
+        const pattern = k.listPrefixCompany(companyId);
+        console.log("[PUT /ai-agent] Pattern gerado:", pattern);
+        const keys = await redis.keys(pattern);
+        console.log("[PUT /ai-agent] Padrão de listagem:", pattern, "| Keys encontradas:", keys.length);
+        if (keys && keys.length > 0) {
+          await redis.del(...keys);
+          console.log("[PUT /ai-agent] Deletadas", keys.length, "keys de listagem");
+        }
+        // Também invalidar os índices de set
+        const setPattern = `lc:list:set:${companyId}:*`;
+        const setKeys = await redis.keys(setPattern);
+        console.log("[PUT /ai-agent] Padrão de set:", setPattern, "| Keys encontradas:", setKeys.length);
+        if (setKeys && setKeys.length > 0) {
+          await redis.del(...setKeys);
+          console.log("[PUT /ai-agent] Deletadas", setKeys.length, "keys de set");
+        }
+      } catch (cacheErr) {
+        console.warn("[PUT /ai-agent] Failed to clear list cache:", cacheErr);
+      }
+    }
 
     // Buscar nome do agente para resposta
     let agentName = null;
@@ -2032,6 +2123,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
     } catch (socketErr) {
       console.warn("[livechat/chats] failed to emit agent-changed event:", socketErr);
     }
+
+    console.log("[PUT /ai-agent] Retornando resposta:", { 
+      chatId: id, 
+      ai_agent_id: agentId, 
+      ai_agent_name: agentName 
+    });
 
     return res.json({ 
       ...data, 
@@ -2220,6 +2317,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       if (privChatError) {
         console.warn("[livechat/messages] private chat lookup skipped", privChatError);
       } else if (privateChatId) {
+        console.log(`[livechat/messages] Found private_chat_id: ${privateChatId}, fetching messages...`);
         const privateMsgsResp = await traceSupabase(
           "private_messages.list",
           "private_messages",
@@ -2227,7 +2325,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           async () =>
             await supabaseAdmin
               .from("private_messages")
-              .select("id, content, private_chat_id, sender_id, created_at, media_url, caption")
+              .select("id, content, private_chat_id, sender_id, created_at")
               .eq("private_chat_id", privateChatId)
               .order("created_at", { ascending: true }),
         );
@@ -2235,6 +2333,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           console.warn("[livechat/messages] private messages skipped", privateMsgsResp.error);
         } else {
           const privRows = (privateMsgsResp.data || []) as any[];
+          console.log(`[livechat/messages] Found ${privRows.length} private messages`);
           const senderIds = toUuidArray(privRows.map((row) => row.sender_id));
           let senderNames: Record<string, string> = {};
           if (senderIds.length > 0) {
@@ -2270,8 +2369,8 @@ export function registerLivechatChatRoutes(app: express.Application) {
             type: "PRIVATE",
             is_private: true,
             sender_name: row.sender_id ? senderNames[row.sender_id] || null : null,
-            media_url: row.media_url ?? null,
-            caption: row.caption ?? null,
+            media_url: null,
+            caption: null,
           }));
         }
       }

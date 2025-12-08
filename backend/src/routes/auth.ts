@@ -60,7 +60,9 @@ export function registerAuthRoutes(app: express.Application) {
       role: profile.role || "USER",
       company_id: user.company_id || profile.company_id,
       name: profile.name || user.name || user.email,
+      phone: profile.phone || user.phone || null,
       theme_preference: profile.theme_preference || "system", // ✅ Já vem do cache do requireAuth
+      requires_phone_setup: !profile.phone && !user.phone, // ✅ Flag indicando se precisa configurar telefone
     };
     
     console.log('[/auth/me] 📤 Response:', response);
@@ -106,6 +108,53 @@ export function registerAuthRoutes(app: express.Application) {
     } catch (e: any) {
       console.error('[/auth/me/theme] Error:', e);
       return res.status(500).json({ error: e?.message || "theme update error" });
+    }
+  });
+
+  // Update phone number
+  app.patch("/auth/me/phone", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const { phone } = req.body || {};
+      
+      if (!phone || typeof phone !== "string" || phone.trim().length === 0) {
+        return res.status(400).json({ error: "Telefone é obrigatório" });
+      }
+
+      // Validar formato básico (apenas números, pode ter +, -, espaços, parênteses)
+      const phoneClean = phone.replace(/[\s\-\(\)]/g, '');
+      if (!/^\+?[0-9]{10,15}$/.test(phoneClean)) {
+        return res.status(400).json({ error: "Formato de telefone inválido. Use apenas números com DDD (ex: +5511999999999)" });
+      }
+
+      const { error } = await supabaseAdmin
+        .from("users")
+        .update({ phone: phoneClean })
+        .eq("user_id", authUserId);
+
+      if (error) {
+        console.error('[/auth/me/phone] Error updating phone:', error);
+        return res.status(500).json({ error: error.message });
+      }
+
+      // ✅ Invalidar cache de autenticação para forçar refresh
+      try {
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith("Bearer ")) {
+          const token = authHeader.slice(7);
+          const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
+          const cacheKey = `auth:token:${tokenHash}`;
+          await redis.del(cacheKey);
+          console.log('[/auth/me/phone] Cache invalidated:', cacheKey);
+        }
+      } catch (cacheError) {
+        console.warn('[/auth/me/phone] Failed to invalidate cache:', cacheError);
+      }
+
+      return res.json({ ok: true, phone: phoneClean });
+    } catch (e: any) {
+      console.error('[/auth/me/phone] Error:', e);
+      return res.status(500).json({ error: e?.message || "phone update error" });
     }
   });
 
@@ -337,7 +386,7 @@ export function registerAuthRoutes(app: express.Application) {
   // Reset password with token
   app.post("/auth/reset-password", async (req, res) => {
     try {
-      const { token, newPassword, confirmPassword } = req.body || {};
+      const { token, newPassword, confirmPassword, phone } = req.body || {};
 
       if (!token || !newPassword || !confirmPassword) {
         return res.status(400).json({ error: "Todos os campos são obrigatórios" });
@@ -349,6 +398,14 @@ export function registerAuthRoutes(app: express.Application) {
 
       if (newPassword.length < 6) {
         return res.status(400).json({ error: "A senha deve ter no mínimo 6 caracteres" });
+      }
+
+      // Validar telefone se fornecido
+      if (phone) {
+        const phoneClean = String(phone).replace(/\D/g, '');
+        if (phoneClean.length < 10 || phoneClean.length > 15) {
+          return res.status(400).json({ error: "Formato de telefone inválido" });
+        }
       }
 
       // Buscar token no banco
@@ -381,6 +438,20 @@ export function registerAuthRoutes(app: express.Application) {
       if (updateError) {
         console.error('[reset-password] Error updating password:', updateError);
         return res.status(500).json({ error: "Erro ao atualizar senha" });
+      }
+
+      // Atualizar telefone se fornecido
+      if (phone) {
+        const phoneClean = String(phone).replace(/\D/g, '');
+        const { error: phoneError } = await supabaseAdmin
+          .from("users")
+          .update({ phone: phoneClean })
+          .eq("user_id", tokenData.user_id);
+
+        if (phoneError) {
+          console.error('[reset-password] Error updating phone:', phoneError);
+          // Não bloquear se falhar ao atualizar telefone
+        }
       }
 
       // Marcar token como usado

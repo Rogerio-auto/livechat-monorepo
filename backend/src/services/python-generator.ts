@@ -470,8 +470,14 @@ export async function uploadGeneratedDocument(
   deleteAfterUpload: boolean = true // Parâmetro para controlar se deleta após upload
 ): Promise<{ success: boolean; publicUrl?: string; error?: string }> {
   try {
+    console.log("[uploadGeneratedDocument] 📤 INÍCIO");
+    console.log("[uploadGeneratedDocument] localPath:", localPath);
+    console.log("[uploadGeneratedDocument] storagePath:", storagePath);
+    console.log("[uploadGeneratedDocument] deleteAfterUpload:", deleteAfterUpload);
+    
     // Ler arquivo gerado
     const buffer = fs.readFileSync(localPath);
+    console.log("[uploadGeneratedDocument] ✅ Arquivo lido, tamanho:", buffer.length, "bytes");
 
     // Upload para storage
     const { error: uploadError } = await supabaseAdmin.storage
@@ -489,6 +495,8 @@ export async function uploadGeneratedDocument(
       };
     }
 
+    console.log("[uploadGeneratedDocument] ✅ Upload concluído");
+
     // Obter URL pública
     const { data: urlData } = supabaseAdmin.storage
       .from(DOCS_BUCKET)
@@ -496,11 +504,15 @@ export async function uploadGeneratedDocument(
 
     // Limpar arquivo temporário (somente se solicitado)
     if (deleteAfterUpload) {
+      console.log("[uploadGeneratedDocument] 🗑️ DELETANDO arquivo temporário...");
       try {
         fs.unlinkSync(localPath);
+        console.log("[uploadGeneratedDocument] ✅ Arquivo deletado");
       } catch (e) {
-        console.warn("[PythonGen] Não foi possível limpar arquivo temporário:", e);
+        console.warn("[uploadGeneratedDocument] ⚠️ Não foi possível limpar arquivo temporário:", e);
       }
+    } else {
+      console.log("[uploadGeneratedDocument] ℹ️ Arquivo NÃO foi deletado (deleteAfterUpload=false)");
     }
 
     return {
@@ -580,6 +592,7 @@ export async function generateSolarProposal(
 
     // 4. Upload DOCX para storage
     console.log("[PythonGen] 3. Fazendo upload do DOCX...");
+    console.log("[PythonGen] deleteAfterUpload =", !convertToPdf, "(convertToPdf =", convertToPdf, ")");
     const uploadResult = await uploadGeneratedDocument(
       outputLocalPath,
       outputStoragePath,
@@ -593,6 +606,34 @@ export async function generateSolarProposal(
       };
     }
 
+    console.log("[PythonGen] ✅ Upload DOCX concluído!");
+    
+    // Se vai converter PDF, NÃO deveria ter deletado
+    if (convertToPdf) {
+      console.log("[PythonGen] 🔍 Verificando arquivo para conversão PDF...");
+      
+      // Aguardar sistema de arquivos
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      const docxExistsAfterUpload = fs.existsSync(outputLocalPath);
+      console.log("[PythonGen] 📁 Arquivo existe?", docxExistsAfterUpload);
+      console.log("[PythonGen] 📂 Caminho:", outputLocalPath);
+      
+      if (docxExistsAfterUpload) {
+        const stats = fs.statSync(outputLocalPath);
+        console.log("[PythonGen] 📊 Tamanho:", stats.size, "bytes");
+      } else {
+        console.error("[PythonGen] ❌ ARQUIVO FOI DELETADO!");
+        console.error("[PythonGen] deleteAfterUpload passou:", !convertToPdf);
+        console.error("[PythonGen] convertToPdf:", convertToPdf);
+        
+        // Listar arquivos no temp
+        const tempDir = path.dirname(outputLocalPath);
+        const files = fs.readdirSync(tempDir);
+        console.error("[PythonGen] Arquivos em temp:", files.filter(f => f.includes('generated')));
+      }
+    }
+
     const result: any = {
       success: true,
       generatedPath: outputStoragePath,
@@ -602,6 +643,14 @@ export async function generateSolarProposal(
     // 5. Converter para PDF (opcional)
     if (convertToPdf) {
       console.log("[PythonGen] 4. Convertendo para PDF...");
+      
+      // Verificar se arquivo DOCX ainda existe
+      if (!fs.existsSync(outputLocalPath)) {
+        console.error("[PythonGen] ❌ ERRO: Arquivo DOCX não existe mais:", outputLocalPath);
+        result.pdfError = "Arquivo DOCX foi deletado antes da conversão";
+        return result;
+      }
+      console.log("[PythonGen] ✅ Arquivo DOCX existe:", outputLocalPath);
       
       // Caminho do PDF temporário
       const pdfLocalPath = outputLocalPath.replace(/\.docx$/i, '.pdf');
@@ -635,12 +684,19 @@ export async function generateSolarProposal(
         }
       }
       
-      // Limpar arquivo DOCX temporário após converter para PDF
+      // Limpar arquivos temporários após converter para PDF
       try {
-        fs.unlinkSync(outputLocalPath);
-        console.log("[PythonGen] Arquivo DOCX temporário removido após conversão PDF");
+        console.log("[PythonGen] 6. Limpando arquivos temporários...");
+        if (fs.existsSync(outputLocalPath)) {
+          fs.unlinkSync(outputLocalPath);
+          console.log("[PythonGen] ✅ DOCX temporário removido:", outputLocalPath);
+        }
+        if (fs.existsSync(pdfLocalPath)) {
+          fs.unlinkSync(pdfLocalPath);
+          console.log("[PythonGen] ✅ PDF temporário removido:", pdfLocalPath);
+        }
       } catch (e) {
-        console.warn("[PythonGen] Não foi possível limpar DOCX temporário:", e);
+        console.warn("[PythonGen] ⚠️ Erro ao limpar temporários:", e);
       }
     }
 

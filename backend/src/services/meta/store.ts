@@ -1062,8 +1062,9 @@ export async function ensureLeadCustomerChat(args: {
       })(),
     ]);
 
-    // ========== FIX: Buscar chat usando external_id ou remote_id para evitar chat errado ==========
+    // ========== FIX: Buscar chat usando external_id, remote_id OU LID para evitar chat duplicado ==========
     // Se customer tem múltiplos chats, precisamos filtrar pelo identificador único
+    // Tentar buscar usando externalIdCandidate OU LID (se fornecido)
     let chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
       `select id, external_id, chat_type, remote_id
          from public.chats
@@ -1071,14 +1072,21 @@ export async function ensureLeadCustomerChat(args: {
           and customer_id = $2
           and (
             ($3::text is not null and (external_id = $3 or remote_id = $3))
-            or ($3::text is null and (external_id is null or external_id = ''))
+            or ($4::text is not null and (external_id = $4 or remote_id = $4))
+            or ($3::text is null and $4::text is null and (external_id is null or external_id = ''))
           )
         limit 1`,
-      [args.inboxId, customer!.id, externalIdCandidate],
+      [args.inboxId, customer!.id, externalIdCandidate, lid],
     );
 
     // Se não encontrou com filtro, tenta sem (compatibilidade com chats antigos)
     if (!chat) {
+      console.log("[META][store] Chat not found with external_id/lid filter, trying fallback by customer_id only", {
+        inboxId: args.inboxId,
+        customerId: customer!.id,
+        externalIdCandidate,
+        lid,
+      });
       chat = await tx.oneOrNone<{ id: string; external_id: string | null; chat_type: string | null; remote_id: string | null }>(
         `select id, external_id, chat_type, remote_id
            from public.chats
@@ -1093,6 +1101,7 @@ export async function ensureLeadCustomerChat(args: {
       inboxId: args.inboxId,
       customerId: customer!.id,
       customerPhone: msisdn,
+      customerLid: lid,
       chatFound: !!chat,
       chatId: chat?.id,
       externalId: chat?.external_id,

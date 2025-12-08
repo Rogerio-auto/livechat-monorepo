@@ -48,22 +48,76 @@ class GeradorPropostaSolar:
         self.silent = silent
         # Print removido em modo produção - pode causar buffering
     
+    def safe_float(self, value, default):
+        """
+        Converte para float com segurança, tratando None, strings vazias e erros
+        
+        Args:
+            value: Valor a ser convertido
+            default: Valor padrão caso a conversão falhe
+            
+        Returns:
+            float: Valor convertido ou default
+        """
+        if value is None or value == '':
+            return default
+        
+        # Se já é número, retornar direto
+        if isinstance(value, (int, float)):
+            return float(value)
+        
+        try:
+            value_str = str(value).strip()
+            # Se contém "R$" ou vírgula, é formato brasileiro (R$ 1.234,56)
+            if 'R$' in value_str or ',' in value_str:
+                # Formato brasileiro: remover R$, trocar ponto por nada (milhar) e vírgula por ponto (decimal)
+                value_str = value_str.replace('R$', '').replace('.', '').replace(',', '.').strip()
+            # Senão, assumir que já está em formato numérico correto (1234.56)
+            return float(value_str)
+        except (ValueError, AttributeError):
+            return default
+    
+    def format_currency(self, value):
+        """
+        Formata um valor numérico para formato de moeda brasileiro (R$ 1.234,56)
+        
+        Args:
+            value (float): Valor a ser formatado
+            
+        Returns:
+            str: Valor formatado como moeda
+        """
+        return f"R$ {value:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+    
     def _print(self, *args, **kwargs):
         """Print condicional - só imprime se não estiver em modo silencioso"""
         if not self.silent:
             print(*args, **kwargs)
 
-    def gerar_grafico_comparativo(self):
+    def gerar_grafico_comparativo(self, consumo_mensal=None, producao_mensal=None):
         """
         Gera o gráfico de barras comparativo Consumo x Geração
+        
+        Args:
+            consumo_mensal (float): Consumo mensal real do cliente em kWh
+            producao_mensal (float): Produção mensal estimada do sistema em kWh
         
         Returns:
             InlineImage: Objeto de imagem para inserção no DOCX
         """
-        # Dados de exemplo (futuramente podem vir como parâmetro)
+        # Usar dados reais ou fallback para valores de exemplo
+        consumo_base = consumo_mensal if consumo_mensal else 1200
+        producao_base = producao_mensal if producao_mensal else 1500
+        
         meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
-        consumo = [1200] * 12  # Consumo constante
-        geracao = [1500, 1450, 1600, 1550, 1400, 1300, 1350, 1500, 1600, 1650, 1500, 1450]
+        # Consumo constante ao longo do ano
+        consumo = [consumo_base] * 12
+        # Produção varia ±10% ao longo do ano (simula variação sazonal)
+        geracao = [
+            producao_base * 1.00, producao_base * 0.97, producao_base * 1.07, producao_base * 1.03,
+            producao_base * 0.93, producao_base * 0.87, producao_base * 0.90, producao_base * 1.00,
+            producao_base * 1.07, producao_base * 1.10, producao_base * 1.00, producao_base * 0.97
+        ]
 
         # Criar figura
         plt.figure(figsize=(8, 4))
@@ -175,18 +229,36 @@ class GeradorPropostaSolar:
         
         return InlineImage(self.doc, buffer, width=Mm(180))
 
-    def calcular_fluxo_caixa(self, valor_investimento=25000):
+    def calcular_fluxo_caixa(self, valor_investimento, dados_cliente=None):
         """
         Calcula a tabela de fluxo de caixa projetado para 25 anos
         
         Args:
             valor_investimento (float): Valor do investimento inicial em R$
+            dados_cliente (dict): Dados da proposta para usar valores reais
             
         Returns:
             list: Lista de dicionários com dados anuais do fluxo de caixa
         """
+        # Extrair dados reais ou usar fallbacks (com tratamento de valores vazios)
+        tarifa_base = self.safe_float(dados_cliente.get('tarifa') if dados_cliente else None, 0.92)
+        
+        # Tentar pegar economia mensal sem formatação primeiro
+        economia_mensal = dados_cliente.get('valor_economia_mensal') if dados_cliente else None
+        if not economia_mensal:
+            # Fallback: tentar extrair de economia_mensal formatada
+            economia_mensal_str = dados_cliente.get('economia_mensal', 'R$ 1142,00') if dados_cliente else 'R$ 1142,00'
+            economia_mensal = self.safe_float(economia_mensal_str, 1142)
+        else:
+            economia_mensal = self.safe_float(economia_mensal, 1142)
+        
+        economia_anual_base = economia_mensal * 12
+        producao_media = self.safe_float(dados_cliente.get('producao_media') if dados_cliente else None, 1500)
+        consumo_medio = self.safe_float(dados_cliente.get('consumo_medio') if dados_cliente else None, 1350)
+        producao_anual = producao_media * 12
+        consumo_anual = consumo_medio * 12
+        
         lista_fluxo = []
-        economia_anual_base = 13700  # Economia base estimada (R$/ano)
         saldo = -valor_investimento  # Começa negativo (investimento)
         
         # Calcular economia acumulada para anos específicos (1, 5, 10, 25)
@@ -201,9 +273,11 @@ class GeradorPropostaSolar:
             econ_atual = economia_anual_base * fator_inflacao
             saldo += econ_atual
             
-            # Cálculos auxiliares
-            tarifa_ano = 0.92 * fator_inflacao
-            fatura_sem_solar = 1200 * 12 * tarifa_ano
+            # Cálculos auxiliares com dados reais
+            tarifa_ano = tarifa_base * fator_inflacao
+            fatura_sem_solar = consumo_anual * tarifa_ano
+            fatura_com_solar = 100  # Custo mínimo
+            credito_acumulado = (producao_anual - consumo_anual) * (1 + (ano * 0.01))  # Degrada 1% ao ano
             economia_acumulada = saldo + valor_investimento
             
             # Guardar valores específicos
@@ -227,17 +301,17 @@ class GeradorPropostaSolar:
                 # Ano atual (usado na primeira coluna)
                 'ano': str(ano),
                 
-                # Dados técnicos e financeiros DESTE ANO específico
+                # Dados técnicos e financeiros DESTE ANO específico (VALORES REAIS)
                 # Nomes conforme template Word
-                'tar': f'{tarifa_ano:.2f}'.replace('.', ','),  # Tarifa em R$
-                'tar_fb': '0,00',  # Tarifa Fio B
-                'en_g': '15.000',  # Energia Gerada em kWh
-                'en_cons': '12.000',  # Energia Consumida em kWh
-                'cred_ac': '3.000',  # Crédito Acumulado em kWh
+                'tar': f'{tarifa_ano:.2f}'.replace('.', ','),  # Tarifa em R$/kWh
+                'tar_fb': f'{(tarifa_ano * 0.3):.2f}'.replace('.', ','),  # Tarifa Fio B (30% da tarifa)
+                'en_g': f"{producao_anual:,.0f}".replace(',', '.'),  # Energia Gerada em kWh
+                'en_cons': f"{consumo_anual:,.0f}".replace(',', '.'),  # Energia Consumida em kWh
+                'cred_ac': f"{max(0, credito_acumulado):,.0f}".replace(',', '.'),  # Crédito Acumulado em kWh
                 
-                # Valores financeiros deste ano
+                # Valores financeiros deste ano (VALORES REAIS)
                 'fat_s_sol': f"R$ {fatura_sem_solar:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),  # Fatura Sem Solar
-                'fat_c_sol': 'R$ 100,00',  # Fatura Com Solar
+                'fat_c_sol': f"R$ {fatura_com_solar:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),  # Fatura Com Solar
                 'eco': f"R$ {econ_atual:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),  # Economia
                 'eco_ac': f"R$ {economia_acumulada:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),  # Economia Acumulada
                 'payback': texto_payback,
@@ -276,14 +350,37 @@ class GeradorPropostaSolar:
         
         # 1. Gerar gráficos
         self._print("\n1. Gerando graficos...")
-        img_comparativo = self.gerar_grafico_comparativo()
-        self._print("   OK Grafico comparativo criado")
+        # Extrair dados reais para o gráfico
+        consumo_mensal = self.safe_float(dados_cliente.get('consumo_medio'), 1200)
+        producao_mensal = self.safe_float(dados_cliente.get('producao_media'), 0)
+        
+        # Se produção é 0 ou muito baixa, tentar extrair do título do kit
+        if producao_mensal < 100:
+            titulo_kit = dados_cliente.get('title', '')
+            import re
+            # Buscar padrões como "4.200 KWH", "4200KWH", "1.500 KMH"
+            match = re.search(r'(\d+\.?\d*)\s*(?:KWH|KMH)', titulo_kit, re.IGNORECASE)
+            if match:
+                # Remover ponto de milhar e converter
+                valor_str = match.group(1).replace('.', '')
+                producao_mensal = float(valor_str)
+                self._print(f"   ⚠️ Produção extraída do título do kit: {producao_mensal} kWh")
+        
+        # Garantir valor mínimo razoável
+        if producao_mensal < 100:
+            producao_mensal = 1500
+            self._print(f"   ⚠️ Usando produção padrão: {producao_mensal} kWh")
+        
+        img_comparativo = self.gerar_grafico_comparativo(consumo_mensal, producao_mensal)
+        self._print(f"   OK Grafico comparativo criado (Consumo: {consumo_mensal} kWh, Produção: {producao_mensal} kWh)")
         
         # 2. Calcular tabelas financeiras
         self._print("\n2. Calculando tabelas financeiras...")
         valor_inv = dados_cliente.get('valor_investimento', 25000)
-        tabela_fluxo = self.calcular_fluxo_caixa(valor_inv)
-        self._print(f"   OK Fluxo de caixa calculado (25 anos)")
+        # Passar produção calculada para garantir consistência
+        dados_cliente_com_producao = {**dados_cliente, 'producao_media': producao_mensal}
+        tabela_fluxo = self.calcular_fluxo_caixa(valor_inv, dados_cliente_com_producao)
+        self._print(f"   OK Fluxo de caixa calculado (25 anos) com produção: {producao_mensal} kWh/mês")
         
         # 3. Gerar gráfico de retorno
         self._print("\n3. Gerando grafico de retorno...")
@@ -362,6 +459,11 @@ class GeradorPropostaSolar:
         
         # 4. Montar contexto completo
         self._print("\n4. Montando contexto de variaveis...")
+        
+        # DEBUG: Verificar simulações recebidas
+        simulacoes_recebidas = dados_cliente.get('simulacoes', [])
+        print(f"[DEBUG-PYTHON] Simulações recebidas: {simulacoes_recebidas}", flush=True)
+        
         contexto = {
             # --- Dados do Cliente ---
             'NOME_CLIENTE': dados_cliente.get('nome', 'CLIENTE NÃO INFORMADO'),
@@ -382,17 +484,19 @@ class GeradorPropostaSolar:
             'CELULAR_EMPRESA': '(11) 3333-3333',
             
             # --- Dados Técnicos do Sistema ---
-            'POT_TOTAL': dados_cliente.get('potencia', '5.5 kWp'),
-            'NUM_PAINEL': dados_cliente.get('num_paineis', '10'),
-            'PRODU_MEDIA': dados_cliente.get('producao_media', '650 kWh'),
-            'AREA_TOTAL': dados_cliente.get('area', '30 m²'),
-            'CONSU_MEDIO': dados_cliente.get('consumo_medio', '600 kWh'),
+            'POT_TOTAL': f"{self.safe_float(dados_cliente.get('potencia'), 5.5)} kWp",
+            'NUM_PAINEL': str(dados_cliente.get('num_paineis', '10')),
+            'PRODU_MEDIA': f"{int(producao_mensal)} kWh",  # Usar mesmo valor do gráfico
+            # ⭐ AREA_TOTAL - USAR DADOS REAIS DO CLIENTE
+            'AREA_TOTAL': dados_cliente.get('area') or (f"{self.safe_float(dados_cliente.get('area_necessaria'), 30)} m²" if dados_cliente.get('area_necessaria') else '30 m²'),
+            'CONSU_MEDIO': f"{int(self.safe_float(dados_cliente.get('consumo_medio'), 600))} kWh",
             
             # --- Valores Financeiros ---
             'VAL_INVEST': f"R$ {valor_inv:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+            'VALOR_ENTRADA': self.format_currency(self.safe_float(dados_cliente.get('valor_entrada'), 0)),
             'VALOR_POR_WP': 'R$ 4,55',
-            'VALOR_CONTA_ATUAL': dados_cliente.get('valor_conta_atual', 'R$ 1.200,00'),
-            'VALOR_CONTA_SOLAR': 'R$ 100,00',
+            'VALOR_CONTA_ATUAL': self.format_currency(self.safe_float(dados_cliente.get('valor_conta_atual'), 1200)),
+            'VALOR_CONTA_SOLAR': self.format_currency(self.safe_float(dados_cliente.get('valor_conta_solar'), 100)),
             'VALOR_ECONOMIA': dados_cliente.get('economia_mensal', 'R$ 1.100,00'),
             
             # --- Prazos e Garantias ---
@@ -415,7 +519,8 @@ class GeradorPropostaSolar:
             # --- Condições Comerciais ---
             'CONDICAO_PAGAMENTO': dados_cliente.get('condicao_pagamento', 'À vista ou financiado'),
             'FORMA_PAGAMENTO': 'PIX, Boleto, Cartão ou Financiamento',
-            'ESPECIFICACAO_KIT': 'Kit Premium c/ Monitoramento WiFi',
+            # ⭐ ESPECIFICACAO_KIT - USAR DADOS REAIS DO CLIENTE
+            'ESPECIFICACAO_KIT': dados_cliente.get('ESPECIFICACAO_KIT') or dados_cliente.get('especificacao_painel') or 'Kit Premium c/ Monitoramento WiFi',
             
             # --- Tabelas Dinâmicas ---
             'simulacao': dados_cliente.get('simulacoes', [
@@ -460,6 +565,8 @@ class GeradorPropostaSolar:
         total_vars = len([k for k in contexto.keys() if not isinstance(contexto[k], (list, InlineImage))])
         self._print(f"   OK {total_vars} variaveis simples")
         self._print(f"   OK {len(contexto['simulacao'])} simulacoes de financiamento")
+        if contexto['simulacao']:
+            self._print(f"      DEBUG Simulações: {contexto['simulacao']}")
         self._print(f"   OK {len(contexto['fluxo'])} anos de fluxo de caixa")
         self._print(f"   OK {len(contexto['rentabilidade'])} cenarios de rentabilidade")
         self._print(f"   OK 2 graficos gerados")

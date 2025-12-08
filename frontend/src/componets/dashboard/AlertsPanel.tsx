@@ -53,7 +53,7 @@ export function AlertsPanel({ alerts, loading = false, onDismiss }: AlertsPanelP
       case "warning":
         return "text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800";
       default:
-        return "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800";
+        return "text-[#1f8b49] dark:text-[#74e69e] bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)] border-[rgba(47,180,99,0.28)] dark:border-[rgba(116,230,158,0.18)]";
     }
   };
 

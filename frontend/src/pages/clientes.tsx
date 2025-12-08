@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Sidebar from "../componets/Sidbars/sidebar";
 import { ClienteForm } from "../componets/clientes/ClienteForm";
 import { ClienteDetailsModal } from "../components/customers/ClienteDetailsModal";
 import { formatCPF } from "../utils/format";
@@ -193,12 +192,12 @@ export function ClientesPage() {
 
   const getInitialColor = (name?: string) => {
     const colors = [
-      "bg-blue-500",
-      "bg-purple-500",
-      "bg-pink-500",
-      "bg-green-500",
-      "bg-yellow-500",
-      "bg-red-500",
+      "bg-[rgba(47,180,99,0.18)] text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]",
+      "bg-[rgba(116,230,158,0.22)] text-[#0f2418] dark:bg-[rgba(21,63,41,0.55)] dark:text-[#74e69e]",
+      "bg-[rgba(66,205,115,0.24)] text-[#0f2418] dark:bg-[rgba(17,49,32,0.6)] dark:text-[#74e69e]",
+      "bg-[rgba(21,63,41,0.26)] text-[#74e69e] dark:bg-[rgba(12,34,22,0.72)] dark:text-[#8cf7b3]",
+      "bg-[rgba(47,180,99,0.2)] text-[#0f2418] dark:bg-[rgba(9,26,17,0.72)] dark:text-[#74e69e]",
+      "bg-[rgba(12,40,26,0.35)] text-[#74e69e] dark:bg-[rgba(12,34,22,0.8)] dark:text-[#b4ffd2]",
     ];
     if (!name) return colors[0];
     const index = name.charCodeAt(0) % colors.length;
@@ -206,89 +205,89 @@ export function ClientesPage() {
   };
 
   const getChangeIndicator = (current: number, previous: number) => {
-    if (previous === 0) return { symbol: "", percent: 0, color: "text-gray-400" };
+    if (previous === 0) return { symbol: "", percent: 0, color: "text-[var(--color-text-muted)]" };
     const change = ((current - previous) / previous) * 100;
-    if (change > 0) return { symbol: "↑", percent: change, color: "text-green-500" };
+    if (change > 0) return { symbol: "↑", percent: change, color: "text-[#2fb463]" };
     if (change < 0) return { symbol: "↓", percent: Math.abs(change), color: "text-red-500" };
-    return { symbol: "→", percent: 0, color: "text-gray-400" };
+    return { symbol: "→", percent: 0, color: "text-[var(--color-text-muted)]" };
   };
 
   return (
-  <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
-        <div className="h-screen overflow-auto p-6">
-          <div className="w-full space-y-6">
-            {/* Card principal com todo o conteúdo */}
-            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+    <>
+      <div className="livechat-theme min-h-screen w-full pb-12 transition-colors duration-500">
+        <div className="mx-auto w-full max-w-[var(--page-max-width)] space-y-6 px-3 pb-10 pt-6 sm:px-6 lg:px-8">
+        {/* Card principal com todo o conteúdo */}
+        <div className="livechat-card rounded-3xl p-6 shadow-xl md:p-8">
               
               {/* Header */}
-              <div className="mb-6 flex items-center justify-between">
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Clientes</h1>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Gerencie seus clientes e acompanhe métricas
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingCliente(null);
-                    setShowForm(true);
-                  }}
-                  className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-700 hover:shadow-lg"
-                >
-                  + Novo Cliente
-                </button>
-              </div>
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-[var(--color-text)]">Clientes</h1>
+              <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                Gerencie seus clientes e acompanhe métricas
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setEditingCliente(null);
+                setShowForm(true);
+              }}
+              className="inline-flex items-center justify-center rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+            >
+              + Novo Cliente
+            </button>
+          </div>
 
               {/* Metrics Cards */}
               {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
+                <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   {/* Total */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-blue-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(47,180,99,0.16)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total</span>
-                        <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Total</span>
+                        <svg className="h-5 w-5 text-[#1f8b49]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
+                      <div className="text-2xl font-bold text-[var(--color-text)]">{stats.total}</div>
                     </div>
                   </div>
 
                   {/* Ativos */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-green-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(116,230,158,0.18)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Ativos</span>
-                        <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Ativos</span>
+                        <svg className="h-5 w-5 text-[#2fb463]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.active}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      <div className="text-2xl font-bold text-[var(--color-text)]">{stats.active}</div>
+                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                         {stats.total > 0 ? Math.round((stats.active / stats.total) * 100) : 0}% do total
                       </div>
                     </div>
                   </div>
 
                   {/* Novos/Mês */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-purple-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-purple-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(66,205,115,0.2)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Novos/Mês</span>
-                        <svg className="h-5 w-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Novos/Mês</span>
+                        <svg className="h-5 w-5 text-[#74e69e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.newThisMonth}</div>
+                      <div className="text-2xl font-bold text-[var(--color-text)]">{stats.newThisMonth}</div>
                       {(() => {
                         const indicator = getChangeIndicator(stats.newThisMonth, stats.newLastMonth);
                         return (
-                          <div className={`text-xs mt-1 ${indicator.color}`}>
+                          <div className={`mt-1 text-xs ${indicator.color}`}>
                             {indicator.symbol} {indicator.percent.toFixed(0)}% vs mês anterior
                           </div>
                         );
@@ -297,74 +296,74 @@ export function ClientesPage() {
                   </div>
 
                   {/* Conversão */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-orange-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-orange-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(255,178,89,0.24)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Conversão</span>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Conversão</span>
                         <svg className="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                      <div className="text-2xl font-bold text-[var(--color-text)]">
                         {Math.round(stats.conversionRate * 100)}%
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                         {stats.withProposals} com propostas
                       </div>
                     </div>
                   </div>
 
                   {/* Ticket Médio */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-pink-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-pink-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(47,180,99,0.16)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Ticket Médio</span>
-                        <svg className="h-5 w-5 text-pink-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Ticket Médio</span>
+                        <svg className="h-5 w-5 text-[#2fb463]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                        R$ {stats.avgTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      <div className="text-2xl font-bold text-[var(--color-text)]">
+                        R$ {stats.avgTicket.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                       </div>
                     </div>
                   </div>
 
                   {/* Inativos */}
-                  <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-red-500/10 via-transparent to-transparent p-5">
-                    <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-red-500/10 blur-2xl" />
+                  <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                    <div className="pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full bg-[rgba(255,111,97,0.22)] blur-3xl" />
                     <div className="relative">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Inativos</span>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">Inativos</span>
                         <svg className="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                       </div>
-                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.inactive}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Requer atenção</div>
+                      <div className="text-2xl font-bold text-[var(--color-text)]">{stats.inactive}</div>
+                      <div className="mt-1 text-xs text-[var(--color-text-muted)]">Requer atenção</div>
                     </div>
                   </div>
                 </div>
               )}
 
               {/* Filters */}
-              <div className="mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="mb-8">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   {/* Search */}
                   <input
                     type="text"
                     placeholder="Buscar por nome, email ou CPF..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="livechat-muted-surface rounded-xl px-4 py-2.5 text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   />
                   
                   {/* Status */}
                   <select
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="livechat-muted-surface rounded-xl px-4 py-2.5 text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   >
                     <option value="all">Todos os status</option>
                     <option value="ativo">Ativo</option>
@@ -375,26 +374,26 @@ export function ClientesPage() {
                   <select
                     value={stageFilter}
                     onChange={(e) => setStageFilter(e.target.value)}
-                    className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="livechat-muted-surface rounded-xl px-4 py-2.5 text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   >
                     <option value="all">Todas as etapas</option>
                     {columns.map((col) => (
                       <option key={col.id} value={col.id}>{col.name}</option>
                     ))}
                   </select>
-                </div>
-                
-                {/* Results count */}
-                <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
-                  Exibindo {filteredClientes.length} de {clientes.length} clientes
-                </div>
-              </div>
+            </div>
+
+            {/* Results count */}
+            <div className="mt-4 text-sm text-[var(--color-text-muted)]">
+              Exibindo {filteredClientes.length} de {clientes.length} clientes
+            </div>
+          </div>
 
               {/* Table with limited height and scroll */}
-              <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+              <div className="overflow-hidden rounded-2xl livechat-panel p-0">
                 <div className="max-h-[500px] overflow-y-auto">
                   <table className="w-full border-collapse text-left text-sm">
-                    <thead className="bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400 sticky top-0 z-10">
+                    <thead className="sticky top-0 z-10 bg-[rgba(47,180,99,0.12)] text-[var(--color-text-muted)]">
                       <tr className="uppercase tracking-wide text-xs">
                         <th className="px-4 py-3">Cliente</th>
                         <th className="px-4 py-3">CPF</th>
@@ -408,36 +407,36 @@ export function ClientesPage() {
                       {filteredClientes.map((cliente) => (
                         <tr
                           key={cliente.id}
-                          className="border-t border-gray-200 dark:border-gray-700 transition-colors duration-150 hover:bg-gray-50 dark:hover:bg-gray-900/50"
+                          className="border-t border-[var(--color-border)] transition-colors duration-150 hover:bg-[rgba(47,180,99,0.08)] dark:hover:bg-[rgba(27,58,41,0.7)]"
                         >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-3">
-                              <div className={`flex h-10 w-10 items-center justify-center rounded-full ${getInitialColor(cliente.name)} text-white font-semibold text-sm`}>
+                              <div className={`flex h-10 w-10 items-center justify-center rounded-full font-semibold text-sm ${getInitialColor(cliente.name)}`}>
                                 {getInitial(cliente.name)}
                               </div>
-                              <span className="font-medium text-gray-900 dark:text-white">
+                              <span className="font-medium text-[var(--color-text)]">
                                 {cliente.name}
                               </span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                          <td className="px-4 py-3 text-[var(--color-text-muted)]">
                             {cliente.cpf ? formatCPF(cliente.cpf) : "-"}
                           </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                          <td className="px-4 py-3 text-[var(--color-text-muted)]">
                             {cliente.email || "-"}
                           </td>
                           <td className="px-4 py-3">
                             <span
                               className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
                                 (cliente.status || "").toLowerCase() === "ativo"
-                                  ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                                  ? "bg-[rgba(47,180,99,0.14)] text-[#1f8b49] dark:bg-[rgba(27,58,41,0.65)] dark:text-[#74e69e]"
                                   : "bg-red-500/10 text-red-600 dark:text-red-400"
                               }`}
                             >
                               {cliente.status || "Inativo"}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                          <td className="px-4 py-3 text-[var(--color-text-muted)]">
                             {columns.find((c) => c.id === cliente.kanban_column_id)?.name || "-"}
                           </td>
                           <td className="px-4 py-3">
@@ -446,7 +445,7 @@ export function ClientesPage() {
                                 type="button"
                                 title="Ver detalhes e tarefas"
                                 onClick={() => setSelectedCliente(cliente)}
-                                className="rounded-lg p-2 text-purple-600 dark:text-purple-400 transition-colors duration-150 hover:bg-purple-500/10"
+                                className="rounded-lg p-2 text-[#2fb463] transition-colors duration-150 hover:bg-[rgba(47,180,99,0.12)]"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -472,7 +471,7 @@ export function ClientesPage() {
                                     },
                                   })
                                 }
-                                className="rounded-lg p-2 text-blue-600 dark:text-blue-400 transition-colors duration-150 hover:bg-blue-500/10"
+                                className="rounded-lg p-2 text-[#1f8b49] transition-colors duration-150 hover:bg-[rgba(47,180,99,0.12)]"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -491,7 +490,7 @@ export function ClientesPage() {
                                   setEditingCliente(cliente);
                                   setShowForm(true);
                                 }}
-                                className="rounded-lg p-2 text-blue-600 dark:text-blue-400 transition-colors duration-150 hover:bg-blue-500/10"
+                                className="rounded-lg p-2 text-[#2fb463] transition-colors duration-150 hover:bg-[rgba(47,180,99,0.12)]"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -529,13 +528,13 @@ export function ClientesPage() {
                       ))}
                       {filteredClientes.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-12 text-center text-gray-600 dark:text-gray-400">
+                          <td colSpan={6} className="px-4 py-12 text-center text-[var(--color-text-muted)]">
                             <div className="flex flex-col items-center justify-center">
-                              <svg className="h-12 w-12 text-gray-400 dark:text-gray-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="mb-3 h-12 w-12 text-[rgba(47,180,99,0.25)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                               </svg>
-                              <p className="font-medium">Nenhum cliente encontrado</p>
-                              <p className="text-sm mt-1">Tente ajustar os filtros ou adicione um novo cliente</p>
+                              <p className="font-medium text-[var(--color-text)]">Nenhum cliente encontrado</p>
+                              <p className="mt-1 text-sm text-[var(--color-text-muted)]">Tente ajustar os filtros ou adicione um novo cliente</p>
                             </div>
                           </td>
                         </tr>
@@ -548,60 +547,60 @@ export function ClientesPage() {
           </div>
         </div>
 
-        {/* Modal */}
-        {showForm && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div 
-              className="relative max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header fixo do modal */}
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-8 py-5">
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {editingCliente ? "Editar Cliente" : "Novo Cliente"}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Preencha os dados abaixo para {editingCliente ? "atualizar" : "cadastrar"} o cliente
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingCliente(null);
-                  }}
-                  className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Fechar
-                </button>
+      {/* Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(4,14,9,0.72)] backdrop-blur-sm p-4">
+          <div
+            className="relative max-h-[90vh] w-full max-w-6xl overflow-hidden rounded-3xl livechat-card shadow-[0_45px_120px_-60px_rgba(10,32,21,0.55)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header fixo do modal */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--color-border)] bg-[color-mix(in_srgb,var(--color-surface) 92%,transparent)] px-8 py-5 backdrop-blur-md">
+              <div>
+                <h3 className="text-2xl font-bold text-[var(--color-text)]">
+                  {editingCliente ? "Editar Cliente" : "Novo Cliente"}
+                </h3>
+                <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                  Preencha os dados abaixo para {editingCliente ? "atualizar" : "cadastrar"} o cliente
+                </p>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingCliente(null);
+                }}
+                className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-[var(--color-text-muted)] transition-all hover:bg-[rgba(47,180,99,0.12)] hover:text-[var(--color-text)]"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                Fechar
+              </button>
+            </div>
 
-              {/* Conteúdo com scroll */}
-              <div className="overflow-y-auto max-h-[calc(90vh-88px)] px-8 py-6">
-                <ClienteForm 
-                  initialData={editingCliente} 
-                  onSubmit={async (data: any) => {
-                    await handleFormSubmit(data);
-                    setShowForm(false);
-                    setEditingCliente(null);
-                  }} 
-                />
-              </div>
+            {/* Conteúdo com scroll */}
+            <div className="max-h-[calc(90vh-88px)] overflow-y-auto px-8 py-6">
+              <ClienteForm
+                initialData={editingCliente}
+                onSubmit={async (data: any) => {
+                  await handleFormSubmit(data);
+                  setShowForm(false);
+                  setEditingCliente(null);
+                }}
+              />
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Modal de Detalhes */}
-        {selectedCliente && (
-          <ClienteDetailsModal
-            cliente={selectedCliente}
-            onClose={() => setSelectedCliente(null)}
-          />
-        )}
-      </div>
+      {/* Modal de Detalhes */}
+      {selectedCliente && (
+        <ClienteDetailsModal
+          cliente={selectedCliente}
+          onClose={() => setSelectedCliente(null)}
+        />
+      )}
+    </>
   );
 }

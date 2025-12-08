@@ -16,6 +16,7 @@ import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
 import { TarefasPage } from './pages/tarefas'
 import { AutomationRulesPage } from './pages/AutomationRulesPage'
+import PerfilPage from './pages/perfil'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
 import { AppLayout } from './componets/layout/AppLayout'
@@ -29,6 +30,9 @@ function App() {
         <Route path='/' element={<Navigate to="/dashboard" replace />}/>
         <Route path='/login' element={<Login/>}/>
         <Route path='/reset-password' element={<ResetPassword/>}/>
+        
+        {/* Rota de perfil sem sidebar (tela dedicada) */}
+        <Route path='/perfil' element={<RequireAuth><PerfilPage /></RequireAuth>}/>
         
         {/* Rotas com sidebar compartilhada */}
         <Route element={<RequireAuth><AppLayout /></RequireAuth>}>

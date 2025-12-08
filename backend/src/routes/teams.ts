@@ -562,16 +562,76 @@ export function registerTeamsRoutes(app: Application) {
       
       const { data, error } = await supabaseAdmin
         .from("users")
-        .select("id, name, email, avatar, role, status")
+        .select("id, user_id, name, email, avatar, role, status, profile_picture")
         .eq("company_id", companyId)
         .order("name");
 
       if (error) throw error;
       
-      console.log('[GET /api/users] Found', data?.length, 'users');
-      res.json(data || []);
+      // Map users to include public_user_id for mentions
+      const mapped = (data || []).map((u: any) => ({
+        ...u,
+        public_user_id: u.user_id || u.id,
+      }));
+      
+      console.log('[GET /api/users] Found', mapped.length, 'users');
+      res.json(mapped);
     } catch (err: any) {
       console.error('[GET /api/users] Error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Alias for mentions functionality
+  app.get("/api/users/company", requireAuth, async (req: any, res) => {
+    try {
+      console.log('[GET /api/users/company] Starting request');
+      const authUserId = req.user?.id; // ID do auth.users
+      console.log('[GET /api/users/company] Auth user ID:', authUserId);
+      
+      if (!authUserId) {
+        console.log('[GET /api/users/company] No auth user ID found');
+        return res.status(401).json({ error: "Usuário não autenticado" });
+      }
+      
+      // Primeiro, busca o usuário atual na tabela public.users para pegar o company_id
+      console.log('[GET /api/users/company] Fetching user from public.users with user_id:', authUserId);
+      const { data: currentUser, error: userError } = await supabaseAdmin
+        .from("users")
+        .select("company_id")
+        .eq("user_id", authUserId)
+        .single();
+
+      console.log('[GET /api/users/company] Current user:', currentUser, 'Error:', userError);
+
+      if (userError || !currentUser?.company_id) {
+        console.error('[GET /api/users/company] User not found or no company:', userError);
+        return res.status(404).json({ error: "Usuário ou empresa não encontrada" });
+      }
+      
+      // Agora busca todos os usuários da mesma empresa
+      console.log('[GET /api/users/company] Fetching all users for company_id:', currentUser.company_id);
+      const { data, error } = await supabaseAdmin
+        .from("users")
+        .select("id, user_id, name, email, avatar, role, status")
+        .eq("company_id", currentUser.company_id)
+        .order("name");
+
+      console.log('[GET /api/users/company] Found users:', data?.length, 'Error:', error);
+
+      if (error) throw error;
+      
+      // Map users to include public_user_id for mentions
+      const mapped = (data || []).map((u: any) => ({
+        ...u,
+        public_user_id: u.user_id || u.id,
+        avatar: u.avatar || undefined,
+      }));
+      
+      console.log('[GET /api/users/company] Returning', mapped.length, 'users');
+      res.json(mapped);
+    } catch (err: any) {
+      console.error('[GET /api/users/company] Error:', err);
       res.status(500).json({ error: err.message });
     }
   });

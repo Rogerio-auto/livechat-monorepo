@@ -23,6 +23,7 @@ import { setIO, getIO } from "./lib/io.js";
 import { registerLivechatChatRoutes } from "./routes/livechat.chats.js";
 import { getRedis, rGet, rSet, redis, k } from "./lib/redis.js";
 import { registerLivechatContactsRoutes } from "./routes/livechat.contacts.js";
+import { registerLivechatInboxesRoutes } from "./routes/livechat.inboxes.js";
 import { registerKanbanRoutes } from "./routes/kanban.js";
 import { registerSettingsUsersRoutes } from "./routes/settings.users.js";
 import { registerSettingsInboxesRoutes } from "./routes/settings.inboxes.js";
@@ -573,12 +574,17 @@ async function requireAuth(req: any, res: any, next: any) {
   let token = bearer.startsWith("Bearer ") ? bearer.slice(7) : undefined;
   if (!token) token = req.cookies[JWT_COOKIE_NAME];
 
-  if (!token) return res.status(401).json({ error: "Not authenticated" });
+  if (!token) {
+    console.log("[requireAuth] No token found - cookie:", !!req.cookies[JWT_COOKIE_NAME], "bearer:", !!bearer);
+    return res.status(401).json({ error: "Not authenticated" });
+  }
 
   // valida token com Supabase
   const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user)
+  if (error || !data?.user) {
+    console.log("[requireAuth] Token validation failed:", error?.message);
     return res.status(401).json({ error: "Invalid token" });
+  }
 
   req.user = data.user;
   next();
@@ -1216,6 +1222,163 @@ io.on("connection", async (socket) => {
       return ack?.({ ok: true, items, total: count ?? (items?.length || 0) });
     } catch (e: any) {
       return ack?.({ ok: false, error: e?.message || "chats list error" });
+    }
+  });
+
+  // Send private message
+  socket.on("message:private:send", async (params: any, ack?: (resp: any) => void) => {
+    try {
+      const authUserId = await socketAuthUserId(socket);
+      if (!authUserId) {
+        console.error("[socket] message:private:send - not authenticated");
+        return ack?.({ ok: false, error: "Not authenticated" });
+      }
+
+      const chatId = params?.chatId as string;
+      const text = (params?.text as string) || "";
+      const mentions = (params?.mentions as string[]) || [];
+      
+      if (!chatId || !text.trim()) {
+        console.error("[socket] message:private:send - missing chatId or text", { chatId, hasText: !!text });
+        return ack?.({ ok: false, error: "chatId and text required" });
+      }
+
+      console.log("[socket] message:private:send - processing", { 
+        chatId, 
+        authUserId, 
+        textLength: text.length,
+        mentionsCount: mentions.length 
+      });
+
+      // Resolve local users.id from auth userId
+      let localUserId: string | null = null;
+      try {
+        const { data: urow } = await supabaseAdmin
+          .from("users")
+          .select("id")
+          .eq("user_id", authUserId)
+          .maybeSingle();
+        localUserId = (urow as any)?.id || null;
+      } catch (err) {
+        console.error("[socket] message:private:send - failed to resolve user", err);
+      }
+
+      // Get or create private_chat
+      let privateChatId: string | null = null;
+      const { data: existing } = await supabaseAdmin
+        .from("private_chats")
+        .select("id")
+        .eq("chat_id", chatId)
+        .maybeSingle();
+      
+      if (existing?.id) {
+        privateChatId = existing.id;
+      } else {
+        const { data: created, error: errCreate } = await supabaseAdmin
+          .from("private_chats")
+          .insert([{ chat_id: chatId, is_active: true }])
+          .select("id")
+          .single();
+        if (errCreate) {
+          console.error("[socket] message:private:send - failed to create private_chat", errCreate);
+          return ack?.({ ok: false, error: errCreate.message });
+        }
+        privateChatId = (created as any)?.id || null;
+      }
+
+      if (!privateChatId) {
+        console.error("[socket] message:private:send - no private_chat_id");
+        return ack?.({ ok: false, error: "Failed to create private_chat" });
+      }
+
+      // Insert message
+      const nowIso = new Date().toISOString();
+      const { data: inserted, error } = await supabaseAdmin
+        .from("private_messages")
+        .insert([{
+          content: String(text).trim(),
+          private_chat_id: privateChatId,
+          sender_id: localUserId || authUserId,
+          created_at: nowIso,
+        }])
+        .select("id, content, sender_id, created_at")
+        .single();
+
+      if (error) {
+        console.error("[socket] message:private:send - insert failed", error);
+        return ack?.({ ok: false, error: error.message });
+      }
+
+      console.log("[socket] message:private:send - message inserted", { messageId: inserted.id });
+
+      // Save mentions if any
+      if (mentions.length > 0 && localUserId) {
+        const mentionRows = mentions.map((mentionedUserId) => ({
+          message_id: inserted.id,
+          message_type: "PRIVATE",
+          mentioned_user_id: mentionedUserId,
+          mentioned_by_user_id: localUserId,
+        }));
+        
+        const { error: mentionError } = await supabaseAdmin
+          .from("message_mentions")
+          .insert(mentionRows);
+        
+        if (mentionError) {
+          console.warn("[socket] message:private:send - failed to save mentions", mentionError);
+        } else {
+          console.log("[socket] message:private:send - mentions saved", { count: mentions.length });
+          
+          // Emit notification to mentioned users
+          for (const mentionedUserId of mentions) {
+            io.to(`user:${mentionedUserId}`).emit("user:mentioned", {
+              messageId: inserted.id,
+              chatId: chatId,
+              mentionedBy: localUserId,
+              messageType: "PRIVATE",
+              timestamp: nowIso,
+            });
+            console.log("[socket] Notified user about mention", { mentionedUserId });
+          }
+        }
+      }
+
+      // Get sender name
+      let senderName: string | null = null;
+      if (localUserId) {
+        try {
+          const { data: u } = await supabaseAdmin
+            .from("users")
+            .select("name")
+            .eq("id", localUserId)
+            .maybeSingle();
+          senderName = (u as any)?.name || null;
+        } catch {}
+      }
+
+      // Format response
+      const mapped = {
+        id: inserted.id,
+        chat_id: chatId,
+        body: inserted.content,
+        sender_type: "AGENT",
+        sender_id: inserted.sender_id || null,
+        created_at: inserted.created_at,
+        view_status: null,
+        type: "PRIVATE",
+        is_private: true,
+        sender_name: senderName,
+      };
+
+      // Emit to room
+      io.to(`chat:${chatId}`).emit("message:new", mapped);
+      
+      console.log("[socket] message:private:send - success, emitted to room", { chatId, messageId: mapped.id });
+
+      return ack?.({ ok: true, data: mapped });
+    } catch (e: any) {
+      console.error("[socket] message:private:send - error", e);
+      return ack?.({ ok: false, error: e?.message || "private send error" });
     }
   });
 });
@@ -2713,19 +2876,31 @@ async function socketAuthUserId(socket: any): Promise<string | null> {
     if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
     if (!token) {
       const rawCookie = (headers["cookie"] as string | undefined) || "";
-      const parts = rawCookie.split(/;s*/).map((p) => p.split("="));
+      const parts = rawCookie.split(/;\s*/).map((p) => p.trim().split("="));
       for (const [k, v] of parts) {
-        if (k === JWT_COOKIE_NAME && v) {
+        if (k && k.trim() === JWT_COOKIE_NAME && v) {
           token = decodeURIComponent(v);
           break;
         }
       }
     }
-    if (!token) return null;
+    if (!token) {
+      console.warn("[socketAuthUserId] No token found", {
+        hasAuthHeader: !!auth,
+        hasCookie: !!headers["cookie"],
+        cookieKeys: headers["cookie"]?.split(/;\s*/).map((p: string) => p.split("=")[0]),
+        JWT_COOKIE_NAME,
+      });
+      return null;
+    }
     const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user?.id) return null;
+    if (error || !data?.user?.id) {
+      console.warn("[socketAuthUserId] Auth failed", { error: error?.message });
+      return null;
+    }
     return data.user.id as string;
-  } catch {
+  } catch (err) {
+    console.error("[socketAuthUserId] Exception", err);
     return null;
   }
 }
@@ -3303,6 +3478,7 @@ registerSubscriptionRoutes(app);
 // autenticados
 startLivechatSocketBridge();
 registerLivechatContactsRoutes(app);
+registerLivechatInboxesRoutes(app);
 registerOpenAIIntegrationRoutes(app);
 registerAgentsRoutes(app);
 registerAgentTemplatesRoutes(app);

@@ -6,13 +6,28 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import type { EventClickArg } from "@fullcalendar/core";
 import { API, fetchJson } from "../utils/api";
-import { 
-  FaCalendarAlt, FaUser, FaBuilding, FaCog, FaLock, FaPlus, 
-  FaFilter, FaTimes, FaEdit, FaTrash, FaEye, FaCheck, FaClock,
-  FaPhone, FaTasks, FaRedo, FaBullseye, FaChalkboardTeacher,
-  FaFileAlt, FaCalendarCheck, FaCalendarDay, FaCalendarWeek,
-  FaMapMarkerAlt, FaUsers, FaSave, FaBan, FaPalette, FaEnvelope,
-  FaFacebook, FaInstagram, FaTwitter, FaGlobe, FaHome
+import {
+  FaCalendarAlt,
+  FaUser,
+  FaBuilding,
+  FaCog,
+  FaLock,
+  FaTimes,
+  FaEdit,
+  FaTrash,
+  FaCheck,
+  FaClock,
+  FaPhone,
+  FaTasks,
+  FaFileAlt,
+  FaCalendarCheck,
+  FaCalendarWeek,
+  FaMapMarkerAlt,
+  FaUsers,
+  FaFacebook,
+  FaInstagram,
+  FaTwitter,
+  FaGlobe,
 } from "react-icons/fa";
 import { Task } from "../types/tasks";
 import { TaskModal } from "../components/tasks/TaskModal";
@@ -65,6 +80,71 @@ type UserProfile = {
   role: string;
 };
 
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  MEETING: "Reunião",
+  CALL: "Ligação",
+  TECHNICAL_VISIT: "Visita técnica",
+  FOLLOW_UP: "Follow-up",
+  PRESENTATION: "Apresentação",
+  TRAINING: "Treinamento",
+  OTHER: "Outro",
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  SCHEDULED: "Agendado",
+  CONFIRMED: "Confirmado",
+  IN_PROGRESS: "Em andamento",
+  COMPLETED: "Concluído",
+  CANCELLED: "Cancelado",
+  RESCHEDULED: "Reagendado",
+};
+
+const DIALOG_OVERLAY_CLASS = "fixed inset-0 z-50 flex items-center justify-center bg-[rgba(5,15,9,0.72)] px-4 py-6 backdrop-blur-[12px]";
+
+const ACTION_PRIMARY_CLASS = "inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#1f8b49] via-[#23a257] to-[#36c173] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_20px_60px_-35px_rgba(15,111,55,0.9)] transition hover:-translate-y-0.5 hover:shadow-[0_28px_65px_-32px_rgba(15,111,55,0.88)]";
+
+const ACTION_SECONDARY_CLASS = "inline-flex items-center gap-2 rounded-xl bg-[rgba(47,180,99,0.18)] px-4 py-2.5 text-sm font-semibold text-[rgba(13,117,64,0.95)] transition hover:bg-[rgba(47,180,99,0.25)]";
+
+const ACTION_DANGER_CLASS = "inline-flex items-center gap-2 rounded-xl bg-[rgba(239,68,68,0.14)] px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-[rgba(239,68,68,0.22)]";
+
+const ACTION_GHOST_CLASS = "inline-flex items-center gap-2 rounded-xl border border-transparent bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition hover:border-[rgba(47,180,99,0.35)] hover:bg-[rgba(47,180,99,0.08)] hover:text-emerald-600 dark:bg-gray-900 dark:text-gray-300 dark:hover:bg-[rgba(47,180,99,0.22)]";
+
+const INPUT_BASE_CLASS = "w-full rounded-xl border border-[rgba(15,36,24,0.12)] bg-white px-4 py-2.5 text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900 dark:text-white";
+
+const FILTER_SELECT_CLASS = `${INPUT_BASE_CLASS} text-sm`;
+
+const QUICK_ACTION_CLASS = "inline-flex items-center gap-2 rounded-lg bg-[rgba(47,180,99,0.08)] px-3 py-1.5 text-sm font-medium text-[rgba(13,117,64,0.95)] transition hover:bg-[rgba(47,180,99,0.16)] dark:bg-[rgba(47,180,99,0.16)] dark:text-emerald-200 dark:hover:bg-[rgba(47,180,99,0.24)]";
+
+const statusChipClass = (status?: string) => {
+  switch (status) {
+    case "COMPLETED":
+      return "bg-[rgba(47,180,99,0.28)] text-[rgba(12,83,44,0.95)]";
+    case "CONFIRMED":
+      return "bg-[rgba(59,130,246,0.25)] text-[rgba(26,78,202,0.95)]";
+    case "IN_PROGRESS":
+      return "bg-[rgba(250,204,21,0.3)] text-[rgba(133,77,14,0.95)]";
+    case "CANCELLED":
+      return "bg-[rgba(248,113,113,0.25)] text-[rgba(153,27,27,0.95)]";
+    case "RESCHEDULED":
+      return "bg-[rgba(56,189,248,0.25)] text-[rgba(8,96,131,0.95)]";
+    default:
+      return "bg-[rgba(47,180,99,0.2)] text-[rgba(13,117,64,0.95)]";
+  }
+};
+
+const formatEventDateTime = (iso: string | undefined) => {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 export function CalendarioPage() {
   const navigate = useNavigate();
   const [eventos, setEventos] = useState<Event[]>([]);
@@ -97,6 +177,16 @@ export function CalendarioPage() {
   
   const defaultCalendarId = useMemo(() => calendars.find((c) => c.is_default)?.id, [calendars]);
   const calendarRef = useRef<any>(null);
+
+  const selectedEventStartLabel = useMemo(
+    () => formatEventDateTime(selectedEvent?.start),
+    [selectedEvent?.start],
+  );
+
+  const selectedEventEndLabel = useMemo(
+    () => formatEventDateTime(selectedEvent?.end),
+    [selectedEvent?.end],
+  );
 
   const [form, setForm] = useState<any>({
     title: "",
@@ -146,7 +236,7 @@ export function CalendarioPage() {
         title: e.title,
         start: e.start,
         end: e.end,
-        backgroundColor: e.backgroundColor || "#3B82F6",
+        backgroundColor: e.backgroundColor || "#1F8B49",
         extendedProps: e.extendedProps,
       })));
     } catch (e: any) {
@@ -409,7 +499,7 @@ export function CalendarioPage() {
   const taskEvents = useMemo(() => {
     return tasks.map(task => {
       // Definir cor baseado no status
-      let backgroundColor = "#8B5CF6"; // purple-600 (default)
+      let backgroundColor = "#1f8b49"; // emerald tone (default)
       if (task.status === "COMPLETED") {
         backgroundColor = "#10B981"; // green-500
       } else if (task.status === "IN_PROGRESS") {
@@ -483,11 +573,11 @@ export function CalendarioPage() {
   }, [eventos, taskEvents, activeView, selectedCalendars, filterEventType, filterStatus, personalCalendars, companyCalendars, userProfile]);
 
   return (
-    <div className="ml-16 min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/20 transition-colors duration-300">
+    <div className="ml-16 min-h-screen bg-gradient-to-br from-[#f1faf5] via-white to-[#dff4e7] transition-colors duration-300 dark:from-[#04140a] dark:via-[#071d11] dark:to-[#103520]">
         <div className="h-screen overflow-auto p-6">
-          <div className="max-w-[1600px] mx-auto space-y-6">
+          <div className="mx-auto max-w-[1600px] space-y-6">
             {/* Card principal com todo o conteúdo */}
-            <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+            <div className="livechat-panel rounded-3xl p-8 shadow-[0_52px_120px_-72px_rgba(6,20,12,0.85)] transition-colors duration-300">
               {/* Header */}
               <div className="mb-6 flex items-center justify-between">
                 <div>
@@ -497,7 +587,7 @@ export function CalendarioPage() {
                   </p>
                   {/* Debug: Mostrar perfil do usuário */}
                   {userProfile && (
-                    <div className="mt-2 px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-xs font-medium text-blue-800 dark:text-blue-300 inline-block">
+                    <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-[rgba(47,180,99,0.12)] px-3 py-1 text-xs font-semibold text-[rgba(13,117,64,0.95)] dark:bg-[rgba(47,180,99,0.18)] dark:text-emerald-200">
                       {userProfile.name} • {userProfile.role}
                     </div>
                   )}
@@ -510,14 +600,14 @@ export function CalendarioPage() {
                       setTaskPrefilledDate(null);
                       setShowTaskModal(true);
                     }}
-                    className="rounded-xl bg-purple-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-purple-700 hover:shadow-lg flex items-center gap-2"
+                    className={`${ACTION_SECONDARY_CLASS} shadow-[0_25px_55px_-40px_rgba(21,128,61,0.65)]`}
                   >
                     <FaTasks /> Nova Tarefa
                   </button>
                   <button
                     type="button"
                     onClick={() => openNewEvent()}
-                    className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-blue-700 hover:shadow-lg"
+                    className={`${ACTION_PRIMARY_CLASS} px-6 py-3`}
                   >
                     + Novo Evento
                   </button>
@@ -528,12 +618,12 @@ export function CalendarioPage() {
               <div className="mb-6 space-y-4">
                 {/* Linha 1: Tabs de Visualização */}
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+                  <div className="flex items-center gap-2 rounded-xl bg-[rgba(47,180,99,0.08)] p-1 dark:bg-[rgba(47,180,99,0.14)]">
                     <button
                       onClick={() => setActiveView("all")}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                         activeView === "all"
-                          ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-md"
+                          ? "bg-white text-emerald-600 shadow-md dark:bg-gray-800 dark:text-emerald-300"
                           : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                       }`}
                     >
@@ -543,7 +633,7 @@ export function CalendarioPage() {
                       onClick={() => setActiveView("personal")}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                         activeView === "personal"
-                          ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-md"
+                          ? "bg-white text-emerald-600 shadow-md dark:bg-gray-800 dark:text-emerald-300"
                           : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                       }`}
                     >
@@ -553,7 +643,7 @@ export function CalendarioPage() {
                       onClick={() => setActiveView("team")}
                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                         activeView === "team"
-                          ? "bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-md"
+                          ? "bg-white text-emerald-600 shadow-md dark:bg-gray-800 dark:text-emerald-300"
                           : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
                       }`}
                     >
@@ -566,13 +656,13 @@ export function CalendarioPage() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => navigate("/configuracoes?tab=calendarios")}
-                        className="px-6 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-700 hover:to-purple-800 transition-all shadow-lg shadow-purple-500/50 flex items-center gap-2 transform hover:scale-105"
+                        className={`${ACTION_PRIMARY_CLASS} flex items-center gap-2 px-6 py-3`}
                       >
                         <FaCog size={18} /> Gerenciar Calendários
                       </button>
                       <button
                         onClick={() => navigate("/configuracoes?tab=permissoes-calendario")}
-                        className="px-6 py-3 rounded-xl text-sm font-bold bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-700 hover:to-orange-700 transition-all shadow-lg shadow-amber-500/50 flex items-center gap-2 transform hover:scale-105"
+                        className={`${ACTION_SECONDARY_CLASS} flex items-center gap-2 px-6 py-3 shadow-[0_25px_60px_-45px_rgba(21,128,61,0.6)]`}
                       >
                         <FaLock size={18} /> Permissões
                       </button>
@@ -591,7 +681,7 @@ export function CalendarioPage() {
                         const opts = Array.from(e.target.selectedOptions, opt => opt.value);
                         setSelectedCalendars(opts);
                       }}
-                      className="px-4 py-2 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all min-w-[200px]"
+                      className={`${FILTER_SELECT_CLASS} min-w-[220px]`}
                       size={1}
                     >
                       <option value="">Filtrar por Calendário...</option>
@@ -607,7 +697,7 @@ export function CalendarioPage() {
                   <select
                     value={filterEventType}
                     onChange={(e) => setFilterEventType(e.target.value)}
-                    className="px-4 py-2 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className={`${FILTER_SELECT_CLASS} appearance-none pr-10`}
                   >
                     <option value="all">Todos os Tipos</option>
                     <option value="MEETING">Reunião</option>
@@ -624,7 +714,7 @@ export function CalendarioPage() {
                   <select
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value)}
-                    className="px-4 py-2 rounded-lg text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    className={`${FILTER_SELECT_CLASS} appearance-none pr-10`}
                   >
                     <option value="all">Todos os Status</option>
                     <option value="SCHEDULED">Agendado</option>
@@ -643,7 +733,7 @@ export function CalendarioPage() {
                         setFilterEventType("all");
                         setFilterStatus("all");
                       }}
-                      className="px-4 py-2 rounded-lg text-sm font-medium bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center gap-2"
+                      className="inline-flex items-center gap-2 rounded-lg border border-[rgba(239,68,68,0.28)] bg-[rgba(239,68,68,0.08)] px-4 py-2 text-sm font-semibold text-[rgba(185,28,28,0.92)] transition hover:bg-[rgba(239,68,68,0.14)] dark:border-[rgba(239,68,68,0.35)] dark:bg-[rgba(239,68,68,0.16)] dark:text-red-200 dark:hover:bg-[rgba(239,68,68,0.24)]"
                     >
                       <FaTimes /> Limpar Filtros
                     </button>
@@ -651,7 +741,7 @@ export function CalendarioPage() {
 
                   {/* Indicador de filtros ativos */}
                   {(selectedCalendars.length > 0 || filterEventType !== "all" || filterStatus !== "all") && (
-                    <span className="text-xs text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-full">
+                    <span className="rounded-full bg-[rgba(47,180,99,0.12)] px-3 py-2 text-xs font-medium text-emerald-700 dark:bg-[rgba(47,180,99,0.22)] dark:text-emerald-200">
                       {[
                         selectedCalendars.length > 0 && `${selectedCalendars.length} calendário(s)`,
                         filterEventType !== "all" && "Tipo filtrado",
@@ -669,7 +759,7 @@ export function CalendarioPage() {
                       const api = calendarRef.current?.getApi();
                       api?.today();
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all flex items-center gap-2"
+                    className={QUICK_ACTION_CLASS}
                   >
                     <FaCalendarCheck /> Hoje
                   </button>
@@ -678,7 +768,7 @@ export function CalendarioPage() {
                       const api = calendarRef.current?.getApi();
                       api?.changeView('dayGridMonth');
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all flex items-center gap-2"
+                    className={QUICK_ACTION_CLASS}
                   >
                     <FaCalendarAlt /> Mês
                   </button>
@@ -687,7 +777,7 @@ export function CalendarioPage() {
                       const api = calendarRef.current?.getApi();
                       api?.changeView('timeGridWeek');
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                    className={QUICK_ACTION_CLASS}
                   >
                     📆 Semana
                   </button>
@@ -696,37 +786,37 @@ export function CalendarioPage() {
                       const api = calendarRef.current?.getApi();
                       api?.changeView('timeGridDay');
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                    className={QUICK_ACTION_CLASS}
                   >
                     📄 Dia
                   </button>
                   <div className="flex-1"></div>
-                  <span className="text-xs">
-                    Exibindo <strong className="text-blue-600 dark:text-blue-400">{filteredEvents.length}</strong> de <strong>{eventos.length}</strong> eventos
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    Exibindo <strong className="text-emerald-600 dark:text-emerald-300">{filteredEvents.length}</strong> de <strong>{eventos.length}</strong> eventos
                   </span>
                 </div>
               </div>
 
               {/* Error display */}
               {error && (
-                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+                <div className="mb-5 rounded-2xl border border-red-200/60 bg-red-50/90 p-4 text-sm text-red-800 shadow-sm dark:border-red-800/60 dark:bg-red-900/25 dark:text-red-200">
                   <div className="flex items-center gap-2">
-                    <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                    <span>{error}</span>
                   </div>
                 </div>
               )}
 
               {/* Calendar Info Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent p-5">
-                  <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
+              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-[0_38px_100px_-70px_rgba(8,24,16,0.7)]">
+                  <div className="absolute top-0 right-0 -mt-6 -mr-6 h-24 w-24 rounded-full bg-[rgba(47,180,99,0.18)] blur-2xl" />
                   <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total de Eventos</span>
-                      <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-400">Total de Eventos</span>
+                      <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
@@ -734,12 +824,12 @@ export function CalendarioPage() {
                   </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5">
-                  <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-purple-500/10 blur-2xl" />
+                <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-[0_38px_100px_-70px_rgba(8,24,16,0.7)]">
+                  <div className="absolute top-0 right-0 -mt-6 -mr-6 h-24 w-24 rounded-full bg-[rgba(34,155,90,0.18)] blur-2xl" />
                   <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Calendários</span>
-                      <svg className="h-5 w-5 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-400">Calendários</span>
+                      <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                       </svg>
                     </div>
@@ -747,12 +837,12 @@ export function CalendarioPage() {
                   </div>
                 </div>
 
-                <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-green-500/10 via-transparent to-transparent p-5">
-                  <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
+                <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-[0_38px_100px_-70px_rgba(8,24,16,0.7)]">
+                  <div className="absolute top-0 right-0 -mt-6 -mr-6 h-24 w-24 rounded-full bg-[rgba(22,128,72,0.2)] blur-2xl" />
                   <div className="relative">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Participantes</span>
-                      <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-400">Participantes</span>
+                      <svg className="h-5 w-5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                     </div>
@@ -765,11 +855,13 @@ export function CalendarioPage() {
               {calendars.length > 0 && (
                 <div className="mb-6 flex flex-wrap gap-3">
                   {calendars.map((cal) => (
-                    <div key={cal.id} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-gray-800">
+                    <div key={cal.id} className="flex items-center gap-2 rounded-full bg-[rgba(47,180,99,0.08)] px-3 py-1.5 dark:bg-[rgba(47,180,99,0.16)]">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cal.color }} />
                       <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{cal.name}</span>
                       {cal.is_default && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">Padrão</span>
+                        <span className="rounded px-1.5 py-0.5 text-xs font-semibold bg-[rgba(47,180,99,0.18)] text-emerald-700 dark:bg-[rgba(47,180,99,0.28)] dark:text-emerald-200">
+                          Padrão
+                        </span>
                       )}
                     </div>
                   ))}
@@ -778,8 +870,8 @@ export function CalendarioPage() {
 
               {/* Loading state */}
               {loading && (
-                <div className="mb-4 flex items-center justify-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                <div className="mb-4 flex items-center justify-center gap-2 text-sm text-[rgba(13,117,64,0.85)] dark:text-emerald-200">
+                  <svg className="h-4 w-4 animate-spin text-emerald-500" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
@@ -788,7 +880,7 @@ export function CalendarioPage() {
               )}
 
               {/* FullCalendar */}
-              <div className="rounded-2xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              <div className="livechat-panel rounded-2xl overflow-hidden border border-[rgba(15,36,24,0.12)] bg-white shadow-[0_48px_120px_-80px_rgba(6,20,12,0.85)] dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/90">
                 <FullCalendar
                   ref={calendarRef}
                   plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -841,21 +933,12 @@ export function CalendarioPage() {
 
         {/* Modal */}
         {showModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className={DIALOG_OVERLAY_CLASS}>
             <div
-              className="relative max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl"
+              className="livechat-panel relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-[rgba(15,36,24,0.12)] shadow-[0_52px_120px_-70px_rgba(6,20,12,0.85)] dark:border-[rgba(255,255,255,0.08)]"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header fixo do modal */}
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm px-8 py-5">
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {isEditingEvent ? "Editar Evento" : "Novo Evento"}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {isEditingEvent ? "Atualize os dados do evento" : "Preencha os dados do evento"}
-                  </p>
-                </div>
+              <div className="sticky top-0 z-10 bg-gradient-to-r from-[#10361f] via-[#1f8b49] to-[#2fb463] px-8 py-6 text-white">
                 <button
                   type="button"
                   onClick={() => {
@@ -863,43 +946,50 @@ export function CalendarioPage() {
                     setError(null);
                     setIsEditingEvent(false);
                   }}
-                  className="flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 transition-all hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white"
+                  className="absolute right-6 top-6 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
                 >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Fechar
+                  <FaTimes className="h-4 w-4" />
                 </button>
+                <div>
+                  <h3 className="text-2xl font-bold leading-tight">
+                    {isEditingEvent ? "Editar Evento" : "Novo Evento"}
+                  </h3>
+                  <p className="mt-1 text-sm text-white/80">
+                    {isEditingEvent ? "Atualize os dados do evento" : "Preencha os dados do evento"}
+                  </p>
+                </div>
               </div>
 
-              {/* Conteúdo com scroll */}
-              <div className="overflow-y-auto max-h-[calc(90vh-88px)] px-8 py-6">
-                {/* Error display inside modal */}
+              <div className="max-h-[70vh] overflow-y-auto px-8 py-6 space-y-6">
                 {error && (
-                  <div className="mb-4 rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800 p-4">
+                  <div className="rounded-2xl border border-red-200/60 bg-red-50/90 p-4 text-sm text-red-800 shadow-sm dark:border-red-800/60 dark:bg-red-900/25 dark:text-red-200">
                     <div className="flex items-center gap-2">
-                      <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+                      {error}
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Título *</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Título *
+                    </label>
                     <input
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       value={form.title}
                       onChange={(e) => setForm((f: any) => ({ ...f, title: e.target.value }))}
                       placeholder="Ex.: Reunião com cliente"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Calendário *</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Calendário *
+                    </label>
                     <select
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${INPUT_BASE_CLASS} appearance-none`}
                       value={form.calendar_id}
                       onChange={(e) => setForm((f: any) => ({ ...f, calendar_id: e.target.value }))}
                     >
@@ -912,27 +1002,33 @@ export function CalendarioPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Início *</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Início *
+                    </label>
                     <input
                       type="datetime-local"
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       value={form.start_time}
                       onChange={(e) => setForm((f: any) => ({ ...f, start_time: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fim *</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Fim *
+                    </label>
                     <input
                       type="datetime-local"
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       value={form.end_time}
                       onChange={(e) => setForm((f: any) => ({ ...f, end_time: e.target.value }))}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tipo</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Tipo
+                    </label>
                     <select
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${INPUT_BASE_CLASS} appearance-none`}
                       value={form.event_type}
                       onChange={(e) => setForm((f: any) => ({ ...f, event_type: e.target.value }))}
                     >
@@ -946,9 +1042,11 @@ export function CalendarioPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Status
+                    </label>
                     <select
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={`${INPUT_BASE_CLASS} appearance-none`}
                       value={form.status}
                       onChange={(e) => setForm((f: any) => ({ ...f, status: e.target.value }))}
                     >
@@ -961,40 +1059,47 @@ export function CalendarioPage() {
                     </select>
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Local</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Local
+                    </label>
                     <input
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       value={form.location}
                       onChange={(e) => setForm((f: any) => ({ ...f, location: e.target.value }))}
                       placeholder="Endereço, link ou plataforma"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Descrição</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Descrição
+                    </label>
                     <textarea
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      rows={3}
+                      className={`${INPUT_BASE_CLASS} min-h-[120px]`}
                       value={form.description}
                       onChange={(e) => setForm((f: any) => ({ ...f, description: e.target.value }))}
                       placeholder="Detalhes adicionais sobre o evento"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cliente</label>
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Cliente
+                    </label>
                     <input
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       placeholder="Buscar cliente..."
                       value={customerQuery}
                       onChange={(e) => setCustomerQuery(e.target.value)}
                     />
                     {customerQuery && customerOptions.length > 0 && (
-                      <div className="mt-1 rounded-xl border border-gray-300 dark:border-gray-600 max-h-40 overflow-auto bg-white dark:bg-gray-800">
+                      <div className="mt-2 max-h-40 overflow-auto rounded-2xl border border-[rgba(15,36,24,0.12)] bg-white shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900">
                         {customerOptions.map((c) => (
                           <button
                             type="button"
                             key={c.id}
-                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                              form.customer_id === c.id ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300" : "text-gray-700 dark:text-gray-300"
+                            className={`w-full px-4 py-2.5 text-left text-sm transition ${
+                              form.customer_id === c.id
+                                ? "bg-[rgba(47,180,99,0.14)] font-semibold text-emerald-700 dark:bg-[rgba(47,180,99,0.24)] dark:text-emerald-200"
+                                : "text-gray-700 hover:bg-[rgba(47,180,99,0.08)] dark:text-gray-300 dark:hover:bg-[rgba(47,180,99,0.16)]"
                             }`}
                             onClick={() => {
                               setForm((f: any) => ({ ...f, customer_id: c.id }));
@@ -1008,19 +1113,18 @@ export function CalendarioPage() {
                       </div>
                     )}
                     {form.customer_id && !customerQuery && (
-                      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                        <FaCheck /> Cliente selecionado
+                      <div className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-300">
+                        <FaCheck className="h-3.5 w-3.5" /> Cliente selecionado
                       </div>
                     )}
                   </div>
-                  
-                  {/* Campo de Link da Reunião Online */}
+
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Link da Reunião (Google Meet, Zoom, Teams, etc.)
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Link da reunião (Google Meet, Zoom, Teams, etc.)
                     </label>
                     <input
-                      className="w-full rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2.5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className={INPUT_BASE_CLASS}
                       value={form.meeting_url || ""}
                       onChange={(e) => setForm((f: any) => ({ ...f, meeting_url: e.target.value }))}
                       placeholder="https://meet.google.com/abc-defg-hij"
@@ -1028,10 +1132,10 @@ export function CalendarioPage() {
                   </div>
                 </div>
 
-                <div className="mt-6 flex items-center justify-end gap-3">
+                <div className="flex items-center justify-end gap-3">
                   <button
                     type="button"
-                    className="px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    className={ACTION_GHOST_CLASS}
                     onClick={() => {
                       setShowModal(false);
                       setError(null);
@@ -1041,7 +1145,7 @@ export function CalendarioPage() {
                   </button>
                   <button
                     type="button"
-                    className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`${ACTION_PRIMARY_CLASS} disabled:cursor-not-allowed disabled:opacity-60`}
                     onClick={saveEvent}
                     disabled={!form.title || !form.calendar_id || !form.start_time || !form.end_time}
                   >
@@ -1055,287 +1159,263 @@ export function CalendarioPage() {
         
         {/* Modal: Visualizar/Editar Evento */}
         {showViewEventModal && selectedEvent && (
-          <div 
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md p-4"
+          <div
+            className={DIALOG_OVERLAY_CLASS}
             onClick={() => {
               setShowViewEventModal(false);
               setSelectedEvent(null);
               setIsEditingEvent(false);
             }}
           >
-            <div 
-              className="relative max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-white dark:bg-gray-900 shadow-2xl"
+            <div
+              className="livechat-panel relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-[rgba(15,36,24,0.12)] bg-white shadow-[0_52px_120px_-70px_rgba(6,20,12,0.85)] dark:bg-gray-900"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header com gradiente e close button */}
-              <div className="relative bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-8 py-6">
+              <div className="relative bg-gradient-to-r from-[#10361f] via-[#1f8b49] to-[#2fb463] px-8 py-6 text-white">
                 <button
                   onClick={() => {
                     setShowViewEventModal(false);
                     setSelectedEvent(null);
                     setIsEditingEvent(false);
                   }}
-                  className="absolute top-4 right-4 p-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-all"
+                  className="absolute right-6 top-6 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
                 >
-                  <FaTimes size={20} />
+                  <FaTimes className="h-4 w-4" />
                 </button>
-                
-                <div className="flex items-start gap-4">
-                  <div className="p-3 rounded-xl bg-white/20 backdrop-blur-sm">
-                    <FaCalendarAlt size={28} className="text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="text-3xl font-bold text-white mb-2">
-                      {selectedEvent.title}
-                    </h2>
-                    <div className="flex items-center gap-4 text-white/90 text-sm">
-                      <span className="flex items-center gap-2">
-                        <FaClock />
-                        {new Date(selectedEvent.start || "").toLocaleDateString("pt-BR")}
-                      </span>
-                      <span className="px-3 py-1 rounded-full bg-white/20 backdrop-blur-sm">
-                        {selectedEvent.extendedProps?.event_type || "Evento"}
-                      </span>
-                      <span className={`px-3 py-1 rounded-full backdrop-blur-sm ${
-                        selectedEvent.extendedProps?.status === "COMPLETED" ? "bg-green-500/30" :
-                        selectedEvent.extendedProps?.status === "CANCELLED" ? "bg-red-500/30" :
-                        "bg-blue-500/30"
-                      }`}>
-                        {selectedEvent.extendedProps?.status || "SCHEDULED"}
-                      </span>
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-3 pr-12">
+                    <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+                      <FaCalendarAlt className="h-5 w-5" />
                     </div>
+                    <h2 className="text-3xl font-bold leading-tight">{selectedEvent.title}</h2>
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-white/85">
+                      {selectedEvent.extendedProps?.event_type && (
+                        <span className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1">
+                          <FaCalendarWeek className="h-3.5 w-3.5" />
+                          {EVENT_TYPE_LABELS[selectedEvent.extendedProps.event_type] || selectedEvent.extendedProps.event_type}
+                        </span>
+                      )}
+                      {selectedEvent.extendedProps?.status && (
+                        <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold ${statusChipClass(selectedEvent.extendedProps.status)} backdrop-blur-sm`}>
+                          <FaCheck className="h-3.5 w-3.5" />
+                          {STATUS_LABELS[selectedEvent.extendedProps.status] || selectedEvent.extendedProps.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-start gap-2 text-sm text-white/85">
+                    {selectedEventStartLabel && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 font-semibold">
+                        <FaCalendarCheck className="h-3.5 w-3.5" />
+                        {selectedEventStartLabel}
+                      </span>
+                    )}
+                    {selectedEventEndLabel && (
+                      <span className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 font-semibold">
+                        <FaClock className="h-3.5 w-3.5" />
+                        Término: {selectedEventEndLabel}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Corpo do Modal */}
-              <div className="overflow-y-auto max-h-[calc(90vh-250px)] p-8">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* Coluna Principal - Detalhes do Evento */}
-                  <div className="lg:col-span-2 space-y-6">
-                    
-                    {/* Card de Horário */}
-                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
-                      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                        <FaClock className="text-blue-600 dark:text-blue-400" />
+              <div className="max-h-[70vh] overflow-y-auto px-8 py-6 space-y-6">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                  <div className="space-y-6 lg:col-span-2">
+                    <div className="rounded-2xl border border-[rgba(15,36,24,0.08)] bg-white/95 p-6 shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/95">
+                      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        <FaClock className="h-4 w-4 text-emerald-400" />
                         Horário
                       </h3>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Início</p>
-                          <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                            {new Date(selectedEvent.start || "").toLocaleString("pt-BR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })}
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Início</p>
+                          <p className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{selectedEventStartLabel || "—"}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Término</p>
-                          <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                            {new Date(selectedEvent.end || "").toLocaleString("pt-BR", {
-                              day: "2-digit",
-                              month: "short",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })}
-                          </p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Término</p>
+                          <p className="mt-1 text-base font-semibold text-gray-900 dark:text-gray-100">{selectedEventEndLabel || "—"}</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Descrição */}
                     {selectedEvent.extendedProps?.description && (
-                      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                          <FaFileAlt className="text-purple-600 dark:text-purple-400" />
+                      <div className="rounded-2xl border border-[rgba(15,36,24,0.08)] bg-white/95 p-6 shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/95">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          <FaFileAlt className="h-4 w-4 text-emerald-400" />
                           Descrição
                         </h3>
-                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed">
+                        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                           {selectedEvent.extendedProps.description}
                         </p>
                       </div>
                     )}
 
-                    {/* Local */}
                     {selectedEvent.extendedProps?.location && (
-                      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-                          <FaMapMarkerAlt className="text-red-600 dark:text-red-400" />
+                      <div className="rounded-2xl border border-[rgba(15,36,24,0.08)] bg-white/95 p-6 shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/95">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          <FaMapMarkerAlt className="h-4 w-4 text-emerald-400" />
                           Local
                         </h3>
-                        <p className="text-gray-700 dark:text-gray-300">
+                        <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">
                           {selectedEvent.extendedProps.location}
                         </p>
                       </div>
                     )}
 
+                    {selectedEvent.extendedProps?.meeting_url && (
+                      <div className="rounded-2xl border border-[rgba(47,180,99,0.35)] bg-[rgba(47,180,99,0.08)] p-6 shadow-sm">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-emerald-600">
+                          <FaGlobe className="h-4 w-4" />
+                          Reunião online
+                        </h3>
+                        <p className="mt-2 text-sm text-emerald-900/70 dark:text-emerald-200/80">Acesse a reunião diretamente no link abaixo.</p>
+                        <a
+                          href={selectedEvent.extendedProps.meeting_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 underline-offset-4 hover:underline dark:text-emerald-300"
+                        >
+                          Abrir link da reunião
+                        </a>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Coluna Lateral - Informações do Cliente */}
-                  <div className="lg:col-span-1 space-y-6">
-                    
-                    {/* Card do Cliente/Lead */}
+                  <div className="space-y-6">
                     {(customerData || leadData || selectedEvent.extendedProps?.customer_name || selectedEvent.extendedProps?.lead_name) && (
-                      <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-6 border border-purple-200 dark:border-purple-800">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                          <FaUser className="text-purple-600 dark:text-purple-400" />
-                          {customerData ? 'Cliente' : leadData ? 'Lead' : 'Cliente/Lead'}
+                      <div className="rounded-2xl border border-[rgba(15,36,24,0.1)] bg-white/95 p-6 shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/95">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                          <FaUsers className="h-4 w-4 text-emerald-400" />
+                          {customerData ? "Cliente" : leadData ? "Lead" : "Contato"}
                         </h3>
-                        
                         {loadingCustomer ? (
-                          <div className="flex items-center justify-center py-8">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                          <div className="flex items-center justify-center py-10">
+                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[rgba(47,180,99,0.35)] border-t-transparent" />
                           </div>
                         ) : (
-                          <div className="space-y-4">
-                            {/* Avatar e Nome */}
+                          <div className="mt-4 space-y-4 text-sm text-gray-700 dark:text-gray-300">
                             <div className="flex items-center gap-3">
-                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center text-white font-bold text-xl">
-                                {(customerData?.name || leadData?.name || selectedEvent.extendedProps.customer_name || selectedEvent.extendedProps.lead_name || "?")[0].toUpperCase()}
+                              <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-[rgba(47,180,99,0.18)] text-lg font-bold text-emerald-600 dark:text-emerald-300">
+                                {(customerData?.name || leadData?.name || selectedEvent.extendedProps.customer_name || selectedEvent.extendedProps.lead_name || "?").substring(0, 1).toUpperCase()}
                               </div>
                               <div>
-                                <p className="font-bold text-gray-900 dark:text-white text-lg">
-                                  {customerData?.name || leadData?.name || selectedEvent.extendedProps.customer_name || selectedEvent.extendedProps.lead_name || "Cliente"}
+                                <p className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                                  {customerData?.name || leadData?.name || selectedEvent.extendedProps.customer_name || selectedEvent.extendedProps.lead_name || "Contato"}
                                 </p>
                                 {(customerData?.phone || leadData?.phone || selectedEvent.extendedProps.customer_phone) && (
-                                  <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                                    <FaPhone size={12} />
+                                  <p className="mt-1 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <FaPhone className="h-3.5 w-3.5" />
                                     {customerData?.phone || leadData?.phone || selectedEvent.extendedProps.customer_phone}
                                   </p>
                                 )}
                               </div>
                             </div>
 
-                            {/* Email */}
                             {(customerData?.email || leadData?.email || selectedEvent.extendedProps.customer_email) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                                  <FaEnvelope size={10} /> Email
-                                </p>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white break-all">
+                              <div className="rounded-2xl bg-[rgba(47,180,99,0.08)] px-4 py-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-200/80">Email</p>
+                                <p className="mt-1 break-all text-sm font-medium text-gray-900 dark:text-gray-100">
                                   {customerData?.email || leadData?.email || selectedEvent.extendedProps.customer_email}
                                 </p>
                               </div>
                             )}
 
-                            {/* Telefones Adicionais do Lead */}
                             {leadData && (leadData.cellphone || leadData.altCellphone || leadData.telephone || leadData.altTelephone) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 flex items-center gap-1">
-                                  <FaPhone size={10} /> Telefones
-                                </p>
-                                <div className="space-y-1 text-sm">
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Telefones adicionais</p>
+                                <div className="mt-1 space-y-1 text-xs text-gray-500 dark:text-gray-400">
                                   {leadData.cellphone && (
-                                    <p className="text-gray-700 dark:text-gray-300">
-                                      <span className="text-gray-500 dark:text-gray-400">Celular:</span> {leadData.cellphone}
+                                    <p>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-200">Celular:</span> {leadData.cellphone}
                                     </p>
                                   )}
                                   {leadData.altCellphone && (
-                                    <p className="text-gray-700 dark:text-gray-300">
-                                      <span className="text-gray-500 dark:text-gray-400">Cel. Alt:</span> {leadData.altCellphone}
+                                    <p>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-200">Cel. alt.:</span> {leadData.altCellphone}
                                     </p>
                                   )}
                                   {leadData.telephone && (
-                                    <p className="text-gray-700 dark:text-gray-300">
-                                      <span className="text-gray-500 dark:text-gray-400">Telefone:</span> {leadData.telephone}
+                                    <p>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-200">Telefone:</span> {leadData.telephone}
                                     </p>
                                   )}
                                   {leadData.altTelephone && (
-                                    <p className="text-gray-700 dark:text-gray-300">
-                                      <span className="text-gray-500 dark:text-gray-400">Tel. Alt:</span> {leadData.altTelephone}
+                                    <p>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-200">Telefone alt.:</span> {leadData.altTelephone}
                                     </p>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* CPF/CNPJ (Customer ou Lead) */}
                             {(customerData?.cpf_cnpj || leadData?.cpf) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">CPF/CNPJ</p>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Documento</p>
+                                <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
                                   {customerData?.cpf_cnpj || leadData?.cpf}
                                 </p>
                               </div>
                             )}
 
-                            {/* Endereço Completo do Lead */}
-                            {leadData && (leadData.street || leadData.address) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                                  <FaHome size={10} /> Endereço
-                                </p>
-                                <div className="text-sm text-gray-700 dark:text-gray-300 space-y-0.5">
-                                  {leadData.street && (
+                            {((leadData && (leadData.street || leadData.address)) || customerData?.address) && (
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Endereço</p>
+                                <div className="mt-1 space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                  {leadData?.street && (
                                     <p>
                                       {leadData.street}
                                       {leadData.number && `, ${leadData.number}`}
                                       {leadData.complement && ` - ${leadData.complement}`}
                                     </p>
                                   )}
-                                  {leadData.neighborhood && <p>{leadData.neighborhood}</p>}
-                                  {(leadData.city || leadData.state) && (
+                                  {leadData?.neighborhood && <p>{leadData.neighborhood}</p>}
+                                  {(leadData?.city || leadData?.state) && (
                                     <p>
-                                      {leadData.city}{leadData.state && ` - ${leadData.state}`}
-                                      {leadData.cep && ` | CEP: ${leadData.cep}`}
+                                      {leadData?.city}
+                                      {leadData?.state && ` - ${leadData.state}`}
+                                      {leadData?.cep && ` • CEP ${leadData.cep}`}
                                     </p>
                                   )}
-                                  {!leadData.street && leadData.address && <p>{leadData.address}</p>}
+                                  {leadData?.address && !leadData.street && <p>{leadData.address}</p>}
+                                  {customerData?.address && !leadData && <p>{customerData.address}</p>}
                                 </div>
                               </div>
                             )}
 
-                            {/* Endereço Simples do Customer */}
-                            {customerData?.address && !leadData && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1 flex items-center gap-1">
-                                  <FaHome size={10} /> Endereço
-                                </p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
-                                  {customerData.address}
-                                </p>
-                              </div>
-                            )}
-
-                            {/* Redes Sociais do Lead */}
                             {leadData && (leadData.facebook || leadData.instagram || leadData.twitter || leadData.website || leadData.site) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Redes Sociais</p>
-                                <div className="flex flex-wrap gap-2">
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Redes sociais</p>
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs">
                                   {leadData.facebook && (
                                     <a
-                                      href={leadData.facebook.startsWith('http') ? leadData.facebook : `https://facebook.com/${leadData.facebook}`}
+                                      href={leadData.facebook.startsWith("http") ? leadData.facebook : `https://facebook.com/${leadData.facebook}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors text-xs"
+                                      className="inline-flex items-center gap-1 rounded-full bg-[rgba(47,180,99,0.14)] px-3 py-1 font-semibold text-emerald-600 transition hover:bg-[rgba(47,180,99,0.2)] dark:text-emerald-300"
                                     >
-                                      <FaFacebook /> Facebook
+                                      <FaFacebook className="h-3 w-3" /> Facebook
                                     </a>
                                   )}
                                   {leadData.instagram && (
                                     <a
-                                      href={leadData.instagram.startsWith('http') ? leadData.instagram : `https://instagram.com/${leadData.instagram}`}
+                                      href={leadData.instagram.startsWith("http") ? leadData.instagram : `https://instagram.com/${leadData.instagram}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300 hover:bg-pink-200 dark:hover:bg-pink-900/50 transition-colors text-xs"
+                                      className="inline-flex items-center gap-1 rounded-full bg-[rgba(47,180,99,0.14)] px-3 py-1 font-semibold text-emerald-600 transition hover:bg-[rgba(47,180,99,0.2)] dark:text-emerald-300"
                                     >
-                                      <FaInstagram /> Instagram
+                                      <FaInstagram className="h-3 w-3" /> Instagram
                                     </a>
                                   )}
                                   {leadData.twitter && (
                                     <a
-                                      href={leadData.twitter.startsWith('http') ? leadData.twitter : `https://twitter.com/${leadData.twitter}`}
+                                      href={leadData.twitter.startsWith("http") ? leadData.twitter : `https://twitter.com/${leadData.twitter}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 hover:bg-sky-200 dark:hover:bg-sky-900/50 transition-colors text-xs"
+                                      className="inline-flex items-center gap-1 rounded-full bg-[rgba(47,180,99,0.14)] px-3 py-1 font-semibold text-emerald-600 transition hover:bg-[rgba(47,180,99,0.2)] dark:text-emerald-300"
                                     >
-                                      <FaTwitter /> Twitter
+                                      <FaTwitter className="h-3 w-3" /> Twitter
                                     </a>
                                   )}
                                   {(leadData.website || leadData.site) && (
@@ -1343,35 +1423,32 @@ export function CalendarioPage() {
                                       href={leadData.website || leadData.site}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-xs"
+                                      className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1 font-semibold text-gray-700 transition hover:text-emerald-600 dark:bg-gray-800/60 dark:text-gray-200"
                                     >
-                                      <FaGlobe /> Website
+                                      <FaGlobe className="h-3 w-3" /> Website
                                     </a>
                                   )}
                                 </div>
                               </div>
                             )}
 
-                            {/* Notas */}
                             {(customerData?.notes || leadData?.notes || selectedEvent.extendedProps.customer_notes) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Notas</p>
-                                <p className="text-sm text-gray-700 dark:text-gray-300">
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Notas</p>
+                                <p className="mt-1 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
                                   {customerData?.notes || leadData?.notes || selectedEvent.extendedProps.customer_notes}
                                 </p>
                               </div>
                             )}
 
-                            {/* Tags */}
-                            {(customerData?.tags || leadData?.tags || selectedEvent.extendedProps.customer_tags) && 
-                             ((customerData?.tags?.length || 0) > 0 || (leadData?.tags?.length || 0) > 0 || (selectedEvent.extendedProps.customer_tags?.length || 0) > 0) && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Tags</p>
-                                <div className="flex flex-wrap gap-2">
+                            {(customerData?.tags?.length || leadData?.tags?.length || selectedEvent.extendedProps.customer_tags?.length) && (
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Tags</p>
+                                <div className="mt-2 flex flex-wrap gap-2">
                                   {(customerData?.tags || leadData?.tags || selectedEvent.extendedProps.customer_tags || []).map((tag: string, idx: number) => (
-                                    <span 
+                                    <span
                                       key={idx}
-                                      className="px-2 py-1 text-xs rounded-full bg-purple-200 dark:bg-purple-800 text-purple-900 dark:text-purple-200"
+                                      className="inline-flex items-center gap-1 rounded-full bg-[rgba(47,180,99,0.16)] px-3 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-300"
                                     >
                                       {tag}
                                     </span>
@@ -1380,23 +1457,17 @@ export function CalendarioPage() {
                               </div>
                             )}
 
-                            {/* Status do Lead */}
                             {leadData?.status && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Status</p>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {leadData.status}
-                                </p>
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Status do lead</p>
+                                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{leadData.status}</p>
                               </div>
                             )}
 
-                            {/* Origem do Lead */}
                             {leadData?.source && (
-                              <div className="pt-3 border-t border-purple-200 dark:border-purple-700">
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Origem</p>
-                                <p className="text-sm font-medium text-gray-900 dark:text-white">
-                                  {leadData.source}
-                                </p>
+                              <div className="rounded-2xl bg-white px-4 py-3 shadow-inner dark:bg-gray-800/60">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Origem</p>
+                                <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-gray-100">{leadData.source}</p>
                               </div>
                             )}
                           </div>
@@ -1404,45 +1475,37 @@ export function CalendarioPage() {
                       </div>
                     )}
 
-                    {/* Card de Metadados */}
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-                      <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-4">Informações Adicionais</h3>
-                      <div className="space-y-3 text-sm">
+                    <div className="rounded-2xl border border-[rgba(15,36,24,0.08)] bg-white/95 p-6 shadow-sm dark:border-[rgba(255,255,255,0.08)] dark:bg-gray-900/95">
+                      <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Informações adicionais</h3>
+                      <div className="mt-4 space-y-3 text-sm text-gray-700 dark:text-gray-300">
                         <div>
-                          <p className="text-gray-500 dark:text-gray-400">Calendário</p>
-                          <p className="text-gray-900 dark:text-white font-medium">
-                            {selectedEvent.extendedProps?.calendar_name || "N/A"}
-                          </p>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Calendário</p>
+                          <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">{selectedEvent.extendedProps?.calendar_name || "N/A"}</p>
                         </div>
                         {selectedEvent.extendedProps?.created_by_name && (
                           <div>
-                            <p className="text-gray-500 dark:text-gray-400">Criado por</p>
-                            <p className="text-gray-900 dark:text-white font-medium">
-                              {selectedEvent.extendedProps.created_by_name}
-                            </p>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Criado por</p>
+                            <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">{selectedEvent.extendedProps.created_by_name}</p>
                           </div>
                         )}
                         {selectedEvent.extendedProps?.created_at && (
                           <div>
-                            <p className="text-gray-500 dark:text-gray-400">Criado em</p>
-                            <p className="text-gray-900 dark:text-white font-medium">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Criado em</p>
+                            <p className="mt-1 font-semibold text-gray-900 dark:text-gray-100">
                               {new Date(selectedEvent.extendedProps.created_at).toLocaleDateString("pt-BR")}
                             </p>
                           </div>
                         )}
                       </div>
                     </div>
-
                   </div>
                 </div>
               </div>
 
-              {/* Footer com Ações */}
-              <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 px-8 py-4 flex justify-between items-center">
-                <div className="flex gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[rgba(15,36,24,0.08)] bg-gray-50/80 px-8 py-4 dark:border-[rgba(255,255,255,0.06)] dark:bg-gray-900/70">
+                <div className="flex flex-wrap gap-3">
                   <button
                     onClick={() => {
-                      // Preencher o form com os dados do evento
                       setForm({
                         title: selectedEvent.title || "",
                         description: selectedEvent.extendedProps?.description || "",
@@ -1456,15 +1519,14 @@ export function CalendarioPage() {
                         lead_id: selectedEvent.extendedProps?.lead_id || undefined,
                         meeting_url: selectedEvent.extendedProps?.meeting_url || undefined,
                       });
-                      // Marcar que está editando
                       setIsEditingEvent(true);
-                      // Fechar modal de visualização e abrir modal de edição
                       setShowViewEventModal(false);
                       setShowModal(true);
                     }}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30"
+                    className={ACTION_SECONDARY_CLASS}
                   >
-                    <FaEdit /> Editar
+                    <FaEdit className="h-4 w-4" />
+                    Editar
                   </button>
                   <button
                     onClick={async () => {
@@ -1485,9 +1547,10 @@ export function CalendarioPage() {
                         }
                       }
                     }}
-                    className="px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition-all flex items-center gap-2 shadow-lg shadow-red-600/30"
+                    className={ACTION_DANGER_CLASS}
                   >
-                    <FaTrash /> Deletar
+                    <FaTrash className="h-4 w-4" />
+                    Deletar
                   </button>
                 </div>
                 <button
@@ -1496,8 +1559,9 @@ export function CalendarioPage() {
                     setSelectedEvent(null);
                     setIsEditingEvent(false);
                   }}
-                  className="px-6 py-2.5 rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold transition-all"
+                  className={ACTION_GHOST_CLASS}
                 >
+                  <FaTimes className="h-4 w-4" />
                   Fechar
                 </button>
               </div>

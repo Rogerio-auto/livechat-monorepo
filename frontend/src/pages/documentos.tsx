@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ProposalForm from "../componets/propostas/ProposalForm";
+import { useToast } from "../hooks/useToast";
+import ToastContainer from "../componets/common/ToastContainer";
 
 import { io } from "socket.io-client";
 import { FaFileAlt, FaFileSignature, FaReceipt, FaTrash, FaFileDownload, FaCog } from "react-icons/fa";
@@ -51,6 +53,8 @@ export default function DocumentosPage() {
   const initialLead = location?.state?.lead ?? null;
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [generatingPdf, setGeneratingPdf] = useState(false); // Loading overlay for PDF generation
+  const { toasts, showToast, dismissToast } = useToast();
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
@@ -164,7 +168,7 @@ export default function DocumentosPage() {
       await fetchJson(`${API}/proposals/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
       setPropostas(prev => prev.map(p => p.id === id ? { ...p, status } as Proposal : p));
     } catch (e: any) {
-      alert(e?.message || "Erro ao atualizar status");
+      showToast(e?.message || "Erro ao atualizar status", "error");
     }
   };
 
@@ -174,8 +178,9 @@ export default function DocumentosPage() {
         method: "POST",
       });
       await load();
+      showToast("Proposta duplicada com sucesso!", "success");
     } catch (e: any) {
-      alert(e?.message || "Erro ao duplicar proposta");
+      showToast(e?.message || "Erro ao duplicar proposta", "error");
     }
   };
   const deleteProposal = async (id: string) => {
@@ -183,8 +188,9 @@ export default function DocumentosPage() {
     try {
       await fetchJson(`${API}/proposals/${id}`, { method: "DELETE" });
       setPropostas(prev => prev.filter(p => p.id !== id));
+      showToast("Proposta excluída com sucesso!", "success");
     } catch (e: any) {
-      alert(e?.message || "Erro ao excluir proposta");
+      showToast(e?.message || "Erro ao excluir proposta", "error");
     }
   };
 
@@ -244,8 +250,9 @@ export default function DocumentosPage() {
       await fetchJson(`${API}/documents`, { method: "POST", body: JSON.stringify(payload) });
       setCreateDoc(null);
       load();
+      showToast("Documento criado com sucesso!", "success");
     } catch (e: any) {
-      alert(e?.message || "Erro ao criar documento");
+      showToast(e?.message || "Erro ao criar documento", "error");
     }
   };
 
@@ -256,18 +263,66 @@ export default function DocumentosPage() {
       const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=${docType}`);
       setGenerateTemplate(prev => prev ? { ...prev, templates, loading: false } : null);
     } catch (e: any) {
-      alert(e?.message || "Erro ao carregar templates");
+      showToast(e?.message || "Erro ao carregar templates", "error");
       setGenerateTemplate(null);
+    }
+  };
+
+  // Generate PDF directly without modal (uses default template)
+  const generatePdfDirectly = async (proposal: Proposal) => {
+    setGeneratingPdf(true);
+    try {
+      // Load templates for PROPOSTA
+      const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=PROPOSTA`);
+      
+      if (!templates || templates.length === 0) {
+        showToast('Nenhum template de proposta encontrado. Crie um template primeiro.', 'warning');
+        return;
+      }
+
+      // Find default template or use first one
+      const defaultTemplate = templates.find((t: any) => t.is_default) || templates[0];
+      
+      // Generate document with PDF conversion
+      const result = await fetchJson<{ 
+        success: boolean;
+        document_id: string;
+        download_url: string;
+        generated_path: string;
+        pdf_download_url?: string;
+        pdf_path?: string;
+      }>(`${API}/document-templates/${defaultTemplate.id}/generate-document`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          proposal_id: proposal.id,
+          convert_to_pdf: true
+        }),
+      });
+
+      // Open PDF in new tab
+      if (result.pdf_download_url) {
+        window.open(result.pdf_download_url, '_blank');
+      } else if (result.download_url) {
+        window.open(result.download_url, '_blank');
+      }
+
+      load(); // Reload list
+      showToast('PDF gerado com sucesso!', 'success');
+    } catch (e: any) {
+      showToast(e?.message || "Erro ao gerar PDF", "error");
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
   // Generate document from template
   const generateFromTemplate = async () => {
     if (!generateTemplate || !generateTemplate.selectedTemplateId) {
-      alert('Selecione um template');
+      showToast('Selecione um template', 'warning');
       return;
     }
     setGenerateTemplate(prev => prev ? { ...prev, generating: true } : null);
+    setGeneratingPdf(true);
     try {
       const { proposal, convertToPdf } = generateTemplate;
       
@@ -303,12 +358,13 @@ export default function DocumentosPage() {
       const msg = convertToPdf && result.pdf_path 
         ? 'Documento gerado com sucesso! (DOCX + PDF)'
         : 'Documento gerado com sucesso!';
-      alert(msg);
+      showToast(msg, 'success');
       load(); // Recarregar lista
     } catch (e: any) {
-      alert(e?.message || "Erro ao gerar documento");
+      showToast(e?.message || "Erro ao gerar documento", "error");
     } finally {
       setGenerateTemplate(prev => prev ? { ...prev, generating: false } : null);
+      setGeneratingPdf(false);
     }
   };
 
@@ -357,6 +413,8 @@ export default function DocumentosPage() {
         className="ml-16 min-h-screen p-8"
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
       >
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+        
         <div
           className="mt-8 rounded-2xl border p-6 shadow-lg theme-surface"
           style={{
@@ -537,11 +595,11 @@ export default function DocumentosPage() {
                             >
                               <FaFileDownload />
                             </button>
-                            {/* Proposta */}
+                            {/* Proposta - Gerar PDF direto */}
                             <button
-                              className="p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 transition-colors shadow-sm"
-                              title="Proposta (PDF não configurado)"
-                              onClick={() => { /* sem PDF de proposta no schema; pode-se implementar futuramente */ }}
+                              className="p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm"
+                              title="Gerar PDF da proposta (direto)"
+                              onClick={() => generatePdfDirectly(p)}
                             ><FaFileAlt /> </button>
                             {/* Contrato */}
                             <button
@@ -861,6 +919,39 @@ export default function DocumentosPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Loading Overlay for PDF Generation */}
+        {generatingPdf && (
+          <div 
+            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+            style={{ backgroundColor: "var(--color-overlay)" }}
+          >
+            <div className="theme-surface rounded-2xl shadow-2xl p-8 max-w-sm w-full border" style={{ borderColor: "var(--color-border)" }}>
+              <div className="flex flex-col items-center space-y-4">
+                {/* Spinner animado */}
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
+                  <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0"></div>
+                </div>
+                
+                {/* Texto */}
+                <div className="text-center space-y-2">
+                  <h3 className="text-lg font-semibold theme-text">
+                    Gerando Proposta
+                  </h3>
+                  <p className="text-sm theme-text-muted">
+                    Por favor, aguarde enquanto o documento está sendo gerado...
+                  </p>
+                  <div className="flex items-center justify-center gap-1 pt-2">
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}

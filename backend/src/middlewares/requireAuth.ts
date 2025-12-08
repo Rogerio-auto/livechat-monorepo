@@ -152,13 +152,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing company context" });
     }
 
-    // Buscar o ID da tabela public.users + theme_preference
+    // Buscar o ID da tabela public.users + theme_preference + phone
     let publicUserId: string | null = null;
     let themePreference: string = "system";
+    let phone: string | null = null;
     try {
       const { data: publicUser, error: publicUserError } = await supabaseAdmin
         .from("users")
-        .select("id, theme_preference")
+        .select("id, theme_preference, phone")
         .eq("user_id", supaUser.id)
         .maybeSingle();
       
@@ -169,6 +170,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       if (publicUser?.id) {
         publicUserId = publicUser.id;
         themePreference = publicUser.theme_preference || "system";
+        phone = publicUser.phone || null;
       } else {
         console.warn("[requireAuth] No public user found for auth user:", supaUser.id);
       }
@@ -185,6 +187,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         (typeof appMeta.email === "string" ? appMeta.email : undefined) ??
         supaUser.email,
       company_id: companyId ?? null,
+      phone: phone, // ✅ Telefone do usuário
     };
     
     // Adicionar profile com role para rotas admin
@@ -198,6 +201,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       company_id: companyId ?? null,
       role: profile?.role ?? "USER", // Default USER se não encontrar
       theme_preference: themePreference, // ✅ Incluir theme no profile
+      phone: phone, // ✅ Telefone do usuário
     };
     
     console.log("[requireAuth] 🔑 User authenticated:", {

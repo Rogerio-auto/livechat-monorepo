@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Sidebar from "../Sidbars/sidebar";
 import { TrialBanner } from "../../components/subscription/TrialBanner";
 import { KPICard, formatTime } from "./KPICard";
 import { AlertsPanel } from "./AlertsPanel";
@@ -44,66 +43,62 @@ export function DashboardNew() {
   ];
 
   return (
-    <>
-      <div className="ml-16 min-h-screen bg-linear-to-br from-gray-50 via-gray-100 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-900/30 transition-colors duration-300">
+    <div className="livechat-theme w-full min-h-screen pb-12 transition-colors duration-500">
+      <div className="mx-auto w-full max-w-[var(--page-max-width)] space-y-6 px-3 pb-8 pt-6 sm:px-6 lg:px-8">
         <TrialBanner />
-        <div className="h-screen overflow-auto p-6">
-          <div className="w-full space-y-6">
-            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-2xl">
-              <div className="px-6 py-6 md:px-10 md:py-8">
-                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Acompanhe as métricas e performance do seu negócio
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/60 backdrop-blur-sm p-2 shadow-inner">
-                  <div className="flex flex-wrap gap-2">
-                    {tabs.map((tab) => {
-                      const isActive = activeTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          onClick={() => setActiveTab(tab.id)}
-                          className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
-                            isActive
-                              ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30"
-                              : "text-gray-600 dark:text-gray-300 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-white/10"
-                          }`}
-                        >
-                          <span
-                            className={`flex h-9 w-9 items-center justify-center rounded-xl border border-white/60 transition-all ${
-                              isActive
-                                ? "bg-white/20 text-white"
-                                : "bg-blue-50 text-blue-500 dark:bg-blue-900/30 dark:text-blue-300"
-                            }`}
-                          >
-                            {tab.icon}
-                          </span>
-                          <span>{tab.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="mt-8">
-                  {activeTab === "overview" && <OverviewTab />}
-                  {activeTab === "attendance" && <AttendanceTab />}
-                  {activeTab === "ai-agents" && <AIAgentsTab />}
-                  {activeTab === "campaigns" && <CampaignsTab />}
-                  {activeTab === "sales" && <SalesTab />}
-                  {activeTab === "customers" && <CustomersTab />}
-                </div>
+        <div className="livechat-card rounded-3xl">
+          <div className="px-5 py-6 md:px-10 md:py-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold text-[var(--color-text)]">Dashboard</h1>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  Acompanhe as métricas e performance do seu negócio
+                </p>
               </div>
+            </div>
+
+            <div className="mt-6 rounded-2xl livechat-muted-surface p-2 shadow-inner backdrop-blur-md">
+              <div className="flex flex-wrap gap-2">
+                {tabs.map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
+                        isActive
+                          ? "bg-[#2fb463] text-white shadow-[0_18px_48px_-24px_rgba(47,180,99,0.55)]"
+                          : "text-[var(--color-text-muted)] hover:bg-[rgba(47,180,99,0.12)] hover:text-[var(--color-primary)] dark:hover:bg-[rgba(116,230,158,0.12)]"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border border-white/40 transition-all ${
+                          isActive
+                            ? "bg-white/25 text-white"
+                            : "bg-[rgba(47,180,99,0.1)] text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]"
+                        }`}
+                      >
+                        {tab.icon}
+                      </span>
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-8">
+              {activeTab === "overview" && <OverviewTab />}
+              {activeTab === "attendance" && <AttendanceTab />}
+              {activeTab === "ai-agents" && <AIAgentsTab />}
+              {activeTab === "campaigns" && <CampaignsTab />}
+              {activeTab === "sales" && <SalesTab />}
+              {activeTab === "customers" && <CustomersTab />}
             </div>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -116,7 +111,7 @@ function OverviewTab() {
   const navigate = useNavigate();
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       {/* KPIs */}
       <div className="col-span-12 lg:col-span-3">
         <KPICard
@@ -181,10 +176,10 @@ function OverviewTab() {
 
       {/* Alertas */}
       <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-blue-500/5 via-transparent to-transparent dark:from-blue-400/10" />
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
           <div className="relative">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Alertas e Pendências
             </h3>
             <AlertsPanel alerts={alerts} loading={alertsLoading} />
@@ -199,10 +194,10 @@ function OverviewTab() {
 
       {/* Conversas Recentes */}
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-slate-500/5 via-transparent to-transparent dark:from-slate-400/10" />
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(90,211,139,0.12)] via-transparent to-transparent" />
           <div className="relative">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Conversas Recentes
             </h3>
             {chatsLoading ? (
@@ -210,7 +205,7 @@ function OverviewTab() {
                 {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className="h-16 rounded-xl bg-slate-100/60 dark:bg-slate-800/60 animate-pulse"
+                    className="h-16 animate-pulse rounded-xl bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]"
                   />
                 ))}
               </div>
@@ -218,17 +213,17 @@ function OverviewTab() {
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200 dark:border-gray-700">
-                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <tr className="border-b border-[var(--color-border)]">
+                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                         Cliente
                       </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                         Status
                       </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                         Última Mensagem
                       </th>
-                      <th className="text-left py-3 px-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                         Ações
                       </th>
                     </tr>
@@ -237,18 +232,18 @@ function OverviewTab() {
                     {recentChats.map((chat: any) => (
                       <tr
                         key={chat.id}
-                        className="border-b border-gray-100 dark:border-gray-800/70 hover:bg-slate-50/80 dark:hover:bg-slate-900/60 transition-colors"
+                        className="border-b border-[var(--color-border)] transition-colors hover:bg-[rgba(47,180,99,0.08)] dark:hover:bg-[rgba(27,58,41,0.7)]"
                       >
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(47,180,99,0.16)] text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]">
                               <FiUser />
                             </div>
                             <div>
-                              <div className="font-semibold text-gray-900 dark:text-white">
+                              <div className="font-semibold text-[var(--color-text)]">
                                 {chat.customer_name || "Sem nome"}
                               </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                              <div className="text-xs text-[var(--color-text-muted)]">
                                 {chat.customer_phone}
                               </div>
                             </div>
@@ -268,10 +263,10 @@ function OverviewTab() {
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-sm text-gray-700 dark:text-gray-200">
+                          <div className="text-sm text-[var(--color-text)]">
                             {chat.last_message?.substring(0, 50) || "..."}
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          <div className="mt-1 text-xs text-[var(--color-text-muted)]">
                             {chat.last_message_at
                               ? new Date(chat.last_message_at).toLocaleString("pt-BR")
                               : "-"}
@@ -280,7 +275,7 @@ function OverviewTab() {
                         <td className="py-3 px-4">
                           <button
                             onClick={() => navigate(`/livechat?chat=${chat.id}`)}
-                            className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                            className="text-sm font-semibold text-[#2fb463] hover:underline dark:text-[#74e69e]"
                           >
                             Abrir →
                           </button>
@@ -304,7 +299,7 @@ function AttendanceTab() {
   const { data: inboxStats, loading: inboxLoading } = useInboxStats();
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12 lg:col-span-8">
         <ChartContainer title="Volume de Mensagens (Últimos 30 Dias)" loading={volumeLoading}>
           <BarChartComponent
@@ -318,7 +313,7 @@ function AttendanceTab() {
               agentes: d.fromAgent,
             }))}
             dataKeys={["clientes", "agentes"]}
-            colors={["#1D4ED8", "#38BDF8"]}
+            colors={["#2fb463", "#74e69e"]}
           />
         </ChartContainer>
       </div>
@@ -337,34 +332,34 @@ function AttendanceTab() {
       </div>
 
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-blue-500/5 via-transparent to-transparent dark:from-blue-400/10" />
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
           <div className="relative">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Estatísticas por Inbox
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {inboxStats.map((inbox) => (
                 <div
                   key={inbox.id}
-                  className="rounded-xl border border-gray-200/70 dark:border-gray-700/70 bg-white/80 dark:bg-gray-900/70 p-4 shadow-sm"
+                  className="livechat-muted-surface rounded-xl p-4 shadow-sm"
                 >
-                  <div className="font-semibold text-gray-900 dark:text-white mb-2">
+                  <div className="mb-2 font-semibold text-[var(--color-text)]">
                     {inbox.name}
                   </div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                  <div className="text-sm text-[var(--color-text-muted)]">
                     Provider: {inbox.provider}
                   </div>
                   <div className="mt-4 flex justify-between">
                     <div>
-                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Total</div>
-                      <div className="text-xl font-bold text-gray-900 dark:text-white">
+                      <div className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">Total</div>
+                      <div className="text-xl font-bold text-[var(--color-text)]">
                         {inbox.stats.total_contacts}
                       </div>
                     </div>
                     <div>
-                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Ativos</div>
-                      <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                      <div className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">Ativos</div>
+                      <div className="text-xl font-bold text-[#2fb463] dark:text-[#74e69e]">
                         {inbox.stats.active_contacts}
                       </div>
                     </div>
@@ -384,7 +379,7 @@ function AIAgentsTab() {
   const { data: agents, loading: agentsLoading } = useAgentMetrics();
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12 lg:col-span-8">
         <ChartContainer title="Performance dos Agentes AI" loading={agentsLoading}>
           <BarChartComponent
@@ -395,26 +390,26 @@ function AIAgentsTab() {
               total: agent.total_chats,
             }))}
             dataKeys={["ativos", "total"]}
-            colors={["#10B981", "#1D4ED8"]}
+            colors={["#2fb463", "#74e69e"]}
             horizontal
           />
         </ChartContainer>
       </div>
 
       <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-indigo-500/5 via-transparent to-transparent dark:from-indigo-400/10" />
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
           <div className="relative space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Status dos Agentes
             </h3>
             {agents.map((agent) => (
               <div
                 key={agent.id}
-                className="rounded-xl border border-gray-200/70 dark:border-gray-700/70 bg-white/80 dark:bg-gray-900/70 p-3 shadow-sm"
+                className="livechat-muted-surface rounded-xl p-3 shadow-sm"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-gray-900 dark:text-white">
+                  <span className="font-semibold text-[var(--color-text)]">
                     {agent.name}
                   </span>
                   <span
@@ -423,7 +418,7 @@ function AIAgentsTab() {
                     }`}
                   />
                 </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="text-xs text-[var(--color-text-muted)]">
                   {agent.active_chats} chats ativos • {agent.total_chats} total
                 </div>
               </div>
@@ -440,7 +435,7 @@ function CampaignsTab() {
   const { data: campaignStats, loading: campaignsLoading } = useCampaignStats();
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12 lg:col-span-3">
         <KPICard
           title="Total de Campanhas"
@@ -489,7 +484,7 @@ function CampaignsTab() {
             ]}
             dataKey="value"
             nameKey="name"
-            colors={["#10B981", "#F59E0B", "#1D4ED8", "#EF4444"]}
+            colors={["#2fb463", "#F59E0B", "#74e69e", "#EF4444"]}
           />
         </ChartContainer>
       </div>
@@ -503,7 +498,7 @@ function SalesTab() {
   const { data: leadStats, loading: leadsLoading } = useLeadStats();
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12 lg:col-span-3">
         <KPICard
           title="Total de Leads"
@@ -551,7 +546,7 @@ function SalesTab() {
               leads: stage.count,
             }))}
             dataKeys={["leads"]}
-            colors={["#1D4ED8"]}
+            colors={["#2fb463"]}
             horizontal
             height={Math.max(200, funnel.length * 40)}
           />
@@ -566,12 +561,12 @@ function CustomersTab() {
   const { data: topCustomers, loading: customersLoading } = useTopCustomers(30, 10);
 
   return (
-    <div className="grid grid-cols-12 gap-6">
+    <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-blue-500/5 via-transparent to-transparent dark:from-blue-400/10" />
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
           <div className="relative">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-4">
+            <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Top 10 Clientes por Interação (Últimos 30 Dias)
             </h3>
             {customersLoading ? (
@@ -579,7 +574,7 @@ function CustomersTab() {
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div
                     key={i}
-                    className="h-14 rounded-xl bg-slate-100/60 dark:bg-slate-800/60 animate-pulse"
+                    className="h-14 animate-pulse rounded-xl bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]"
                   />
                 ))}
               </div>
@@ -588,24 +583,24 @@ function CustomersTab() {
                 {topCustomers.map((customer, index) => (
                   <div
                     key={customer.id}
-                    className="flex items-center gap-4 rounded-xl border border-gray-200/70 dark:border-gray-700/70 bg-white/80 dark:bg-gray-900/70 p-4 shadow-sm transition-all hover:border-blue-400/50 hover:shadow-lg"
+                    className="flex items-center gap-4 rounded-xl livechat-muted-surface p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
                   >
-                    <div className="flex items-center justify-center w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-300 font-bold">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(47,180,99,0.16)] font-bold text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]">
                       #{index + 1}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-gray-900 dark:text-white">
+                      <div className="font-semibold text-[var(--color-text)]">
                         {customer.name}
                       </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <div className="text-sm text-[var(--color-text-muted)]">
                         {customer.phone}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                      <div className="text-lg font-bold text-[#2fb463] dark:text-[#74e69e]">
                         {customer.messageCount}
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">mensagens</div>
+                      <div className="text-xs text-[var(--color-text-muted)]">mensagens</div>
                     </div>
                   </div>
                 ))}

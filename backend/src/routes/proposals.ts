@@ -148,7 +148,7 @@ export function registerProposalRoutes(app: express.Application) {
         solar_total_power: body.solar_total_power ?? null,
         solar_num_panels: body.solar_num_panels ?? null,
         solar_panel_power: body.solar_panel_power ?? null,
-        solar_panel_spec: body.solar_panel_spec ?? null,
+        solar_panel_spec: body.solar_panel_spec ?? null, // Texto completo do kit
         solar_inverter_spec: body.solar_inverter_spec ?? null,
         solar_area_needed: body.solar_area_needed ?? null,
         panel_model: body.panel_model ?? null,

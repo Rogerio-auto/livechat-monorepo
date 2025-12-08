@@ -1,14 +1,21 @@
 import { FiSearch, FiFilter, FiX } from "react-icons/fi";
 
+type Filters = {
+  media_type: string;
+  category: string;
+  search: string;
+  is_active: string;
+};
+
 interface MediaFiltersProps {
-  filters: {
-    media_type: string;
-    category: string;
-    search: string;
-    is_active: string;
-  };
-  onFilterChange: (filters: any) => void;
+  filters: Filters;
+  onFilterChange: (filters: Filters) => void;
 }
+
+const CONTROL_CLASS =
+  "config-input rounded-xl border border-transparent bg-(--color-surface) px-3 py-2 text-sm text-(--color-text) shadow-sm transition focus:border-[rgba(47,180,99,0.35)] focus:outline-none";
+const SEARCH_CLASS =
+  "config-input w-full rounded-xl border border-transparent bg-(--color-surface) pl-10 pr-3 py-2 text-sm text-(--color-text) shadow-sm transition focus:border-[rgba(47,180,99,0.35)] focus:outline-none";
 
 export default function MediaFilters({ filters, onFilterChange }: MediaFiltersProps) {
   const hasActiveFilters =
@@ -24,39 +31,41 @@ export default function MediaFilters({ filters, onFilterChange }: MediaFiltersPr
   };
 
   return (
-    <div 
-      className="rounded-xl border p-4 theme-surface-muted mb-6"
-      style={{ borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)" }}
-    >
-      <div className="flex items-center gap-4 flex-wrap">
-        {/* Search */}
-        <div className="flex-1 min-w-[200px]">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiSearch className="h-5 w-5 theme-text-muted" />
-            </div>
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) =>
-                onFilterChange({ ...filters, search: e.target.value })
-              }
-              className="block w-full pl-10 pr-3 py-2 border rounded-lg theme-input text-sm"
-              style={{ borderColor: "var(--color-border)" }}
-              placeholder="Buscar por título, descrição ou nome do arquivo..."
-            />
-          </div>
+    <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-(--color-surface) text-(--color-primary)">
+            <FiFilter className="h-3.5 w-3.5" />
+          </span>
+          Refinar biblioteca
         </div>
-
-        {/* Media Type */}
-        <div className="w-[180px]">
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex items-center gap-2 rounded-xl border border-transparent bg-(--color-surface) px-4 py-2 text-xs font-semibold text-(--color-text) transition hover:border-[rgba(47,180,99,0.35)] hover:text-(--color-primary)"
+          >
+            <FiX className="h-4 w-4" />
+            Limpar filtros
+          </button>
+        )}
+      </div>
+      <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-4">
+        <div className="relative flex-1 min-w-[220px]">
+          <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-(--color-text-muted)" />
+          <input
+            type="text"
+            value={filters.search}
+            onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
+            className={SEARCH_CLASS}
+            placeholder="Busque por título, descrição ou nome do arquivo..."
+          />
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           <select
             value={filters.media_type}
-            onChange={(e) =>
-              onFilterChange({ ...filters, media_type: e.target.value })
-            }
-            className="block w-full px-3 py-2 border rounded-lg theme-input text-sm"
-            style={{ borderColor: "var(--color-border)" }}
+            onChange={(e) => onFilterChange({ ...filters, media_type: e.target.value })}
+            className={`${CONTROL_CLASS} min-w-[170px]`}
           >
             <option value="">Todos os tipos</option>
             <option value="image">Imagens</option>
@@ -64,17 +73,10 @@ export default function MediaFilters({ filters, onFilterChange }: MediaFiltersPr
             <option value="document">Documentos</option>
             <option value="audio">Áudios</option>
           </select>
-        </div>
-
-        {/* Category */}
-        <div className="w-[180px]">
           <select
             value={filters.category}
-            onChange={(e) =>
-              onFilterChange({ ...filters, category: e.target.value })
-            }
-            className="block w-full px-3 py-2 border rounded-lg theme-input text-sm"
-            style={{ borderColor: "var(--color-border)" }}
+            onChange={(e) => onFilterChange({ ...filters, category: e.target.value })}
+            className={`${CONTROL_CLASS} min-w-[170px]`}
           >
             <option value="">Todas categorias</option>
             <option value="product">Produto</option>
@@ -83,35 +85,16 @@ export default function MediaFilters({ filters, onFilterChange }: MediaFiltersPr
             <option value="documentation">Documentação</option>
             <option value="other">Outro</option>
           </select>
-        </div>
-
-        {/* Status */}
-        <div className="w-[150px]">
           <select
             value={filters.is_active}
-            onChange={(e) =>
-              onFilterChange({ ...filters, is_active: e.target.value })
-            }
-            className="block w-full px-3 py-2 border rounded-lg theme-input text-sm"
-            style={{ borderColor: "var(--color-border)" }}
+            onChange={(e) => onFilterChange({ ...filters, is_active: e.target.value })}
+            className={`${CONTROL_CLASS} min-w-[150px]`}
           >
             <option value="true">Ativos</option>
             <option value="false">Inativos</option>
             <option value="">Todos</option>
           </select>
         </div>
-
-        {/* Clear Filters */}
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="inline-flex items-center px-3 py-2 border rounded-lg text-sm theme-secondary transition"
-            style={{ borderColor: "var(--color-border)" }}
-          >
-            <FiX className="h-4 w-4 mr-1" />
-            Limpar
-          </button>
-        )}
       </div>
     </div>
   );

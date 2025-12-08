@@ -69,13 +69,13 @@ export function TrialBanner() {
   const isUrgent = daysRemaining <= 3;
   const bgColor = isUrgent
     ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
-    : "bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800";
+    : "bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)] border-[rgba(47,180,99,0.28)] dark:border-[rgba(116,230,158,0.18)]";
   const textColor = isUrgent
     ? "text-red-800 dark:text-red-300"
-    : "text-blue-800 dark:text-blue-300";
+    : "text-[#1f8b49] dark:text-[#74e69e]";
   const iconColor = isUrgent
     ? "text-red-500 dark:text-red-400"
-    : "text-blue-500 dark:text-blue-400";
+    : "text-[#2fb463] dark:text-[#74e69e]";
 
   return (
     <div
@@ -106,7 +106,7 @@ export function TrialBanner() {
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             isUrgent
               ? "bg-red-600 hover:bg-red-700 text-white"
-              : "bg-blue-600 hover:bg-blue-700 text-white"
+              : "bg-[#2fb463] text-white hover:bg-[#1f8b49]"
           }`}
         >
           Atualizar Plano

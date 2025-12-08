@@ -176,9 +176,9 @@ function OverviewTab() {
 
       {/* Alertas */}
       <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
+        <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl flex flex-col max-h-[600px]">
           <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
-          <div className="relative">
+          <div className="relative flex-1 overflow-y-auto">
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Alertas e Pendências
             </h3>

@@ -39,11 +39,23 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   app.post("/logout", (_req, res) => {
+    console.log('[AUTH] 🚪 Logout request received');
+    
+    // Limpar cookie principal de autenticação
     res.clearCookie(JWT_COOKIE_NAME, { 
       path: "/",
-      domain: JWT_COOKIE_DOMAIN 
+      domain: JWT_COOKIE_DOMAIN,
+      httpOnly: true,
+      secure: JWT_COOKIE_SECURE,
+      sameSite: "lax"
     });
-    return res.json({ ok: true });
+    
+    // Limpar outros cookies potenciais
+    res.clearCookie('refresh_token', { path: "/" });
+    res.clearCookie('session', { path: "/" });
+    
+    console.log('[AUTH] ✅ Cookies cleared successfully');
+    return res.json({ ok: true, message: 'Logged out successfully' });
   });
 
   app.get("/auth/me", requireAuth, async (req: any, res) => {

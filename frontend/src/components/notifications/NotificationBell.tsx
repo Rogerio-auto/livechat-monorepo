@@ -31,6 +31,7 @@ export function NotificationBell() {
     markAllAsRead,
     deleteNotification,
     requestPermission,
+    refresh,
   } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -50,12 +51,13 @@ export function NotificationBell() {
     }
   }, [isOpen]);
 
-  // Solicitar permissão ao abrir pela primeira vez
+  // Recarregar notificações e solicitar permissão ao abrir
   useEffect(() => {
     if (isOpen) {
+      refresh();
       requestPermission();
     }
-  }, [isOpen, requestPermission]);
+  }, [isOpen, refresh, requestPermission]);
 
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {

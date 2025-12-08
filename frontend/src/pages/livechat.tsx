@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
 import { useNavigate, useLocation } from "react-router-dom";
+import { cleanupService } from "../services/cleanupService";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
 import LivechatMenu, {
   type LivechatSection,
@@ -1139,14 +1140,41 @@ const bumpChatToTop = useCallback((update: {
       cancelled = true;
     };
   }, []);
+  
+  // Auto-mark chat as read when opening (with debounce)
   useEffect(() => {
     const s = socketRef.current;
     if (!s) return;
-    if (currentChat?.id) s.emit("join", { chatId: currentChat.id });
+    
+    if (currentChat?.id) {
+      s.emit("join", { chatId: currentChat.id });
+      
+      // ✅ AUTO-MARK AS READ quando abrir chat com mensagens não lidas
+      if (currentChat.unread_count && currentChat.unread_count > 0) {
+        console.log('[READ_RECEIPTS] Agendando mark-read', {
+          chatId: currentChat.id,
+          unread_count: currentChat.unread_count,
+        });
+        
+        // Debounce de 500ms para garantir que usuário realmente visualizou
+        const timer = setTimeout(() => {
+          console.log('[READ_RECEIPTS] Executando mark-read após 500ms', {
+            chatId: currentChat.id,
+          });
+          markChatAsRead(currentChat.id);
+        }, 500);
+        
+        return () => {
+          clearTimeout(timer);
+          if (currentChat?.id) s.emit("leave", { chatId: currentChat.id });
+        };
+      }
+    }
+    
     return () => {
       if (currentChat?.id) s.emit("leave", { chatId: currentChat.id });
     };
-  }, [currentChat?.id]);
+  }, [currentChat?.id, currentChat?.unread_count, markChatAsRead]);
 
 
   useEffect(() => {
@@ -1174,6 +1202,56 @@ const bumpChatToTop = useCallback((update: {
       s.off("chat:tags", onTags);
     };
   }, []);
+
+  // ✅ Socket listeners para sincronização de leitura em tempo real
+  useEffect(() => {
+    const s = socketRef.current;
+    if (!s) return;
+
+    // Listener para chat:read (outro usuário/aba/dispositivo marcou como lido)
+    const onChatRead = (payload: { chatId: string; inboxId?: string; timestamp: string }) => {
+      console.log('[READ_RECEIPTS][socket] chat:read recebido', payload);
+      if (payload?.chatId) {
+        // Atualizar unread_count localmente para 0
+        patchChatLocal(payload.chatId, { unread_count: 0 } as any);
+      }
+    };
+
+    // Listener para message:status (status de mensagem individual atualizado)
+    const onMessageStatus = (payload: { 
+      kind?: string;
+      chatId: string; 
+      messageId: string; 
+      externalId?: string;
+      view_status?: string;
+      status?: string;
+    }) => {
+      console.log('[READ_RECEIPTS][socket] message:status recebido', payload);
+      
+      const currentChatId = currentChatIdRef.current;
+      if (payload?.chatId === currentChatId && payload?.messageId) {
+        // Atualizar view_status da mensagem no histórico local
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === payload.messageId
+              ? { 
+                  ...msg, 
+                  view_status: payload.view_status || payload.status || msg.view_status 
+                }
+              : msg
+          )
+        );
+      }
+    };
+
+    s.on('chat:read', onChatRead);
+    s.on('message:status', onMessageStatus);
+
+    return () => {
+      s.off('chat:read', onChatRead);
+      s.off('message:status', onMessageStatus);
+    };
+  }, [patchChatLocal]);
 
   // Contacts live inside the Livechat page now (no route navigation)
 
@@ -1878,6 +1956,66 @@ const scrollToBottom = useCallback(
     logSendLatency,
     selectedDepartmentId,
   ]);
+
+  // Registrar socket no cleanupService e escutar evento de logout
+  useEffect(() => {
+    // Registrar socket para desconectar no logout
+    if (socketRef.current) {
+      cleanupService.registerSocket(socketRef.current);
+    }
+  }, [socketRef.current]);
+
+  useEffect(() => {
+    const handleLogout = () => {
+      console.log('[LiveChat] 🧹 Cleaning up on logout');
+      
+      // Limpar cache de mensagens
+      messagesCache.clear();
+      console.log('[LiveChat] Cleared messagesCache');
+      
+      // Limpar metadata de cache
+      chatsCacheMetaRef.current = {};
+      messagesMetaRef.current = {};
+      console.log('[LiveChat] Cleared cache metadata');
+      
+      // Limpar store de chats
+      chatsStoreRef.current = {};
+      currentChatsKeyRef.current = null;
+      console.log('[LiveChat] Cleared chats store');
+      
+      // Resetar estados principais
+      setChats([]);
+      setMessages([]);
+      setCurrentChat(null);
+      setSelectedChat(null);
+      setSelectedDepartmentId(null);
+      setInboxId('');
+      setText('');
+      setReplyingTo(null);
+      setChatTags([]);
+      setCompanyUsers([]);
+      setMentions([]);
+      console.log('[LiveChat] Reset main states');
+      
+      // Limpar drafts
+      draftsRef.current.clear();
+      console.log('[LiveChat] Cleared drafts');
+      
+      // Desconectar socket (redundante mas seguro)
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      
+      console.log('[LiveChat] ✅ Cleanup completed');
+    };
+
+    window.addEventListener('user:logout', handleLogout);
+    
+    return () => {
+      window.removeEventListener('user:logout', handleLogout);
+    };
+  }, [messagesCache]);
 
   const loadChats = useCallback(
     async ({ reset = false }: { reset?: boolean } = {}) => {
@@ -3347,8 +3485,8 @@ const scrollToBottom = useCallback(
   }
 
   return (
-    <section className="livechat-theme flex flex-col gap-6 pb-6 text-[color:var(--color-text)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-3rem)] xl:pb-0 xl:overflow-hidden">
-      <div className="grid flex-1 grid-cols-12 gap-6 xl:gap-8 xl:overflow-hidden">
+    <section className="livechat-theme flex flex-col gap-3 pb-3 text-[color:var(--color-text)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-1.5rem)] xl:pb-0 xl:overflow-hidden">
+      <div className="grid flex-1 grid-cols-12 gap-3 xl:gap-4 xl:overflow-hidden">
         <div className="col-span-12 xl:col-span-2">
           <div className="livechat-panel rounded-[28px] p-4 shadow-[0_24px_70px_-55px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:sticky xl:top-[calc(var(--app-topbar-height,4rem)+1.5rem)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-3rem)] xl:overflow-hidden">
             <div className="xl:h-full xl:overflow-y-auto">
@@ -3362,7 +3500,7 @@ const scrollToBottom = useCallback(
             <Card
               gradient={false}
               padding="md"
-              className="livechat-card col-span-12 xl:col-span-4 flex min-h-[520px] flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+              className="livechat-card col-span-12 md:col-span-5 lg:col-span-4 xl:col-span-3 flex min-h-[520px] flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
             >
               <div className="shrink-0">
                 <div className="mb-4 flex items-center gap-2">
@@ -3599,7 +3737,7 @@ const scrollToBottom = useCallback(
             <Card
               gradient={false}
               padding="md"
-              className="livechat-card col-span-12 xl:col-span-6 flex flex-col overflow-hidden shadow-[0_40px_100px_-70px_rgba(8,12,20,0.88)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+              className="livechat-card col-span-12 md:col-span-7 lg:col-span-8 xl:col-span-7 flex flex-col overflow-hidden shadow-[0_40px_100px_-70px_rgba(8,12,20,0.88)] backdrop-blur-sm xl:min-h-0 xl:h-full"
             >
               <ChatHeader
                 apiBase={API}

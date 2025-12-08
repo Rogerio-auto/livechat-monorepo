@@ -36,9 +36,9 @@ export function TasksWidget() {
   };
 
   return (
-    <div className="livechat-card rounded-3xl p-6 shadow-xl transition-colors duration-300">
+    <div className="livechat-card rounded-3xl p-5 shadow-xl transition-colors duration-300 flex flex-col max-h-[600px] overflow-hidden">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(47,180,99,0.16)]">
             <svg className="h-5 w-5 text-[#1f8b49] dark:text-[#74e69e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -60,7 +60,7 @@ export function TasksWidget() {
 
       {/* Stats Grid */}
       {stats && (
-        <div className="mb-6 grid grid-cols-2 gap-3">
+        <div className="mb-4 grid grid-cols-2 gap-3 flex-shrink-0">
           {/* Pendentes */}
           <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -107,25 +107,27 @@ export function TasksWidget() {
         </div>
       )}
 
-      {/* Completion Progress Bar */}
-      {stats && stats.total > 0 && (
-        <div className="mb-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">Taxa de Conclusão</span>
-            <span className="text-xs font-bold text-[var(--color-text)]">{completionRate}%</span>
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-[rgba(47,180,99,0.3)] scrollbar-track-transparent hover:scrollbar-thumb-[rgba(47,180,99,0.5)]">
+        {/* Completion Progress Bar */}
+        {stats && stats.total > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-[var(--color-text-muted)]">Taxa de Conclusão</span>
+              <span className="text-xs font-bold text-[var(--color-text)]">{completionRate}%</span>
+            </div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#2fb463] to-[#1f8b49] transition-all duration-500"
+                style={{ width: `${completionRate}%` }}
+              />
+            </div>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#2fb463] to-[#1f8b49] transition-all duration-500"
-              style={{ width: `${completionRate}%` }}
-            />
-          </div>
-        </div>
-      )}
+        )}
 
-      {/* Overdue Tasks */}
-      {overdueTasks.length > 0 && (
-        <div className="mb-4">
+        {/* Overdue Tasks */}
+        {overdueTasks.length > 0 && (
+          <div className="mb-4">
           <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-red-600 dark:text-red-400">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -199,6 +201,7 @@ export function TasksWidget() {
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">Nenhuma tarefa urgente no momento</p>
         </div>
       )}
+      </div>
     </div>
   );
 }

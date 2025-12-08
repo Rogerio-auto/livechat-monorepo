@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { cleanupService } from "../../services/cleanupService";
 import {
   FaTachometerAlt,
   FaUsers,
@@ -151,12 +152,38 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
   }, [profile?.id, registerUserTheme]);
 
   const logout = async () => {
+    console.log('[Sidebar] 🚪 Logout initiated');
+    
     try {
-      await fetch(`${API}/logout`, { method: "POST", credentials: "include" });
+      // 1. Chamar endpoint de logout no backend
+      await fetch(`${API}/logout`, { 
+        method: "POST", 
+        credentials: "include" 
+      });
+      console.log('[Sidebar] ✅ Backend logout successful');
+    } catch (error) {
+      console.error('[Sidebar] ⚠️ Backend logout error:', error);
+      // Continuar com limpeza mesmo se backend falhar
     } finally {
-      registerUserTheme(null);
-      navigate("/login");
-      onRequestClose?.();
+      try {
+        // 2. EXECUTAR LIMPEZA COMPLETA DO SISTEMA
+        await cleanupService.cleanup();
+        console.log('[Sidebar] ✅ System cleanup successful');
+        
+        // 3. Limpar tema do usuário
+        registerUserTheme(null);
+        
+        // 4. Fechar modais/sidebars
+        onRequestClose?.();
+        
+        // 5. FORÇAR RELOAD COMPLETO (garante limpeza total)
+        console.log('[Sidebar] 🔄 Forcing full page reload...');
+        window.location.href = '/login';
+      } catch (cleanupError) {
+        console.error('[Sidebar] ❌ Cleanup error:', cleanupError);
+        // Forçar reload mesmo se cleanup falhar
+        window.location.href = '/login';
+      }
     }
   };
 

@@ -4583,12 +4583,12 @@ async function startOutboundWorkers(count: number, prefetch: number): Promise<vo
 }
 
 async function main(): Promise<void> {
-  // 🔒 Garante que apenas 1 instância do worker está rodando
-  await ensureSingleWorkerInstance();
-
   const target = (process.argv[2] ?? "all").toLowerCase();
 
-  // Ajuste de concorr??ncia via env:
+  // 🔒 Garante que apenas 1 instância do worker está rodando (por tipo)
+  await ensureSingleWorkerInstance(target);
+
+  // Ajuste de concorrência via env:
   // INBOUND_WORKERS / INBOUND_PREFETCH / INBOUND_MEDIA_WORKERS / INBOUND_MEDIA_PREFETCH / OUTBOUND_WORKERS / OUTBOUND_PREFETCH
   switch (target) {
     case "inbound":

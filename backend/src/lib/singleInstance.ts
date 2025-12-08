@@ -5,9 +5,10 @@ import process from "node:process";
 /**
  * Garante que apenas 1 instância do worker está rodando
  * Usa Redis para coordenação entre processos
+ * @param workerType - Tipo do worker (inbound, outbound, media, all)
  */
-export async function ensureSingleWorkerInstance(): Promise<void> {
-  const INSTANCE_KEY = "worker:instance:lock";
+export async function ensureSingleWorkerInstance(workerType: string = "all"): Promise<void> {
+  const INSTANCE_KEY = `worker:instance:lock:${workerType}`;
   const INSTANCE_TTL = 30; // 30 segundos
   const CHECK_INTERVAL = 20000; // 20 segundos
 
@@ -19,18 +20,18 @@ export async function ensureSingleWorkerInstance(): Promise<void> {
   if (!registered) {
     // Outra instância já está rodando
     const currentInstance = await redis.get(INSTANCE_KEY);
-    console.error(`[SingleInstance] ❌ Outra instância do worker já está rodando: ${currentInstance}`);
-    console.error(`[SingleInstance] ❌ Esta instância (PID ${process.pid}) será encerrada em 3 segundos...`);
+    console.error(`[SingleInstance][${workerType}] ❌ Outra instância do worker já está rodando: ${currentInstance}`);
+    console.error(`[SingleInstance][${workerType}] ❌ Esta instância (PID ${process.pid}) será encerrada em 3 segundos...`);
     
     setTimeout(() => {
-      console.error(`[SingleInstance] ❌ Encerrando PID ${process.pid}`);
+      console.error(`[SingleInstance][${workerType}] ❌ Encerrando PID ${process.pid}`);
       process.exit(1);
     }, 3000);
     
     return;
   }
 
-  console.log(`[SingleInstance] ✅ Worker registrado: PID ${process.pid}`);
+  console.log(`[SingleInstance][${workerType}] ✅ Worker registrado: PID ${process.pid}`);
 
   // Renova o lock periodicamente (heartbeat)
   const heartbeat = setInterval(async () => {
@@ -38,20 +39,20 @@ export async function ensureSingleWorkerInstance(): Promise<void> {
       const current = await redis.get(INSTANCE_KEY);
       if (current === instanceId) {
         await redis.expire(INSTANCE_KEY, INSTANCE_TTL);
-        console.log(`[SingleInstance] 💓 Heartbeat: PID ${process.pid}`);
+        console.log(`[SingleInstance][${workerType}] 💓 Heartbeat: PID ${process.pid}`);
       } else {
-        console.error(`[SingleInstance] ⚠️  Lock perdido! Encerrando...`);
+        console.error(`[SingleInstance][${workerType}] ⚠️  Lock perdido! Encerrando...`);
         clearInterval(heartbeat);
         process.exit(1);
       }
     } catch (error) {
-      console.error(`[SingleInstance] ❌ Erro no heartbeat:`, error);
+      console.error(`[SingleInstance][${workerType}] ❌ Erro no heartbeat:`, error);
     }
   }, CHECK_INTERVAL);
 
   // Cleanup ao encerrar
   process.on("SIGINT", async () => {
-    console.log(`[SingleInstance] 🛑 SIGINT recebido, limpando lock...`);
+    console.log(`[SingleInstance][${workerType}] 🛑 SIGINT recebido, limpando lock...`);
     clearInterval(heartbeat);
     const current = await redis.get(INSTANCE_KEY);
     if (current === instanceId) {
@@ -61,7 +62,7 @@ export async function ensureSingleWorkerInstance(): Promise<void> {
   });
 
   process.on("SIGTERM", async () => {
-    console.log(`[SingleInstance] 🛑 SIGTERM recebido, limpando lock...`);
+    console.log(`[SingleInstance][${workerType}] 🛑 SIGTERM recebido, limpando lock...`);
     clearInterval(heartbeat);
     const current = await redis.get(INSTANCE_KEY);
     if (current === instanceId) {

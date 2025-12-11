@@ -1068,8 +1068,21 @@ io.on("connection", async (socket) => {
     }
   });
 
-  socket.on("leave", async (payload: { chatId?: string }) => {
+  socket.on("leave", async (payload: { chatId?: string; companyId?: string }) => {
     const chatId = payload?.chatId;
+    const companyId = payload?.companyId;
+    
+    // ✅ LEAVE company room
+    if (companyId) {
+      socket.leave(`company:${companyId}`);
+      console.log("[RT] 🏢 socket left company room", { 
+        socketId: socket.id, 
+        companyId,
+        room: `company:${companyId}`
+      });
+    }
+    
+    // ✅ LEAVE specific chat room
     if (chatId) {
       socket.leave(`chat:${chatId}`);
       

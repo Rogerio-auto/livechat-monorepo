@@ -1685,12 +1685,6 @@ const scrollToBottom = useCallback(
     s.on("connect", () => {
       console.log("[Socket] Connected");
       setSocketReady(true);
-      
-      // ✅ JOIN à sala da company para receber eventos globais
-      if (company?.id) {
-        s.emit("join", { companyId: company.id });
-        console.log("[Socket] 🏢 Joined company room:", `company:${company.id}`);
-      }
     });
 
     s.on("disconnect", () => {
@@ -2053,6 +2047,32 @@ const scrollToBottom = useCallback(
     logSendLatency,
     selectedDepartmentId,
   ]);
+
+  // ✅ JOIN company room when socket is ready AND company is loaded
+  useEffect(() => {
+    if (!socketReady || !company?.id || !socketRef.current) {
+      console.log("[Socket] ⏳ Waiting to join company room:", { 
+        socketReady, 
+        hasCompany: !!company?.id,
+        hasSocket: !!socketRef.current 
+      });
+      return;
+    }
+
+    const companyId = company.id;
+    const socket = socketRef.current;
+    
+    console.log("[Socket] 🏢 Joining company room:", `company:${companyId}`);
+    socket.emit("join", { companyId });
+    
+    // Cleanup: leave company room on unmount
+    return () => {
+      if (socket && companyId) {
+        console.log("[Socket] 🏢 Leaving company room:", `company:${companyId}`);
+        socket.emit("leave", { companyId });
+      }
+    };
+  }, [socketReady, company?.id]);
 
   // Registrar socket no cleanupService e escutar evento de logout
   useEffect(() => {

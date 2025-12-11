@@ -32,6 +32,7 @@ import {
 import { Task } from "../types/tasks";
 import { TaskModal } from "../components/tasks/TaskModal";
 import { io, Socket } from "socket.io-client";
+import { toast } from "../hooks/useToast";
 
 type Agent = { id: string; name: string };
 type Customer = { id: string; name: string };
@@ -443,7 +444,7 @@ export function CalendarioPage() {
         setIsEditingEvent(false);
         setShowViewEventModal(true);
         
-        alert("Evento atualizado com sucesso!");
+        toast.success("Evento atualizado com sucesso!");
       } else {
         // CREATE - Criando novo evento
         await fetchJson(`${API}/calendar/events`, {
@@ -455,7 +456,7 @@ export function CalendarioPage() {
         setIsEditingEvent(false);
         setSelectedEvent(null);
         
-        alert("Evento criado com sucesso!");
+        toast.success("Evento criado com sucesso!");
       }
       
       const api = calendarRef.current?.getApi?.();
@@ -1543,7 +1544,7 @@ export function CalendarioPage() {
                             await loadEventos(view.activeStart, view.activeEnd);
                           }
                         } catch (err: any) {
-                          alert("Erro ao deletar evento: " + err.message);
+                          toast.error("Erro ao deletar evento: " + err.message);
                         }
                       }
                     }}

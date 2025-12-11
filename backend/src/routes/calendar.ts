@@ -18,13 +18,23 @@ const TABLE_AVAILABILITY_EXCEPTIONS = process.env.TABLE_AVAILABILITY_EXCEPTIONS 
 const TABLE_CALENDAR_PERMISSIONS = process.env.TABLE_CALENDAR_PERMISSIONS || "calendar_permissions";
 
 async function checkAvailability(userId: string, startISO: string, endISO: string) {
-  const { data, error } = await (supabaseAdmin as any).rpc("is_user_available_simple", {
-    p_user_id: userId,
-    p_start_time: startISO,
-    p_end_time: endISO,
-  });
-  if (error) throw new Error(error.message);
-  return Boolean(data);
+  // TODO: Criar função is_user_available_simple no Supabase
+  // Por enquanto, retorna sempre true para não bloquear criação de eventos
+  try {
+    const { data, error } = await (supabaseAdmin as any).rpc("is_user_available_simple", {
+      p_user_id: userId,
+      p_start_time: startISO,
+      p_end_time: endISO,
+    });
+    if (error) {
+      console.warn("[checkAvailability] Função is_user_available_simple não encontrada, assumindo disponível");
+      return true; // Assume disponível se função não existir
+    }
+    return Boolean(data);
+  } catch (err) {
+    console.warn("[checkAvailability] Erro ao verificar disponibilidade:", err);
+    return true; // Assume disponível em caso de erro
+  }
 }
 
 export function registerCalendarRoutes(app: express.Application) {
@@ -201,7 +211,21 @@ export function registerCalendarRoutes(app: express.Application) {
   // Create event with participants
   app.post("/calendar/events", requireAuth, requireCalendarCreateEvent, async (req: any, res) => {
     try {
-      const userId = req.user.id;
+      const authUserId = req.user.id;
+      
+      // Buscar ID da tabela users (não o auth user id)
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      
+      if (uerr || !urow) {
+        return res.status(403).json({ error: "User not found" });
+      }
+      
+      const userId = (urow as any).id;
+      
       const schema = z
         .object({
           title: z.string().min(1),

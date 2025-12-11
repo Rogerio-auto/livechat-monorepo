@@ -104,13 +104,26 @@ export function registerAuthRoutes(app: express.Application) {
 
       // ✅ Invalidar cache de autenticação para forçar refresh
       try {
+        let token: string | undefined;
         const authHeader = req.headers.authorization;
+        
+        // Tentar pegar token do header Authorization
         if (authHeader?.startsWith("Bearer ")) {
-          const token = authHeader.slice(7);
+          token = authHeader.slice(7);
+        }
+        
+        // Se não encontrou no header, tentar pegar do cookie
+        if (!token) {
+          token = (req as any).cookies?.jwt;
+        }
+        
+        if (token && token !== "undefined") {
           const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
           const cacheKey = `auth:token:${tokenHash}`;
           await redis.del(cacheKey);
-          console.log('[/auth/me/theme] Cache invalidated:', cacheKey);
+          console.log('[/auth/me/theme] ✅ Cache invalidated:', cacheKey);
+        } else {
+          console.warn('[/auth/me/theme] ⚠️ No token found to invalidate cache');
         }
       } catch (cacheError) {
         console.warn('[/auth/me/theme] Failed to invalidate cache:', cacheError);
@@ -151,13 +164,26 @@ export function registerAuthRoutes(app: express.Application) {
 
       // ✅ Invalidar cache de autenticação para forçar refresh
       try {
+        let token: string | undefined;
         const authHeader = req.headers.authorization;
+        
+        // Tentar pegar token do header Authorization
         if (authHeader?.startsWith("Bearer ")) {
-          const token = authHeader.slice(7);
+          token = authHeader.slice(7);
+        }
+        
+        // Se não encontrou no header, tentar pegar do cookie
+        if (!token) {
+          token = (req as any).cookies?.jwt;
+        }
+        
+        if (token && token !== "undefined") {
           const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
           const cacheKey = `auth:token:${tokenHash}`;
           await redis.del(cacheKey);
-          console.log('[/auth/me/phone] Cache invalidated:', cacheKey);
+          console.log('[/auth/me/phone] ✅ Cache invalidated:', cacheKey);
+        } else {
+          console.warn('[/auth/me/phone] ⚠️ No token found to invalidate cache');
         }
       } catch (cacheError) {
         console.warn('[/auth/me/phone] Failed to invalidate cache:', cacheError);

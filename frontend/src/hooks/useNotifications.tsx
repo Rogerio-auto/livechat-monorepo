@@ -39,7 +39,7 @@ export function useNotifications() {
   useEffect(() => {
     const token = getAccessToken();
     if (!token) {
-      console.warn('[useNotifications] No access token found');
+      // Token ainda não disponível (carregando ou não logado)
       return;
     }
 

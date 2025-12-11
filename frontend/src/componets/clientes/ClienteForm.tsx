@@ -46,6 +46,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
   const [form, setForm] = useState<any>({ ...DEFAULTS });
   const [columns, setColumns] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
 
   // Atualiza form quando initialData mudar
   useEffect(() => {
@@ -104,6 +105,46 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
     const next = fmt ? fmt(value) : value;
 
     setForm((prev: any) => ({ ...prev, [name]: next }));
+
+    // Auto-preenchimento de endereço ao digitar CEP completo
+    if (name === "cep") {
+      const cepDigits = unformatCEP(next);
+      if (cepDigits.length === 8) {
+        fetchAddressByCEP(cepDigits);
+      }
+    }
+  };
+
+  const fetchAddressByCEP = async (cep: string) => {
+    setCepLoading(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      if (!response.ok) throw new Error("CEP não encontrado");
+      
+      const data = await response.json();
+      
+      if (data.erro) {
+        console.warn("CEP não encontrado na base ViaCEP");
+        return;
+      }
+
+      // Auto-preencher campos de endereço (não sobrescreve se já tiver valor)
+      setForm((prev: any) => ({
+        ...prev,
+        rua: data.logradouro || prev.rua,
+        bairro: data.bairro || prev.bairro,
+        cidade: data.localidade || prev.cidade,
+        uf: data.uf ? normUF(data.uf) : prev.uf,
+        // Só preenche complemento se vier da API e campo estiver vazio
+        complemento: (!prev.complemento && data.complemento) ? data.complemento : prev.complemento,
+      }));
+
+      console.log("✅ Endereço preenchido automaticamente via CEP:", cep);
+    } catch (error) {
+      console.error("Erro ao buscar CEP:", error);
+    } finally {
+      setCepLoading(false);
+    }
   };
 
   const sanitize = (d: any) => {
@@ -361,16 +402,33 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
         
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className={labelClass}>CEP</label>
-            <input
-              name="cep"
-              inputMode="numeric"
-              value={form.cep || ""}
-              onChange={handleChange}
-              placeholder="00000-000"
-              className={inputClass}
-              maxLength={9}
-            />
+            <label className={labelClass}>
+              CEP
+              {cepLoading && (
+                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
+                  Buscando...
+                </span>
+              )}
+            </label>
+            <div className="relative">
+              <input
+                name="cep"
+                inputMode="numeric"
+                value={form.cep || ""}
+                onChange={handleChange}
+                placeholder="00000-000"
+                className={inputClass}
+                maxLength={9}
+              />
+              {cepLoading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <svg className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="md:col-span-2">

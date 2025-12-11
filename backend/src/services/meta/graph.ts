@@ -296,3 +296,131 @@ export async function sendInteractiveButtons({
 
   return { wamid };
 }
+
+/**
+ * Envia mensagem interativa com lista de opções (menu)
+ * Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages#interactive-messages
+ */
+export async function sendInteractiveList({
+  inboxId,
+  chatId,
+  customerPhone,
+  message,
+  buttonText,
+  sections,
+  footer,
+  senderSupabaseId,
+}: {
+  inboxId: string;
+  chatId: string;
+  customerPhone: string;
+  message: string;
+  buttonText: string;
+  sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
+  footer?: string;
+  senderSupabaseId?: string | null;
+}): Promise<{ wamid: string }> {
+  const creds = await getDecryptedCredsForInbox(inboxId);
+  const graphCreds = toGraphCreds(creds);
+
+  // Validações
+  if (!sections || sections.length === 0 || sections.length > 10) {
+    throw new Error("Listas devem ter entre 1 e 10 seções");
+  }
+
+  let totalRows = 0;
+  for (const section of sections) {
+    if (!section.rows || section.rows.length === 0) {
+      throw new Error(`Seção "${section.title}" deve ter pelo menos 1 opção`);
+    }
+    totalRows += section.rows.length;
+    for (const row of section.rows) {
+      if (row.title.length > 24) {
+        throw new Error(`Título da opção muito longo: "${row.title}" (máx: 24 caracteres)`);
+      }
+      if (row.description && row.description.length > 72) {
+        throw new Error(`Descrição da opção muito longa: "${row.description}" (máx: 72 caracteres)`);
+      }
+    }
+  }
+
+  if (totalRows > 10) {
+    throw new Error(`Total de opções na lista não pode exceder 10 (atual: ${totalRows})`);
+  }
+
+  if (buttonText.length > 20) {
+    throw new Error(`Texto do botão muito longo: "${buttonText}" (máx: 20 caracteres)`);
+  }
+
+  // Monta payload conforme API da Meta
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: customerPhone,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: {
+        text: message,
+      },
+      action: {
+        button: buttonText,
+        sections: sections.map((section) => ({
+          title: section.title,
+          rows: section.rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            description: row.description || undefined,
+          })),
+        })),
+      },
+    },
+  };
+
+  // Adiciona footer se fornecido
+  if (footer && footer.trim()) {
+    (payload.interactive as any).footer = {
+      text: footer.trim().slice(0, 60), // Máximo 60 caracteres
+    };
+  }
+
+  console.log("[META][INTERACTIVE] Sending interactive list", {
+    chatId,
+    inboxId,
+    customerPhone,
+    sectionsCount: sections.length,
+    totalRows,
+    messageLength: message.length,
+  });
+
+  // Envia para API da Meta
+  const data = await graphFetch(graphCreds, `${graphCreds.phone_number_id}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  const wamid: string | null = (data as any)?.messages?.[0]?.id ?? null;
+  if (!wamid) {
+    throw new Error("Meta API não retornou message ID (wamid)");
+  }
+
+  // Salva mensagem no banco
+  await insertOutboundMessage({
+    chatId,
+    inboxId,
+    customerId: "", // Will be set by trigger
+    externalId: wamid,
+    content: message,
+    type: "INTERACTIVE",
+    senderId: senderSupabaseId,
+  });
+
+  console.log("[META][INTERACTIVE] ✅ Interactive list sent", {
+    chatId,
+    wamid,
+    totalRows,
+  });
+
+  return { wamid };
+}
+

@@ -63,10 +63,11 @@ export default function PerfilPage() {
 
       setSuccess(true);
       
-      // Aguardar 1 segundo e forçar reload completo para limpar cache
+      // Cache foi invalidado no backend, forçar reload para buscar dados atualizados
+      // Aguardar 800ms para mostrar mensagem de sucesso ao usuário
       setTimeout(() => {
         window.location.href = '/dashboard';
-      }, 1000);
+      }, 800);
     } catch (err: any) {
       setError(err.message || 'Erro ao atualizar telefone');
     } finally {

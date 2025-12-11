@@ -20,12 +20,14 @@ import PerfilPage from './pages/perfil'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
 import { AppLayout } from './componets/layout/AppLayout'
+import { ToastContainer } from './componets/ToastContainer'
 
 
 function App() {
   return (
     <ThemeProvider>
       <BrowserRouter>
+      <ToastContainer />
       <Routes>
         <Route path='/' element={<Navigate to="/dashboard" replace />}/>
         <Route path='/login' element={<Login/>}/>

@@ -19,7 +19,7 @@ export async function requireCalendarOwner(req: Request, res: Response, next: Ne
     // Map auth user -> local users.id
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
-      .select("id")
+      .select("id, role")
       .eq("user_id", authUserId)
       .maybeSingle();
     
@@ -28,6 +28,21 @@ export async function requireCalendarOwner(req: Request, res: Response, next: Ne
     }
 
     const ownerId = (urow as any).id;
+    const userRole = (urow as any)?.role;
+
+    // ADMIN/MANAGER bypass - full access
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
+      const { data: calendar } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("*")
+        .eq("id", calendarId)
+        .maybeSingle();
+      
+      if (calendar) {
+        (req as any).calendar = calendar;
+        return next();
+      }
+    }
 
     // Check if user owns the calendar
     const { data: calendar, error } = await supabaseAdmin
@@ -65,7 +80,7 @@ export async function requireCalendarView(req: Request, res: Response, next: Nex
     // Map auth user -> local users.id
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
-      .select("id")
+      .select("id, role")
       .eq("user_id", authUserId)
       .maybeSingle();
     
@@ -74,6 +89,22 @@ export async function requireCalendarView(req: Request, res: Response, next: Nex
     }
 
     const userId = (urow as any).id;
+    const userRole = (urow as any)?.role;
+
+    // ADMIN/MANAGER bypass - full access to view any calendar
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
+      const { data: calendar } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("*")
+        .eq("id", calendarId)
+        .maybeSingle();
+      
+      if (calendar) {
+        (req as any).calendar = calendar;
+        (req as any).calendarPermission = { isOwner: true, can_view: true, can_edit: true, can_manage: true };
+        return next();
+      }
+    }
 
     // Check if user owns the calendar
     const { data: calendar } = await supabaseAdmin
@@ -142,7 +173,7 @@ export async function requireCalendarEdit(req: Request, res: Response, next: Nex
     // Map auth user -> local users.id
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
-      .select("id")
+      .select("id, role")
       .eq("user_id", authUserId)
       .maybeSingle();
     
@@ -151,6 +182,22 @@ export async function requireCalendarEdit(req: Request, res: Response, next: Nex
     }
 
     const userId = (urow as any).id;
+    const userRole = (urow as any)?.role;
+
+    // ADMIN/MANAGER bypass - full edit access
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
+      const { data: calendar } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("*")
+        .eq("id", calendarId)
+        .maybeSingle();
+      
+      if (calendar) {
+        (req as any).calendar = calendar;
+        (req as any).calendarPermission = { isOwner: true, can_view: true, can_edit: true, can_manage: true };
+        return next();
+      }
+    }
 
     // Check if user owns the calendar
     const { data: calendar } = await supabaseAdmin
@@ -205,19 +252,48 @@ export async function requireCalendarCreateEvent(req: Request, res: Response, ne
     const calendarId = (req.body as any).calendar_id;
     const authUserId = (req as any).user?.id;
 
+    console.log("[requireCalendarCreateEvent] 🔍 Request:", { 
+      authUserId, 
+      calendarId,
+      userRole: (req as any).profile?.role 
+    });
+
     if (!calendarId) {
+      console.warn("[requireCalendarCreateEvent] ❌ Missing calendar_id");
       return res.status(400).json({ error: "calendar_id required in request body" });
     }
 
     // Map auth user -> local users.id
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
-      .select("id")
+      .select("id, role")
       .eq("user_id", authUserId)
       .maybeSingle();
     
+    console.log("[requireCalendarCreateEvent] 👤 User lookup:", { 
+      found: !!urow, 
+      userId: (urow as any)?.id,
+      role: (urow as any)?.role,
+      error: uerr?.message 
+    });
+    
     if (uerr || !urow) {
+      console.warn("[requireCalendarCreateEvent] ❌ User not found");
       return res.status(403).json({ error: "User not found" });
+    }
+
+    // ADMIN bypass - full access
+    const userRole = (urow as any)?.role;
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
+      console.log("[requireCalendarCreateEvent] ✅ ADMIN/MANAGER bypass");
+      (req as any).calendarPermission = { 
+        isOwner: true, 
+        can_view: true, 
+        can_edit: true, 
+        can_manage: true, 
+        can_create_events: true 
+      };
+      return next();
     }
 
     const userId = (urow as any).id;
@@ -229,12 +305,20 @@ export async function requireCalendarCreateEvent(req: Request, res: Response, ne
       .eq("id", calendarId)
       .maybeSingle();
 
+    console.log("[requireCalendarCreateEvent] 📅 Calendar lookup:", { 
+      found: !!calendar, 
+      calendarId,
+      ownerId: (calendar as any)?.owner_id 
+    });
+
     if (!calendar) {
+      console.warn("[requireCalendarCreateEvent] ❌ Calendar not found");
       return res.status(404).json({ error: "Calendar not found" });
     }
 
     // If user is owner, allow
     if ((calendar as any).owner_id === userId) {
+      console.log("[requireCalendarCreateEvent] ✅ User is calendar owner");
       (req as any).calendar = calendar;
       (req as any).calendarPermission = { isOwner: true, can_view: true, can_edit: true, can_manage: true, can_create_events: true };
       return next();
@@ -248,7 +332,14 @@ export async function requireCalendarCreateEvent(req: Request, res: Response, ne
       .eq("user_id", userId)
       .maybeSingle();
 
+    console.log("[requireCalendarCreateEvent] 🔐 Permission check:", { 
+      found: !!permission, 
+      can_create_events: (permission as any)?.can_create_events,
+      error: permErr?.message 
+    });
+
     if (permErr || !permission || !(permission as any).can_create_events) {
+      console.warn("[requireCalendarCreateEvent] ❌ Access denied");
       return res.status(403).json({ error: "Create event access denied for this calendar" });
     }
 
@@ -293,8 +384,8 @@ export async function requireEventOwner(req: Request, res: Response, next: NextF
     const userId = (urow as any).id;
     const userRole = (urow as any).role;
 
-    // ADMIN can edit any event
-    if (userRole === "ADMIN") {
+    // ADMIN/MANAGER can edit any event
+    if (userRole === "ADMIN" || userRole === "MANAGER") {
       const { data: event, error } = await supabaseAdmin
         .from(TABLE_EVENTS)
         .select("id, created_by_id, calendar_id")

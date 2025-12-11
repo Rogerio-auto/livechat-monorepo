@@ -5,6 +5,7 @@ import { supabaseAdmin } from "../lib/supabase";
 import type { Tool, AgentTool } from "../repos/tools.repo";
 import { logToolExecution } from "../repos/tools.repo";
 import { getIO, hasIO } from "../lib/io";
+import { sendInteractiveButtons, sendInteractiveList } from "./meta/graph";
 
 export type ToolExecutionContext = {
   agentId: string;
@@ -802,121 +803,106 @@ async function handleSocket(
   params: Record<string, any>,
   context: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
-  const { event, room, validate_inbox, allowed_providers, max_buttons, max_button_length } = config;
+  const { event, room, validate_inbox, allowed_providers } = config;
   if (!event) throw new Error("handler_config.event is required for SOCKET");
 
-  // ====== VALIDAÇÃO ESPECIAL: send_interactive_buttons ======
-  if (event === "send:interactive_message") {
-    // 1. Validar provider da inbox (apenas META_CLOUD)
-    if (validate_inbox) {
-      const { data: chatData } = await supabaseAdmin
-        .from("chats")
-        .select("inbox_id, inboxes!inner(provider)")
-        .eq("id", context.chatId)
-        .single();
+  let inboxId: string | undefined;
+  let provider: string | undefined;
+  let customerPhone: string | undefined;
 
-      if (!chatData?.inboxes) {
-        throw new Error("Não foi possível identificar a inbox do chat");
-      }
+  // 1. Validar provider da inbox se necessário (para ferramentas interativas)
+  if (validate_inbox) {
+    const { data: chatData } = await supabaseAdmin
+      .from("chats")
+      .select("inbox_id, customer_phone, inboxes!inner(provider)")
+      .eq("id", context.chatId)
+      .single();
 
-      const provider = (chatData.inboxes as any).provider?.toUpperCase();
-      const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
-
-      if (!allowedProviders.includes(provider)) {
-        throw new Error(
-          `Botões interativos só funcionam com WhatsApp Business API (Meta Cloud). ` +
-          `Provider atual: ${provider}. Esta conversa não suporta botões.`
-        );
-      }
-
-      console.log(`[SOCKET][send_interactive_buttons] ✅ Provider validado: ${provider}`);
+    if (!chatData?.inboxes) {
+      throw new Error("Não foi possível identificar a inbox do chat");
     }
 
-    // 2. Validar estrutura dos botões
-    if (!params.message || typeof params.message !== "string") {
-      throw new Error("Campo 'message' é obrigatório e deve ser texto");
-    }
+    inboxId = chatData.inbox_id;
+    customerPhone = chatData.customer_phone;
+    provider = (chatData.inboxes as any).provider?.toUpperCase();
+    const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
 
-    if (!Array.isArray(params.buttons) || params.buttons.length === 0) {
-      throw new Error("Campo 'buttons' deve ser um array com pelo menos 1 botão");
+    if (!allowedProviders.includes(provider)) {
+      throw new Error(
+        `Interatividade só funciona com providers: ${allowedProviders.join(", ")}. ` +
+        `Provider atual: ${provider}.`
+      );
     }
-
-    const maxButtons = max_buttons || 3;
-    if (params.buttons.length > maxButtons) {
-      throw new Error(`Máximo de ${maxButtons} botões permitidos. Enviados: ${params.buttons.length}`);
-    }
-
-    const maxLength = max_button_length || 20;
-    for (const [index, button] of params.buttons.entries()) {
-      if (!button.id || typeof button.id !== "string") {
-        throw new Error(`Botão ${index + 1}: campo 'id' é obrigatório`);
-      }
-      if (!button.title || typeof button.title !== "string") {
-        throw new Error(`Botão ${index + 1}: campo 'title' é obrigatório`);
-      }
-      if (button.title.length > maxLength) {
-        throw new Error(
-          `Botão ${index + 1}: título muito longo (${button.title.length} caracteres). ` +
-          `Máximo: ${maxLength} caracteres`
-        );
-      }
-    }
-
-    // 3. Validar footer se presente
-    if (params.footer && typeof params.footer === "string" && params.footer.length > 60) {
-      throw new Error(`Footer muito longo (${params.footer.length} caracteres). Máximo: 60 caracteres`);
-    }
-
-    console.log(`[SOCKET][send_interactive_buttons] ✅ Validações OK`, {
-      chatId: context.chatId,
-      buttonsCount: params.buttons.length,
-      messageLength: params.message.length,
-      hasFooter: !!params.footer
-    });
   }
 
+  // 2. Enviar via Meta API se for o caso
+  if (provider === "META_CLOUD" && inboxId && customerPhone) {
+    try {
+      if (event === "send:interactive_message") {
+        // Validação básica de botões
+        if (!params.message || !Array.isArray(params.buttons)) {
+          throw new Error("Parâmetros inválidos para botões (message, buttons)");
+        }
+        
+        await sendInteractiveButtons({
+          inboxId,
+          chatId: context.chatId,
+          customerPhone,
+          message: params.message,
+          buttons: params.buttons,
+          footer: params.footer,
+          senderSupabaseId: context.userId,
+        });
+      } else if (event === "send:interactive_list") {
+        // Validação básica de lista
+        if (!params.message || !Array.isArray(params.sections)) {
+          throw new Error("Parâmetros inválidos para lista (message, sections)");
+        }
+
+        await sendInteractiveList({
+          inboxId,
+          chatId: context.chatId,
+          customerPhone,
+          message: params.message,
+          buttonText: params.buttonText || "Abrir Menu",
+          sections: params.sections,
+          footer: params.footer,
+          senderSupabaseId: context.userId,
+        });
+      }
+    } catch (error: any) {
+      console.error(`[SOCKET] Failed to send interactive message via Meta API:`, error);
+      throw new Error(`Erro ao enviar mensagem interativa: ${error.message}`);
+    }
+  }
+
+  // 3. Emitir Socket para Frontend (UI)
+  // Isso garante que o operador veja os botões/listas que foram enviados
   const targetRoom = room || `chat:${context.chatId}`;
   
-  // Se Socket.IO não estiver disponível (ex: no worker), retorna sucesso com aviso
-  if (!hasIO()) {
-    console.warn(`[SOCKET] Socket.IO not available, event '${event}' not emitted to '${targetRoom}'`);
-    return { 
-      success: true, 
-      data: { 
-        message: `Event '${event}' scheduled (Socket.IO unavailable in worker context)`,
-        event,
-        room: targetRoom,
-        params 
-      } 
+  if (hasIO()) {
+    const io = getIO();
+    const payload = {
+      chatId: context.chatId,
+      agentId: context.agentId,
+      contactId: context.contactId,
+      ...params,
+      timestamp: new Date().toISOString()
     };
+
+    io.to(targetRoom).emit(event, payload);
+    console.log(`[SOCKET] Event '${event}' emitted to room '${targetRoom}'`);
+  } else {
+    console.warn(`[SOCKET] Socket.IO not available, event '${event}' not emitted to '${targetRoom}'`);
   }
-
-  const io = getIO();
-  
-  // Preparar payload para emissão
-  const payload = {
-    chatId: context.chatId,
-    agentId: context.agentId,
-    contactId: context.contactId,
-    ...params,
-    timestamp: new Date().toISOString()
-  };
-
-  io.to(targetRoom).emit(event, payload);
-
-  console.log(`[SOCKET] Event '${event}' emitted to room '${targetRoom}'`, {
-    chatId: context.chatId,
-    event,
-    paramsKeys: Object.keys(params)
-  });
 
   return { 
     success: true, 
     data: { 
-      message: `Botões interativos enviados com sucesso`,
+      message: `Mensagem interativa enviada com sucesso`,
       event,
       room: targetRoom,
-      buttonsCount: params.buttons?.length || 0
+      provider: provider || "SOCKET_ONLY"
     } 
   };
 }

@@ -91,7 +91,7 @@ export default function LiveChatPage() {
   const PAGE_SIZE = 20;
   const MESSAGES_PAGE_SIZE = 20;
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string>("OPEN");
+  const [status, setStatus] = useState<string>("ALL");
   const [chatScope, setChatScope] = useState<"conversations" | "groups">("conversations");
   const [section, setSection] = useState<LivechatSection>("all");
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
@@ -186,7 +186,7 @@ export default function LiveChatPage() {
   const resetFilters = useCallback(() => {
     setInboxId("");
     setSelectedDepartmentId(null);
-    setStatus("OPEN");
+    setStatus("ALL");
   }, []);
 
   // Status options: used for filtering and per-chat status change
@@ -435,26 +435,37 @@ export default function LiveChatPage() {
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
     try {
+      // ✅ CORREÇÃO: Atualizar o estado local IMEDIATAMENTE para feedback visual instantâneo
+      patchChatLocal(chatId, { unread_count: 0 } as any);
+      
       const res = await fetch(`${API}/livechat/chats/${chatId}/mark-read`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
       if (!res.ok) {
+        // 404 = chat não existe ou sem permissão - silenciar (comum após logout/troca de empresa)
+        if (res.status === 404) {
+          console.debug("[READ_RECEIPTS] Chat não encontrado ou sem permissão", { chatId });
+          return;
+        }
         const json = await res.json().catch(() => ({}));
         console.warn("[READ_RECEIPTS] mark-read falhou", {
           chatId,
+          status: res.status,
           error: json?.error || res.statusText,
         });
+        // Se falhar, não reverter - melhor manter o estado otimista
         return;
       }
       await res.json().catch(() => ({}));
-      patchChatLocal(chatId, { unread_count: 0 } as any);
+      console.log('[READ_RECEIPTS] Chat marcado como lido com sucesso', { chatId });
     } catch (error) {
       console.error("[READ_RECEIPTS] erro inesperado ao marcar como lida", {
         chatId,
         error: error instanceof Error ? error.message : String(error),
       });
+      // Não reverter o estado mesmo em caso de erro
     }
   }, [patchChatLocal]);
 
@@ -1116,9 +1127,26 @@ const bumpChatToTop = useCallback((update: {
     return arr;
   });
 
+  // ✅ CORREÇÃO: Atualizar selectedChat e currentChat também
   setSelectedChat((prev) => {
     if (prev && prev.id === update.chatId) {
-      return normalizeChat({ ...prev, ...update });
+      const merged = { ...prev, ...update };
+      // Se este é o chat selecionado, garantir que unread_count seja 0
+      if (currentChatIdRef.current === update.chatId) {
+        merged.unread_count = 0;
+      }
+      return normalizeChat(merged);
+    }
+    return prev;
+  });
+  
+  // Atualizar currentChat também se for o mesmo
+  setCurrentChat((prev) => {
+    if (prev && prev.id === update.chatId) {
+      const merged = { ...prev, ...update };
+      // Chat aberto sempre tem unread_count = 0
+      merged.unread_count = 0;
+      return normalizeChat(merged);
     }
     return prev;
   });
@@ -1680,6 +1708,32 @@ const scrollToBottom = useCallback(
         lastMessageFrom = "AGENT";
       }
       
+      // ✅ CORREÇÃO: Se o chat está aberto no momento, não incrementar unread_count
+      // O backend já incrementou o contador, mas se o usuário está visualizando,
+      // devemos manter em 0 e chamar mark-read
+      const isChatOpen = currentChatIdRef.current === m.chat_id;
+      const isFromCustomer = m.sender_type === "CUSTOMER";
+      
+      console.debug('[READ_RECEIPTS] Nova mensagem recebida', {
+        chatId: m.chat_id,
+        messageId: m.id,
+        isChatOpen,
+        isFromCustomer,
+        currentChatId: currentChatIdRef.current,
+      });
+      
+      // Se chat está aberto E mensagem é do cliente, marcar como lida imediatamente
+      if (isChatOpen && isFromCustomer) {
+        console.log('[READ_RECEIPTS] ✅ Chat aberto, marcando mensagem como lida automaticamente', {
+          chatId: m.chat_id,
+          messageId: m.id,
+        });
+        // Marcar como lida após um pequeno delay para garantir que foi exibida
+        setTimeout(() => {
+          markChatAsRead(m.chat_id);
+        }, 300);
+      }
+      
       // Bump chat to top quando receber mensagem nova
       bumpChatToTop({
         chatId: m.chat_id,
@@ -1694,9 +1748,12 @@ const scrollToBottom = useCallback(
           : undefined,
         remote_id: Object.prototype.hasOwnProperty.call(m, "remote_id") ? (m as any).remote_id ?? null : undefined,
         kind: Object.prototype.hasOwnProperty.call(m, "kind") ? (m as any).kind ?? null : undefined,
-        unread_count: Object.prototype.hasOwnProperty.call(m, "unread_count") 
-          ? (m as any).unread_count ?? undefined
-          : undefined,
+        // Se chat está aberto, forçar unread_count = 0, caso contrário usar valor do payload
+        unread_count: isChatOpen && isFromCustomer ? 0 : (
+          Object.prototype.hasOwnProperty.call(m, "unread_count") 
+            ? (m as any).unread_count ?? undefined
+            : undefined
+        ),
       });
     };
 
@@ -1727,6 +1784,9 @@ const scrollToBottom = useCallback(
     };
 
     const onChatUpdated = (p: any) => {
+      // ✅ CORREÇÃO: Se o chat está aberto, garantir que unread_count seja 0
+      const isChatOpen = currentChatIdRef.current === p.chatId;
+      
       bumpChatToTop({
         chatId: p.chatId,
         last_message: p.last_message ?? null,
@@ -1747,9 +1807,12 @@ const scrollToBottom = useCallback(
         remote_id: Object.prototype.hasOwnProperty.call(p, "remote_id") ? p.remote_id ?? null : undefined,
         kind: Object.prototype.hasOwnProperty.call(p, "kind") ? p.kind ?? null : undefined,
         status: p.status ?? undefined,
-        unread_count: Object.prototype.hasOwnProperty.call(p, "unread_count") 
-          ? p.unread_count ?? undefined
-          : undefined,
+        // Se chat está aberto, forçar unread_count = 0
+        unread_count: isChatOpen ? 0 : (
+          Object.prototype.hasOwnProperty.call(p, "unread_count") 
+            ? p.unread_count ?? undefined
+            : undefined
+        ),
         department_id: Object.prototype.hasOwnProperty.call(p, "department_id")
           ? p.department_id ?? null
           : undefined,
@@ -2272,10 +2335,11 @@ const scrollToBottom = useCallback(
 
         return applyResult(data.items || [], data.total ?? 0);
       } catch (error: any) {
-        console.error("[livechat] loadChats error", error);
+        // AbortError é esperado durante navegação rápida - não logar como erro
         if (error?.name === "AbortError") {
           return { items: chatsRef.current, total: chatsTotalRef.current };
         }
+        console.error("[livechat] loadChats error", error);
         console.error("Falha ao carregar chats", error);
         if (myReqId === chatsReqIdRef.current) {
           chatsOffsetRef.current = previousOffsetValue;
@@ -2356,6 +2420,21 @@ const scrollToBottom = useCallback(
           if (res.status === 401) {
             navigate("/login");
             throw new Error("Unauthorized");
+          }
+          // 404 = chat não existe ou sem permissão - silenciar (comum após logout/troca de empresa)
+          if (res.status === 404) {
+            console.debug("[loadMessages] Chat não encontrado ou sem permissão", { chatId });
+            // Retornar array vazio para não quebrar a UI
+            messagesCache.set(chatId, []);
+            messagesMetaRef.current[chatId] = { nextBefore: null, hasMore: false };
+            if (currentChatIdRef.current === chatId) {
+              setMessages([]);
+              setMessagesHasMore(false);
+            }
+            if (messagesRequestRef.current === requestId) {
+              messagesRequestRef.current = null;
+            }
+            return false;
           }
           throw new Error((payload as any)?.error || `HTTP ${res.status}`);
         }

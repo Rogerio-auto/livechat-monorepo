@@ -519,6 +519,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
             let query = supabaseAdmin
               .from("chats")
               .select(buildChatSelectFields(), { count: "exact" })
+              // Filtrar por company_id via join com inbox
               .eq("inbox.company_id", companyId)
               .order("last_message_at", { ascending: false, nullsFirst: false })
               .order("created_at", { ascending: false })
@@ -1697,20 +1698,44 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Detalhar chat (com cache)
-  app.get("/livechat/chats/:id", requireAuth, async (req, res) => {
+  app.get("/livechat/chats/:id", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
+
+    // 🔒 SEGURANÇA: Validar company_id do usuário
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ error: "Empresa não identificada" });
+    }
 
     const cacheKey = k.chat(id);
     const cached = await rGet<any>(cacheKey);
-    if (cached) return res.json(cached);
+    // Validar company_id mesmo no cache
+    if (cached && cached.company_id === companyId) {
+      return res.json(cached);
+    }
 
+    // Validar company_id via inbox_id
     const { data, error } = await supabaseAdmin
       .from("chats")
-      .select("*, ai_agent:agents!chats_ai_agent_id_fkey(id, name)")
+      .select("*, ai_agent:agents!chats_ai_agent_id_fkey(id, name), inbox_id")
       .eq("id", id)
       .maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: "Chat nao encontrado" });
+    if (!data) return res.status(404).json({ error: "Chat não encontrado" });
+    
+    // Validar que a inbox pertence à empresa
+    if ((data as any).inbox_id) {
+      const { data: inboxData } = await supabaseAdmin
+        .from("inboxes")
+        .select("company_id")
+        .eq("id", (data as any).inbox_id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (!inboxData) {
+        return res.status(404).json({ error: "Chat não encontrado ou acesso negado" });
+      }
+    }
 
     // Flatten AI agent relationship and fallback to active company agent if missing
     try {
@@ -1734,10 +1759,41 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Atualizar status (invalida chat + listas)
-  app.put("/livechat/chats/:id/status", requireAuth, async (req, res) => {
+  app.put("/livechat/chats/:id/status", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
     const { status } = req.body || {};
     if (!status) return res.status(400).json({ error: "status obrigatorio" });
+
+    // 🔒 SEGURANÇA: Validar company_id do usuário
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ error: "Empresa não identificada" });
+    }
+
+    // Primeiro validar se o chat pertence à empresa via inbox_id
+    const { data: chatCheck } = await supabaseAdmin
+      .from("chats")
+      .select("id, inbox_id")
+      .eq("id", id)
+      .maybeSingle();
+    
+    if (!chatCheck) {
+      return res.status(404).json({ error: "Chat não encontrado" });
+    }
+    
+    // Validar que a inbox pertence à empresa
+    if ((chatCheck as any).inbox_id) {
+      const { data: inboxData } = await supabaseAdmin
+        .from("inboxes")
+        .select("company_id")
+        .eq("id", (chatCheck as any).inbox_id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (!inboxData) {
+        return res.status(404).json({ error: "Chat não encontrado ou acesso negado" });
+      }
+    }
 
     const { data, error } = await supabaseAdmin
       .from("chats")
@@ -1748,7 +1804,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
     if (error) return res.status(500).json({ error: error.message });
 
     await rDel(k.chat(id));
-    const companyId = (data as any)?.company_id ?? req.user?.company_id ?? null;
+    // companyId já foi validado acima
     if (companyId) {
       const inboxCandidate = (data as any)?.inbox_id ?? null;
       const remoteId = (data as any)?.remote_id ?? null;
@@ -1798,14 +1854,21 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Atualizar departamento do chat
-  app.put("/livechat/chats/:id/department", requireAuth, async (req, res) => {
+  app.put("/livechat/chats/:id/department", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
     let { department_id: departmentId } = (req.body || {}) as { department_id?: string | null };
+
+    // 🔒 SEGURANÇA: Validar company_id do usuário
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ error: "Empresa não identificada" });
+    }
 
     console.info("[livechat] PUT /livechat/chats/:id/department", {
       chatId: id,
       requestedDepartmentId: departmentId ?? null,
       userId: req.user?.id ?? null,
+      companyId,
     });
 
     if (departmentId === "") departmentId = null;
@@ -1835,18 +1898,26 @@ export function registerLivechatChatRoutes(app: express.Application) {
       console.warn("[livechat] department update chat not found", { chatId: id });
       return res.status(404).json({ error: "Chat não encontrado" });
     }
+    
+    // Validar que a inbox pertence à empresa
+    const chatInboxId = (chatRow as any).inbox_id;
+    if (chatInboxId) {
+      const { data: inboxData } = await supabaseAdmin
+        .from("inboxes")
+        .select("company_id")
+        .eq("id", chatInboxId)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      
+      if (!inboxData) {
+        return res.status(404).json({ error: "Chat não encontrado ou acesso negado" });
+      }
+    }
 
     console.debug("[livechat] department update current chat", {
       chatId: id,
       currentDepartmentId: (chatRow as any)?.department_id ?? null,
-      companyId: (chatRow as any)?.company_id ?? null,
     });
-
-    const companyId = (chatRow as any).company_id ?? req.user?.company_id ?? null;
-    if (!companyId) return res.status(401).json({ error: "Empresa não identificada" });
-    if (req.user?.company_id && req.user.company_id !== companyId) {
-      return res.status(403).json({ error: "Acesso negado" });
-    }
 
     let departmentMeta: { id: string; name: string | null; color: string | null; icon: string | null } | null = null;
     if (departmentId) {
@@ -2012,11 +2083,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
     
     console.log("[PUT /ai-agent] Company ID do usuário:", companyId);
 
-    // Verificar se chat existe e pertence à empresa do usuário (via inbox)
+    // Verificar se chat existe e pertence à empresa do usuário (via inbox E company_id direto)
     const { data: chatData, error: chatError } = await supabaseAdmin
       .from("chats")
       .select("id, inbox:inboxes!inner(id, company_id)")
       .eq("id", id)
+      .eq("company_id", companyId)
       .eq("inbox.company_id", companyId)
       .maybeSingle();
 
@@ -2141,6 +2213,12 @@ export function registerLivechatChatRoutes(app: express.Application) {
   app.get("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
     const { id } = req.params as { id: string };
     
+    // 🔒 SEGURANÇA: Validar company_id do usuário
+    const companyId = req.user?.company_id;
+    if (!companyId) {
+      return res.status(401).json({ error: "Empresa não identificada" });
+    }
+    
     // ✅ CORREÇÃO: Desabilitar cache do navegador para mensagens
     // O cache do Redis é suficiente e mais controlável
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -2171,6 +2249,38 @@ export function registerLivechatChatRoutes(app: express.Application) {
     };
 
     try {
+      // 🔒 SEGURANÇA: Validar que o chat pertence à empresa do usuário via inbox_id
+      const { data: chatOwnership, error: ownershipError } = await supabaseAdmin
+        .from("chats")
+        .select("id, inbox_id")
+        .eq("id", id)
+        .maybeSingle();
+      
+      if (ownershipError) {
+        endTimer({ error: ownershipError.message, queries: queryLog });
+        return res.status(500).json({ error: ownershipError.message });
+      }
+      
+      if (!chatOwnership) {
+        endTimer({ error: "chat_not_found", queries: queryLog });
+        return res.status(404).json({ error: "Chat não encontrado" });
+      }
+      
+      // Validar que a inbox pertence à empresa
+      const chatInboxId = (chatOwnership as any).inbox_id;
+      if (chatInboxId) {
+        const { data: inboxData } = await supabaseAdmin
+          .from("inboxes")
+          .select("company_id")
+          .eq("id", chatInboxId)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        
+        if (!inboxData) {
+          endTimer({ error: "chat_not_found_or_unauthorized", queries: queryLog });
+          return res.status(404).json({ error: "Chat não encontrado ou acesso negado" });
+        }
+      }
       const cacheKey = k.msgsKey(id, before, limit);
       const privMetaKey = k.privateChat(id);
       const [cachedRaw, cachedPrivMeta] = await Promise.all([
@@ -2421,16 +2531,38 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const { text, senderType = "AGENT", draftId } = req.body || {};
       if (!text) return res.status(400).json({ error: "text obrigatorio" });
 
+      // 🔒 SEGURANÇA: Validar company_id do usuário
+      const companyId = req.user?.company_id;
+      if (!companyId) {
+        return res.status(401).json({ error: "Empresa não identificada" });
+      }
+
       const clientDraftId =
         typeof draftId === "string" && draftId.trim().length > 0 ? draftId.trim() : null;
 
       const { data: chat, error: chatErr } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id, customer_id")
+        .select("id, inbox_id, status, customer_id")
         .eq("id", chatId)
         .maybeSingle();
+      
       if (chatErr) return res.status(500).json({ error: chatErr.message });
-      if (!chat) return res.status(404).json({ error: "Chat not found" });
+      if (!chat) return res.status(404).json({ error: "Chat não encontrado" });
+      
+      // Validar que a inbox pertence à empresa
+      const chatInboxId = (chat as any).inbox_id;
+      if (chatInboxId) {
+        const { data: inboxData } = await supabaseAdmin
+          .from("inboxes")
+          .select("company_id")
+          .eq("id", chatInboxId)
+          .eq("company_id", companyId)
+          .maybeSingle();
+        
+        if (!inboxData) {
+          return res.status(404).json({ error: "Chat não encontrado ou acesso negado" });
+        }
+      }
 
       const isFromCustomer = String(senderType).toUpperCase() === "CUSTOMER";
       const nowIso = new Date().toISOString();
@@ -3198,12 +3330,19 @@ export function registerLivechatChatRoutes(app: express.Application) {
   app.post("/livechat/chats/:id/mark-read", requireAuth, async (req: any, res) => {
     try {
       const { id: chatId } = req.params as { id: string };
-      console.log("[READ_RECEIPTS][livechat/mark-read] Marking chat as read (provider-agnostic)", { chatId });
+      
+      // 🔒 SEGURANÇA: Validar company_id do usuário
+      const userCompanyId = req.user?.company_id;
+      if (!userCompanyId) {
+        return res.status(401).json({ ok: false, error: "Empresa não identificada" });
+      }
+      
+      console.log("[READ_RECEIPTS][livechat/mark-read] Marking chat as read (provider-agnostic)", { chatId, userCompanyId });
 
       // 1. Get chat details to determine provider
       const { data: chat, error: chatError } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id, company_id")
+        .select("id, inbox_id")
         .eq("id", chatId)
         .maybeSingle();
 
@@ -3218,6 +3357,22 @@ export function registerLivechatChatRoutes(app: express.Application) {
       if (!chat) {
         console.warn("[READ_RECEIPTS][livechat/mark-read] Chat not found", { chatId });
         return res.status(404).json({ ok: false, error: "Chat not found" });
+      }
+      
+      // Validar que a inbox pertence à empresa
+      const chatInboxId = (chat as any).inbox_id;
+      if (chatInboxId) {
+        const { data: inboxData } = await supabaseAdmin
+          .from("inboxes")
+          .select("company_id")
+          .eq("id", chatInboxId)
+          .eq("company_id", userCompanyId)
+          .maybeSingle();
+        
+        if (!inboxData) {
+          console.warn("[READ_RECEIPTS][livechat/mark-read] Chat access denied", { chatId });
+          return res.status(404).json({ ok: false, error: "Chat not found" });
+        }
       }
 
       // 2. Get inbox provider

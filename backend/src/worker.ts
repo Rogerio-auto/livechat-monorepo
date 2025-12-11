@@ -491,6 +491,7 @@ bufferInterval.unref?.();
 async function fetchChatUpdateForSocket(chatId: string): Promise<{
   chatId: string;
   inboxId: string | null;
+  companyId: string | null;
   status: string | null;
   last_message: string | null;
   last_message_at: string | null;
@@ -509,6 +510,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   const row = await db.oneOrNone<{
     chat_id: string;
     inbox_id: string | null;
+    company_id: string | null;
     status: string | null;
     last_message: string | null;
     last_message_at: string | null;
@@ -525,6 +527,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   }>(
     `select ch.id as chat_id,
             ch.inbox_id,
+            ib.company_id,
             ch.status,
             ch.last_message,
             ch.last_message_at,
@@ -539,6 +542,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             cust.phone as customer_phone,
             cust.id as customer_id
        from public.chats ch
+  left join public.inbox ib on ib.id = ch.inbox_id
  left join public.customers cust on cust.id = ch.customer_id
  left join public.agents ag on ag.id = ch.ai_agent_id
       where ch.id = $1`,
@@ -548,6 +552,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   return {
     chatId: row.chat_id,
     inboxId: row.inbox_id,
+    companyId: row.company_id,
     status: row.status,
     last_message: row.last_message,
     last_message_at: row.last_message_at,

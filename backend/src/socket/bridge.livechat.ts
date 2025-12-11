@@ -32,7 +32,13 @@ function emitMessage(ev: Extract<SocketEvent, { kind: "livechat.inbound.message"
   );
 
   if (ev.chatUpdate) {
-    io.emit("chat:updated", ev.chatUpdate);
+    // 🔒 CORREÇÃO CRÍTICA: Emitir apenas para a sala da empresa, não para todos
+    const companyId = (ev.chatUpdate as any)?.companyId;
+    if (companyId) {
+      io.to(`company:${companyId}`).emit("chat:updated", ev.chatUpdate);
+    } else {
+      console.warn("[socket.bridge] chat:updated sem companyId - não emitido", { chatId: ev.chatId });
+    }
   }
 }
 

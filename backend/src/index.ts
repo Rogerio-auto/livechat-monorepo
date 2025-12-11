@@ -1014,8 +1014,43 @@ io.on("connection", async (socket) => {
     }
   }
 
-  socket.on("join", async (payload: { chatId?: string }) => {
+  socket.on("join", async (payload: { chatId?: string; companyId?: string }) => {
     const chatId = payload?.chatId;
+    const companyId = payload?.companyId;
+    
+    // ✅ JOIN company room (global events for entire company)
+    if (companyId) {
+      // Security: verify user belongs to this company
+      const userId = await socketAuthUserId(socket);
+      if (userId) {
+        try {
+          const userCompany = await db.oneOrNone<{ company_id: string }>(
+            `SELECT company_id FROM public.users WHERE id = $1`,
+            [userId]
+          );
+          
+          if (userCompany?.company_id === companyId) {
+            socket.join(`company:${companyId}`);
+            console.log("[RT] ✅ socket joined company room", { 
+              socketId: socket.id, 
+              companyId, 
+              userId,
+              room: `company:${companyId}`
+            });
+          } else {
+            console.warn("[RT] ⚠️ user tried to join wrong company room", { 
+              userId, 
+              requestedCompany: companyId,
+              actualCompany: userCompany?.company_id 
+            });
+          }
+        } catch (error) {
+          console.error("[RT] ❌ failed to verify company access:", error);
+        }
+      }
+    }
+    
+    // ✅ JOIN specific chat room (messages for specific chat)
     if (chatId) {
       socket.join(`chat:${chatId}`);
       

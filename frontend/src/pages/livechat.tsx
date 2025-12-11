@@ -4,6 +4,7 @@ import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
 import { useNavigate, useLocation } from "react-router-dom";
 import { cleanupService } from "../services/cleanupService";
+import { useCompany } from "../hooks/useCompany";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
 import LivechatMenu, {
   type LivechatSection,
@@ -70,6 +71,7 @@ function formatPhoneDisplay(raw?: string | null) {
 
 export default function LiveChatPage() {
   const navigate = useNavigate();
+  const { company } = useCompany();
   const [chatsState, setChatsState] = useState<Chat[]>([]);
   const chatsRef = useRef<Chat[]>([]);
   const setChats = useCallback((value: SetStateAction<Chat[]>) => {
@@ -1683,6 +1685,12 @@ const scrollToBottom = useCallback(
     s.on("connect", () => {
       console.log("[Socket] Connected");
       setSocketReady(true);
+      
+      // ✅ JOIN à sala da company para receber eventos globais
+      if (company?.id) {
+        s.emit("join", { companyId: company.id });
+        console.log("[Socket] 🏢 Joined company room:", `company:${company.id}`);
+      }
     });
 
     s.on("disconnect", () => {

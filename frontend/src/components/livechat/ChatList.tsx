@@ -202,7 +202,13 @@ export default function ChatList({
   // Debug leve: quantos chats vieram com foto_url para validar avatars
   useEffect(() => {
     const withPhoto = normalizedChats.filter((c) => !!c.photo_url).length;
-    console.debug("[UI][ChatList] avatars:", { total: normalizedChats.length, withPhoto });
+    const withUnread = normalizedChats.filter((c) => c.unread_count && c.unread_count > 0);
+    console.debug("[UI][ChatList] render:", { 
+      total: normalizedChats.length, 
+      withPhoto,
+      withUnread: withUnread.length,
+      unreadDetails: withUnread.map(c => ({ id: c.id, name: c.name, unread: c.unread_count }))
+    });
   }, [normalizedChats]);
 
   if (!normalizedChats.length) {
@@ -374,7 +380,10 @@ export default function ChatList({
             <div className="flex flex-col items-end gap-1">
               <div className="text-xs text-(--color-text-muted)">{lastAt}</div>
               {chat.unread_count && chat.unread_count > 0 ? (
-                <div className="flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-(--color-primary) text-white text-xs font-semibold">
+                <div 
+                  className="flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-(--color-primary) text-white text-xs font-semibold"
+                  title={`${chat.unread_count} mensagens não lidas`}
+                >
                   {chat.unread_count > 99 ? "99+" : chat.unread_count}
                 </div>
               ) : null}

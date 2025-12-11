@@ -350,6 +350,22 @@ export default function LiveChatPage() {
 
   // [KANBAN-BACKEND] util para atualizar card localmente
   const patchChatLocal = useCallback((chatId: string, partial: Partial<Chat>) => {
+    console.log("[CACHE] 🔄 patchChatLocal", { chatId, partial, hasUnread: 'unread_count' in partial });
+    
+    // ✅ ATUALIZAR CHATS STATE (lista normal)
+    setChats((prev) => {
+      const idx = prev.findIndex((c) => c.id === chatId);
+      if (idx === -1) return prev;
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], ...partial };
+      console.log("[CACHE] ✅ chatsState updated", { 
+        chatId, 
+        oldUnread: prev[idx].unread_count, 
+        newUnread: updated[idx].unread_count 
+      });
+      return updated;
+    });
+    
     setSelectedChat((prev) => (prev && prev.id === chatId ? { ...prev, ...partial } : prev));
     setChatsByStage((prev) => {
       const draft = structuredClone(prev);
@@ -380,7 +396,7 @@ export default function LiveChatPage() {
       }
       return draft;
     });
-  }, []);
+  }, [setChats]);
 
   const updateChatSnapshots = useCallback((updatedChat: Chat) => {
     const entries = Object.entries(chatsStoreRef.current);

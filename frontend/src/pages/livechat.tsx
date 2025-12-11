@@ -20,6 +20,9 @@ import CampaignsPanel from "../componets/livechat/CampaignsPanel";
 import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
 import { MentionInput } from "../components/MentionInput";
 import { Button, Card } from "../components/ui";
+import { format, isToday, isYesterday, isSameDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
   "http://localhost:5000";
@@ -67,6 +70,29 @@ function formatPhoneDisplay(raw?: string | null) {
     return raw.trim();
   }
   return digits || raw.trim();
+}
+
+function formatDateSeparator(dateString: string) {
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return null;
+
+  if (isToday(date)) {
+    return "Hoje";
+  }
+  if (isYesterday(date)) {
+    return "Ontem";
+  }
+  
+  const diff = Date.now() - date.getTime();
+  const daysDiff = diff / (1000 * 60 * 60 * 24);
+  
+  if (daysDiff < 7) {
+     // Capitalize first letter
+     const weekday = format(date, "EEEE", { locale: ptBR });
+     return weekday.charAt(0).toUpperCase() + weekday.slice(1);
+  }
+  
+  return format(date, "dd/MM/yyyy");
 }
 
 export default function LiveChatPage() {
@@ -1683,12 +1709,10 @@ const scrollToBottom = useCallback(
     socketRef.current = s;
 
     s.on("connect", () => {
-      console.log("[Socket] Connected");
       setSocketReady(true);
     });
 
     s.on("disconnect", () => {
-      console.log("[Socket] Disconnected");
       setSocketReady(false);
     });
 
@@ -2051,24 +2075,17 @@ const scrollToBottom = useCallback(
   // ✅ JOIN company room when socket is ready AND company is loaded
   useEffect(() => {
     if (!socketReady || !company?.id || !socketRef.current) {
-      console.log("[Socket] ⏳ Waiting to join company room:", { 
-        socketReady, 
-        hasCompany: !!company?.id,
-        hasSocket: !!socketRef.current 
-      });
       return;
     }
 
     const companyId = company.id;
     const socket = socketRef.current;
     
-    console.log("[Socket] 🏢 Joining company room:", `company:${companyId}`);
     socket.emit("join", { companyId });
     
     // Cleanup: leave company room on unmount
     return () => {
       if (socket && companyId) {
-        console.log("[Socket] 🏢 Leaving company room:", `company:${companyId}`);
         socket.emit("leave", { companyId });
       }
     };
@@ -3949,22 +3966,38 @@ const scrollToBottom = useCallback(
                   <div className="py-4 text-center text-sm theme-text-muted">Carregando mensagens...</div>
                 )}
 
-                {messages.map((m) => (
-                  <MessageBubble
-                    key={m.id}
-                    m={m}
-                    isAgent={m.sender_type === "AGENT"}
-                    mediaItems={mediaItems}
-                    mediaIndex={mediaIndexById.get(m.id) ?? undefined}
-                    showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
-                    onRetry={retryFailedMessage}
-                    onReply={() => setReplyingTo(m)}
-                    onEdit={handleEditMessage}
-                    onDelete={handleDeleteMessage}
-                    allMessages={messages}
-                    customerName={currentChat?.customer_name || currentChat?.display_name || null}
-                  />
-                ))}
+                {messages.map((m, index) => {
+                  const showDateSeparator =
+                    index === 0 ||
+                    !isSameDay(new Date(m.created_at), new Date(messages[index - 1].created_at));
+                  
+                  const dateLabel = showDateSeparator ? formatDateSeparator(m.created_at) : null;
+
+                  return (
+                    <div key={m.id}>
+                      {showDateSeparator && dateLabel && (
+                        <div className="flex justify-center my-4">
+                          <span className="bg-gray-100 dark:bg-gray-800/80 text-gray-600 dark:text-gray-300 text-xs font-medium px-3 py-1 rounded-full shadow-sm border border-gray-200 dark:border-gray-700">
+                            {dateLabel}
+                          </span>
+                        </div>
+                      )}
+                      <MessageBubble
+                        m={m}
+                        isAgent={m.sender_type === "AGENT"}
+                        mediaItems={mediaItems}
+                        mediaIndex={mediaIndexById.get(m.id) ?? undefined}
+                        showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
+                        onRetry={retryFailedMessage}
+                        onReply={() => setReplyingTo(m)}
+                        onEdit={handleEditMessage}
+                        onDelete={handleDeleteMessage}
+                        allMessages={messages}
+                        customerName={currentChat?.customer_name || currentChat?.display_name || null}
+                      />
+                    </div>
+                  );
+                })}
 
                 {!messagesLoading && messages.length === 0 && (
                   <div className="py-4 text-center text-sm theme-text-muted">Nenhuma mensagem.</div>

@@ -990,13 +990,10 @@ const chatViewers = new Map<string, Set<string>>(); // chatId -> Set<userId>
 (io as any)._chatViewers = chatViewers; // expose to routes
 
 io.on("connection", async (socket) => {
-  console.log("[RT] client connected:", socket.id);
-
   // Automatically join user to their personal notification room
   const userId = await socketAuthUserId(socket);
   if (userId) {
     socket.join(`user:${userId}`);
-    console.log("[RT] socket joined user room", { socketId: socket.id, userId });
     
     // Join company room for multi-tenancy isolation
     try {
@@ -1008,7 +1005,6 @@ io.on("connection", async (socket) => {
       
       if (profile?.company_id) {
         socket.join(`company:${profile.company_id}`);
-        console.log("[RT] socket joined company room", { socketId: socket.id, userId, companyId: profile.company_id });
       }
     } catch (error) {
       console.error("[RT] failed to join company room", { socketId: socket.id, userId, error });
@@ -1032,12 +1028,6 @@ io.on("connection", async (socket) => {
           
           if (userCompany?.company_id === companyId) {
             socket.join(`company:${companyId}`);
-            console.log("[RT] ✅ socket joined company room", { 
-              socketId: socket.id, 
-              companyId, 
-              userId,
-              room: `company:${companyId}`
-            });
           } else {
             console.warn("[RT] ⚠️ user tried to join wrong company room", { 
               userId, 
@@ -1062,9 +1052,6 @@ io.on("connection", async (socket) => {
           chatViewers.set(chatId, new Set());
         }
         chatViewers.get(chatId)!.add(userId);
-        console.log("[RT] socket joined chat", { socketId: socket.id, chatId, userId, viewersCount: chatViewers.get(chatId)!.size });
-      } else {
-        console.log("[RT] socket joined chat (no auth)", { socketId: socket.id, chatId });
       }
     }
   });
@@ -1076,11 +1063,6 @@ io.on("connection", async (socket) => {
     // ✅ LEAVE company room
     if (companyId) {
       socket.leave(`company:${companyId}`);
-      console.log("[RT] 🏢 socket left company room", { 
-        socketId: socket.id, 
-        companyId,
-        room: `company:${companyId}`
-      });
     }
     
     // ✅ LEAVE specific chat room
@@ -1094,9 +1076,6 @@ io.on("connection", async (socket) => {
         if (chatViewers.get(chatId)!.size === 0) {
           chatViewers.delete(chatId); // cleanup empty sets
         }
-        console.log("[RT] socket left chat", { socketId: socket.id, chatId, userId });
-      } else {
-        console.log("[RT] socket left chat (no auth)", { socketId: socket.id, chatId });
       }
     }
   });

@@ -1,12 +1,12 @@
 import express from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { 
   requireCalendarOwner, 
   requireCalendarCreateEvent, 
   requireEventOwner 
-} from "../middlewares/calendarPermissions.ts";
+} from "../middlewares/calendarPermissions.js";
 
 const VIEW_USER_AGENDA = process.env.VIEW_USER_AGENDA || "user_agenda";
 const TABLE_CALENDARS = process.env.TABLE_CALENDARS || "calendars";

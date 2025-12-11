@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import ProposalForm from "../componets/propostas/ProposalForm";
-import { useToast } from "../hooks/useToast";
-import ToastContainer from "../componets/common/ToastContainer";
-
+import { toast } from "../hooks/useToast";
 import { io } from "socket.io-client";
 import { FaFileAlt, FaFileSignature, FaReceipt, FaTrash, FaFileDownload, FaCog } from "react-icons/fa";
 
@@ -54,7 +52,6 @@ export default function DocumentosPage() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [generatingPdf, setGeneratingPdf] = useState(false); // Loading overlay for PDF generation
-  const { toasts, showToast, dismissToast } = useToast();
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
     const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
@@ -168,7 +165,7 @@ export default function DocumentosPage() {
       await fetchJson(`${API}/proposals/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
       setPropostas(prev => prev.map(p => p.id === id ? { ...p, status } as Proposal : p));
     } catch (e: any) {
-      showToast(e?.message || "Erro ao atualizar status", "error");
+      toast.error(e?.message || "Erro ao atualizar status");
     }
   };
 
@@ -178,9 +175,9 @@ export default function DocumentosPage() {
         method: "POST",
       });
       await load();
-      showToast("Proposta duplicada com sucesso!", "success");
+      toast.success("Proposta duplicada com sucesso!");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao duplicar proposta", "error");
+      toast.error(e?.message || "Erro ao duplicar proposta");
     }
   };
   const deleteProposal = async (id: string) => {
@@ -188,9 +185,9 @@ export default function DocumentosPage() {
     try {
       await fetchJson(`${API}/proposals/${id}`, { method: "DELETE" });
       setPropostas(prev => prev.filter(p => p.id !== id));
-      showToast("Proposta excluída com sucesso!", "success");
+      toast.success("Proposta excluída com sucesso!");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao excluir proposta", "error");
+      toast.error(e?.message || "Erro ao excluir proposta");
     }
   };
 
@@ -250,9 +247,9 @@ export default function DocumentosPage() {
       await fetchJson(`${API}/documents`, { method: "POST", body: JSON.stringify(payload) });
       setCreateDoc(null);
       load();
-      showToast("Documento criado com sucesso!", "success");
+      toast.success("Documento criado com sucesso!");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao criar documento", "error");
+      toast.error(e?.message || "Erro ao criar documento");
     }
   };
 
@@ -263,7 +260,7 @@ export default function DocumentosPage() {
       const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=${docType}`);
       setGenerateTemplate(prev => prev ? { ...prev, templates, loading: false } : null);
     } catch (e: any) {
-      showToast(e?.message || "Erro ao carregar templates", "error");
+      toast.error(e?.message || "Erro ao carregar templates");
       setGenerateTemplate(null);
     }
   };
@@ -276,7 +273,7 @@ export default function DocumentosPage() {
       const templates = await fetchJson<any[]>(`${API}/document-templates?doc_type=PROPOSTA`);
       
       if (!templates || templates.length === 0) {
-        showToast('Nenhum template de proposta encontrado. Crie um template primeiro.', 'warning');
+        toast.error("Erro");
         return;
       }
 
@@ -307,9 +304,9 @@ export default function DocumentosPage() {
       }
 
       load(); // Reload list
-      showToast('PDF gerado com sucesso!', 'success');
+      toast.error("Erro");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao gerar PDF", "error");
+      toast.error(e?.message || "Erro ao gerar PDF");
     } finally {
       setGeneratingPdf(false);
     }
@@ -318,7 +315,7 @@ export default function DocumentosPage() {
   // Generate document from template
   const generateFromTemplate = async () => {
     if (!generateTemplate || !generateTemplate.selectedTemplateId) {
-      showToast('Selecione um template', 'warning');
+      toast.error("Erro");
       return;
     }
     setGenerateTemplate(prev => prev ? { ...prev, generating: true } : null);
@@ -358,10 +355,10 @@ export default function DocumentosPage() {
       const msg = convertToPdf && result.pdf_path 
         ? 'Documento gerado com sucesso! (DOCX + PDF)'
         : 'Documento gerado com sucesso!';
-      showToast(msg, 'success');
+      toast.error("Erro");
       load(); // Recarregar lista
     } catch (e: any) {
-      showToast(e?.message || "Erro ao gerar documento", "error");
+      toast.error(e?.message || "Erro ao gerar documento");
     } finally {
       setGenerateTemplate(prev => prev ? { ...prev, generating: false } : null);
       setGeneratingPdf(false);
@@ -413,7 +410,7 @@ export default function DocumentosPage() {
         className="ml-16 min-h-screen p-8"
         style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
       >
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+        
         
         <div
           className="mt-8 rounded-2xl border p-6 shadow-lg theme-surface"

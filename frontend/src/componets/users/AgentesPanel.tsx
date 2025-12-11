@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { API, fetchJson } from "../../utils/api";
 import { Input, Button } from "../../components/ui";
-import { useToast } from "../../hooks/useToast";
-import ToastContainer from "../common/ToastContainer";
-
+import { toast } from "../../hooks/useToast";
 type AgentRow = {
   id: string;
   name: string;
@@ -34,7 +32,6 @@ export default function AgentesPanel() {
   const [newAgent, setNewAgent] = useState<NewAgentForm>({ name: "", email: "", role: "AGENT" });
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const inflight = useRef(false);
-  const { toasts, showToast, dismissToast } = useToast();
 
   const loadAgents = async () => {
     if (inflight.current) return;
@@ -90,9 +87,9 @@ export default function AgentesPanel() {
         body: JSON.stringify(patch),
       });
       setAgents((prev) => prev.map((agent) => (agent.id === id ? { ...agent, ...patch } : agent)));
-      showToast("Colaborador atualizado com sucesso!", "success");
+      toast.success("Colaborador atualizado com sucesso!");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao atualizar colaborador", "error");
+      toast.error(e?.message || "Erro ao atualizar colaborador");
     }
   };
 
@@ -100,15 +97,15 @@ export default function AgentesPanel() {
     try {
       await fetchJson(`${API}/settings/users/${id}`, { method: "DELETE" });
       setAgents((prev) => prev.filter((agent) => agent.id !== id));
-      showToast("Colaborador removido com sucesso!", "success");
+      toast.success("Colaborador removido com sucesso!");
     } catch (e: any) {
-      showToast(e?.message || "Erro ao remover colaborador", "error");
+      toast.error(e?.message || "Erro ao remover colaborador");
     }
   };
 
   const createAgent = async () => {
     if (!newAgent.name || !newAgent.email) {
-      showToast("Preencha nome e email do colaborador", "warning");
+      toast.error("Erro");
       return;
     }
     
@@ -120,17 +117,14 @@ export default function AgentesPanel() {
       });
       setAgents((prev) => [created, ...prev]);
       setNewAgent({ name: "", email: "", role: "AGENT" });
-      showToast("Colaborador criado com sucesso! Email de convite enviado.", "success");
+      toast.success("Colaborador criado com sucesso! Email de convite enviado.");
     } catch (e: any) {
       // Verificar se é erro de limite atingido
       const errorData = e?.data || {};
       if (errorData.code === "LIMIT_REACHED") {
-        showToast(
-          errorData.message || `Limite de ${errorData.limit} colaboradores atingido. Faça upgrade do seu plano para adicionar mais usuários.`,
-          "error"
-        );
+        toast.error("Erro");
       } else {
-        showToast(e?.message || "Erro ao criar colaborador", "error");
+        toast.error(e?.message || "Erro ao criar colaborador");
       }
     }
   };
@@ -140,9 +134,9 @@ export default function AgentesPanel() {
       await fetchJson(`${API}/settings/users/${userId}/resend-invite`, {
         method: "POST",
       });
-      showToast(`Convite reenviado para ${userEmail} com sucesso!`, "success");
+      toast.success(`Convite reenviado para ${userEmail} com sucesso!`);
     } catch (e: any) {
-      showToast(e?.message || "Erro ao reenviar convite", "error");
+      toast.error(e?.message || "Erro ao reenviar convite");
     }
   };
 
@@ -160,7 +154,7 @@ export default function AgentesPanel() {
               : agent
           )
         );
-        showToast("Acesso à caixa de entrada removido", "success");
+        toast.success("Acesso à caixa de entrada removido");
       } else {
         // Add access
         await fetchJson(`${API}/settings/users/${userId}/inboxes`, {
@@ -174,10 +168,10 @@ export default function AgentesPanel() {
               : agent
           )
         );
-        showToast("Acesso à caixa de entrada concedido", "success");
+        toast.success("Acesso à caixa de entrada concedido");
       }
     } catch (e: any) {
-      showToast(e?.message || "Erro ao atualizar acesso", "error");
+      toast.error(e?.message || "Erro ao atualizar acesso");
     }
   };
 
@@ -370,7 +364,7 @@ export default function AgentesPanel() {
           </div>
         ))}
       </div>
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      
     </section>
   );
 }

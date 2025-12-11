@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 const TABLE_CALENDARS = process.env.TABLE_CALENDARS || "calendars";
 const TABLE_EVENTS = process.env.TABLE_EVENTS || "events";

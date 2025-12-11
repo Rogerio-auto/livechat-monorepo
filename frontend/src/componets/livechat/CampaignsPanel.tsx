@@ -1,14 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { FiBarChart2, FiPlay, FiPause, FiXCircle, FiTrash2, FiRefreshCw, FiDownload, FiPlus, FiMessageSquare, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { useUserProfile } from "../../hooks/useUserProfile";
-import { useToast } from "../../hooks/useToast";
+import { toast } from "../../hooks/useToast";
 import CampaignModalWizard from "./CampaignModalWizard";
 import CampaignMetricsModal from "./CampaignMetricsModal";
 import TemplateCard from "./TemplateCard";
 import TemplateWizardModal from "./TemplateWizardModal";
 import TemplateDetailModal from "./TemplateDetailModal";
 import MetaTemplateSubmitModal from "./MetaTemplateSubmitModal";
-import ToastContainer from "../common/ToastContainer";
 import type { Campaign } from "../../types/types";
 
 type Template = { id: string; name: string; kind: string; status?: string; meta_status?: string; meta_template_id?: string };
@@ -22,7 +21,6 @@ type PagePayload = {
 
 export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
   const { profile } = useUserProfile();
-  const { toasts, showToast, dismissToast } = useToast();
   const limit = 20;
   const [items, setItems] = useState<Campaign[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -355,9 +353,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       });
       // reload templates
       loadTemplates();
-      showToast(`Template "${cloned.name || "Clone"}" criado com sucesso!`, "success");
+      toast.success(`Template "${cloned.name || "Clone"}" criado com sucesso!`);
     } catch (e: any) {
-      showToast(`Falha ao clonar: ${e?.message || "erro"}`, "error");
+      toast.error(`Falha ao clonar: ${e?.message || "erro"}`);
     }
   };
 
@@ -369,9 +367,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       });
       // optimist remove from UI
       setTemplates((prev) => prev.filter((t) => t.id !== template.id));
-      showToast(`Template "${template.name}" excluído com sucesso.`, "success");
+      toast.success(`Template "${template.name}" excluído com sucesso.`);
     } catch (e: any) {
-      showToast(`Falha ao excluir template: ${e?.message || "erro"}`, "error");
+      toast.error(`Falha ao excluir template: ${e?.message || "erro"}`);
     }
   };
 
@@ -382,7 +380,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       const inboxId = details.inbox_id;
       
       if (!inboxId) {
-        showToast("Template não possui inbox configurada", "error");
+        toast.error("Template não possui inbox configurada");
         return;
       }
 
@@ -390,21 +388,21 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       setMetaSubmitInboxId(inboxId);
       setMetaSubmitOpen(true);
     } catch (e: any) {
-      showToast(`Erro ao abrir envio para Meta: ${e?.message || "erro"}`, "error");
+      toast.error(`Erro ao abrir envio para Meta: ${e?.message || "erro"}`);
     }
   };
 
   const onMetaSubmitSuccess = () => {
     loadTemplates(true); // Sincroniza com Meta
-    showToast("Template enviado para Meta com sucesso! Aguarde aprovação.", "success");
+    toast.success("Template enviado para Meta com sucesso! Aguarde aprovação.");
   };
 
   const handleSyncTemplates = async () => {
     try {
       await loadTemplates(true); // Chama com syncMeta=true
-      showToast("Templates sincronizados com a Meta!", "success");
+      toast.success("Templates sincronizados com a Meta!");
     } catch (e: any) {
-      showToast(`Erro ao sincronizar: ${e?.message || "erro"}`, "error");
+      toast.error(`Erro ao sincronizar: ${e?.message || "erro"}`);
     }
   };
 
@@ -413,7 +411,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
     const metaInboxes = inboxes.filter(i => i.provider?.toUpperCase() === "META_CLOUD");
     
     if (metaInboxes.length === 0) {
-      showToast("Nenhuma inbox Meta Cloud encontrada", "error");
+      toast.error("Nenhuma inbox Meta Cloud encontrada");
       return;
     }
 
@@ -435,12 +433,12 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
 
       if (result.imported > 0) {
         await loadTemplates();
-        showToast(`${result.imported} template(s) importado(s) com sucesso!`, "success");
+        toast.success(`${result.imported} template(s) importado(s) com sucesso!`);
       } else {
-        showToast("Nenhum template novo para importar", "info");
+        toast.info("Nenhum template novo para importar");
       }
     } catch (e: any) {
-      showToast(`Erro ao importar: ${e?.message || "erro"}`, "error");
+      toast.error(`Erro ao importar: ${e?.message || "erro"}`);
     }
   };
 
@@ -537,7 +535,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         })
       });
 
-      showToast('Template criado e enviado para aprovação da Meta!', 'success');
+      toast.success('Template criado e enviado para aprovação da Meta!');
       setWizardOpen(false);
       loadTemplates(true); // Sync after creation
     } catch (err: any) {
@@ -573,14 +571,14 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         body: JSON.stringify({ status: newStatus }),
       });
       setItems((prev) => prev.map((c) => (c.id === campaign.id ? updated : c)));
-      showToast(`Campanha ${newStatus === "PAUSED" ? "pausada" : "retomada"} com sucesso!`, "success");
+      toast.success(`Campanha ${newStatus === "PAUSED" ? "pausada" : "retomada"} com sucesso!`);
     } catch (e: any) {
       // Se há dados de validação, mostrar detalhes
       if (e.data?.critical_issues?.length) {
         const issues = e.data.critical_issues.join("\n• ");
-        showToast(`❌ Validação falhou:\n• ${issues}`, "error");
+        toast.error(`❌ Validação falhou:\n• ${issues}`);
       } else {
-        showToast(`Falha ao alterar status: ${e?.message || "erro"}`, "error");
+        toast.error(`Falha ao alterar status: ${e?.message || "erro"}`);
       }
       console.error("[CampaignsPanel] Toggle status error:", e.data || e);
     }
@@ -596,12 +594,12 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         body: JSON.stringify(payload),
       });
       setItems((prev) => prev.map((c) => (c.id === campaign.id ? updated : c)));
-      showToast(`Campanha agendada e ativada!`, "success");
+      toast.success(`Campanha agendada e ativada!`);
     } catch (e: any) {
       // Se há dados de validação, mostrar detalhes
       if (e.data?.critical_issues?.length) {
         const issues = e.data.critical_issues.join("\n• ");
-        showToast(`❌ Não é possível ativar:\n• ${issues}`, "error");
+        toast.error(`❌ Não é possível ativar:\n• ${issues}`);
         
         // Mostrar também warnings se houver
         if (e.data?.warnings?.length) {
@@ -616,7 +614,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         // Mostrar critical_issues expandido
         console.error("[CampaignsPanel] Critical issues:", e.data.critical_issues);
       } else {
-        showToast(`Falha ao ativar campanha: ${e?.message || "erro"}`, "error");
+        toast.error(`Falha ao ativar campanha: ${e?.message || "erro"}`);
       }
       console.error("[CampaignsPanel] Quick activate error:", e.data || e);
     }
@@ -630,9 +628,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         body: JSON.stringify({ status: "CANCELLED" }),
       });
       setItems((prev) => prev.map((c) => (c.id === campaign.id ? updated : c)));
-      showToast(`Campanha "${campaign.name}" cancelada.`, "success");
+      toast.success(`Campanha "${campaign.name}" cancelada.`);
     } catch (e: any) {
-      showToast(`Falha ao cancelar: ${e?.message || "erro"}`, "error");
+      toast.error(`Falha ao cancelar: ${e?.message || "erro"}`);
     }
   };
 
@@ -643,15 +641,14 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
         method: "DELETE",
       });
       setItems((prev) => prev.filter((c) => c.id !== campaign.id));
-      showToast(`Campanha "${campaign.name}" excluída com sucesso.`, "success");
+      toast.success(`Campanha "${campaign.name}" excluída com sucesso.`);
     } catch (e: any) {
-      showToast(`Falha ao excluir: ${e?.message || "erro"}`, "error");
+      toast.error(`Falha ao excluir: ${e?.message || "erro"}`);
     }
   };
 
   return (
     <div className="flex-1 flex flex-col gap-3">
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       
       {/* Seção de Templates/Messages no topo - sempre renderiza */}
       <div className="flex flex-col gap-2">

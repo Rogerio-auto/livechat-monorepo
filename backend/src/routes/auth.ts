@@ -1,12 +1,12 @@
 import express from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAnon, supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.ts";
-import { getIO } from "../lib/io.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAnon, supabaseAdmin } from "../lib/supabase.js";
+import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.js";
+import { getIO } from "../lib/io.js";
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
 import { randomUUID } from "crypto";
-import { redis } from "../lib/redis.ts";
+import { redis } from "../lib/redis.js";
 
 export function registerAuthRoutes(app: express.Application) {
   console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');

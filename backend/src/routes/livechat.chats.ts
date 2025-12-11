@@ -3342,7 +3342,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       // 1. Get chat details to determine provider
       const { data: chat, error: chatError } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id")
+        .select("id, inbox_id, company_id")
         .eq("id", chatId)
         .maybeSingle();
 

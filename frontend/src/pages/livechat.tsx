@@ -435,9 +435,12 @@ export default function LiveChatPage() {
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
     try {
+      console.log("[READ_RECEIPTS] 🔵 Marcando chat como lido (otimista)", { chatId });
+      
       // ✅ CORREÇÃO: Atualizar o estado local IMEDIATAMENTE para feedback visual instantâneo
       patchChatLocal(chatId, { unread_count: 0 } as any);
       
+      console.log("[READ_RECEIPTS] 📤 Enviando mark-read para API", { chatId });
       const res = await fetch(`${API}/livechat/chats/${chatId}/mark-read`, {
         method: "POST",
         credentials: "include",
@@ -1784,6 +1787,13 @@ const scrollToBottom = useCallback(
     };
 
     const onChatUpdated = (p: any) => {
+      console.log("[SOCKET] 📨 chat:updated received", {
+        chatId: p.chatId,
+        unread_count: p.unread_count,
+        currentChat: currentChatIdRef.current,
+        isChatOpen: currentChatIdRef.current === p.chatId
+      });
+      
       // ✅ CORREÇÃO: Se o chat está aberto, garantir que unread_count seja 0
       const isChatOpen = currentChatIdRef.current === p.chatId;
       

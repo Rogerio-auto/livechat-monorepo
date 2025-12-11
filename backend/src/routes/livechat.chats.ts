@@ -3460,6 +3460,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
           // Emit socket events
           const io = getIO();
+          const chatCompanyId = chat.company_id;
+          const roomName = chatCompanyId ? `company:${chatCompanyId}` : null;
+          
+          console.log("[READ_RECEIPTS][WAHA] 🔔 Socket info:", {
+            chatId,
+            companyId: chatCompanyId,
+            roomName,
+            totalSockets: io.sockets.sockets.size,
+            roomSize: roomName ? (io.sockets.adapter.rooms.get(roomName)?.size || 0) : 0,
+            chatRoomSize: io.sockets.adapter.rooms.get(`chat:${chatId}`)?.size || 0
+          });
           
           // Emit message status updates
           if (messageIds.length > 0) {
@@ -3476,14 +3487,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           // Emit chat updated with unread_count = 0
-          const chatCompanyId = chat.company_id;
-          if (chatCompanyId) {
-            io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+          if (roomName) {
+            io.to(roomName).emit("chat:updated", {
               chatId,
               unread_count: 0,
             });
 
-            io.to(`company:${chatCompanyId}`).emit("chat:read", {
+            io.to(roomName).emit("chat:read", {
               chatId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),
@@ -3501,7 +3511,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
             });
           }
 
-          console.log("[READ_RECEIPTS][livechat/mark-read] Socket events emitted", {
+          console.log("[READ_RECEIPTS][WAHA] ✅ Socket events emitted", {
             chatId,
             count: messageIds.length,
           });
@@ -3578,6 +3588,17 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
           // 4. Emit socket events
           const io = getIO();
+          const chatCompanyId = chat.company_id;
+          const roomName = chatCompanyId ? `company:${chatCompanyId}` : null;
+          
+          console.log("[READ_RECEIPTS][META] 🔔 Socket info:", {
+            chatId,
+            companyId: chatCompanyId,
+            roomName,
+            totalSockets: io.sockets.sockets.size,
+            roomSize: roomName ? (io.sockets.adapter.rooms.get(roomName)?.size || 0) : 0,
+            chatRoomSize: io.sockets.adapter.rooms.get(`chat:${chatId}`)?.size || 0
+          });
           
           // Emit message status updates
           if (messageIds.length > 0) {
@@ -3594,14 +3615,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           // Emit chat updated with unread_count = 0
-          const chatCompanyId = chat.company_id;
-          if (chatCompanyId) {
-            io.to(`company:${chatCompanyId}`).emit("chat:updated", {
+          if (roomName) {
+            io.to(roomName).emit("chat:updated", {
               chatId,
               unread_count: 0,
             });
 
-            io.to(`company:${chatCompanyId}`).emit("chat:read", {
+            io.to(roomName).emit("chat:read", {
               chatId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),

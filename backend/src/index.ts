@@ -10,6 +10,7 @@ import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
 import { EX_APP, publish, consume, Q_SOCKET_LIVECHAT } from "./queue/rabbit.js";
+import db from "./pg.js";
 import { metaWebhookGet, metaWebhookPost } from "./routes/metawebhook.js";
 import { registerSendMessageRoutes } from "./routes/sendMessage.js";
 import { listWebhookEvents } from "./routes/adminwebhooks.js";

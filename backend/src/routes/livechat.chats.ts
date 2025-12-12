@@ -1822,23 +1822,27 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       const content = `${actorName} alterou o status para "${statusLabel}"`;
       
-      await supabaseAdmin.from("chat_messages").insert({
+      const { data: insertedMsg, error: insertError } = await supabaseAdmin.from("chat_messages").insert({
         chat_id: id,
         content,
         type: "SYSTEM",
         is_from_customer: false,
         created_at: new Date().toISOString(),
-      });
-      
-      const io = getIO();
-      io?.to(`chat:${id}`).emit("message:new", {
-          id: crypto.randomUUID(),
-          chat_id: id,
-          content,
-          type: "SYSTEM",
-          sender_type: "SYSTEM",
-          created_at: new Date().toISOString(),
-      });
+      }).select().single();
+
+      if (insertError) {
+        console.error("[PUT /status] Failed to insert system message:", insertError);
+      } else if (insertedMsg) {
+        const io = getIO();
+        io?.to(`chat:${id}`).emit("message:new", {
+            id: insertedMsg.id,
+            chat_id: id,
+            content,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: insertedMsg.created_at,
+        });
+      }
     } catch (e) {
       console.error("Failed to insert system message for status change", e);
     }
@@ -2027,6 +2031,44 @@ export function registerLivechatChatRoutes(app: express.Application) {
       previousDepartmentId,
       nextDepartmentId: updatedRow?.department_id ?? null,
     });
+
+    // System message for department change
+    try {
+      const authUserId = (req as any).user.id as string;
+      const { data: u } = await supabaseAdmin
+        .from("users")
+        .select("name")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      const actorName = u?.name || "Alguém";
+      
+      const deptName = departmentPayloadName || "Sem departamento";
+      const content = `${actorName} alterou o departamento para "${deptName}"`;
+      
+      const { data: insertedMsg, error: insertError } = await supabaseAdmin.from("chat_messages").insert({
+        chat_id: id,
+        content,
+        type: "SYSTEM",
+        is_from_customer: false,
+        created_at: new Date().toISOString(),
+      }).select().single();
+
+      if (insertError) {
+        console.error("[PUT /department] Failed to insert system message:", insertError);
+      } else if (insertedMsg) {
+        const io = getIO();
+        io?.to(`chat:${id}`).emit("message:new", {
+            id: insertedMsg.id,
+            chat_id: id,
+            content,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: insertedMsg.created_at,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to insert system message for department change", e);
+    }
 
     await rDel(k.chat(id));
 
@@ -2238,23 +2280,27 @@ export function registerLivechatChatRoutes(app: express.Application) {
         content = `${actorName} removeu o agente de IA`;
       }
       
-      await supabaseAdmin.from("chat_messages").insert({
+      const { data: insertedMsg, error: insertError } = await supabaseAdmin.from("chat_messages").insert({
         chat_id: id,
         content,
         type: "SYSTEM",
         is_from_customer: false,
         created_at: new Date().toISOString(),
-      });
-      
-      const io = getIO();
-      io?.to(`chat:${id}`).emit("message:new", {
-          id: crypto.randomUUID(),
-          chat_id: id,
-          content,
-          type: "SYSTEM",
-          sender_type: "SYSTEM",
-          created_at: new Date().toISOString(),
-      });
+      }).select().single();
+
+      if (insertError) {
+        console.error("[PUT /ai-agent] Failed to insert system message:", insertError);
+      } else if (insertedMsg) {
+        const io = getIO();
+        io?.to(`chat:${id}`).emit("message:new", {
+            id: insertedMsg.id,
+            chat_id: id,
+            content,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: insertedMsg.created_at,
+        });
+      }
     } catch (e) {
       console.error("Failed to insert system message for AI agent change", e);
     }

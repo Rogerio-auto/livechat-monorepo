@@ -3491,33 +3491,53 @@ const scrollToBottom = useCallback(
     [currentChat?.id],
   );
 
+  const [isAssigning, setIsAssigning] = useState(false);
+
   const assignAgent = useCallback(
     async (userId: string | null) => {
       if (!currentChat?.id) return;
+      setIsAssigning(true);
       const chatId = currentChat.id;
-      const body = userId ? { userId } : { unassign: true };
-      const resp = await fetchJson<{
-        assigned_agent_id: string | null;
-        assigned_agent_name: string | null;
-        assigned_agent_user_id?: string | null;
-      }>(`${API}/livechat/chats/${chatId}/assignee`, {
-        method: "PUT",
-        body: JSON.stringify(body),
-      });
+      try {
+        const body = userId ? { userId } : { unassign: true };
+        const resp = await fetchJson<{
+          assigned_agent_id: string | null;
+          assigned_agent_name: string | null;
+          assigned_agent_user_id?: string | null;
+        }>(`${API}/livechat/chats/${chatId}/assignee`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
 
 
-      setCurrentChat((prev) =>
-        prev && prev.id === chatId
-          ? {
-            ...prev,
-            assigned_agent_id: resp?.assigned_agent_id ?? null,
-            assigned_agent_name: resp?.assigned_agent_name ?? null,
-            assigned_agent_user_id:
-              resp?.assigned_agent_user_id ?? userId ?? null,
-          }
-          : prev,
-      );
-      setSelectedChat((prev) =>
+        setCurrentChat((prev) =>
+          prev && prev.id === chatId
+            ? {
+              ...prev,
+              assigned_agent_id: resp?.assigned_agent_id ?? null,
+              assigned_agent_name: resp?.assigned_agent_name ?? null,
+              assigned_agent_user_id:
+                resp?.assigned_agent_user_id ?? userId ?? null,
+            }
+            : prev,
+        );
+        setSelectedChat((prev) =>
+          prev && prev.id === chatId
+            ? {
+              ...prev,
+              assigned_agent_id: resp?.assigned_agent_id ?? null,
+              assigned_agent_name: resp?.assigned_agent_name ?? null,
+              assigned_agent_user_id:
+                resp?.assigned_agent_user_id ?? userId ?? null,
+            }
+            : prev,
+        );
+      } finally {
+        setIsAssigning(false);
+      }
+    },
+    [currentChat?.id],
+  );
         prev && prev.id === chatId
           ? {
             ...prev,
@@ -3992,6 +4012,7 @@ const scrollToBottom = useCallback(
                         Ninguém responsável por este chat.
                       </span>
                       <button
+                        disabled={isAssigning}
                         onClick={async () => {
                           try {
                             if (currentUser?.id) {
@@ -4001,9 +4022,9 @@ const scrollToBottom = useCallback(
                             console.error("Failed to self-assign", e);
                           }
                         }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors shadow-sm flex items-center gap-1"
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors shadow-sm flex items-center gap-1"
                       >
-                        Assumir atendimento
+                        {isAssigning ? "Atribuindo..." : "Assumir atendimento"}
                       </button>
                     </div>
                   </div>

@@ -2108,13 +2108,17 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
 
       // System message
       const actorName = await getActorName();
-      await supabaseAdmin.from("chat_messages").insert({
+      const { data: insertedMsg, error: insertError } = await supabaseAdmin.from("chat_messages").insert({
         chat_id: chatId,
         content: `${actorName} removeu a atribuição`,
         type: "SYSTEM",
         is_from_customer: false,
         created_at: new Date().toISOString(),
-      });
+      }).select().single();
+
+      if (insertError) {
+        console.error("[PUT /assignee] Failed to insert unassign system message:", insertError);
+      }
 
       try {
         io?.emit("chat:updated", {
@@ -2123,15 +2127,34 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
           assigned_agent_name: null,
         });
         // Emit new message event to update UI immediately
-        io?.to(`chat:${chatId}`).emit("message:new", {
-            id: crypto.randomUUID(),
-            chat_id: chatId,
-            content: `${actorName} removeu a atribuição`,
-            type: "SYSTEM",
-            sender_type: "SYSTEM",
-            created_at: new Date().toISOString(),
-        });
-      } catch {}
+        if (insertedMsg) {
+          io?.to(`chat:${chatId}`).emit("message:new", {
+              id: insertedMsg.id,
+              chat_id: chatId,
+              content: `${actorName} removeu a atribuição`,
+              type: "SYSTEM",
+              sender_type: "SYSTEM",
+              created_at: insertedMsg.created_at,
+          });
+        }
+      } catch (e) {
+        console.error("[PUT /assignee] Socket emit error:", e);
+      }
+
+      // Invalidate cache
+      try {
+        await rDel(k.chat(chatId));
+        // Clear list caches for this company
+        const companyId = req.user?.company_id;
+        if (companyId) {
+          const pattern = k.listPrefixCompany(companyId);
+          const keys = await redis.keys(pattern);
+          if (keys.length > 0) await redis.del(...keys);
+        }
+      } catch (cacheErr) {
+        console.error("[PUT /assignee] Cache invalidation error:", cacheErr);
+      }
+
       return res.json({ ok: true, assigned_agent_id: null, assigned_agent_name: null });
     }
 
@@ -2220,24 +2243,44 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
       const actorName = await getActorName();
       const msgContent = `${actorName} atribuiu a ${assignedName || "um agente"}`;
       
-      await supabaseAdmin.from("chat_messages").insert({
+      const { data: insertedMsg, error: insertError } = await supabaseAdmin.from("chat_messages").insert({
         chat_id: chatId,
         content: msgContent,
         type: "SYSTEM",
         is_from_customer: false,
         created_at: new Date().toISOString(),
-      });
+      }).select().single();
 
-      io?.to(`chat:${chatId}`).emit("message:new", {
-        id: crypto.randomUUID(),
-        chat_id: chatId,
-        content: msgContent,
-        type: "SYSTEM",
-        sender_type: "SYSTEM",
-        created_at: new Date().toISOString(),
-      });
+      if (insertError) {
+        console.error("[PUT /assignee] Failed to insert system message:", insertError);
+      } else if (insertedMsg) {
+        io?.to(`chat:${chatId}`).emit("message:new", {
+          id: insertedMsg.id,
+          chat_id: chatId,
+          content: msgContent,
+          type: "SYSTEM",
+          sender_type: "SYSTEM",
+          created_at: insertedMsg.created_at,
+        });
+      }
 
-    } catch {}
+    } catch (e) {
+      console.error("[PUT /assignee] System message error:", e);
+    }
+
+    // Invalidate cache
+    try {
+      await rDel(k.chat(chatId));
+      // Clear list caches for this company
+      const companyId = req.user?.company_id;
+      if (companyId) {
+        const pattern = k.listPrefixCompany(companyId);
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) await redis.del(...keys);
+      }
+    } catch (cacheErr) {
+      console.error("[PUT /assignee] Cache invalidation error:", cacheErr);
+    }
 
     return res.json({
       ok: true,

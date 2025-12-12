@@ -865,6 +865,7 @@ export default function LiveChatPage() {
         leadId,
         email,
         phone,
+        chatId, // Pass chatId for system message
         // Opcional: manda observao do modal se voc tiver ela aqui
         // note: noteDraft,
       };

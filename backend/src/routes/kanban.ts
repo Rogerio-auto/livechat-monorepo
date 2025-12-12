@@ -1193,6 +1193,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                 email,
                 phone,
                 note,
+                chatId,
             } = (req.body || {}) as {
                 boardId: string;
                 columnId: string;
@@ -1202,11 +1203,53 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                 email?: string;
                 phone?: string;
                 note?: string;
+                chatId?: string;
             };
 
             if (!boardId || !columnId || !title) {
                 return res.status(400).json({ error: "boardId, columnId e title são obrigatórios" });
             }
+
+            // Helper for system messages
+            const insertSystemMessage = async (action: string) => {
+                if (!chatId) return;
+                try {
+                    const { data: u } = await supabaseAdmin
+                        .from("users")
+                        .select("name")
+                        .eq("user_id", authUserId)
+                        .maybeSingle();
+                    const actorName = u?.name || "Alguém";
+                    
+                    const { data: col } = await supabaseAdmin
+                        .from("kanban_columns")
+                        .select("name")
+                        .eq("id", columnId)
+                        .maybeSingle();
+                    const colName = col?.name || "uma etapa";
+
+                    const content = `${actorName} ${action} "${colName}"`;
+                    
+                    await supabaseAdmin.from("chat_messages").insert({
+                        chat_id: chatId,
+                        content,
+                        type: "SYSTEM",
+                        sender_type: "SYSTEM",
+                        created_at: new Date().toISOString(),
+                    });
+                    
+                    io.to(`chat:${chatId}`).emit("message:new", {
+                        id: crypto.randomUUID(),
+                        chat_id: chatId,
+                        content,
+                        type: "SYSTEM",
+                        sender_type: "SYSTEM",
+                        created_at: new Date().toISOString(),
+                    });
+                } catch (e) {
+                    console.error("Failed to insert system message", e);
+                }
+            };
 
             // board pertence à empresa?
             const { data: board, error: errBoard } = await supabaseAdmin
@@ -1364,6 +1407,9 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                     if (errLast) return res.status(500).json({ error: errLast.message });
                     patch.kanban_column_id = columnId;
                     patch.position = (last?.position || 0) + 1;
+                    
+                    // System message for move
+                    await insertSystemMessage("moveu para a etapa");
                 }
                 if (note !== undefined && note !== null) patch.notes = String(note);
 
@@ -1428,6 +1474,9 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                 .select("id, kanban_board_id, kanban_column_id, position")
                 .maybeSingle();
             if (errIns) return res.status(500).json({ error: errIns.message });
+
+            // System message for create
+            await insertSystemMessage("adicionou à etapa");
 
             // sincroniza lead (se houver)
             try {

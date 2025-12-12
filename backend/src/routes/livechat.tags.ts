@@ -156,6 +156,36 @@ export function registerLivechatTagsRoutes(app: express.Application) {
         return res.status(500).json({ error: error.message });
       }
 
+      // System message
+      try {
+        const { data: actorUser } = await supabaseAdmin
+          .from("users")
+          .select("name")
+          .eq("user_id", authUserId)
+          .maybeSingle();
+        const actorName = actorUser?.name || "Alguém";
+        
+        const msgContent = `${actorName} adicionou a tag "${tag.name}"`;
+        await supabaseAdmin.from("chat_messages").insert({
+          chat_id: id,
+          content: msgContent,
+          type: "SYSTEM",
+          sender_type: "SYSTEM",
+          created_at: new Date().toISOString(),
+        });
+        
+        getIO()?.to(`chat:${id}`).emit("message:new", {
+            id: crypto.randomUUID(),
+            chat_id: id,
+            content: msgContent,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: new Date().toISOString(),
+        });
+      } catch (sysErr) {
+        console.error("Failed to create system message for tag add", sysErr);
+      }
+
       // Emit socket event
       try {
         const { data: allTags } = await supabaseAdmin.from('chat_tags').select('tag_id').eq('chat_id', id);
@@ -265,6 +295,13 @@ export function registerLivechatTagsRoutes(app: express.Application) {
     const { id, tagId } = req.params as { id: string; tagId: string };
     
     try {
+      // Fetch tag name before deleting (for system message)
+      const { data: tag } = await supabaseAdmin
+        .from('tags')
+        .select('name')
+        .eq('id', tagId)
+        .maybeSingle();
+
       const { error } = await supabaseAdmin
         .from('chat_tags')
         .delete()
@@ -273,6 +310,38 @@ export function registerLivechatTagsRoutes(app: express.Application) {
 
       if (error) {
         return res.status(500).json({ error: error.message });
+      }
+
+      // System message
+      try {
+        const authUserId = (req as any).user.id as string;
+        const { data: actorUser } = await supabaseAdmin
+          .from("users")
+          .select("name")
+          .eq("user_id", authUserId)
+          .maybeSingle();
+        const actorName = actorUser?.name || "Alguém";
+        const tagName = tag?.name || "uma tag";
+        
+        const msgContent = `${actorName} removeu a tag "${tagName}"`;
+        await supabaseAdmin.from("chat_messages").insert({
+          chat_id: id,
+          content: msgContent,
+          type: "SYSTEM",
+          sender_type: "SYSTEM",
+          created_at: new Date().toISOString(),
+        });
+        
+        getIO()?.to(`chat:${id}`).emit("message:new", {
+            id: crypto.randomUUID(),
+            chat_id: id,
+            content: msgContent,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: new Date().toISOString(),
+        });
+      } catch (sysErr) {
+        console.error("Failed to create system message for tag remove", sysErr);
       }
 
       // Emit socket event

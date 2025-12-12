@@ -2087,6 +2087,17 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
       }
     }
 
+    // Helper to get actor name
+    const getActorName = async () => {
+      if (!actingLocalUserId) return "Alguém";
+      const { data: u } = await supabaseAdmin
+        .from("users")
+        .select("name")
+        .eq("id", actingLocalUserId)
+        .maybeSingle();
+      return u?.name || "Alguém";
+    };
+
     // 3) Remover atribuição
     if (unassign === true) {
       const { error: errUpd } = await supabaseAdmin
@@ -2095,11 +2106,30 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
         .eq("id", chatId);
       if (errUpd) return res.status(500).json({ error: errUpd.message });
 
+      // System message
+      const actorName = await getActorName();
+      await supabaseAdmin.from("chat_messages").insert({
+        chat_id: chatId,
+        content: `${actorName} removeu a atribuição`,
+        type: "SYSTEM",
+        sender_type: "SYSTEM",
+        created_at: new Date().toISOString(),
+      });
+
       try {
         io?.emit("chat:updated", {
           chatId,
           assigned_agent_id: null,
           assigned_agent_name: null,
+        });
+        // Emit new message event to update UI immediately
+        io?.to(`chat:${chatId}`).emit("message:new", {
+            id: crypto.randomUUID(),
+            chat_id: chatId,
+            content: `${actorName} removeu a atribuição`,
+            type: "SYSTEM",
+            sender_type: "SYSTEM",
+            created_at: new Date().toISOString(),
         });
       } catch {}
       return res.json({ ok: true, assigned_agent_id: null, assigned_agent_name: null });
@@ -2185,6 +2215,28 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
         assigned_agent_id: targetLinkId,
         assigned_agent_name: assignedName,
       });
+
+      // System message
+      const actorName = await getActorName();
+      const msgContent = `${actorName} atribuiu a ${assignedName || "um agente"}`;
+      
+      await supabaseAdmin.from("chat_messages").insert({
+        chat_id: chatId,
+        content: msgContent,
+        type: "SYSTEM",
+        sender_type: "SYSTEM",
+        created_at: new Date().toISOString(),
+      });
+
+      io?.to(`chat:${chatId}`).emit("message:new", {
+        id: crypto.randomUUID(),
+        chat_id: chatId,
+        content: msgContent,
+        type: "SYSTEM",
+        sender_type: "SYSTEM",
+        created_at: new Date().toISOString(),
+      });
+
     } catch {}
 
     return res.json({

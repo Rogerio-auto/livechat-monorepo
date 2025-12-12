@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin, FiInfo } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -76,6 +76,17 @@ export function MessageBubble({
     };
   }, [isAgent, isPrivate]);
   const messageType = (m.type || "TEXT").toUpperCase();
+
+  if (messageType === "SYSTEM") {
+    return (
+      <div className="flex justify-center my-2 w-full">
+        <span className="bg-gray-100 dark:bg-gray-800/60 text-gray-500 dark:text-gray-400 text-xs px-3 py-1 rounded-full shadow-sm border border-gray-200 dark:border-gray-700/50 flex items-center gap-1.5">
+          <FiInfo className="w-3 h-3 opacity-70" />
+          {m.body ?? m.content}
+        </span>
+      </div>
+    );
+  }
   
   // Fallback para URLs de mídia
   const mediaUrl = m.media_public_url || m.media_url || null;

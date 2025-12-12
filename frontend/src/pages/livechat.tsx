@@ -14,7 +14,7 @@ import { MessageBubble } from "../componets/livechat/MessageBubble";
 import { LabelsManager } from "../componets/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/types";
-import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch } from "react-icons/fi";
+import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
 import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
@@ -624,21 +624,16 @@ export default function LiveChatPage() {
 
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
   useEffect(() => {
-    if (!currentChat) {
-      const first = filteredChats[0] ?? null;
-      if (first) {
-        setCurrentChat(first);
-        setSelectedChat(first);
-      }
-      return;
-    }
+    if (!currentChat) return;
+
     const currentMatches = chatScope === "groups" ? isGroupChat(currentChat) : !isGroupChat(currentChat);
     if (!currentMatches) {
-      const fallback = filteredChats[0] ?? null;
-      setCurrentChat(fallback);
-      setSelectedChat(fallback);
+      // Se o chat atual não corresponde ao escopo (ex: mudou de Conversas para Grupos),
+      // apenas desselecione. Não selecione o primeiro automaticamente.
+      setCurrentChat(null);
+      setSelectedChat(null);
     }
-  }, [chatScope, filteredChats, currentChat, isGroupChat]);
+  }, [chatScope, currentChat, isGroupChat]);
 
 
   // lista de etapas (colunas do Kanban)
@@ -3925,6 +3920,16 @@ const scrollToBottom = useCallback(
               padding="md"
               className="livechat-card col-span-12 md:col-span-7 lg:col-span-8 xl:col-span-7 flex flex-col overflow-hidden shadow-[0_40px_100px_-70px_rgba(8,12,20,0.88)] backdrop-blur-sm xl:min-h-0 xl:h-full"
             >
+              {!currentChat ? (
+                <div className="flex h-full flex-col items-center justify-center text-center opacity-60">
+                  <div className="mb-4 rounded-full bg-gray-100 p-6 dark:bg-gray-800">
+                    <FiMessageSquare size={48} />
+                  </div>
+                  <h3 className="text-lg font-medium">Nenhum chat selecionado</h3>
+                  <p className="text-sm">Selecione uma conversa para iniciar o atendimento</p>
+                </div>
+              ) : (
+                <>
               <ChatHeader
                 apiBase={API}
                 chat={currentChat}
@@ -4195,6 +4200,8 @@ const scrollToBottom = useCallback(
                   className="hidden"
                 />
               </div>
+              </>
+              )}
             </Card>
           </>
         )}

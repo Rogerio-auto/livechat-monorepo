@@ -54,20 +54,25 @@ export function useNotifications() {
     socketRef.current = socketInstance;
 
     socketInstance.on('connect', () => {
-      console.log('[useNotifications] Socket connected:', socketInstance.id);
+      console.log('[useNotifications] ✅ Socket connected:', socketInstance.id);
     });
 
-    socketInstance.on('disconnect', () => {
-      console.log('[useNotifications] Socket disconnected');
+    socketInstance.on('connect_error', (err) => {
+      console.error('[useNotifications] ❌ Socket connection error:', err);
+    });
+
+    socketInstance.on('disconnect', (reason) => {
+      console.log('[useNotifications] 🔌 Socket disconnected:', reason);
     });
 
     // Listener para novas notificações
     socketInstance.on('notification', (notification: Notification & { isNew?: boolean }) => {
-      console.log('[useNotifications] New notification received:', notification);
+      console.log('[useNotifications] 🔔 New notification received:', notification);
 
       setNotifications(prev => {
         // Evitar duplicatas
         if (prev.some(n => n.id === notification.id)) {
+          console.log('[useNotifications] ⚠️ Duplicate notification ignored:', notification.id);
           return prev;
         }
         return [notification, ...prev];

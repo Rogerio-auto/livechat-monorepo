@@ -2863,40 +2863,69 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   // ========== STEP 2: EMIT SOCKET IMMEDIATELY (BEFORE MEDIA PROCESSING) ==========
   try {
+    console.log("[worker][WAHA] 🔄 Starting socket emission process:", {
+      chatId,
+      companyId: job.companyId,
+      inboxId: job.inboxId,
+      messageId: mappedMessage.id,
+      sender_type: mappedMessage.sender_type,
+      body_preview: mappedMessage.body?.substring(0, 50),
+    });
+
     const chatSummary = await fetchChatUpdateForSocket(chatId);
+    
+    console.log("[worker][WAHA] 📊 Chat summary fetched:", {
+      chatId,
+      hasSummary: !!chatSummary,
+      summary_keys: chatSummary ? Object.keys(chatSummary) : [],
+    });
+
+    const chatUpdatePayload = chatSummary
+      ? {
+          ...chatSummary,
+          last_message_from: mappedMessage.sender_type,
+          companyId: job.companyId,
+        }
+      : {
+          chatId,
+          inboxId: job.inboxId,
+          last_message: mappedMessage.body,
+          last_message_at: mappedMessage.created_at,
+          last_message_from: mappedMessage.sender_type,
+          customer_name: isGroupChat ? null : name ?? null,
+          customer_phone: isGroupChat ? null : phoneForLead ?? null,
+          kind: isGroupChat ? "GROUP" : null,
+          group_name: isGroupChat ? groupMeta?.name ?? name ?? chatJid : null,
+          group_avatar_url: isGroupChat ? groupMeta?.avatarUrl ?? null : null,
+          remote_id: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
+          companyId: job.companyId,
+        };
+
+    console.log("[worker][WAHA] 📦 Socket payload prepared:", {
+      chatId,
+      companyId: job.companyId,
+      has_chatUpdate: true,
+      chatUpdate_companyId: chatUpdatePayload.companyId,
+      chatUpdate_last_message_from: chatUpdatePayload.last_message_from,
+      chatUpdate_last_message_preview: chatUpdatePayload.last_message?.substring(0, 30),
+    });
+
     const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
       kind: "livechat.inbound.message",
       chatId,
       companyId: job.companyId,
       inboxId: job.inboxId,
       message: mappedMessage,
-      chatUpdate: chatSummary
-        ? {
-            ...chatSummary,
-            last_message_from: mappedMessage.sender_type,
-          }
-        : {
-            chatId,
-            inboxId: job.inboxId,
-            last_message: mappedMessage.body,
-            last_message_at: mappedMessage.created_at,
-            last_message_from: mappedMessage.sender_type,
-            customer_name: isGroupChat ? null : name ?? null,
-            customer_phone: isGroupChat ? null : phoneForLead ?? null,
-            kind: isGroupChat ? "GROUP" : null,
-            group_name: isGroupChat ? groupMeta?.name ?? name ?? chatJid : null,
-            group_avatar_url: isGroupChat ? groupMeta?.avatarUrl ?? null : null,
-            remote_id: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
-            companyId: job.companyId, // ✅ Ensure companyId is present in fallback chatUpdate
-          },
+      chatUpdate: chatUpdatePayload,
     });
 
     if (!socketSuccess) {
-      console.error("[worker][WAHA] METRIC: Socket emission failed after all retries:", {
+      console.error("[worker][WAHA] ❌ Socket emission FAILED after all retries:", {
         operation: 'inbound',
         messageId: mappedMessage.id,
         chatId,
         inboxId: job.inboxId,
+        companyId: job.companyId,
         provider: 'WAHA',
         hasDraft: !!job?.draftId
       });
@@ -2907,11 +2936,17 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         inboxId: job.inboxId,
         messageId: mappedMessage.id,
         hasChatSummary: !!chatSummary,
-        companyId: job.companyId
+        companyId: job.companyId,
+        chatUpdate_companyId: chatUpdatePayload.companyId,
       });
     }
   } catch (error) {
-    console.warn("[WAHA][worker] failed to publish socket inbound message", error);
+    console.error("[WAHA][worker] ❌ EXCEPTION during socket publish:", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      chatId,
+      companyId: job.companyId,
+    });
   }
 
   // ========== STEP 3: PROCESS MEDIA IN BACKGROUND (NON-BLOCKING) ==========
@@ -5548,9 +5583,12 @@ async function tickCampaigns() {
   }, 50); // TTL de 50 segundos (menor que intervalo de 60s)
 }
 
-// Task reminders - roda a cada 5 minutos
+// Task reminders - roda a cada 1 minuto (DEBUG)
 import { checkAndSendReminders } from "./jobs/taskReminders.js";
-setInterval(() => runWithDistributedLock("task:reminders", checkAndSendReminders, 240), 5 * 60_000);
+setInterval(() => {
+  console.log("[worker] ⏰ Triggering task reminder check...");
+  runWithDistributedLock("task:reminders", checkAndSendReminders, 50);
+}, 60_000);
 
 // Auto-criação de tarefas - roda a cada 6 horas
 import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";

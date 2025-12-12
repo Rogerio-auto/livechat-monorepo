@@ -100,6 +100,13 @@ export class NotificationService {
    * Cria uma notificação e envia via WebSocket
    */
   static async create(input: CreateNotificationInput) {
+    console.log("[NotificationService] 🔔 Creating notification:", {
+      type: input.type,
+      userId: input.userId,
+      companyId: input.companyId,
+      title: input.title
+    });
+
     try {
       const config = NOTIFICATION_CONFIG[input.type];
       
@@ -121,18 +128,22 @@ export class NotificationService {
         .single();
 
       if (error) {
-        console.error("[NotificationService] Error creating notification:", error);
+        console.error("[NotificationService] ❌ Error creating notification in DB:", error);
         throw error;
       }
 
       // Enviar via WebSocket
       const io = getIO();
-      io.to(`user:${input.userId}`).emit("notification", {
+      const room = `user:${input.userId}`;
+      console.log(`[NotificationService] 📡 Emitting socket event to room: ${room}`);
+      
+      io.to(room).emit("notification", {
         ...notification,
         isNew: true,
       });
 
       console.log(`[NotificationService] ✅ Notification sent to user ${input.userId}:`, {
+        id: notification.id,
         type: input.type,
         title: input.title,
         sound: input.soundType || config.soundType,
@@ -140,7 +151,7 @@ export class NotificationService {
 
       return notification;
     } catch (error) {
-      console.error("[NotificationService] Fatal error:", error);
+      console.error("[NotificationService] 💥 Fatal error in create:", error);
       throw error;
     }
   }
@@ -149,6 +160,7 @@ export class NotificationService {
    * Marca notificação como lida
    */
   static async markAsRead(notificationId: string, userId: string) {
+    console.log(`[NotificationService] Marking as read: ${notificationId} for user ${userId}`);
     const { error } = await supabaseAdmin
       .from("notifications")
       .update({
@@ -159,7 +171,7 @@ export class NotificationService {
       .eq("user_id", userId);
 
     if (error) {
-      console.error("[NotificationService] Error marking as read:", error);
+      console.error("[NotificationService] ❌ Error marking as read:", error);
       throw error;
     }
   }
@@ -168,6 +180,7 @@ export class NotificationService {
    * Marca todas as notificações do usuário como lidas
    */
   static async markAllAsRead(userId: string, companyId: string) {
+    console.log(`[NotificationService] Marking ALL as read for user ${userId}`);
     const { error } = await supabaseAdmin
       .from("notifications")
       .update({
@@ -179,7 +192,7 @@ export class NotificationService {
       .eq("is_read", false);
 
     if (error) {
-      console.error("[NotificationService] Error marking all as read:", error);
+      console.error("[NotificationService] ❌ Error marking all as read:", error);
       throw error;
     }
   }
@@ -188,6 +201,7 @@ export class NotificationService {
    * Busca notificações não lidas do usuário
    */
   static async getUnread(userId: string, companyId: string) {
+    // console.log(`[NotificationService] Fetching unread for user ${userId}`);
     const { data, error } = await supabaseAdmin
       .from("notifications")
       .select("*")
@@ -197,7 +211,7 @@ export class NotificationService {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("[NotificationService] Error fetching unread:", error);
+      console.error("[NotificationService] ❌ Error fetching unread:", error);
       throw error;
     }
 
@@ -251,10 +265,11 @@ export class NotificationService {
       .eq("company_id", companyId)
       .eq("is_read", false);
 
-    if (error) {
-      console.error("[NotificationService] Error counting unread:", error);
+    if (error) {❌ Error counting unread:", error);
       return 0;
     }
+
+    // console.log(`[NotificationService] Unread count for ${userId}: ${count}`);    }
 
     return count || 0;
   }

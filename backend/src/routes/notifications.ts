@@ -10,6 +10,7 @@ export function registerNotificationRoutes(app: express.Application) {
     try {
       const userId = req.user.id;
       const companyId = req.user.company_id;
+      console.log(`[API] GET /notifications/unread - User: ${userId}`);
 
       const notifications = await NotificationService.getUnread(userId, companyId);
       return res.json(notifications);
@@ -97,6 +98,8 @@ export function registerNotificationRoutes(app: express.Application) {
       const userId = req.user.id;
       const companyId = req.user.company_id;
       const { title, message, type, priority, data, soundType, actionUrl, category } = req.body;
+
+      console.log(`[API] POST /notifications - User: ${userId}`, { title, type });
 
       if (!title || !message || !type) {
         return res.status(400).json({ error: "title, message e type são obrigatórios" });

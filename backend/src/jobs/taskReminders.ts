@@ -10,37 +10,39 @@ import { supabaseAdmin } from "../lib/supabase.js";
  */
 export async function checkAndSendReminders(): Promise<void> {
   try {
-    console.log("[taskReminders] Checking for pending reminders...");
+    console.log(`[taskReminders] ⏰ Checking for pending reminders at ${new Date().toISOString()}...`);
 
     const tasks = await getTasksWithPendingReminders();
 
     if (tasks.length === 0) {
-      console.log("[taskReminders] No pending reminders found");
+      console.log("[taskReminders] 💤 No pending reminders found");
       return;
     }
 
-    console.log(`[taskReminders] Found ${tasks.length} tasks with pending reminders`);
+    console.log(`[taskReminders] 📋 Found ${tasks.length} tasks with pending reminders`);
 
     let io;
     try {
       io = getIO();
+      console.log("[taskReminders] ✅ Socket.IO instance retrieved");
     } catch (e) {
-      console.warn("[taskReminders] Socket.IO not available, skipping IN_APP notifications");
+      console.warn("[taskReminders] ⚠️ Socket.IO not available, skipping IN_APP notifications");
     }
 
     for (const task of tasks) {
       try {
+        console.log(`[taskReminders] ▶️ Processing task ${task.id} (${task.title})`);
         await sendTaskReminder(task, io);
         await markReminderAsSent(task.id);
-        console.log(`[taskReminders] Reminder sent for task ${task.id}: ${task.title}`);
+        console.log(`[taskReminders] ✅ Reminder sent and marked as done for task ${task.id}`);
       } catch (error) {
-        console.error(`[taskReminders] Failed to send reminder for task ${task.id}:`, error);
+        console.error(`[taskReminders] ❌ Failed to send reminder for task ${task.id}:`, error);
       }
     }
 
-    console.log(`[taskReminders] Processed ${tasks.length} reminders`);
+    console.log(`[taskReminders] 🏁 Processed ${tasks.length} reminders`);
   } catch (error) {
-    console.error("[taskReminders] Error checking reminders:", error);
+    console.error("[taskReminders] 💥 Error checking reminders:", error);
   }
 }
 
@@ -96,6 +98,7 @@ async function getDefaultInboxForCompany(companyId: string) {
  */
 async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
   const channels = parseReminderChannels(task.reminder_channels);
+  console.log(`[taskReminders] 📢 Sending reminder for task ${task.id} via channels: ${channels.join(", ")}`);
 
   // Preparar notificação
   const notification = {
@@ -121,11 +124,13 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
 
   // Enviar notificação in-app via Socket.io
   if (channels.includes("IN_APP") && io) {
+    console.log(`[taskReminders] 📱 Sending IN_APP notification to company ${task.company_id}`);
     // Emitir para a empresa toda
     io.to(`company:${task.company_id}`).emit("notification", notification);
 
     // Se tem responsável, emitir para ele especificamente
     if (task.assigned_to) {
+      console.log(`[taskReminders] 👤 Sending IN_APP notification to user ${task.assigned_to}`);
       io.to(`user:${task.assigned_to}`).emit("notification", notification);
     }
 
@@ -140,6 +145,7 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
   // Envio de email
   if (channels.includes("EMAIL")) {
     if (task.assigned_to_email) {
+      console.log(`[taskReminders] 📧 Sending EMAIL to ${task.assigned_to_email}`);
       const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
       const actionUrl = `${frontendUrl}/tasks?taskId=${task.id}`;
       
@@ -151,12 +157,13 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
         actionUrl
       );
     } else {
-      console.warn(`[taskReminders] Cannot send email reminder for task ${task.id}: No assigned user email`);
+      console.warn(`[taskReminders] ⚠️ Cannot send email reminder for task ${task.id}: No assigned user email`);
     }
   }
 
   // Envio de WhatsApp via WAHA
   if (channels.includes("WHATSAPP")) {
+    console.log(`[taskReminders] 💬 Processing WHATSAPP reminder`);
     try {
       const message = `⏰ *Lembrete de Tarefa*\n\n*${task.title}*\n${task.description ? `_${task.description}_\n` : ''}${task.due_date ? `📅 Vencimento: ${new Date(task.due_date).toLocaleString('pt-BR')}` : ''}`;
 
@@ -173,6 +180,7 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
             if (!userPhone.startsWith("55")) userPhone = "55" + userPhone; // Fallback simples
             const userJid = `${userPhone}@s.whatsapp.net`;
 
+            console.log(`[taskReminders] 📤 Sending WhatsApp to user ${userJid} via inbox ${defaultInbox.id}`);
             await publish(EX_APP, "outbound.request", {
               jobType: "message.send",
               provider: "WAHA",
@@ -184,10 +192,12 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
               companyId: task.company_id,
               createdAt: new Date().toISOString(),
             });
-            console.log(`[taskReminders] WhatsApp reminder sent to ASSIGNED USER ${task.assigned_to} (${userJid})`);
+            console.log(`[taskReminders] ✅ WhatsApp reminder sent to ASSIGNED USER ${task.assigned_to} (${userJid})`);
           } else {
-            console.warn(`[taskReminders] Cannot send WA to user: No active inbox found for company ${task.company_id}`);
+            console.warn(`[taskReminders] ⚠️ Cannot send WA to user: No active inbox found for company ${task.company_id}`);
           }
+        } else {
+            console.warn(`[taskReminders] ⚠️ User ${task.assigned_to} has no phone number configured`);
         }
       }
 

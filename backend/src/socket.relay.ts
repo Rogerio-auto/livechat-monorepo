@@ -24,8 +24,26 @@ function emitMessage(
   io: Server,
   ev: Extract<SocketEvent, { kind: "livechat.inbound.message" | "livechat.outbound.message" }>,
 ) {
-  if (!ev?.chatId || !ev?.message) return;
+  console.log("[socket.relay] 🔄 emitMessage called:", {
+    kind: ev?.kind,
+    chatId: ev?.chatId,
+    hasMessage: !!ev?.message,
+    hasChatUpdate: !!ev?.chatUpdate,
+    companyId: ev?.companyId,
+  });
+  
+  if (!ev?.chatId || !ev?.message) {
+    console.log("[socket.relay] ⚠️ Skipping emit - missing chatId or message");
+    return;
+  }
+  
   const room = `chat:${ev.chatId}`;
+
+  console.log("[socket.relay] 📤 Emitting to chat room:", {
+    room,
+    messageId: ev.message?.id,
+    events: ["message:new", ev.kind === "livechat.inbound.message" ? "message:inbound" : "message:outbound"],
+  });
 
   // Emite eventos legados e novos para compatibilidade.
   io.to(room).emit("message:new", ev.message);
@@ -35,14 +53,24 @@ function emitMessage(
   );
 
   if (ev.chatUpdate) {
+    console.log("[socket.relay] 💬 Processing chatUpdate:", {
+      chatId: ev.chatUpdate.id,
+      companyId: ev.companyId,
+      last_message_from: ev.chatUpdate.last_message_from,
+      last_message_body: ev.chatUpdate.last_message_body?.substring(0, 50),
+    });
+    
     // Emit to company room if companyId provided, otherwise fallback to global (legacy)
     if (ev.companyId) {
+      const companyRoom = `company:${ev.companyId}`;
       console.log("[socket.relay] 📡 Emitting chat:updated to company room:", {
+        room: companyRoom,
         companyId: ev.companyId,
         chatId: ev.chatId,
         last_message_from: ev.chatUpdate.last_message_from,
+        chatUpdate_companyId: ev.chatUpdate.company_id,
       });
-      io.to(`company:${ev.companyId}`).emit("chat:updated", ev.chatUpdate);
+      io.to(companyRoom).emit("chat:updated", ev.chatUpdate);
     } else {
       // Legacy fallback - unsafe but maintains compatibility
       console.warn("[socket.relay] ⚠️  chat:updated without companyId - using global broadcast (unsafe)", { chatId: ev.chatId });
@@ -74,6 +102,15 @@ export function startSocketRelay(io: Server) {
     if (!msg) return;
     try {
       const payload = JSON.parse(msg.content.toString()) as SocketEvent;
+      
+      console.log("[socket.relay] 📨 Received message from queue:", {
+        kind: payload?.kind,
+        chatId: payload?.chatId,
+        companyId: (payload as any)?.companyId,
+        hasMessage: !!(payload as any)?.message,
+        hasChatUpdate: !!(payload as any)?.chatUpdate,
+      });
+      
       switch (payload?.kind) {
         case "livechat.inbound.message":
         case "livechat.outbound.message":
@@ -83,11 +120,12 @@ export function startSocketRelay(io: Server) {
           emitStatus(io, payload);
           break;
         default:
+          console.log("[socket.relay] ⚠️ Unknown message kind:", payload?.kind);
           break;
       }
       ch.ack(msg);
     } catch (e) {
-      console.error("[socket.relay] error:", (e as any)?.message || e);
+      console.error("[socket.relay] ❌ ERROR parsing message:", (e as any)?.message || e);
       ch.nack(msg, false, false);
     }
   });

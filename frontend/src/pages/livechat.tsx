@@ -98,6 +98,24 @@ function formatDateSeparator(dateString: string) {
 export default function LiveChatPage() {
   const navigate = useNavigate();
   const { company } = useCompany();
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
+
+  // Fetch current user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`${API}/auth/me`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          setCurrentUser(data);
+        }
+      } catch (e) {
+        console.error("Failed to fetch user profile", e);
+      }
+    };
+    fetchProfile();
+  }, []);
+
   const [chatsState, setChatsState] = useState<Chat[]>([]);
   const chatsRef = useRef<Chat[]>([]);
   const setChats = useCallback((value: SetStateAction<Chat[]>) => {
@@ -142,7 +160,6 @@ export default function LiveChatPage() {
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
 
   const chatsListRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -3478,14 +3495,14 @@ const scrollToBottom = useCallback(
     async (userId: string | null) => {
       if (!currentChat?.id) return;
       const chatId = currentChat.id;
+      const body = userId ? { userId } : { unassign: true };
       const resp = await fetchJson<{
         assigned_agent_id: string | null;
         assigned_agent_name: string | null;
         assigned_agent_user_id?: string | null;
       }>(`${API}/livechat/chats/${chatId}/assignee`, {
         method: "PUT",
-        body: JSON.stringify({ userId }),
-
+        body: JSON.stringify(body),
       });
 
 
@@ -3965,6 +3982,31 @@ const scrollToBottom = useCallback(
                 )}
                 {messagesLoading && (
                   <div className="py-4 text-center text-sm theme-text-muted">Carregando mensagens...</div>
+                )}
+
+                {/* Floating Action: Assign Self */}
+                {!messagesLoading && currentChat && !currentChat.assigned_agent_id && (
+                  <div className="sticky top-2 z-10 flex justify-center mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-100 dark:border-blue-800 rounded-full shadow-lg px-4 py-2 flex items-center gap-3 backdrop-blur-sm">
+                      <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                        Ninguém responsável por este chat.
+                      </span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            if (currentUser?.id) {
+                               await assignAgent(currentUser.id);
+                            }
+                          } catch (e) {
+                            console.error("Failed to self-assign", e);
+                          }
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-full transition-colors shadow-sm flex items-center gap-1"
+                      >
+                        Assumir atendimento
+                      </button>
+                    </div>
+                  </div>
                 )}
 
                 {messages.map((m, index) => {

@@ -2034,13 +2034,24 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
     // System message for department change
     try {
-      const authUserId = (req as any).user.id as string;
-      const { data: u } = await supabaseAdmin
-        .from("users")
-        .select("name")
-        .eq("user_id", authUserId)
-        .maybeSingle();
-      const actorName = u?.name || "Alguém";
+      const authUserId = req.user?.id;
+      let actingLocalUserId: string | null = null;
+      let actorName = "Alguém";
+
+      // Resolve user ID and Name
+      if (authUserId) {
+        const { data: uExt } = await supabaseAdmin.from("users").select("id, name").eq("user_id", authUserId).maybeSingle();
+        if (uExt) {
+          actingLocalUserId = uExt.id;
+          if (uExt.name) actorName = uExt.name;
+        } else {
+          const { data: uLoc } = await supabaseAdmin.from("users").select("id, name").eq("id", authUserId).maybeSingle();
+          if (uLoc) {
+            actingLocalUserId = uLoc.id;
+            if (uLoc.name) actorName = uLoc.name;
+          }
+        }
+      }
       
       const deptName = departmentPayloadName || "Sem departamento";
       const content = `${actorName} alterou o departamento para "${deptName}"`;
@@ -2050,6 +2061,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         content,
         type: "SYSTEM",
         is_from_customer: false,
+        sender_id: actingLocalUserId, // Include sender_id
         created_at: new Date().toISOString(),
       }).select().single();
 
@@ -2265,13 +2277,24 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
     // System message for AI Agent assignment
     try {
-      const authUserId = (req as any).user.id as string;
-      const { data: u } = await supabaseAdmin
-        .from("users")
-        .select("name")
-        .eq("user_id", authUserId)
-        .maybeSingle();
-      const actorName = u?.name || "Alguém";
+      const authUserId = req.user?.id;
+      let actingLocalUserId: string | null = null;
+      let actorName = "Alguém";
+
+      // Resolve user ID and Name
+      if (authUserId) {
+        const { data: uExt } = await supabaseAdmin.from("users").select("id, name").eq("user_id", authUserId).maybeSingle();
+        if (uExt) {
+          actingLocalUserId = uExt.id;
+          if (uExt.name) actorName = uExt.name;
+        } else {
+          const { data: uLoc } = await supabaseAdmin.from("users").select("id, name").eq("id", authUserId).maybeSingle();
+          if (uLoc) {
+            actingLocalUserId = uLoc.id;
+            if (uLoc.name) actorName = uLoc.name;
+          }
+        }
+      }
       
       let content = "";
       if (agentId) {
@@ -2285,6 +2308,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         content,
         type: "SYSTEM",
         is_from_customer: false,
+        sender_id: actingLocalUserId, // Include sender_id
         created_at: new Date().toISOString(),
       }).select().single();
 

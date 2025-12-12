@@ -145,3 +145,51 @@ export async function notifyCampaignCompleted(params: {
     actionUrl: `/dashboard/campanhas/${params.campaignId}`,
   });
 }
+
+/**
+ * Notifica usuário sobre nova mensagem recebida
+ */
+export async function notifyNewMessage(params: {
+  chatId: string;
+  messageBody: string;
+  companyId?: string;
+  senderName?: string;
+  senderPhone?: string;
+}) {
+  try {
+    // 1. Buscar chat para saber quem é o dono (owner_id)
+    const { data: chat } = await supabaseAdmin
+      .from("chats")
+      .select("owner_id, company_id")
+      .eq("id", params.chatId)
+      .single();
+
+    if (!chat || !chat.owner_id) {
+      return;
+    }
+
+    const userId = chat.owner_id;
+    const companyId = params.companyId || chat.company_id;
+
+    if (!companyId) return;
+
+    // 2. Criar notificação
+    await NotificationService.create({
+      title: `Nova mensagem de ${params.senderName || params.senderPhone || "Cliente"}`,
+      message: params.messageBody.substring(0, 100) + (params.messageBody.length > 100 ? "..." : ""),
+      type: "USER_MESSAGE",
+      priority: "HIGH",
+      userId: userId,
+      companyId: companyId,
+      data: {
+        chatId: params.chatId,
+        senderPhone: params.senderPhone
+      },
+      actionUrl: `/dashboard/chats/${params.chatId}`,
+      category: "message"
+    });
+
+  } catch (error) {
+    console.error("[notifyNewMessage] ❌ Erro ao notificar nova mensagem:", error);
+  }
+}

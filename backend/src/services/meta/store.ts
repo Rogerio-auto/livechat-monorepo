@@ -5,6 +5,7 @@ import { supabaseAdmin } from "../../lib/supabase.js";
 import { clearMessageCache, clearListCacheIndexes, rDel, rGet, rSet, k } from "../../lib/redis.ts";
 import { decryptSecret, encryptMediaUrl } from "../../lib/crypto.ts";
 import { WAHA_PROVIDER } from "../waha/client.ts";
+import { notifyNewMessage } from "../NotificationHelpers.ts";
 
 let customerAvatarColumnMissing = false;
 let chatLastMessageFromColumnMissing = false;
@@ -1494,6 +1495,14 @@ export async function insertInboundMessage(args: {
     lastMessageType: args.type ?? result.message.type ?? "TEXT",
     lastMessageMediaUrl: result.message.media_url ?? null,
   });
+
+  // 🔔 Notificar usuário sobre nova mensagem
+  notifyNewMessage({
+    chatId: args.chatId,
+    messageBody: args.content,
+    senderName: args.remoteSenderName ?? undefined,
+    senderPhone: args.remoteSenderPhone ?? undefined,
+  }).catch(err => console.error("[META][store] Failed to notify new message", err));
 
   return {
     id: result.message.id,

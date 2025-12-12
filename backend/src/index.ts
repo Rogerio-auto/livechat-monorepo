@@ -994,6 +994,7 @@ io.on("connection", async (socket) => {
   const userId = await socketAuthUserId(socket);
   if (userId) {
     socket.join(`user:${userId}`);
+    console.log(`[Socket] 🔌 User connected and joined room user:${userId}`);
     
     // Join company room for multi-tenancy isolation
     try {

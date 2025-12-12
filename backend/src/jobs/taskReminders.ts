@@ -1,5 +1,8 @@
 import { getIO } from "../lib/io.js";
 import { getTasksWithPendingReminders, markReminderAsSent, type TaskWithContext } from "../repos/tasks.repo.js";
+import { sendTaskReminderEmail } from "../services/emailService.js";
+import { publish, EX_APP } from "../queue/rabbit.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 /**
  * Verifica e envia lembretes de tarefas
@@ -34,6 +37,53 @@ export async function checkAndSendReminders(): Promise<void> {
   } catch (error) {
     console.error("[taskReminders] Error checking reminders:", error);
   }
+}
+
+
+async function getChatInfoForTask(task: TaskWithContext) {
+  // 1. Se tiver chat vinculado, usa ele (para notificar cliente)
+  if (task.related_chat_id) {
+    const { data } = await supabaseAdmin
+      .from('chats')
+      .select('id, inbox_id, customer_phone')
+      .eq('id', task.related_chat_id)
+      .single();
+    return data;
+  }
+  
+  // 2. Se tiver cliente vinculado, tenta achar chat recente (para notificar cliente)
+  if (task.related_customer_id) {
+    const { data } = await supabaseAdmin
+      .from('chats')
+      .select('id, inbox_id, customer_phone')
+      .eq('customer_id', task.related_customer_id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  }
+  
+  return null;
+}
+
+async function getUserPhoneInfo(userId: string) {
+  const { data } = await supabaseAdmin
+    .from('users')
+    .select('phone, company_id')
+    .eq('id', userId)
+    .single();
+  return data;
+}
+
+async function getDefaultInboxForCompany(companyId: string) {
+  const { data } = await supabaseAdmin
+    .from('inboxes')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('is_active', true)
+    .limit(1)
+    .maybeSingle();
+  return data;
 }
 
 /**
@@ -82,16 +132,77 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
     });
   }
 
-  // TODO: Implementar envio de email
+  // Envio de email
   if (channels.includes("EMAIL")) {
-    console.log(`[taskReminders] Email reminder for task ${task.id} (not implemented yet)`);
-    // Aqui você pode integrar com serviço de email (nodemailer, sendgrid, etc)
+    if (task.assigned_to_email) {
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const actionUrl = `${frontendUrl}/tasks?taskId=${task.id}`;
+      
+      await sendTaskReminderEmail(
+        task.assigned_to_email,
+        task.title,
+        task.description,
+        task.due_date,
+        actionUrl
+      );
+    } else {
+      console.warn(`[taskReminders] Cannot send email reminder for task ${task.id}: No assigned user email`);
+    }
   }
 
-  // TODO: Implementar envio de WhatsApp
+  // Envio de WhatsApp via WAHA
   if (channels.includes("WHATSAPP")) {
-    console.log(`[taskReminders] WhatsApp reminder for task ${task.id} (not implemented yet)`);
-    // Aqui você pode integrar com WAHA ou outro serviço de WhatsApp
+    try {
+      const message = `⏰ *Lembrete de Tarefa*\n\n*${task.title}*\n${task.description ? `_${task.description}_\n` : ''}${task.due_date ? `📅 Vencimento: ${new Date(task.due_date).toLocaleString('pt-BR')}` : ''}`;
+
+      // 1. Tentar enviar para o USUÁRIO RESPONSÁVEL (Prioridade)
+      if (task.assigned_to) {
+        const userInfo = await getUserPhoneInfo(task.assigned_to);
+        if (userInfo?.phone) {
+          // Precisa de uma inbox para enviar. Pega a primeira ativa da empresa.
+          const defaultInbox = await getDefaultInboxForCompany(task.company_id);
+          
+          if (defaultInbox?.id) {
+            // Formatar telefone para JID (assumindo BR 55...)
+            let userPhone = userInfo.phone.replace(/\D/g, "");
+            if (!userPhone.startsWith("55")) userPhone = "55" + userPhone; // Fallback simples
+            const userJid = `${userPhone}@s.whatsapp.net`;
+
+            await publish(EX_APP, "outbound.request", {
+              jobType: "message.send",
+              provider: "WAHA",
+              inboxId: defaultInbox.id,
+              chatId: userJid,
+              content: `[Lembrete para Você]\n${message}`,
+              companyId: task.company_id,
+              createdAt: new Date().toISOString(),
+            });
+            console.log(`[taskReminders] WhatsApp reminder sent to ASSIGNED USER ${task.assigned_to} (${userJid})`);
+          } else {
+            console.warn(`[taskReminders] Cannot send WA to user: No active inbox found for company ${task.company_id}`);
+          }
+        }
+      }
+
+      // 2. Tentar enviar para o CLIENTE (se houver chat vinculado)
+      // Isso mantém o comportamento anterior caso seja desejado notificar o cliente também
+      const chatInfo = await getChatInfoForTask(task);
+      if (chatInfo && chatInfo.inbox_id) {
+        await publish(EX_APP, "outbound.request", {
+          jobType: "message.send",
+          provider: "WAHA",
+          inboxId: chatInfo.inbox_id,
+          chatId: chatInfo.id,
+          content: message,
+          companyId: task.company_id,
+          createdAt: new Date().toISOString(),
+        });
+        console.log(`[taskReminders] WhatsApp reminder sent to CUSTOMER chat ${chatInfo.id}`);
+      }
+
+    } catch (error) {
+      console.error(`[taskReminders] Failed to send WhatsApp reminder for task ${task.id}:`, error);
+    }
   }
 }
 

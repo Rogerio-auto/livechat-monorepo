@@ -1792,6 +1792,20 @@ const scrollToBottom = useCallback(
           markChatAsRead(m.chat_id);
         }, 300);
       }
+
+      // Calcular novo unread_count
+      let nextUnreadCount: number | undefined = undefined;
+      
+      if (isChatOpen && isFromCustomer) {
+        nextUnreadCount = 0;
+      } else if (Object.prototype.hasOwnProperty.call(m, "unread_count")) {
+        nextUnreadCount = (m as any).unread_count;
+      } else if (isFromCustomer) {
+        // Se não veio no payload, incrementar localmente
+        const currentChatObj = chatsRef.current.find(c => c.id === m.chat_id);
+        const currentCount = currentChatObj?.unread_count ?? 0;
+        nextUnreadCount = currentCount + 1;
+      }
       
       // Bump chat to top quando receber mensagem nova
       bumpChatToTop({
@@ -1807,12 +1821,7 @@ const scrollToBottom = useCallback(
           : undefined,
         remote_id: Object.prototype.hasOwnProperty.call(m, "remote_id") ? (m as any).remote_id ?? null : undefined,
         kind: Object.prototype.hasOwnProperty.call(m, "kind") ? (m as any).kind ?? null : undefined,
-        // Se chat está aberto, forçar unread_count = 0, caso contrário usar valor do payload
-        unread_count: isChatOpen && isFromCustomer ? 0 : (
-          Object.prototype.hasOwnProperty.call(m, "unread_count") 
-            ? (m as any).unread_count ?? undefined
-            : undefined
-        ),
+        unread_count: nextUnreadCount,
       });
     };
 

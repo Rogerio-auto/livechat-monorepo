@@ -214,3 +214,66 @@ export async function sendPasswordChangedEmail(
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Envia email de lembrete de tarefa
+ */
+export async function sendTaskReminderEmail(
+  to: string,
+  taskTitle: string,
+  taskDescription: string | null | undefined,
+  dueDate: string | null | undefined,
+  actionUrl: string
+): Promise<boolean> {
+  try {
+    const subject = `⏰ Lembrete de Tarefa: ${taskTitle}`;
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { font-family: sans-serif; color: #333; }
+    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+    .header { background-color: #f3f4f6; padding: 15px; border-radius: 8px; text-align: center; }
+    .content { padding: 20px 0; }
+    .button { display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 5px; }
+    .footer { font-size: 12px; color: #666; text-align: center; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h2>Lembrete de Tarefa</h2>
+    </div>
+    <div class="content">
+      <p>Olá,</p>
+      <p>Este é um lembrete para a tarefa: <strong>${taskTitle}</strong></p>
+      ${taskDescription ? `<p><strong>Descrição:</strong><br>${taskDescription}</p>` : ''}
+      ${dueDate ? `<p><strong>Vencimento:</strong> ${new Date(dueDate).toLocaleString('pt-BR')}</p>` : ''}
+      <p>
+        <a href="${actionUrl}" class="button">Ver Tarefa</a>
+      </p>
+    </div>
+    <div class="footer">
+      <p>Enviado automaticamente pelo sistema.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    await transporter.sendMail({
+      from: EMAIL_FROM,
+      to,
+      subject,
+      html,
+    });
+
+    console.log(`[emailService] Task reminder sent to ${to}`);
+    return true;
+  } catch (error) {
+    console.error(`[emailService] Failed to send task reminder to ${to}:`, error);
+    return false;
+  }
+}

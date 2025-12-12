@@ -22,7 +22,7 @@ import {
 } from "./services/meta/store.js";
 import { setIO, getIO } from "./lib/io.js";
 import { registerLivechatChatRoutes } from "./routes/livechat.chats.js";
-import { getRedis, rGet, rSet, redis, k } from "./lib/redis.js";
+import { getRedis, rGet, rSet, redis, k, clearMessageCache, rDel } from "./lib/redis.js";
 import { registerLivechatContactsRoutes } from "./routes/livechat.contacts.js";
 import { registerLivechatInboxesRoutes } from "./routes/livechat.inboxes.js";
 import { registerKanbanRoutes } from "./routes/kanban.js";
@@ -2144,6 +2144,7 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
       // Invalidate cache
       try {
         await rDel(k.chat(chatId));
+        await clearMessageCache(chatId);
         // Clear list caches for this company
         const companyId = req.user?.company_id;
         if (companyId) {
@@ -2271,6 +2272,7 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
     // Invalidate cache
     try {
       await rDel(k.chat(chatId));
+      await clearMessageCache(chatId);
       // Clear list caches for this company
       const companyId = req.user?.company_id;
       if (companyId) {

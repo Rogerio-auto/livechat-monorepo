@@ -1400,7 +1400,7 @@ const scrollToBottom = useCallback(
     // Ensure sender_type is set correctly
     // If missing or invalid, derive from is_from_customer
     let senderType = raw.sender_type;
-    if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER")) {
+    if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER" && senderType !== "SYSTEM")) {
       // Map boolean is_from_customer to string sender_type
       if (typeof raw.is_from_customer === "boolean") {
         senderType = raw.is_from_customer ? "CUSTOMER" : "AGENT";

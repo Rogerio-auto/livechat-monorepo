@@ -2885,6 +2885,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
             group_name: isGroupChat ? groupMeta?.name ?? name ?? chatJid : null,
             group_avatar_url: isGroupChat ? groupMeta?.avatarUrl ?? null : null,
             remote_id: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
+            companyId: job.companyId, // ✅ Ensure companyId is present in fallback chatUpdate
           },
     });
 

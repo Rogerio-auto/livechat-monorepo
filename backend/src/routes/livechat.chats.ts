@@ -107,7 +107,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
         id: row.id,
         chat_id: row.chat_id,
         body: row.content,
-        sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_type: row.type === "SYSTEM" ? "SYSTEM" : (row.is_from_customer ? "CUSTOMER" : "AGENT"),
         sender_id: row.sender_id || null,
         created_at: row.created_at,
         view_status: row.view_status || null,

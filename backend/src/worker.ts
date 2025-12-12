@@ -1923,6 +1923,7 @@ async function handleMetaInboundMessages(args: {
           ? {
               ...chatSummary,
               last_message_from: mappedMessage.sender_type,
+              companyId, // ✅ Ensure companyId is present
             }
           : {
               chatId,
@@ -1936,6 +1937,7 @@ async function handleMetaInboundMessages(args: {
               group_name: isGroupMessage ? metaContext.groupName ?? null : null,
               group_avatar_url: isGroupMessage ? metaContext.groupAvatarUrl ?? null : null,
               remote_id: isGroupMessage ? metaContext.groupId ?? null : participantWaId ?? null,
+              companyId, // ✅ Ensure companyId is present in fallback chatUpdate
             },
       });
 
@@ -3497,43 +3499,84 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   let messageOperation: "insert" | "update" | null = null;
   if (internalChatId) {
     // Resolve sender identity metadata (name/avatar) for human agents
-    let wSenderName: string | null = null;
-    let wSenderAvatarUrl: string | null = null;
-    try {
-      // FIRST: Check if this is a human agent message (senderId provided)
-      if (job?.senderId || job?.senderUserSupabaseId) {
-        // If senderId provided, it's the local users.id; query by id
-        // If senderUserSupabaseId provided, it's auth user.id; query by user_id
-        const userId = job.senderId || job.senderUserSupabaseId;
-        const lookupColumn = job.senderId ? 'id' : 'user_id';
-        const userRow = await db.oneOrNone<{ id: string; name: string | null; email: string | null; avatar: string | null }>(
-          `select id, name, email, avatar from public.users where ${lookupColumn} = $1`,
-          [userId],
-        );
-        if (userRow) {
-          wSenderName = userRow.name || userRow.email || null;
-          wSenderAvatarUrl = userRow.avatar || null;
-          // Ensure we use local ID for persistence
-          if (!job.senderId) {
-            job.senderId = userRow.id;
+    // Resolve dbChatId first before any DB queries
+    let dbChatId = internalChatId;
+    const isUuid = (id: string | null) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || "");
+
+    if (!isUuid(dbChatId)) {
+      if (remoteChatId) {
+        const resolved = await findChatIdByRemoteId({ inboxId, remoteId: remoteChatId });
+        if (resolved) {
+          dbChatId = resolved;
+        } else if (job?.companyId) {
+          try {
+            if (remoteChatId.endsWith("@g.us")) {
+              const groupResult = await ensureGroupChat({
+                inboxId,
+                companyId: job.companyId,
+                remoteId: remoteChatId,
+                groupName: payload?.name || "Grupo",
+              });
+              if (groupResult?.chatId) dbChatId = groupResult.chatId;
+            } else {
+              const phone = remoteChatId.split("@")[0];
+              const chat = await ensureLeadCustomerChat({
+                inboxId,
+                companyId: job.companyId,
+                phone: phone,
+                name: payload?.name || phone,
+              });
+              if (chat?.chatId) dbChatId = chat.chatId;
+            }
+          } catch (err) {
+            console.warn("[worker][WAHA] Failed to ensure chat for outbound", err);
           }
         }
       } else {
-        // FALLBACK: If no senderId, check if it's an AI agent message
-        const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
-          `select ai_agent_id from public.chats where id = $1`,
-          [internalChatId],
-        );
-        if (chatRow?.ai_agent_id) {
-          const agentRow = await db.oneOrNone<{ name: string | null }>(
-            `select name from public.agents where id = $1`,
-            [chatRow.ai_agent_id],
-          );
-          wSenderName = agentRow?.name ?? null;
-        }
+        dbChatId = null;
       }
-    } catch (e) {
-      console.warn("[worker][WAHA] failed to resolve sender identity", e instanceof Error ? e.message : e);
+    }
+
+    let wSenderName: string | null = null;
+    let wSenderAvatarUrl: string | null = null;
+    
+    if (dbChatId) {
+      try {
+        // FIRST: Check if this is a human agent message (senderId provided)
+        if (job?.senderId || job?.senderUserSupabaseId) {
+          // If senderId provided, it's the local users.id; query by id
+          // If senderUserSupabaseId provided, it's auth user.id; query by user_id
+          const userId = job.senderId || job.senderUserSupabaseId;
+          const lookupColumn = job.senderId ? 'id' : 'user_id';
+          const userRow = await db.oneOrNone<{ id: string; name: string | null; email: string | null; avatar: string | null }>(
+            `select id, name, email, avatar from public.users where ${lookupColumn} = $1`,
+            [userId],
+          );
+          if (userRow) {
+            wSenderName = userRow.name || userRow.email || null;
+            wSenderAvatarUrl = userRow.avatar || null;
+            // Ensure we use local ID for persistence
+            if (!job.senderId) {
+              job.senderId = userRow.id;
+            }
+          }
+        } else {
+          // FALLBACK: If no senderId, check if it's an AI agent message
+          const chatRow = await db.oneOrNone<{ ai_agent_id: string | null }>(
+            `select ai_agent_id from public.chats where id = $1`,
+            [dbChatId],
+          );
+          if (chatRow?.ai_agent_id) {
+            const agentRow = await db.oneOrNone<{ name: string | null }>(
+              `select name from public.agents where id = $1`,
+              [chatRow.ai_agent_id],
+            );
+            wSenderName = agentRow?.name ?? null;
+          }
+        }
+      } catch (e) {
+        console.warn("[worker][WAHA] failed to resolve sender identity", e instanceof Error ? e.message : e);
+      }
     }
 
     console.log("[worker][WAHA] insertOutboundMessage params:", {
@@ -3543,22 +3586,27 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       senderAvatarUrl: wSenderAvatarUrl,
     });
 
-    const upsert = await insertOutboundMessage({
-      chatId: internalChatId,
-      inboxId,
-      customerId: String(job?.customerId || ""),
-      externalId: externalId ?? null,
-      content: contentForChat,
-      type:
-        messageType === "media"
-          ? String(payload?.kind || "DOCUMENT").toUpperCase()
-          : "TEXT",
-      senderId: job?.senderId || job?.senderUserSupabaseId || null,
-      senderName: wSenderName ?? null,
-      senderAvatarUrl: wSenderAvatarUrl ?? null,
-      messageId: payload?.draftId || job?.messageId || null,
-      viewStatus: externalId ? "Sent" : "Pending",
-    });
+    let upsert = null;
+    if (dbChatId) {
+      upsert = await insertOutboundMessage({
+        chatId: dbChatId,
+        inboxId,
+        customerId: String(job?.customerId || ""),
+        externalId: externalId ?? null,
+        content: contentForChat,
+        type:
+          messageType === "media"
+            ? String(payload?.kind || "DOCUMENT").toUpperCase()
+            : "TEXT",
+        senderId: job?.senderId || job?.senderUserSupabaseId || null,
+        senderName: wSenderName ?? null,
+        senderAvatarUrl: wSenderAvatarUrl ?? null,
+        messageId: payload?.draftId || job?.messageId || null,
+        viewStatus: externalId ? "Sent" : "Pending",
+      });
+    } else {
+      console.warn("[worker][WAHA] Skipping DB insert: No valid chat UUID found", { internalChatId, remoteChatId });
+    }
 
     console.log("[worker][WAHA] insertOutboundMessage result:", {
       operation: upsert?.operation,

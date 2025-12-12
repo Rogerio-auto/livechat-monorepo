@@ -37,12 +37,19 @@ function emitMessage(
   if (ev.chatUpdate) {
     // Emit to company room if companyId provided, otherwise fallback to global (legacy)
     if (ev.companyId) {
+      console.log("[socket.relay] 📡 Emitting chat:updated to company room:", {
+        companyId: ev.companyId,
+        chatId: ev.chatId,
+        last_message_from: ev.chatUpdate.last_message_from,
+      });
       io.to(`company:${ev.companyId}`).emit("chat:updated", ev.chatUpdate);
     } else {
       // Legacy fallback - unsafe but maintains compatibility
-      console.warn("[socket.relay] chat:updated without companyId - using global broadcast (unsafe)", { chatId: ev.chatId });
+      console.warn("[socket.relay] ⚠️  chat:updated without companyId - using global broadcast (unsafe)", { chatId: ev.chatId });
       io.emit("chat:updated", ev.chatUpdate);
     }
+  } else {
+    console.log("[socket.relay] ⏭️  No chatUpdate in payload, skipping chat:updated emission");
   }
 }
 

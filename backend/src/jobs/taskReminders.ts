@@ -21,7 +21,12 @@ export async function checkAndSendReminders(): Promise<void> {
 
     console.log(`[taskReminders] Found ${tasks.length} tasks with pending reminders`);
 
-    const io = getIO();
+    let io;
+    try {
+      io = getIO();
+    } catch (e) {
+      console.warn("[taskReminders] Socket.IO not available, skipping IN_APP notifications");
+    }
 
     for (const task of tasks) {
       try {
@@ -115,7 +120,7 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
   };
 
   // Enviar notificação in-app via Socket.io
-  if (channels.includes("IN_APP")) {
+  if (channels.includes("IN_APP") && io) {
     // Emitir para a empresa toda
     io.to(`company:${task.company_id}`).emit("notification", notification);
 
@@ -172,8 +177,10 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
               jobType: "message.send",
               provider: "WAHA",
               inboxId: defaultInbox.id,
-              chatId: userJid,
-              content: `[Lembrete para Você]\n${message}`,
+              payload: {
+                chatId: userJid,
+                content: `[Lembrete para Você]\n${message}`,
+              },
               companyId: task.company_id,
               createdAt: new Date().toISOString(),
             });
@@ -193,7 +200,9 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
           provider: "WAHA",
           inboxId: chatInfo.inbox_id,
           chatId: chatInfo.id,
-          content: message,
+          payload: {
+            content: message,
+          },
           companyId: task.company_id,
           createdAt: new Date().toISOString(),
         });

@@ -994,7 +994,7 @@ io.on("connection", async (socket) => {
   const userId = await socketAuthUserId(socket);
   if (userId) {
     socket.join(`user:${userId}`);
-    console.log(`[Socket] 🔌 User connected and joined room user:${userId}`);
+    console.log(`[Socket] 🔌 User connected and joined room user:${userId}`, { socketId: socket.id });
     
     // Join company room for multi-tenancy isolation
     try {
@@ -1006,10 +1006,18 @@ io.on("connection", async (socket) => {
       
       if (profile?.company_id) {
         socket.join(`company:${profile.company_id}`);
+        console.log(`[Socket] ✅ User joined company room: company:${profile.company_id}`, { 
+          socketId: socket.id, 
+          userId 
+        });
+      } else {
+        console.warn("[Socket] ⚠️  User has no company_id in profile", { socketId: socket.id, userId });
       }
     } catch (error) {
-      console.error("[RT] failed to join company room", { socketId: socket.id, userId, error });
+      console.error("[RT] ❌ failed to join company room", { socketId: socket.id, userId, error });
     }
+  } else {
+    console.warn("[Socket] ⚠️  Connection without valid userId", { socketId: socket.id });
   }
 
   socket.on("join", async (payload: { chatId?: string; companyId?: string }) => {
@@ -1029,8 +1037,13 @@ io.on("connection", async (socket) => {
           
           if (userCompany?.company_id === companyId) {
             socket.join(`company:${companyId}`);
+            console.log("[RT] ✅ User explicitly joined company room", { 
+              socketId: socket.id,
+              userId, 
+              companyId 
+            });
           } else {
-            console.warn("[RT] ⚠️ user tried to join wrong company room", { 
+            console.warn("[RT] ⚠️  user tried to join wrong company room", { 
               userId, 
               requestedCompany: companyId,
               actualCompany: userCompany?.company_id 

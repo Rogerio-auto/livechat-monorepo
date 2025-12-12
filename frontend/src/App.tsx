@@ -44,9 +44,11 @@ function App() {
           <Route path='/tarefas' element={<TarefasPage />}/>
           <Route path='/automacao' element={<AutomationRulesPage />}/>
           <Route path='/documentos' element={<DocumentosPage/>}/>
+          <Route path='/documentos/:docId' element={<DocumentosPage/>}/>
           <Route path='/templates' element={<TemplatesPage/>}/>
           <Route path='/calendario' element={<CalendarioPage/>}/>
           <Route path='/livechat' element={<LiveChatPage/>}/>
+          <Route path='/livechat/:chatId' element={<LiveChatPage/>}/>
           <Route path='/produtos' element={<ProdutosPage/>}/>
           <Route path='/galeria' element={<GaleriaPage/>}/>
           <Route path='/configuracoes' element={<ConfiguracoesPage/>}/>

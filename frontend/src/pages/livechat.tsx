@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction,
 import { createPortal } from "react-dom";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { cleanupService } from "../services/cleanupService";
 import { useCompany } from "../hooks/useCompany";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
@@ -97,6 +97,7 @@ function formatDateSeparator(dateString: string) {
 
 export default function LiveChatPage() {
   const navigate = useNavigate();
+  const { chatId } = useParams();
   const { company } = useCompany();
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
 
@@ -2572,13 +2573,10 @@ const scrollToBottom = useCallback(
 
 
   const handleSelectChat = useCallback(
-    (chatId: string) => {
-      const target =
-        chatsRef.current.find((item) => item.id === chatId) ?? chats.find((item) => item.id === chatId);
-      if (!target) return;
-      setCurrentChat(target);
+    (selectedChatId: string) => {
+      navigate(`/livechat/${selectedChatId}`);
     },
-    [chats],
+    [navigate],
   );
 
   const handleChatsScroll = useCallback(
@@ -2830,21 +2828,46 @@ const scrollToBottom = useCallback(
 
 
   const location = useLocation();
+  
+  // Handle URL chat selection (both /:chatId and ?openChat=ID)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    const openId = params.get("openChat");
-    if (!openId) return;
-    const exists = chats.find((c) => c.id === openId);
-    if (exists) {
-      setCurrentChat(exists);
-      return;
+    const targetId = chatId || params.get("openChat");
+
+    if (targetId) {
+      if (currentChat?.id === targetId) return;
+
+      const existing = chatsRef.current.find((c) => c.id === targetId);
+      if (existing) {
+        setCurrentChat(existing);
+      } else {
+        const fetchChat = async () => {
+          try {
+            const token = getAccessToken();
+            const res = await fetch(`${API}/livechat/chats/${targetId}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (res.ok) {
+              const data = await res.json();
+              setChats((prev) => {
+                if (prev.some((c) => c.id === data.id)) return prev;
+                return [data, ...prev];
+              });
+              setCurrentChat(data);
+            }
+          } catch (e) {
+            console.error("Failed to fetch chat from URL", e);
+          }
+        };
+        fetchChat();
+      }
+    } else {
+      // Only clear if we are in a state where we expect a chat but none is selected via URL
+      // But be careful not to clear if the user just clicked something that hasn't updated URL yet?
+      // Actually, if we use navigate(), URL updates first.
+      if (currentChat) setCurrentChat(null);
     }
-    (async () => {
-      const resp = await loadChats();
-      const item = (resp.items || []).find((c) => c.id === openId);
-      if (item) setCurrentChat(item);
-    })();
-  }, [location.search, chats, loadChats]);
+  }, [chatId, location.search, currentChat, setChats]);
 
 
   // Load contacts when contacts section active

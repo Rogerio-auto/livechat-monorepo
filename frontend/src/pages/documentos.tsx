@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ProposalForm from "../componets/propostas/ProposalForm";
 import { toast } from "../hooks/useToast";
 import { io } from "socket.io-client";
@@ -48,6 +48,7 @@ export default function DocumentosPage() {
   const [showNew, setShowNew] = useState(false);
   const location = useLocation() as any;
   const navigate = useNavigate();
+  const { docId } = useParams();
   const initialLead = location?.state?.lead ?? null;
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -99,11 +100,16 @@ export default function DocumentosPage() {
 
   const filteredPropostas = useMemo(() => {
     let arr = propostas as Proposal[];
+    
+    if (docId) {
+      return arr.filter(p => p.id === docId || p.number === docId);
+    }
+
     const term = q.trim().toLowerCase();
     if (term) arr = arr.filter(p => (p.number || "").toLowerCase().includes(term) || (p.title || "").toLowerCase().includes(term));
     if (statusFilter && statusFilter !== "ALL") arr = arr.filter(p => String(p.status || "").toUpperCase() === statusFilter);
     return arr;
-  }, [propostas, q, statusFilter]);
+  }, [propostas, q, statusFilter, docId]);
 
   const docsByProposal = useMemo(() => {
     const map = new Map<string, { contract?: DocSummary; receipt?: DocSummary }>();

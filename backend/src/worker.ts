@@ -46,6 +46,7 @@ import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bu
 import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer, getMediaBucket } from "../src/lib/storage.ts";
 import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 import { incrementUsage, checkLimit } from "../src/services/subscriptions.ts";
+import { NotificationService } from "./services/NotificationService.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -2939,6 +2940,43 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         companyId: job.companyId,
         chatUpdate_companyId: chatUpdatePayload.companyId,
       });
+
+      // 🔔 NOTIFICATION: Send notification to assigned user
+      try {
+        // 1. Fetch chat details to get assigned_to
+        const { data: chatData, error: chatError } = await supabaseAdmin
+          .from("chats")
+          .select("assigned_to, customer_name, customer_phone")
+          .eq("id", chatId)
+          .single();
+
+        if (chatData && chatData.assigned_to) {
+          const senderName = chatData.customer_name || chatData.customer_phone || "Cliente";
+          const msgPreview = mappedMessage.body 
+            ? (mappedMessage.body.length > 50 ? mappedMessage.body.substring(0, 50) + "..." : mappedMessage.body)
+            : (hasMedia ? "📷 Mídia" : "Nova mensagem");
+
+          await NotificationService.create({
+            type: "CHAT_MESSAGE",
+            title: `Nova mensagem de ${senderName}`,
+            message: msgPreview,
+            userId: chatData.assigned_to,
+            companyId: job.companyId,
+            data: {
+              chatId,
+              messageId: mappedMessage.id,
+              senderName
+            },
+            category: "chat",
+            actionUrl: `/livechat/${chatId}`
+          });
+          console.log(`[worker][WAHA] 🔔 Notification sent to assigned user ${chatData.assigned_to}`);
+        } else {
+          console.log(`[worker][WAHA] 🔕 Chat ${chatId} has no assigned user, skipping notification`);
+        }
+      } catch (notifError) {
+        console.error("[worker][WAHA] ❌ Failed to send notification:", notifError);
+      }
     }
   } catch (error) {
     console.error("[WAHA][worker] ❌ EXCEPTION during socket publish:", {

@@ -143,7 +143,7 @@ export function useNotifications() {
     }
   }, []);
 
-  const fetchAllNotifications = async () => {
+  const fetchAllNotifications = useCallback(async () => {
     setLoading(true);
     try {
       const token = getAccessToken();
@@ -166,9 +166,9 @@ export function useNotifications() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchUnreadCount = async () => {
+  const fetchUnreadCount = useCallback(async () => {
     try {
       const token = getAccessToken();
       const res = await fetch(`${API}/api/notifications/unread/count`, {
@@ -188,7 +188,7 @@ export function useNotifications() {
       console.error('[useNotifications] Error fetching count:', error);
       setUnreadCount(0);
     }
-  };
+  }, []);
 
   const markAsRead = useCallback(async (id: string) => {
     try {

@@ -2112,7 +2112,7 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
         chat_id: chatId,
         content: `${actorName} removeu a atribuição`,
         type: "SYSTEM",
-        sender_type: "SYSTEM",
+        is_from_customer: false,
         created_at: new Date().toISOString(),
       });
 
@@ -2224,7 +2224,7 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
         chat_id: chatId,
         content: msgContent,
         type: "SYSTEM",
-        sender_type: "SYSTEM",
+        is_from_customer: false,
         created_at: new Date().toISOString(),
       });
 

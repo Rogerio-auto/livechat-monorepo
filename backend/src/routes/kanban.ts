@@ -1234,7 +1234,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                         chat_id: chatId,
                         content,
                         type: "SYSTEM",
-                        sender_type: "SYSTEM",
+                        is_from_customer: false,
                         created_at: new Date().toISOString(),
                     });
                     

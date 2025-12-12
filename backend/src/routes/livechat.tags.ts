@@ -170,7 +170,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
           chat_id: id,
           content: msgContent,
           type: "SYSTEM",
-          sender_type: "SYSTEM",
+          is_from_customer: false,
           created_at: new Date().toISOString(),
         });
         
@@ -328,7 +328,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
           chat_id: id,
           content: msgContent,
           type: "SYSTEM",
-          sender_type: "SYSTEM",
+          is_from_customer: false,
           created_at: new Date().toISOString(),
         });
         

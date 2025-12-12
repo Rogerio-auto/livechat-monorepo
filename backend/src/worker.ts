@@ -2941,7 +2941,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
         chatUpdate_companyId: chatUpdatePayload.companyId,
       });
 
-      // 🔔 NOTIFICATION: Send notification to assigned user
+      // 🔔 NOTIFICATION: Send notification to assigned user OR admins
       try {
         // 1. Fetch chat details to get assigned_to
         const { data: chatData, error: chatError } = await supabaseAdmin
@@ -2950,29 +2950,64 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           .eq("id", chatId)
           .single();
 
-        if (chatData && chatData.assigned_to) {
-          const senderName = chatData.customer_name || chatData.customer_phone || "Cliente";
-          const msgPreview = mappedMessage.body 
-            ? (mappedMessage.body.length > 50 ? mappedMessage.body.substring(0, 50) + "..." : mappedMessage.body)
-            : (hasMedia ? "📷 Mídia" : "Nova mensagem");
+        const senderName = chatData?.customer_name || chatData?.customer_phone || "Cliente";
+        const msgPreview = mappedMessage.body 
+          ? (mappedMessage.body.length > 50 ? mappedMessage.body.substring(0, 50) + "..." : mappedMessage.body)
+          : (hasMedia ? "📷 Mídia" : "Nova mensagem");
 
-          await NotificationService.create({
-            type: "CHAT_MESSAGE",
-            title: `Nova mensagem de ${senderName}`,
-            message: msgPreview,
-            userId: chatData.assigned_to,
-            companyId: job.companyId,
-            data: {
-              chatId,
-              messageId: mappedMessage.id,
-              senderName
-            },
-            category: "chat",
-            actionUrl: `/livechat/${chatId}`
-          });
-          console.log(`[worker][WAHA] 🔔 Notification sent to assigned user ${chatData.assigned_to}`);
+        const targetUserIds: string[] = [];
+
+        if (chatData && chatData.assigned_to) {
+          targetUserIds.push(chatData.assigned_to);
+          console.log(`[worker][WAHA] 🔔 Chat assigned to ${chatData.assigned_to}`);
         } else {
-          console.log(`[worker][WAHA] 🔕 Chat ${chatId} has no assigned user, skipping notification`);
+          console.log(`[worker][WAHA] 🔕 Chat ${chatId} has no assigned user. Fetching admins...`);
+          // Fetch admins/managers
+          const { data: admins } = await supabaseAdmin
+            .from("users")
+            .select("id")
+            .eq("company_id", job.companyId)
+            .in("role", ["ADMIN", "MANAGER"]);
+          
+          if (admins && admins.length > 0) {
+            targetUserIds.push(...admins.map(a => a.id));
+            console.log(`[worker][WAHA] 🔔 Will notify ${admins.length} admins/managers`);
+          } else {
+            console.log(`[worker][WAHA] ⚠️ No admins found for company ${job.companyId}`);
+          }
+        }
+
+        // Send notifications
+        for (const userId of targetUserIds) {
+          try {
+            const notification = await NotificationService.create({
+              type: "CHAT_MESSAGE",
+              title: `Nova mensagem de ${senderName}`,
+              message: msgPreview,
+              userId: userId,
+              companyId: job.companyId,
+              data: {
+                chatId,
+                messageId: mappedMessage.id,
+                senderName
+              },
+              category: "chat",
+              actionUrl: `/livechat/${chatId}`
+            });
+
+            // Emit socket event via RabbitMQ (since we are in worker)
+            await emitSocketWithRetry("socket.livechat.notification", {
+              kind: "notification",
+              userId: userId,
+              notification: {
+                ...notification,
+                isNew: true
+              }
+            });
+            console.log(`[worker][WAHA] 📨 Socket event sent for user ${userId}`);
+          } catch (innerErr) {
+            console.error(`[worker][WAHA] ❌ Failed to notify user ${userId}:`, innerErr);
+          }
         }
       } catch (notifError) {
         console.error("[worker][WAHA] ❌ Failed to send notification:", notifError);

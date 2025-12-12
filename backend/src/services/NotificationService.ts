@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
+import { getIO, hasIO } from "../lib/io.ts";
 
 export type NotificationType = 
   | "SYSTEM"
@@ -132,17 +132,25 @@ export class NotificationService {
         throw error;
       }
 
-      // Enviar via WebSocket
-      const io = getIO();
-      const room = `user:${input.userId}`;
-      console.log(`[NotificationService] 📡 Emitting socket event to room: ${room}`);
-      
-      io.to(room).emit("notification", {
-        ...notification,
-        isNew: true,
-      });
+      // Enviar via WebSocket se disponível
+      if (hasIO()) {
+        try {
+          const io = getIO();
+          const room = `user:${input.userId}`;
+          console.log(`[NotificationService] 📡 Emitting socket event to room: ${room}`);
+          
+          io.to(room).emit("notification", {
+            ...notification,
+            isNew: true,
+          });
+        } catch (socketError) {
+          console.warn("[NotificationService] ⚠️ Failed to emit socket event (IO error):", socketError);
+        }
+      } else {
+        console.log("[NotificationService] ℹ️ Skipping direct socket emit (no IO instance)");
+      }
 
-      console.log(`[NotificationService] ✅ Notification sent to user ${input.userId}:`, {
+      console.log(`[NotificationService] ✅ Notification created for user ${input.userId}:`, {
         id: notification.id,
         type: input.type,
         title: input.title,

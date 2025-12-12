@@ -18,7 +18,22 @@ type SocketEvent =
       externalId?: string | null;
       view_status?: string | null;
       raw_status?: string | null;
+    }
+  | {
+      kind: "notification";
+      userId: string;
+      notification: any;
     };
+
+function emitNotification(
+  io: Server,
+  ev: Extract<SocketEvent, { kind: "notification" }>,
+) {
+  if (!ev?.userId || !ev?.notification) return;
+  const room = `user:${ev.userId}`;
+  console.log(`[socket.relay] 🔔 Emitting notification to room: ${room}`);
+  io.to(room).emit("notification", ev.notification);
+}
 
 function emitMessage(
   io: Server,
@@ -118,6 +133,9 @@ export function startSocketRelay(io: Server) {
           break;
         case "livechat.message.status":
           emitStatus(io, payload);
+          break;
+        case "notification":
+          emitNotification(io, payload);
           break;
         default:
           console.log("[socket.relay] ⚠️ Unknown message kind:", payload?.kind);

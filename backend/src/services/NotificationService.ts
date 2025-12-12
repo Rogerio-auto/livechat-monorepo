@@ -265,12 +265,12 @@ export class NotificationService {
       .eq("company_id", companyId)
       .eq("is_read", false);
 
-    if (error) {❌ Error counting unread:", error);
+    if (error) {
+      console.error("[NotificationService] ❌ Error counting unread:", error);
       return 0;
     }
 
-    // console.log(`[NotificationService] Unread count for ${userId}: ${count}`);    }
-
+    // console.log(`[NotificationService] Unread count for ${userId}: ${count}`);
     return count || 0;
   }
 }

@@ -3538,32 +3538,7 @@ const scrollToBottom = useCallback(
     },
     [currentChat?.id],
   );
-        prev && prev.id === chatId
-          ? {
-            ...prev,
-            assigned_agent_id: resp?.assigned_agent_id ?? null,
-            assigned_agent_name: resp?.assigned_agent_name ?? null,
-            assigned_agent_user_id:
-              resp?.assigned_agent_user_id ?? userId ?? null,
-          }
-          : prev,
-      );
-      setChats((prev) =>
-        prev.map((c) =>
-          c.id === chatId
-            ? {
-              ...c,
-              assigned_agent_id: resp?.assigned_agent_id ?? null,
-              assigned_agent_name: resp?.assigned_agent_name ?? null,
-              assigned_agent_user_id:
-                resp?.assigned_agent_user_id ?? userId ?? null,
-            }
-            : c,
-        ),
-      );
-    },
-    [currentChat?.id],
-  );
+
 
   const toggleTag = useCallback(
     (tagId: string) => {

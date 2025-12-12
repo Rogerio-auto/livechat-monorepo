@@ -2943,10 +2943,10 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
       // 🔔 NOTIFICATION: Send notification to assigned user OR admins
       try {
-        // 1. Fetch chat details to get assigned_to
+        // 1. Fetch chat details to get assignee_agent (which links to inbox_users)
         const { data: chatData, error: chatError } = await supabaseAdmin
           .from("chats")
-          .select("assigned_to, customer_name, customer_phone")
+          .select("assignee_agent, customer_name, customer_phone")
           .eq("id", chatId)
           .single();
 
@@ -2957,11 +2957,24 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
         const targetUserIds: string[] = [];
 
-        if (chatData && chatData.assigned_to) {
-          targetUserIds.push(chatData.assigned_to);
-          console.log(`[worker][WAHA] 🔔 Chat assigned to ${chatData.assigned_to}`);
-        } else {
-          console.log(`[worker][WAHA] 🔕 Chat ${chatId} has no assigned user. Fetching admins...`);
+        if (chatData && chatData.assignee_agent) {
+          // Resolve user_id from inbox_users
+          const { data: inboxUser } = await supabaseAdmin
+            .from("inbox_users")
+            .select("user_id")
+            .eq("id", chatData.assignee_agent)
+            .single();
+            
+          if (inboxUser && inboxUser.user_id) {
+            targetUserIds.push(inboxUser.user_id);
+            console.log(`[worker][WAHA] 🔔 Chat assigned to agent ${chatData.assignee_agent} (User: ${inboxUser.user_id})`);
+          } else {
+             console.warn(`[worker][WAHA] ⚠️ Chat has assignee_agent ${chatData.assignee_agent} but could not resolve user_id`);
+          }
+        } 
+        
+        if (targetUserIds.length === 0) {
+          console.log(`[worker][WAHA] 🔕 Chat ${chatId} has no assigned user (or resolution failed). Fetching admins...`);
           // Fetch admins/managers
           const { data: admins } = await supabaseAdmin
             .from("users")

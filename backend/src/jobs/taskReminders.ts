@@ -1,4 +1,5 @@
 import { getIO } from "../lib/io.js";
+import { NotificationService } from "../services/NotificationService.js";
 import { getTasksWithPendingReminders, markReminderAsSent, type TaskWithContext } from "../repos/tasks.repo.js";
 import { sendTaskReminderEmail } from "../services/emailService.js";
 import { publish, EX_APP } from "../queue/rabbit.js";
@@ -122,24 +123,41 @@ async function sendTaskReminder(task: TaskWithContext, io: any): Promise<void> {
     companyId: task.company_id,
   };
 
-  // Enviar notificação in-app via Socket.io
-  if (channels.includes("IN_APP") && io) {
-    console.log(`[taskReminders] 📱 Sending IN_APP notification to company ${task.company_id}`);
-    // Emitir para a empresa toda
-    io.to(`company:${task.company_id}`).emit("notification", notification);
-
-    // Se tem responsável, emitir para ele especificamente
+  // Enviar notificação in-app via NotificationService
+  if (channels.includes("IN_APP")) {
     if (task.assigned_to) {
-      console.log(`[taskReminders] 👤 Sending IN_APP notification to user ${task.assigned_to}`);
-      io.to(`user:${task.assigned_to}`).emit("notification", notification);
+      try {
+        await NotificationService.create({
+          type: "TASK_DUE_SOON",
+          title: "⏰ Lembrete de Tarefa",
+          message: `A tarefa "${task.title}" vence em breve.`,
+          userId: task.assigned_to,
+          companyId: task.company_id,
+          priority: task.priority === "HIGH" ? "HIGH" : "NORMAL",
+          category: "task",
+          data: {
+            taskId: task.id,
+            taskTitle: task.title,
+            taskDueDate: task.due_date,
+          },
+          actionUrl: `/tarefas?taskId=${task.id}`
+        });
+        console.log(`[taskReminders] ✅ Notification created for user ${task.assigned_to}`);
+      } catch (err) {
+        console.error(`[taskReminders] ❌ Failed to create notification for task ${task.id}:`, err);
+      }
+    } else {
+       console.warn(`[taskReminders] ⚠️ Task ${task.id} has no assigned user for IN_APP notification`);
     }
 
-    // Emitir evento específico de lembrete de tarefa
-    io.to(`company:${task.company_id}`).emit("task:reminder", {
-      task,
-      notification,
-      companyId: task.company_id,
-    });
+    // Emitir evento específico de lembrete de tarefa (Legacy support)
+    if (io) {
+      io.to(`company:${task.company_id}`).emit("task:reminder", {
+        task,
+        notification,
+        companyId: task.company_id,
+      });
+    }
   }
 
   // Envio de email

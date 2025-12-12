@@ -2058,6 +2058,8 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
     const { linkId: linkIdParam, userId: userIdParam, unassign } = req.body || {};
     const io = req.app?.locals?.io;
 
+    console.log(`[PUT /assignee] Request for chat ${chatId}`, { linkIdParam, userIdParam, unassign });
+
     // 1) Carrega o chat e inbox
     const { data: chat, error: errChat } = await supabaseAdmin
       .from("chats")
@@ -2223,11 +2225,15 @@ app.put("/livechat/chats/:id/assignee", requireAuth, async (req: any, res) => {
     }
 
     // 5) Atualiza o chat
+    console.log(`[PUT /assignee] Updating chat ${chatId} with assignee_agent=${targetLinkId}`);
     const { error: errUpdate } = await supabaseAdmin
       .from("chats")
       .update({ assignee_agent: targetLinkId })
       .eq("id", chatId);
-    if (errUpdate) return res.status(500).json({ error: errUpdate.message });
+    if (errUpdate) {
+      console.error(`[PUT /assignee] Update failed:`, errUpdate);
+      return res.status(500).json({ error: errUpdate.message });
+    }
 
     // 6) Retorna nome do agente
     let assignedName: string | null = null;

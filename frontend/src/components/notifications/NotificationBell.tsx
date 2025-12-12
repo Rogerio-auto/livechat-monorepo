@@ -35,6 +35,7 @@ export function NotificationBell() {
   } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'all' | 'chat' | 'system'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fechar dropdown ao clicar fora
@@ -81,6 +82,13 @@ export function NotificationBell() {
     await deleteNotification(notificationId);
   };
 
+  const filteredNotifications = notifications.filter(n => {
+    if (activeTab === 'all') return true;
+    if (activeTab === 'chat') return n.category === 'chat';
+    if (activeTab === 'system') return n.category !== 'chat';
+    return true;
+  });
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Botão do sino */}
@@ -100,30 +108,66 @@ export function NotificationBell() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="fixed left-4 top-16 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-[9999] max-h-[600px] flex flex-col">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-[9999] max-h-[600px] flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 dark:text-white">
-              Notificações {unreadCount > 0 && `(${unreadCount})`}
-            </h3>
-            
-            <div className="flex gap-2">
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllAsRead}
-                  className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-                  title="Marcar todas como lidas"
-                >
-                  <Check size={16} />
-                  Marcar todas
-                </button>
-              )}
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                Notificações {unreadCount > 0 && `(${unreadCount})`}
+              </h3>
               
+              <div className="flex gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                    title="Marcar todas como lidas"
+                  >
+                    <Check size={16} />
+                    Marcar todas
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex gap-2 border-b border-gray-100 dark:border-gray-700 pb-2">
               <button
-                onClick={() => setIsOpen(false)}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                onClick={() => setActiveTab('all')}
+                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                  activeTab === 'all'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
               >
-                <X size={20} />
+                Todas
+              </button>
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                  activeTab === 'chat'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
+              >
+                Mensagens
+              </button>
+              <button
+                onClick={() => setActiveTab('system')}
+                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                  activeTab === 'system'
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
+                }`}
+              >
+                Sistema
               </button>
             </div>
           </div>
@@ -134,14 +178,14 @@ export function NotificationBell() {
               <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 Carregando...
               </div>
-            ) : notifications.length === 0 ? (
+            ) : filteredNotifications.length === 0 ? (
               <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                 <Bell size={48} className="mx-auto mb-2 opacity-30" />
-                <p>Nenhuma notificação</p>
+                <p>Nenhuma notificação {activeTab !== 'all' ? 'nesta categoria' : ''}</p>
               </div>
             ) : (
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {notifications.map(notification => (
+                {filteredNotifications.map(notification => (
                   <NotificationItem
                     key={notification.id}
                     notification={notification}

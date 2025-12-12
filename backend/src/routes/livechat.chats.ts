@@ -1803,6 +1803,46 @@ export function registerLivechatChatRoutes(app: express.Application) {
       .single();
     if (error) return res.status(500).json({ error: error.message });
 
+    // System message for status change
+    try {
+      const authUserId = (req as any).user.id as string;
+      const { data: u } = await supabaseAdmin
+        .from("users")
+        .select("name")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      const actorName = u?.name || "Alguém";
+      
+      const statusLabel = status === "OPEN" ? "Aberto" :
+                          status === "RESOLVED" ? "Resolvido" :
+                          status === "PENDING" ? "Pendente" :
+                          status === "CLOSED" ? "Fechado" :
+                          status === "ASSIGNED" ? "Atribuído" :
+                          status === "AI" ? "IA" : status;
+
+      const content = `${actorName} alterou o status para "${statusLabel}"`;
+      
+      await supabaseAdmin.from("chat_messages").insert({
+        chat_id: id,
+        content,
+        type: "SYSTEM",
+        sender_type: "SYSTEM",
+        created_at: new Date().toISOString(),
+      });
+      
+      const io = getIO();
+      io?.to(`chat:${id}`).emit("message:new", {
+          id: crypto.randomUUID(),
+          chat_id: id,
+          content,
+          type: "SYSTEM",
+          sender_type: "SYSTEM",
+          created_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("Failed to insert system message for status change", e);
+    }
+
     await rDel(k.chat(id));
     // companyId já foi validado acima
     if (companyId) {
@@ -2179,6 +2219,44 @@ export function registerLivechatChatRoutes(app: express.Application) {
         .eq("id", agentId)
         .maybeSingle();
       agentName = agentData?.name ?? null;
+    }
+
+    // System message for AI Agent assignment
+    try {
+      const authUserId = (req as any).user.id as string;
+      const { data: u } = await supabaseAdmin
+        .from("users")
+        .select("name")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      const actorName = u?.name || "Alguém";
+      
+      let content = "";
+      if (agentId) {
+        content = `${actorName} atribuiu o agente de IA "${agentName || 'Desconhecido'}"`;
+      } else {
+        content = `${actorName} removeu o agente de IA`;
+      }
+      
+      await supabaseAdmin.from("chat_messages").insert({
+        chat_id: id,
+        content,
+        type: "SYSTEM",
+        sender_type: "SYSTEM",
+        created_at: new Date().toISOString(),
+      });
+      
+      const io = getIO();
+      io?.to(`chat:${id}`).emit("message:new", {
+          id: crypto.randomUUID(),
+          chat_id: id,
+          content,
+          type: "SYSTEM",
+          sender_type: "SYSTEM",
+          created_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.error("Failed to insert system message for AI agent change", e);
     }
 
     // Emitir evento socket para atualizar UI

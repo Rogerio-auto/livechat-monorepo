@@ -2948,12 +2948,17 @@ registerLivechatTagsRoutes(app);
 
 async function socketAuthUserId(socket: any): Promise<string | null> {
   try {
+    let token: string | undefined = socket.handshake?.auth?.token;
+
     const headers = (socket.request?.headers || {}) as any;
-    let token: string | undefined;
-    const auth =
-      (headers["authorization"] as string | undefined) ||
-      (headers["Authorization"] as string | undefined);
-    if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
+    
+    if (!token) {
+      const auth =
+        (headers["authorization"] as string | undefined) ||
+        (headers["Authorization"] as string | undefined);
+      if (auth && auth.startsWith("Bearer ")) token = auth.slice(7);
+    }
+
     if (!token) {
       const rawCookie = (headers["cookie"] as string | undefined) || "";
       const parts = rawCookie.split(/;\s*/).map((p) => p.trim().split("="));
@@ -2966,7 +2971,8 @@ async function socketAuthUserId(socket: any): Promise<string | null> {
     }
     if (!token) {
       console.warn("[socketAuthUserId] No token found", {
-        hasAuthHeader: !!auth,
+        hasAuthToken: !!socket.handshake?.auth?.token,
+        hasAuthHeader: !!headers["authorization"],
         hasCookie: !!headers["cookie"],
         cookieKeys: headers["cookie"]?.split(/;\s*/).map((p: string) => p.split("=")[0]),
         JWT_COOKIE_NAME,

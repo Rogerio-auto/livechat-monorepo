@@ -38,13 +38,12 @@ export function useNotifications() {
   // Inicializar Socket.IO
   useEffect(() => {
     const token = getAccessToken();
-    if (!token) {
-      // Token ainda não disponível (carregando ou não logado)
-      return;
-    }
+    // Removido check estrito de token pois usamos cookies httpOnly também
+    // if (!token) return;
 
     const socketInstance = io(API, {
-      auth: { token },
+      auth: token ? { token } : {},
+      withCredentials: true, // Importante para enviar cookies
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 1000,

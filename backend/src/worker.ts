@@ -1051,6 +1051,7 @@ function extractContentAndType(m: any): { content: string; type: string; caption
         interactiveContent: m?.system ?? null,
       };
     default:
+      console.warn("[META][inbound] Unknown message type:", t, JSON.stringify(m, null, 2));
       // Fallback to TEXT for unknown types to prevent DB enum errors
       return { content: `[${t.toUpperCase()}]`, type: "TEXT", caption: null };
   }
@@ -1566,18 +1567,19 @@ async function handleMetaInboundMessages(args: {
       continue;
     }
 
-    // console.log("[META][inbound] Processing message", {
-    //   wamid,
-    //   participantWaId,
-    //   extractedPhone,
-    //   extractedLid,
-    //   remotePhone,
-    //   pushname,
-    //   participantName: metaContext.participantName,
-    //   isGroupMessage,
-    //   inboxId,
-    //   messageType: m?.type, // Log message type
-    // });
+    console.log("[META][inbound] Processing message", {
+      wamid,
+      participantWaId,
+      extractedPhone,
+      extractedLid,
+      remotePhone,
+      pushname,
+      participantName: metaContext.participantName,
+      isGroupMessage,
+      inboxId,
+      messageType: m?.type, // Log message type
+    });
+    console.log("[META][inbound] Payload:", JSON.stringify(m, null, 2));
 
     // Ensure chat (group or direct)
     let chatId: string;

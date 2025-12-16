@@ -21,7 +21,7 @@ import {
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
 import { PlanBadge } from "../../components/subscription/PlanBadge";
-
+import { useSubscription, type PlanFeatures } from "../../context/SubscriptionContext";
 type Profile = {
   id: string;
   email: string;
@@ -37,6 +37,7 @@ type SidebarLink = {
   icon: ReactNode;
   label: string;
   isActive: (path: string) => boolean;
+  feature?: string;
 };
 
 const links: SidebarLink[] = [
@@ -63,12 +64,14 @@ const links: SidebarLink[] = [
     icon: <FaTasks />,
     label: "Tarefas",
     isActive: (path) => path.startsWith("/tarefas"),
+    feature: "tasks_module",
   },
   {
     to: "/automacao",
     icon: <FaCogs />,
     label: "Automação",
     isActive: (path) => path.startsWith("/automacao"),
+    feature: "automation_module",
   },
   {
     to: "/produtos",
@@ -81,12 +84,14 @@ const links: SidebarLink[] = [
     icon: <FaImages />,
     label: "Galeria",
     isActive: (path) => path.startsWith("/galeria"),
+    feature: "media_library",
   },
   {
     to: "/calendario",
     icon: <FaCalendarAlt />,
     label: "Calendario",
     isActive: (path) => path.startsWith("/calendario"),
+    feature: "calendar_module",
   },
   {
     to: "/funil",
@@ -99,6 +104,7 @@ const links: SidebarLink[] = [
     icon: <FaFileInvoice />,
     label: "Documentos",
     isActive: (path) => path.startsWith("/documentos"),
+    feature: "document_generation",
   },
   {
     to: "/configuracoes",
@@ -125,6 +131,7 @@ type SidebarProps = {
 
 export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarProps = {}) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const { features } = useSubscription();
   const navigate = useNavigate();
   const location = useLocation();
   const API =
@@ -134,6 +141,7 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
   useEffect(() => {
     (async () => {
       try {
+        // Fetch Profile
         const res = await fetch(`${API}/me/profile`, {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -197,6 +205,7 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
       >
         <SidebarContent
           profile={profile}
+          features={features}
           locationPath={location.pathname}
           isAdmin={profile?.role?.toUpperCase() === "ADMIN"}
           logout={logout}
@@ -234,6 +243,7 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
           </button>
           <SidebarContent
             profile={profile}
+            features={features}
             locationPath={location.pathname}
             isAdmin={profile?.role?.toUpperCase() === "ADMIN"}
             logout={logout}
@@ -248,6 +258,7 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
 
 type SidebarContentProps = {
   profile: Profile | null;
+  features: PlanFeatures;
   locationPath: string;
   isAdmin?: boolean;
   logout: () => Promise<void> | void;
@@ -257,6 +268,7 @@ type SidebarContentProps = {
 
 function SidebarContent({
   profile,
+  features,
   locationPath,
   isAdmin,
   logout,
@@ -264,6 +276,11 @@ function SidebarContent({
   forceExpanded,
 }: SidebarContentProps) {
   const metaLabel = profile?.companyId ? `ID ${profile.companyId}` : "Operações";
+
+  const visibleLinks = links.filter((link) => {
+    if (!link.feature) return true;
+    return features[link.feature] === true;
+  });
 
   return (
     <div className="relative flex h-full flex-col">
@@ -325,7 +342,7 @@ function SidebarContent({
         >
           Navegação
         </p>
-        {links.map((item) => (
+        {visibleLinks.map((item) => (
           <SidebarItem
             key={item.to}
             to={item.to}

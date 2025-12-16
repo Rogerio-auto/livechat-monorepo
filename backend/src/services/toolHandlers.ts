@@ -812,18 +812,21 @@ async function handleSocket(
 
   // 1. Validar provider da inbox se necessário (para ferramentas interativas)
   if (validate_inbox) {
-    const { data: chatData } = await supabaseAdmin
+    // Join com customers para pegar o telefone
+    const { data: chatData, error } = await supabaseAdmin
       .from("chats")
-      .select("inbox_id, customer_phone, inboxes!inner(provider)")
+      .select("inbox_id, customers(phone), inboxes!inner(provider)")
       .eq("id", context.chatId)
       .single();
 
-    if (!chatData?.inboxes) {
-      throw new Error("Não foi possível identificar a inbox do chat");
+    if (error || !chatData?.inboxes) {
+      console.error("[SOCKET] Error fetching chat data:", error);
+      throw new Error("Não foi possível identificar a inbox do chat (Erro DB)");
     }
 
     inboxId = chatData.inbox_id;
-    customerPhone = chatData.customer_phone;
+    // Acessar telefone via relação customers
+    customerPhone = (chatData.customers as any)?.phone;
     provider = (chatData.inboxes as any).provider?.toUpperCase();
     const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
 

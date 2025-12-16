@@ -18,6 +18,12 @@ export function registerSubscriptionRoutes(app: express.Application) {
   // Obter assinatura atual da empresa (com plano e dias de trial)
   // 1. Get current subscription
   app.get("/api/subscriptions/current", requireAuth, async (req: any, res: Response) => {
+    // Prevent caching
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
+
     try {
       const companyId = req.user?.company_id;
       if (!companyId) {

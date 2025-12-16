@@ -5,6 +5,8 @@ import { supabaseAdmin, supabaseAnon } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
 
 // Middleware para verificar se é ADMIN
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
+
 async function requireAdmin(req: any, res: any, next: any) {
   const authUserId = req.user?.id;
   if (!authUserId) return res.status(401).json({ error: "Não autenticado" });
@@ -15,8 +17,9 @@ async function requireAdmin(req: any, res: any, next: any) {
     .eq("user_id", authUserId)
     .maybeSingle();
   
-  if (String(user?.role || "").toUpperCase() !== "ADMIN") {
-    return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
+  const normalizedRole = String(user?.role || "").toUpperCase();
+  if (!ADMIN_ROLES.includes(normalizedRole)) {
+    return res.status(403).json({ error: "Acesso negado. Apenas administradores autorizados." });
   }
   
   next();
@@ -68,6 +71,128 @@ export function registerCompanyRoutes(app: express.Application) {
       return res.json(companiesWithCounts);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "companies list error" });
+    }
+  });
+
+  // GET company details with analytics (ADMIN only)
+  app.get("/api/admin/companies/:companyId", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+
+    try {
+      const companyFields = [
+        "id",
+        "name",
+        "email",
+        "phone",
+        "address",
+        "city",
+        "state",
+        "zip_code",
+        "cnpj",
+        "logo",
+        "plan",
+        "is_active",
+        "industry",
+        "team_size",
+        "created_at",
+        "updated_at",
+      ].join(", ");
+
+      const { data: rawCompany, error: companyError } = await supabaseAdmin
+        .from("companies")
+        .select(companyFields)
+        .eq("id", companyId)
+        .maybeSingle();
+
+      if (companyError) {
+        return res.status(500).json({ error: companyError.message });
+      }
+
+      if (!rawCompany) {
+        return res.status(404).json({ error: "Empresa não encontrada" });
+      }
+
+      const {
+        count: usersCount,
+        error: usersError,
+      } = await supabaseAdmin
+        .from("users")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (usersError) return res.status(500).json({ error: usersError.message });
+
+      const {
+        count: inboxesCount,
+        error: inboxesError,
+      } = await supabaseAdmin
+        .from("inboxes")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (inboxesError) return res.status(500).json({ error: inboxesError.message });
+
+      const {
+        count: agentsCount,
+        error: agentsError,
+      } = await supabaseAdmin
+        .from("agents")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (agentsError) return res.status(500).json({ error: agentsError.message });
+
+      const {
+        count: chatsCount,
+        error: chatsError,
+      } = await supabaseAdmin
+        .from("chats")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (chatsError) return res.status(500).json({ error: chatsError.message });
+
+      const {
+        count: messagesCount,
+        error: messagesError,
+      } = await supabaseAdmin
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId);
+      if (messagesError) return res.status(500).json({ error: messagesError.message });
+
+      const { data: lastMessage } = await supabaseAdmin
+        .from("messages")
+        .select("created_at")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const normalizedStatus =
+        (rawCompany as any)?.status ?? (rawCompany.is_active === false ? "inactive" : "active");
+
+      return res.json({
+        company: {
+          ...rawCompany,
+          status: normalizedStatus,
+        },
+        analytics: {
+          counts: {
+            users: usersCount || 0,
+            inboxes: inboxesCount || 0,
+            agents: agentsCount || 0,
+            chats: chatsCount || 0,
+          },
+          usage: {
+            messages: messagesCount || 0,
+            lastMessageAt: lastMessage?.created_at ?? null,
+          },
+          finance: {
+            plan: rawCompany.plan ?? null,
+            status: normalizedStatus,
+            isActive: normalizedStatus !== "inactive",
+          },
+        },
+      });
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Erro ao carregar detalhes da empresa" });
     }
   });
 

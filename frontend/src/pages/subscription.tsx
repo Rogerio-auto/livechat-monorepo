@@ -4,6 +4,7 @@ import {
   Zap,
   Rocket,
   Check,
+  X,
   TrendingUp,
   Users,
   MessageSquare,
@@ -12,16 +13,24 @@ import {
   Calendar,
   AlertTriangle,
   Loader2,
+  Briefcase,
+  FileText,
+  Image as ImageIcon,
+  Layout,
+  Headphones,
+  Server,
 } from "lucide-react";
 
 interface Plan {
   id: string;
   name: string;
-  price_monthly: string;
-  price_yearly: string;
+  display_name: string;
+  price_monthly: number;
+  price_yearly?: number;
   limits: Record<string, number>;
-  features: Record<string, boolean | string>;
+  features: Record<string, boolean>;
   sort_order: number;
+  description?: string;
 }
 
 interface Subscription {
@@ -46,32 +55,37 @@ interface Usage {
   };
 }
 
-const planIcons: Record<string, any> = {
-  starter: Zap,
-  professional: Crown,
-  business: Rocket,
+const PLAN_DESCRIPTIONS: Record<string, string> = {
+  starter: "Ideal para atendimento focado em conversão",
+  growth: "Organização e automação inicial para pequenas equipes",
+  professional: "Gestão completa para times em crescimento",
+  business: "Potência máxima para grandes operações",
 };
 
-const usageIcons: Record<string, any> = {
-  users: Users,
-  ai_agents: Crown,
-  messages_sent: MessageSquare,
-  messages_per_month: MessageSquare,
-  inboxes: Mail,
-  contacts: Users,
-  storage_mb: Database,
-  campaigns_per_month: TrendingUp,
+const FEATURE_LABELS: Record<string, string> = {
+  tasks_module: "Gestão de Tarefas",
+  calendar_module: "Calendário e Agendamento",
+  media_library: "Galeria de Mídia",
+  document_generation: "Gerador de Documentos",
+  api_access: "API de Integração",
+  webhooks: "Webhooks",
+  priority_support: "Suporte Prioritário",
+  dedicated_manager: "Gerente de Sucesso",
+  custom_integrations: "Integrações Customizadas",
+  "24_7_support": "Suporte 24/7",
+  white_label: "White Label",
+  advanced_reports: "Relatórios Avançados",
+  custom_templates: "Templates Personalizados",
 };
 
-const usageLabels: Record<string, string> = {
-  users: "Usuários",
-  ai_agents: "Agentes IA",
-  messages_sent: "Mensagens Enviadas",
-  messages_per_month: "Mensagens/Mês",
-  inboxes: "Inboxes",
-  contacts: "Contatos",
-  storage_mb: "Armazenamento (MB)",
-  campaigns_per_month: "Campanhas/Mês",
+const LIMIT_LABELS: Record<string, string> = {
+  users: "usuários",
+  inboxes: "conexões de WhatsApp",
+  ai_agents: "agentes de IA",
+  messages_per_month: "mensagens/mês",
+  contacts: "contatos",
+  campaigns_per_month: "campanhas ativas",
+  storage_mb: "MB de armazenamento",
 };
 
 export default function SubscriptionPage() {
@@ -79,8 +93,8 @@ export default function SubscriptionPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [usage, setUsage] = useState<Usage>({});
   const [loading, setLoading] = useState(true);
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [upgrading, setUpgrading] = useState(false);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [managing, setManaging] = useState(false);
 
   useEffect(() => {
     loadSubscriptionData();
@@ -93,17 +107,6 @@ export default function SubscriptionPage() {
         fetch("/api/subscriptions/plans", { credentials: "include" }),
         fetch("/api/subscriptions/usage", { credentials: "include" }),
       ]);
-
-      // Check if responses are OK
-      if (!subRes.ok) {
-        console.error("Subscription fetch failed:", subRes.status, subRes.statusText);
-      }
-      if (!plansRes.ok) {
-        console.error("Plans fetch failed:", plansRes.status, plansRes.statusText);
-      }
-      if (!usageRes.ok) {
-        console.error("Usage fetch failed:", usageRes.status, usageRes.statusText);
-      }
 
       const [subData, plansData, usageData] = await Promise.all([
         subRes.ok ? subRes.json() : null,
@@ -124,276 +127,253 @@ export default function SubscriptionPage() {
   };
 
   const handleUpgrade = async (planId: string) => {
-    if (!confirm("Deseja realmente mudar de plano?")) return;
-
-    setUpgrading(true);
+    setUpgrading(planId);
     try {
-      const res = await fetch("/api/subscriptions/upgrade", {
+      const res = await fetch("/api/checkout/session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, interval: "monthly" }),
       });
 
       if (res.ok) {
-        alert("Plano atualizado com sucesso!");
-        await loadSubscriptionData();
-        setSelectedPlan(null);
+        const { url } = await res.json();
+        if (url) {
+          window.location.href = url;
+        } else {
+          alert("Erro ao iniciar checkout: URL não recebida.");
+        }
       } else {
         const error = await res.json();
-        alert(`Erro ao atualizar plano: ${error.error || "Tente novamente"}`);
+        alert(`Erro ao iniciar checkout: ${error.error || "Tente novamente"}`);
       }
     } catch (error) {
-      alert("Erro ao atualizar plano. Tente novamente.");
+      alert("Erro ao iniciar checkout. Tente novamente.");
     } finally {
-      setUpgrading(false);
+      setUpgrading(null);
     }
   };
 
-  const getUsageColor = (percentage: number) => {
-    if (percentage >= 90) return "text-red-600 bg-red-100 dark:bg-red-900/20";
-    if (percentage >= 70) return "text-amber-600 bg-amber-100 dark:bg-amber-900/20";
-    return "text-green-600 bg-green-100 dark:bg-green-900/20";
+  const handlePortal = async () => {
+    setManaging(true);
+    try {
+      const res = await fetch("/api/checkout/portal", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (res.ok) {
+        const { url } = await res.json();
+        if (url) {
+          window.location.href = url;
+        }
+      } else {
+        alert("Erro ao abrir portal de assinatura.");
+      }
+    } catch (error) {
+      alert("Erro ao abrir portal.");
+    } finally {
+      setManaging(false);
+    }
   };
 
-  const getUsageBarColor = (percentage: number) => {
-    if (percentage >= 90) return "bg-red-500";
-    if (percentage >= 70) return "bg-amber-500";
-    return "bg-green-500";
+  const formatLimit = (key: string, value: number | undefined) => {
+    if (value === undefined || value === null) return "Indisponível";
+    if (value === -1) return `Ilimitado ${LIMIT_LABELS[key] || key}`;
+    if (key === 'storage_mb') {
+        return `${value >= 1024 ? value / 1024 + 'GB' : value + 'MB'} de armazenamento`;
+    }
+    return `${value.toLocaleString()} ${LIMIT_LABELS[key] || key}`;
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="flex items-center justify-center h-screen bg-gray-50 dark:bg-gray-900">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
       </div>
     );
   }
-
-  if (!subscription) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-center">
-          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Nenhuma assinatura encontrada</h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            Entre em contato com o suporte.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const currentPlan = plans.find((p) => p.id === subscription.plan_id);
-  const trialDaysRemaining = subscription.status === "trial" && subscription.trial_ends_at
-    ? Math.max(
-        0,
-        Math.ceil(
-          (new Date(subscription.trial_ends_at).getTime() - Date.now()) /
-            (1000 * 60 * 60 * 24)
-        )
-      )
-    : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Assinatura e Uso
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        
+        {/* Header Section */}
+        <div className="text-center mb-16">
+          <h1 className="text-4xl font-extrabold text-gray-900 dark:text-white sm:text-5xl sm:tracking-tight lg:text-6xl">
+            Escolha o plano ideal para o seu negócio
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Gerencie seu plano e acompanhe o uso dos recursos
+          <p className="mt-5 max-w-xl mx-auto text-xl text-gray-500 dark:text-gray-400">
+            Escale seu atendimento, organize sua equipe e venda mais com nossos planos flexíveis.
           </p>
         </div>
 
-        {/* Current Plan Card */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-8">
-          <div className="flex items-start justify-between">
+        {/* Current Subscription Status (if active) */}
+        {subscription && (
+          <div className="mb-12 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-blue-100 dark:border-blue-900 p-6 flex flex-col sm:flex-row items-center justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-2">
-                {currentPlan && planIcons[currentPlan.name.toLowerCase()] && (
-                  <>
-                    {(() => {
-                      const Icon = planIcons[currentPlan.name.toLowerCase()];
-                      return <Icon className="h-8 w-8 text-blue-600" />;
-                    })()}
-                  </>
-                )}
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Plano {currentPlan?.name}
-                </h2>
-              </div>
-              <div className="flex items-center gap-4 text-sm">
-                <span
-                  className={`px-3 py-1 rounded-full font-medium ${
-                    subscription.status === "trial"
-                      ? "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300"
-                      : subscription.status === "active"
-                      ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300"
-                      : "bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300"
-                  }`}
-                >
-                  {subscription.status === "trial"
-                    ? `Trial (${trialDaysRemaining} dias restantes)`
-                    : subscription.status === "active"
-                    ? "Ativo"
-                    : subscription.status === "expired"
-                    ? "Expirado"
-                    : "Cancelado"}
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Sua assinatura atual: <span className="text-blue-600">{subscription.plan?.display_name || subscription.plan?.name || "Plano Desconhecido"}</span>
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Status: <span className={`font-medium ${subscription.status === 'active' ? 'text-green-600' : 'text-amber-600'}`}>
+                  {subscription.status === 'active' ? 'Ativa' : subscription.status === 'trial' ? 'Período de Teste' : subscription.status}
                 </span>
-                {subscription.billing_cycle && (
-                  <span className="text-gray-600 dark:text-gray-400">
-                    Ciclo: {subscription.billing_cycle === "monthly" ? "Mensal" : "Anual"}
-                  </span>
+                {subscription.trial_ends_at && subscription.status === 'trial' && (
+                   ` • Expira em ${new Date(subscription.trial_ends_at).toLocaleDateString()}`
                 )}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                R$ {currentPlan?.price_monthly}
-              </div>
-              <div className="text-sm text-gray-600 dark:text-gray-400">por mês</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Usage Stats */}
-        <div className="mb-8">
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Uso dos Recursos
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {Object.entries(usage).map(([key, data]) => {
-              const Icon = usageIcons[key] || Database;
-              const label = usageLabels[key] || key;
-              const percentage = data.limit === -1 ? 0 : data.percentage;
-              const isUnlimited = data.limit === -1;
-
-              return (
-                <div
-                  key={key}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4"
+              </p>
+              {subscription.status === 'active' && (
+                <button 
+                  onClick={handlePortal}
+                  disabled={managing}
+                  className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
                 >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {label}
-                      </span>
-                    </div>
-                    {!isUnlimited && (
-                      <span
-                        className={`text-xs font-semibold px-2 py-1 rounded ${getUsageColor(
-                          percentage
-                        )}`}
-                      >
-                        {percentage.toFixed(0)}%
-                      </span>
-                    )}
-                  </div>
-                  {isUnlimited ? (
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      Ilimitado
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-baseline gap-1 mb-2">
-                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                          {data.current.toLocaleString()}
-                        </span>
-                        <span className="text-sm text-gray-600 dark:text-gray-400">
-                          / {data.limit.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all ${getUsageBarColor(
-                            percentage
-                          )}`}
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
-                        />
-                      </div>
-                    </>
-                  )}
+                  {managing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  Gerenciar Assinatura e Faturas
+                </button>
+              )}
+            </div>
+            {/* Usage Summary Mini-Bar */}
+            <div className="mt-4 sm:mt-0 flex gap-4 text-sm text-gray-600 dark:text-gray-300">
+                <div className="flex flex-col items-center">
+                    <span className="font-bold">{usage.messages_per_month?.current || 0} / {usage.messages_per_month?.limit === -1 ? '∞' : usage.messages_per_month?.limit}</span>
+                    <span className="text-xs">Mensagens</span>
                 </div>
-              );
-            })}
+                <div className="flex flex-col items-center">
+                    <span className="font-bold">{usage.contacts?.current || 0} / {usage.contacts?.limit === -1 ? '∞' : usage.contacts?.limit}</span>
+                    <span className="text-xs">Contatos</span>
+                </div>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Available Plans */}
-        <div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-            Planos Disponíveis
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {plans.map((plan) => {
-              const Icon = planIcons[plan.name.toLowerCase()] || Crown;
-              const isCurrent = plan.id === subscription.plan_id;
+        {/* Plans Grid */}
+        <div className="grid grid-cols-1 gap-y-10 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 xl:gap-x-8">
+          {plans.map((plan) => {
+            const isCurrentPlan = subscription?.plan_id === plan.id;
+            const isPopular = plan.id === 'professional';
+            
+            return (
+              <div 
+                key={plan.id} 
+                className={`relative flex flex-col bg-white dark:bg-gray-800 rounded-2xl shadow-lg transition-all duration-200 hover:shadow-xl border ${
+                  isCurrentPlan 
+                    ? 'border-blue-500 ring-2 ring-blue-500 ring-opacity-50' 
+                    : isPopular 
+                      ? 'border-purple-500 dark:border-purple-400' 
+                      : 'border-gray-200 dark:border-gray-700'
+                }`}
+              >
+                {isPopular && !isCurrentPlan && (
+                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                    <span className="inline-flex items-center px-4 py-1 rounded-full text-sm font-bold bg-purple-500 text-white shadow-sm">
+                      Mais Popular
+                    </span>
+                  </div>
+                )}
 
-              return (
-                <div
-                  key={plan.id}
-                  className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm border-2 p-6 ${
-                    isCurrent
-                      ? "border-blue-500"
-                      : "border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  <div className="text-center mb-6">
-                    <Icon className="h-12 w-12 mx-auto mb-3 text-blue-600" />
-                    <h4 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
-                      {plan.name}
-                    </h4>
-                    <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                {isCurrentPlan && (
+                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                    <span className="inline-flex items-center px-4 py-1 rounded-full text-sm font-bold bg-blue-600 text-white shadow-sm">
+                      Plano Atual
+                    </span>
+                  </div>
+                )}
+
+                <div className="p-6 flex-1">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                    {plan.display_name}
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 min-h-[40px]">
+                    {PLAN_DESCRIPTIONS[plan.id] || "Plano flexível para sua empresa"}
+                  </p>
+                  
+                  <div className="mt-6 flex items-baseline">
+                    <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
                       R$ {plan.price_monthly}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      por mês
-                    </div>
+                    </span>
+                    <span className="ml-1 text-xl font-medium text-gray-500 dark:text-gray-400">
+                      /mês
+                    </span>
                   </div>
 
-                  <ul className="space-y-3 mb-6">
-                    {Object.entries(plan.limits).map(([key, value]) => (
-                      <li key={key} className="flex items-start gap-2 text-sm">
-                        <Check className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-gray-700 dark:text-gray-300">
-                          {usageLabels[key] || key}:{" "}
-                          {value === -1 ? "Ilimitado" : value.toLocaleString()}
-                        </span>
-                      </li>
+                  {/* Limits List */}
+                  <ul className="mt-6 space-y-4">
+                    {['users', 'inboxes', 'ai_agents', 'messages_per_month', 'contacts', 'campaigns_per_month'].map(key => (
+                        <li key={key} className="flex items-start">
+                            <div className="flex-shrink-0">
+                                <Check className="h-5 w-5 text-green-500" />
+                            </div>
+                            <p className="ml-3 text-sm text-gray-700 dark:text-gray-300">
+                                {formatLimit(key, plan.limits ? plan.limits[key] : undefined)}
+                            </p>
+                        </li>
                     ))}
                   </ul>
 
-                  {isCurrent ? (
-                    <button
-                      disabled
-                      className="w-full py-2 px-4 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium cursor-not-allowed"
-                    >
-                      Plano Atual
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleUpgrade(plan.id)}
-                      disabled={upgrading}
-                      className="w-full py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {upgrading ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Processando...
-                        </>
-                      ) : (
-                        "Selecionar Plano"
-                      )}
-                    </button>
-                  )}
+                  <div className="my-6 border-t border-gray-100 dark:border-gray-700"></div>
+
+                  {/* Features List */}
+                  <ul className="space-y-3">
+                    {Object.entries(FEATURE_LABELS).map(([key, label]) => {
+                        const hasFeature = plan.features ? plan.features[key] : false;
+                        // Only show features that are relevant differentiators or enabled
+                        // If it's disabled, we might want to show it as crossed out ONLY if it's a key differentiator for higher plans
+                        const isKeyDifferentiator = ['tasks_module', 'calendar_module', 'media_library', 'document_generation', 'api_access'].includes(key);
+                        
+                        if (!hasFeature && !isKeyDifferentiator) return null;
+
+                        return (
+                            <li key={key} className="flex items-start">
+                                <div className="flex-shrink-0">
+                                    {hasFeature ? (
+                                        <Check className="h-5 w-5 text-green-500" />
+                                    ) : (
+                                        <X className="h-5 w-5 text-gray-300 dark:text-gray-600" />
+                                    )}
+                                </div>
+                                <p className={`ml-3 text-sm ${hasFeature ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
+                                    {label}
+                                </p>
+                            </li>
+                        );
+                    })}
+                  </ul>
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="p-6 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl border-t border-gray-100 dark:border-gray-700">
+                  <button
+                    onClick={() => !isCurrentPlan && handleUpgrade(plan.id)}
+                    disabled={isCurrentPlan || upgrading === plan.id}
+                    className={`w-full flex items-center justify-center px-4 py-3 border border-transparent text-base font-medium rounded-md shadow-sm transition-colors duration-200 ${
+                      isCurrentPlan
+                        ? 'bg-gray-100 text-gray-400 cursor-default dark:bg-gray-700 dark:text-gray-500'
+                        : isPopular
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                    }`}
+                  >
+                    {upgrading === plan.id ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : isCurrentPlan ? (
+                      "Plano Atual"
+                    ) : (
+                      `Assinar ${plan.display_name}`
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* FAQ or Trust Section could go here */}
+        <div className="mt-20 text-center">
+            <p className="text-gray-500 dark:text-gray-400">
+                Dúvidas sobre os planos? <a href="#" className="text-blue-600 hover:underline">Fale com nosso time de vendas</a>.
+            </p>
         </div>
       </div>
     </div>

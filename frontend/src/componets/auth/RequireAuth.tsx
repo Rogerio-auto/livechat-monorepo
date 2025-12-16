@@ -1,24 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingOverlay } from '../ui/LoadingOverlay';
 import { OnboardingModal } from '../onboarding/OnboardingModal';
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
 
-type Props = { children: React.ReactNode };
+type Props = {
+  children: React.ReactNode;
+  roles?: string[];
+};
 
 type UserProfile = {
   id: string;
   email: string;
   phone?: string | null;
   requires_phone_setup?: boolean;
+  role?: string | null;
 };
 
-export function RequireAuth({ children }: Props) {
+export function RequireAuth({ children, roles }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const [status, setStatus] = useState<'checking' | 'ok' | 'fail'>('checking');
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [roleAllowed, setRoleAllowed] = useState(true);
   const { needsOnboarding, loading: onboardingLoading, markCompleted } = useOnboardingStatus();
+  const rolesKey = roles?.join('|') ?? '';
+  const normalizedRoles = useMemo(() => (roles ? roles.map((role) => role.toUpperCase()) : []), [rolesKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -33,6 +40,14 @@ export function RequireAuth({ children }: Props) {
         if (res.ok) {
           const profile = await res.json();
           setUserProfile(profile);
+          const userRole = String(profile?.role ?? '').toUpperCase();
+          const allowed = normalizedRoles.length === 0 || normalizedRoles.includes(userRole);
+          setRoleAllowed(allowed);
+          if (!allowed) {
+            setStatus('ok');
+            navigate('/dashboard', { replace: true });
+            return;
+          }
           
           // Se precisa configurar telefone e não está na página de perfil, redirecionar
           if (profile.requires_phone_setup && location.pathname !== '/perfil') {
@@ -52,7 +67,7 @@ export function RequireAuth({ children }: Props) {
       }
     })();
     return () => { mounted = false; };
-  }, [navigate, location.pathname]);
+  }, [navigate, location.pathname, normalizedRoles]);
 
   const handleOnboardingComplete = () => {
     markCompleted();
@@ -65,6 +80,9 @@ export function RequireAuth({ children }: Props) {
   }
   
   if (status === 'ok') {
+    if (!roleAllowed) {
+      return null;
+    }
     return (
       <>
         {/* Modal de onboarding obrigatório */}

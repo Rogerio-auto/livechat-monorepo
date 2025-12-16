@@ -24,10 +24,9 @@ export function AppLayout() {
     }
   }, []);
 
-  // Conexão Socket Global para Notificações
+  // Conexão Socket Global (Static)
   useEffect(() => {
     // Só conecta se tivermos o perfil carregado (para saber o company_id)
-    // Se o profile ainda for null, aguarda.
     if (!profile?.id) return;
 
     // Evitar conectar se já estiver conectado
@@ -42,7 +41,6 @@ export function AppLayout() {
     socket.on("connect", () => {
       console.log("[AppLayout] 🔌 Global Socket connected", { socketId: socket.id });
       // Forçar entrada na sala da empresa para receber eventos globais
-      // Assumindo que o profile tem company_id (ou que o backend infere pelo user_id)
       if ((profile as any).company_id) {
         socket.emit("join", { companyId: (profile as any).company_id });
         
@@ -56,7 +54,21 @@ export function AppLayout() {
       }
     });
 
-    socket.on("chat:updated", (data: any) => {
+    return () => {
+      if (socketRef.current) {
+        console.log("[AppLayout] 🔌 Global Socket disconnecting...");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [profile?.id]); // Depende apenas do ID do perfil
+
+  // Listeners Globais (Dynamic)
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const onChatUpdated = (data: any) => {
       console.log("[AppLayout] 🔔 chat:updated received:", {
         chatId: data.chatId,
         last_message: data.last_message?.substring(0, 30),
@@ -125,15 +137,14 @@ export function AppLayout() {
           from: data?.last_message_from
         });
       }
-    });
+    };
+
+    socket.on("chat:updated", onChatUpdated);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      socket.off("chat:updated", onChatUpdated);
     };
-  }, [profile, location.pathname]);
+  }, [location.pathname, location.search]); // Re-attach listener when location changes
 
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">

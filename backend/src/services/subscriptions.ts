@@ -45,6 +45,13 @@ export interface PlanFeatures {
   dedicated_manager?: boolean;
   custom_integrations?: boolean;
   "24_7_support"?: boolean;
+  
+  // New Module Flags
+  tasks_module?: boolean;
+  calendar_module?: boolean;
+  media_library?: boolean;
+  document_generation?: boolean;
+  automation_module?: boolean;
 }
 
 export interface Subscription {
@@ -137,11 +144,19 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
 
   // ✅ Salvar no cache
   try {
-    await rSet(cacheKey, JSON.stringify(result), SUBSCRIPTION_CACHE_TTL);
+    // rSet já faz JSON.stringify, não precisamos fazer aqui
+    await rSet(cacheKey, result, SUBSCRIPTION_CACHE_TTL);
     console.log("[subscriptions] 💾 Cached:", companyId);
   } catch (cacheError) {
     console.warn("[subscriptions] Cache write error:", cacheError);
   }
+
+  console.log("[subscriptions] Returning subscription:", {
+    id: result.id,
+    plan_id: result.plan_id,
+    plan_name: result.plan?.name,
+    status: result.status
+  });
 
   return result;
 }

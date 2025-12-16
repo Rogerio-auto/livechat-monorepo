@@ -1,13 +1,10 @@
-import { FiMessageSquare, FiAtSign, FiAlertCircle, FiUsers, FiSend, FiBarChart2, FiInbox, FiTag } from "react-icons/fi";
+import { FiMessageSquare, FiAlertCircle, FiUsers, FiSend, FiTag } from "react-icons/fi";
 
 export type LivechatSection =
   | "all"
-  | "mentions"
   | "unanswered"
   | "contacts"
   | "campaigns"
-  | "reports"
-  | "inboxes"
   | "labels";
 
 type Props = {
@@ -17,12 +14,9 @@ type Props = {
 
 const items: Array<{ key: LivechatSection; label: string; Icon: React.ComponentType<any> }> = [
   { key: "all", label: "Todas mensagens", Icon: FiMessageSquare },
-  { key: "mentions", label: "Mensões", Icon: FiAtSign },
   { key: "unanswered", label: "Não atendidas", Icon: FiAlertCircle },
   { key: "contacts", label: "Contatos", Icon: FiUsers },
   { key: "campaigns", label: "Campanhas", Icon: FiSend },
-  { key: "reports", label: "Relatórios", Icon: FiBarChart2 },
-  { key: "inboxes", label: "Caixas de entrada", Icon: FiInbox },
   { key: "labels", label: "Labels", Icon: FiTag },
 ];
 

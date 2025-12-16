@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.ts";
-import { warnOnLimit } from "../middlewares/checkSubscription.ts";
+import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { z } from "zod";
 import { publish, EX_APP } from "../queue/rabbit.ts";
@@ -88,7 +88,7 @@ async function resolveCompanyId(req: any): Promise<string> {
   // -------------------------------
   // CRIAR CAMPANHA
   // -------------------------------
-app.post("/livechat/campaigns", requireAuth, warnOnLimit("campaigns_per_month"), async (req: any, res) => {
+app.post("/livechat/campaigns", requireAuth, checkResourceLimit("campaigns_per_month"), async (req: any, res) => {
   try {
     const companyId = await resolveCompanyId(req);
     const b = req.body || {};
@@ -1513,7 +1513,7 @@ const insert = {
   app.post(
     "/livechat/campaigns/:id/upload-recipients", 
     requireAuth, 
-    warnOnLimit("campaigns"),
+    checkResourceLimit("contacts"),
     upload.single("file"),
     async (req: any, res) => {
     try {

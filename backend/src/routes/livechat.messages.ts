@@ -1,8 +1,10 @@
 import express from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth";
+import { supabaseAdmin } from "../lib/supabase";
 
 const router = express.Router();
+
+
 
 // GET /livechat/messages/:id - Buscar mensagem original para reply preview
 router.get("/:id", requireAuth, async (req, res) => {

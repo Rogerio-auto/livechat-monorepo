@@ -587,7 +587,8 @@ export function registerTeamsRoutes(app: Application) {
     try {
       console.log('[GET /api/users/company] Starting request');
       const authUserId = req.user?.id; // ID do auth.users
-      console.log('[GET /api/users/company] Auth user ID:', authUserId);
+      const inboxId = req.query.inboxId as string | undefined;
+      console.log('[GET /api/users/company] Auth user ID:', authUserId, 'Inbox ID:', inboxId);
       
       if (!authUserId) {
         console.log('[GET /api/users/company] No auth user ID found');
@@ -610,12 +611,32 @@ export function registerTeamsRoutes(app: Application) {
       }
       
       // Agora busca todos os usuários da mesma empresa
-      console.log('[GET /api/users/company] Fetching all users for company_id:', currentUser.company_id);
-      const { data, error } = await supabaseAdmin
+      console.log('[GET /api/users/company] Fetching users for company_id:', currentUser.company_id);
+      
+      let query = supabaseAdmin
         .from("users")
         .select("id, user_id, name, email, avatar, role, status")
         .eq("company_id", currentUser.company_id)
         .order("name");
+
+      if (inboxId) {
+        console.log('[GET /api/users/company] Filtering by inbox_id:', inboxId);
+        const { data: inboxUsers } = await supabaseAdmin
+          .from("inbox_users")
+          .select("user_id")
+          .eq("inbox_id", inboxId);
+          
+        const userIds = inboxUsers?.map((iu: any) => iu.user_id).filter(Boolean) || [];
+        
+        if (userIds.length > 0) {
+          query = query.in("id", userIds);
+        } else {
+          console.log('[GET /api/users/company] No users found in inbox');
+          return res.json([]);
+        }
+      }
+
+      const { data, error } = await query;
 
       console.log('[GET /api/users/company] Found users:', data?.length, 'Error:', error);
 

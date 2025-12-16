@@ -87,27 +87,60 @@ export function PlansSection({ onClose }: PlansSectionProps) {
   };
 
   const handleSelectPlan = async (planId: string) => {
-    if (!confirm("Deseja selecionar este plano?")) return;
+    // Se o plano estiver ativo, redirecionar para o Portal do Cliente para gerenciar assinatura (upgrade/downgrade com prorrogação correta)
+    if (subscription?.status === 'active') {
+      if (!confirm("Para alterar seu plano, você será redirecionado para o Portal do Cliente onde poderá gerenciar sua assinatura com segurança. Deseja continuar?")) return;
+      
+      setUpgrading(true);
+      try {
+        const res = await fetch("/api/checkout/portal", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+        
+        if (res.ok) {
+          const { url } = await res.json();
+          if (url) {
+            window.location.href = url;
+            return;
+          }
+        }
+        setError("Erro ao abrir portal de assinatura.");
+      } catch (err) {
+        setError("Erro ao conectar com o servidor.");
+      } finally {
+        setUpgrading(false);
+      }
+      return;
+    }
+
+    // Se não estiver ativo (Trial, Expirado, Cancelado), criar nova sessão de checkout
+    if (!confirm("Você será redirecionado para a página de pagamento segura. Deseja continuar?")) return;
 
     setUpgrading(true);
     setError(null);
     try {
-      const res = await fetch("/api/subscriptions/upgrade", {
+      const res = await fetch("/api/checkout/session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId }),
+        body: JSON.stringify({ planId, interval: "monthly" }),
       });
 
       if (res.ok) {
-        alert("Plano atualizado com sucesso!");
-        await loadData();
+        const { url } = await res.json();
+        if (url) {
+          window.location.href = url;
+        } else {
+          setError("Erro ao iniciar checkout: URL não recebida.");
+        }
       } else {
         const errorData = await res.json();
-        setError(errorData.error || "Erro ao atualizar plano");
+        setError(errorData.error || "Erro ao iniciar checkout");
       }
     } catch (err) {
-      setError("Erro ao atualizar plano. Tente novamente.");
+      setError("Erro ao iniciar checkout. Tente novamente.");
     } finally {
       setUpgrading(false);
     }

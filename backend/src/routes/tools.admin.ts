@@ -29,19 +29,55 @@ interface AuthRequest extends Request {
   };
 }
 
+const ADMIN_ROLES = new Set(["ADMIN", "SUPER_ADMIN", "SUPERADMIN"]);
+
+async function resolveUserRole(req: AuthRequest): Promise<string> {
+  const cachedRole = String(req.profile?.role || "").toUpperCase();
+  if (ADMIN_ROLES.has(cachedRole)) {
+    return cachedRole;
+  }
+
+  const authId = String((req as any).user?.id || "");
+  if (!authId) {
+    throw Object.assign(new Error("Não autenticado"), { status: 401 });
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("user_id", authId)
+    .maybeSingle();
+
+  if (error) {
+    throw Object.assign(new Error(error.message), { status: 500 });
+  }
+
+  const role = String((data as any)?.role || "").toUpperCase();
+  if (req.profile) {
+    req.profile.role = role;
+  }
+  return role;
+}
+
 // Middleware: verificar role ADMIN
 async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  const profile = req.profile;
-  if (!profile || profile.role !== "ADMIN") {
-    return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
+  try {
+    const role = await resolveUserRole(req);
+    if (!ADMIN_ROLES.has(role)) {
+      return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
+    }
+    next();
+  } catch (error: any) {
+    const status = Number(error?.status) || 500;
+    return res.status(status).json({ error: error?.message || "Erro ao verificar permissões" });
   }
-  next();
 }
 
 router.use(requireAuth);
 // Restrict admin guard to this router's own subpaths to avoid intercepting unrelated /api routes
 router.use("/tools", requireAdmin as any);
 router.use("/agents", requireAdmin as any);
+router.use("/admin", requireAdmin as any);
 
 // ===================== TOOLS CATALOG =====================
 
@@ -369,5 +405,161 @@ router.delete("/agents/:agentId/tools/:toolId", async (req: any, res: any) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ===================== ADMIN COMPANY MANAGEMENT =====================
+
+router.get("/admin/companies/:companyId/tools", async (req: AuthRequest, res) => {
+  try {
+    const { companyId } = req.params as { companyId?: string };
+    if (!companyId) {
+      return res.status(400).json({ error: "companyId obrigatório" });
+    }
+
+    const filters: Record<string, unknown> = {};
+    if (req.query.category) {
+      filters.category = String(req.query.category);
+    }
+    if (req.query.is_active !== undefined) {
+      filters.is_active = req.query.is_active === "true";
+    }
+
+    const tools = await listTools(filters);
+    const visible = tools.filter((tool) => !tool.company_id || tool.company_id === companyId);
+    res.json(visible);
+  } catch (err: any) {
+    console.error("[tools.admin] GET /admin/companies/:companyId/tools error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/admin/companies/:companyId/agents/:agentId/tools", async (req: AuthRequest, res) => {
+  try {
+    const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+    if (!companyId || !agentId) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios" });
+    }
+
+    const ownership = await ensureAgentCompany(agentId, companyId);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ error: ownership.message });
+    }
+
+    const filters: Record<string, unknown> = { agent_id: agentId };
+    if (req.query.is_enabled !== undefined) {
+      filters.is_enabled = req.query.is_enabled === "true";
+    }
+
+    const agentTools = await listAgentTools(filters);
+    res.json(agentTools);
+  } catch (err: any) {
+    console.error("[tools.admin] GET /admin/companies/:companyId/agents/:agentId/tools error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/admin/companies/:companyId/agents/:agentId/tools", async (req: AuthRequest, res) => {
+  try {
+    const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+    if (!companyId || !agentId) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios" });
+    }
+
+    const ownership = await ensureAgentCompany(agentId, companyId);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ error: ownership.message });
+    }
+
+    const { tool_id, is_enabled, overrides } = req.body ?? {};
+    if (!tool_id) {
+      return res.status(400).json({ error: "tool_id obrigatório" });
+    }
+
+    const tool = await getToolById(tool_id);
+    if (!tool) {
+      return res.status(404).json({ error: "Tool not found" });
+    }
+    if (tool.company_id && tool.company_id !== companyId) {
+      return res.status(403).json({ error: "Tool forbidden" });
+    }
+
+    const created = await addToolToAgent(agentId, tool_id, {
+      is_enabled: is_enabled !== false,
+      overrides: overrides || null,
+    });
+
+    res.status(201).json(created);
+  } catch (err: any) {
+    console.error("[tools.admin] POST /admin/companies/:companyId/agents/:agentId/tools error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async (req: AuthRequest, res) => {
+  try {
+    const { companyId, agentId, toolId } = req.params as { companyId?: string; agentId?: string; toolId?: string };
+    if (!companyId || !agentId || !toolId) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios" });
+    }
+
+    const ownership = await ensureAgentCompany(agentId, companyId);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ error: ownership.message });
+    }
+
+    const { is_enabled, overrides } = req.body ?? {};
+    const updated = await updateAgentTool(agentId, toolId, { is_enabled, overrides });
+    if (!updated) {
+      return res.status(404).json({ error: "Agent tool not found" });
+    }
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error("[tools.admin] PUT /admin/companies/:companyId/agents/:agentId/tools/:toolId error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async (req: AuthRequest, res) => {
+  try {
+    const { companyId, agentId, toolId } = req.params as { companyId?: string; agentId?: string; toolId?: string };
+    if (!companyId || !agentId || !toolId) {
+      return res.status(400).json({ error: "Parâmetros obrigatórios" });
+    }
+
+    const ownership = await ensureAgentCompany(agentId, companyId);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ error: ownership.message });
+    }
+
+    await removeToolFromAgent(agentId, toolId);
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("[tools.admin] DELETE /admin/companies/:companyId/agents/:agentId/tools/:toolId error", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function ensureAgentCompany(agentId: string, companyId: string) {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from("agents")
+      .select("id, company_id")
+      .eq("id", agentId)
+      .single();
+
+    if (error || !data) {
+      return { ok: false as const, status: 404, message: "Agente não encontrado" };
+    }
+
+    if (data.company_id !== companyId) {
+      return { ok: false as const, status: 403, message: "Agente não pertence a esta empresa" };
+    }
+
+    return { ok: true as const, agent: data };
+  } catch (err: any) {
+    console.error("[tools.admin] ensureAgentCompany error", err);
+    return { ok: false as const, status: 500, message: "Falha ao validar agente" };
+  }
+}
 
 export default router;

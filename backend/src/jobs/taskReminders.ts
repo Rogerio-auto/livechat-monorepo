@@ -53,22 +53,38 @@ async function getChatInfoForTask(task: TaskWithContext) {
   if (task.related_chat_id) {
     const { data } = await supabaseAdmin
       .from('chats')
-      .select('id, inbox_id, customer_phone')
+      .select('id, inbox_id, customers(phone)')
       .eq('id', task.related_chat_id)
       .single();
-    return data;
+    
+    if (data) {
+      return {
+        id: data.id,
+        inbox_id: data.inbox_id,
+        customer_phone: (data.customers as any)?.phone
+      };
+    }
+    return null;
   }
   
   // 2. Se tiver cliente vinculado, tenta achar chat recente (para notificar cliente)
   if (task.related_customer_id) {
     const { data } = await supabaseAdmin
       .from('chats')
-      .select('id, inbox_id, customer_phone')
+      .select('id, inbox_id, customers(phone)')
       .eq('customer_id', task.related_customer_id)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
-    return data;
+      
+    if (data) {
+      return {
+        id: data.id,
+        inbox_id: data.inbox_id,
+        customer_phone: (data.customers as any)?.phone
+      };
+    }
+    return null;
   }
   
   return null;

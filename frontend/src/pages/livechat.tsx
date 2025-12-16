@@ -95,9 +95,15 @@ function formatDateSeparator(dateString: string) {
   return format(date, "dd/MM/yyyy");
 }
 
+import { LimitModal } from "../components/ui/LimitModal";
+
 export default function LiveChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams();
+  
+  // Limit Modal State
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [limitData, setLimitData] = useState<{ message?: string; resource?: string; limit?: number; current?: number }>({});
   const { company } = useCompany();
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar: string | null } | null>(null);
 
@@ -320,8 +326,9 @@ export default function LiveChatPage() {
     base.chat_type = chatType;
 
     base.group_name = base.group_name ?? null;
-    base.group_avatar_url = base.group_avatar_url ?? null;
-    base.customer_avatar_url = base.customer_avatar_url ?? null;
+    base.group_avatar_url = base.group_avatar_url || null;
+    base.customer_avatar_url = base.customer_avatar_url || null;
+    base.photo_url = (base as any).photo_url || null;
     base.customer_name = base.customer_name ?? (base as any)?.name ?? null;
     base.customer_phone = base.customer_phone ?? (base as any)?.phone ?? (base as any)?.cellphone ?? (base as any)?.celular ?? null;
 
@@ -563,7 +570,7 @@ export default function LiveChatPage() {
           : chat.customer_name || chat.display_phone || sanitizeRemoteIdentifier(chat.display_remote_id || chat.remote_id || chat.external_id) || chat.id;
       const photoUrl = isGroup
         ? chat.group_avatar_url || (chat as any)?.photo_url || null
-        : (chat as any)?.photo_url ?? (chat as any)?.customer_photo_url ?? null;
+        : chat.customer_avatar_url || (chat as any)?.customer_photo_url || (chat as any)?.photo_url || null;
 
       return {
         ...(chat as ChatListItem),
@@ -697,14 +704,19 @@ export default function LiveChatPage() {
     let cancelled = false;
     const loadUsers = async () => {
       try {
-        console.log('[livechat] Loading company users for mentions...');
+        console.log('[livechat] Loading company users for mentions...', { inboxId: currentChat?.inbox_id });
         
         const token = getAccessToken();
         const headers = new Headers();
         headers.set("Content-Type", "application/json");
         if (token) headers.set("Authorization", `Bearer ${token}`);
 
-        const res = await fetch(`${API}/api/users/company`, {
+        const url = new URL(`${API}/api/users/company`);
+        if (currentChat?.inbox_id) {
+          url.searchParams.append('inboxId', currentChat.inbox_id);
+        }
+
+        const res = await fetch(url.toString(), {
           headers,
           credentials: "include",
         });
@@ -735,7 +747,7 @@ export default function LiveChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [API]);
+  }, [API, currentChat?.inbox_id]);
 
 
 
@@ -1191,12 +1203,63 @@ const bumpChatToTop = useCallback((update: {
   // ✅ CORREÇÃO: Atualizar selectedChat e currentChat também
   setSelectedChat((prev) => {
     if (prev && prev.id === update.chatId) {
-      const merged = { ...prev, ...update };
+      // Use the same merge logic as setChats to preserve fields
+      const merged = {
+        ...prev,
+        last_message: update.last_message ?? prev.last_message ?? null,
+        last_message_at: update.last_message_at ?? prev.last_message_at ?? prev.created_at ?? null,
+        last_message_from: update.last_message_from ?? prev.last_message_from ?? null,
+        last_message_type: Object.prototype.hasOwnProperty.call(update, "last_message_type")
+          ? update.last_message_type ?? prev.last_message_type ?? null
+          : prev.last_message_type ?? null,
+        last_message_media_url: Object.prototype.hasOwnProperty.call(update, "last_message_media_url")
+          ? update.last_message_media_url ?? prev.last_message_media_url ?? null
+          : prev.last_message_media_url ?? null,
+        customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
+          ? update.customer_name ?? prev.customer_name ?? null
+          : prev.customer_name ?? null,
+        customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
+          ? update.customer_phone ?? prev.customer_phone ?? null
+          : prev.customer_phone ?? null,
+        group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
+          ? update.group_name ?? prev.group_name ?? null
+          : prev.group_name ?? null,
+        group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
+          ? update.group_avatar_url ?? prev.group_avatar_url ?? null
+          : prev.group_avatar_url ?? null,
+        remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
+          ? update.remote_id ?? prev.remote_id ?? null
+          : prev.remote_id ?? null,
+        kind: update.kind ?? prev.kind ?? null,
+        status: update.status ?? prev.status,
+        ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
+          ? (update as any).ai_agent_id ?? (prev as any)?.ai_agent_id ?? null
+          : (prev as any)?.ai_agent_id ?? null,
+        ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
+          ? (update as any).ai_agent_name ?? (prev as any)?.ai_agent_name ?? null
+          : (prev as any)?.ai_agent_name ?? null,
+        unread_count: Object.prototype.hasOwnProperty.call(update, "unread_count")
+          ? update.unread_count ?? prev.unread_count ?? 0
+          : prev.unread_count ?? 0,
+        department_id: Object.prototype.hasOwnProperty.call(update, "department_id")
+          ? update.department_id ?? prev.department_id ?? null
+          : prev.department_id ?? null,
+        department_name: Object.prototype.hasOwnProperty.call(update, "department_name")
+          ? update.department_name ?? prev.department_name ?? null
+          : prev.department_name ?? null,
+        department_color: Object.prototype.hasOwnProperty.call(update, "department_color")
+          ? update.department_color ?? prev.department_color ?? null
+          : prev.department_color ?? null,
+        department_icon: Object.prototype.hasOwnProperty.call(update, "department_icon")
+          ? update.department_icon ?? prev.department_icon ?? null
+          : prev.department_icon ?? null,
+      };
+      
       // Se este é o chat selecionado, garantir que unread_count seja 0
       if (currentChatIdRef.current === update.chatId) {
         merged.unread_count = 0;
       }
-      return normalizeChat(merged);
+      return normalizeChat(merged as any);
     }
     return prev;
   });
@@ -1204,10 +1267,61 @@ const bumpChatToTop = useCallback((update: {
   // Atualizar currentChat também se for o mesmo
   setCurrentChat((prev) => {
     if (prev && prev.id === update.chatId) {
-      const merged = { ...prev, ...update };
+      // Use the same merge logic as setChats to preserve fields
+      const merged = {
+        ...prev,
+        last_message: update.last_message ?? prev.last_message ?? null,
+        last_message_at: update.last_message_at ?? prev.last_message_at ?? prev.created_at ?? null,
+        last_message_from: update.last_message_from ?? prev.last_message_from ?? null,
+        last_message_type: Object.prototype.hasOwnProperty.call(update, "last_message_type")
+          ? update.last_message_type ?? prev.last_message_type ?? null
+          : prev.last_message_type ?? null,
+        last_message_media_url: Object.prototype.hasOwnProperty.call(update, "last_message_media_url")
+          ? update.last_message_media_url ?? prev.last_message_media_url ?? null
+          : prev.last_message_media_url ?? null,
+        customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
+          ? update.customer_name ?? prev.customer_name ?? null
+          : prev.customer_name ?? null,
+        customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
+          ? update.customer_phone ?? prev.customer_phone ?? null
+          : prev.customer_phone ?? null,
+        group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
+          ? update.group_name ?? prev.group_name ?? null
+          : prev.group_name ?? null,
+        group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
+          ? update.group_avatar_url ?? prev.group_avatar_url ?? null
+          : prev.group_avatar_url ?? null,
+        remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
+          ? update.remote_id ?? prev.remote_id ?? null
+          : prev.remote_id ?? null,
+        kind: update.kind ?? prev.kind ?? null,
+        status: update.status ?? prev.status,
+        ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
+          ? (update as any).ai_agent_id ?? (prev as any)?.ai_agent_id ?? null
+          : (prev as any)?.ai_agent_id ?? null,
+        ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
+          ? (update as any).ai_agent_name ?? (prev as any)?.ai_agent_name ?? null
+          : (prev as any)?.ai_agent_name ?? null,
+        unread_count: Object.prototype.hasOwnProperty.call(update, "unread_count")
+          ? update.unread_count ?? prev.unread_count ?? 0
+          : prev.unread_count ?? 0,
+        department_id: Object.prototype.hasOwnProperty.call(update, "department_id")
+          ? update.department_id ?? prev.department_id ?? null
+          : prev.department_id ?? null,
+        department_name: Object.prototype.hasOwnProperty.call(update, "department_name")
+          ? update.department_name ?? prev.department_name ?? null
+          : prev.department_name ?? null,
+        department_color: Object.prototype.hasOwnProperty.call(update, "department_color")
+          ? update.department_color ?? prev.department_color ?? null
+          : prev.department_color ?? null,
+        department_icon: Object.prototype.hasOwnProperty.call(update, "department_icon")
+          ? update.department_icon ?? prev.department_icon ?? null
+          : prev.department_icon ?? null,
+      };
+
       // Chat aberto sempre tem unread_count = 0
       merged.unread_count = 0;
-      return normalizeChat(merged);
+      return normalizeChat(merged as any);
     }
     return prev;
   });
@@ -1718,32 +1832,47 @@ const scrollToBottom = useCallback(
     [appendMessageToCache, currentUser],
   );
 
+  // 1. Socket Connection Lifecycle (Static)
   useEffect(() => {
     const s = io(API, { withCredentials: true });
     socketRef.current = s;
 
     s.on("connect", () => {
+      console.log("[livechat] Socket connected!", s.id);
       setSocketReady(true);
     });
 
-    s.on("disconnect", () => {
+    s.on("disconnect", (reason) => {
+      console.log("[livechat] Socket disconnected!", reason);
       setSocketReady(false);
     });
 
-    // Listen for mention notifications
+    s.on("connect_error", (err) => {
+      console.error("[livechat] Socket connect error:", err);
+    });
+
+    // Listen for mention notifications (static)
     s.on("user:mentioned", (data: any) => {
       console.log("[Socket] 🔔 You were mentioned!", data);
-      
-      // Show browser notification if available
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("Você foi mencionado!", {
           body: "Alguém mencionou você em uma conversa privada",
           icon: "/favicon.ico",
         });
       }
-      
-      // TODO: Add badge or visual indicator in the chat
     });
+
+    return () => {
+      console.log("[livechat] Cleaning up socket connection");
+      s.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  // 2. Event Listeners (Dynamic)
+  useEffect(() => {
+    const s = socketRef.current;
+    if (!s) return;
 
     const onMessageNew = (m: Message) => {
       console.debug('[Socket] 📨 message:new received:', {
@@ -1862,45 +1991,37 @@ const scrollToBottom = useCallback(
       // ✅ CORREÇÃO: Se o chat está aberto, garantir que unread_count seja 0
       const isChatOpen = currentChatIdRef.current === p.chatId;
       
-      bumpChatToTop({
-        chatId: p.chatId,
-        last_message: p.last_message ?? null,
-        last_message_at: p.last_message_at ?? null,
-        last_message_from: p.last_message_from ?? undefined,
-        last_message_type: Object.prototype.hasOwnProperty.call(p, "last_message_type")
-          ? p.last_message_type ?? null
-          : undefined,
-        last_message_media_url: Object.prototype.hasOwnProperty.call(p, "last_message_media_url")
-          ? p.last_message_media_url ?? null
-          : undefined,
-        customer_name: Object.prototype.hasOwnProperty.call(p, "customer_name") ? p.customer_name ?? null : undefined,
-        customer_phone: Object.prototype.hasOwnProperty.call(p, "customer_phone") ? p.customer_phone ?? null : undefined,
-        group_name: Object.prototype.hasOwnProperty.call(p, "group_name") ? p.group_name ?? null : undefined,
-        group_avatar_url: Object.prototype.hasOwnProperty.call(p, "group_avatar_url")
-          ? p.group_avatar_url ?? null
-          : undefined,
-        remote_id: Object.prototype.hasOwnProperty.call(p, "remote_id") ? p.remote_id ?? null : undefined,
-        kind: Object.prototype.hasOwnProperty.call(p, "kind") ? p.kind ?? null : undefined,
-        status: p.status ?? undefined,
-        // Se chat está aberto, forçar unread_count = 0
-        unread_count: isChatOpen ? 0 : (
-          Object.prototype.hasOwnProperty.call(p, "unread_count") 
-            ? p.unread_count ?? undefined
-            : undefined
-        ),
-        department_id: Object.prototype.hasOwnProperty.call(p, "department_id")
-          ? p.department_id ?? null
-          : undefined,
-        department_name: Object.prototype.hasOwnProperty.call(p, "department_name")
-          ? p.department_name ?? null
-          : undefined,
-        department_color: Object.prototype.hasOwnProperty.call(p, "department_color")
-          ? p.department_color ?? null
-          : undefined,
-        department_icon: Object.prototype.hasOwnProperty.call(p, "department_icon")
-          ? p.department_icon ?? null
-          : undefined,
-      });
+      // Construct update object dynamically to avoid overwriting with undefined
+      const update: any = { chatId: p.chatId };
+      
+      if (p.last_message !== undefined) update.last_message = p.last_message;
+      if (p.last_message_at !== undefined) update.last_message_at = p.last_message_at;
+      if (p.last_message_from !== undefined) update.last_message_from = p.last_message_from;
+      if (p.last_message_type !== undefined) update.last_message_type = p.last_message_type;
+      if (p.last_message_media_url !== undefined) update.last_message_media_url = p.last_message_media_url;
+      
+      if (p.customer_name !== undefined) update.customer_name = p.customer_name;
+      if (p.customer_phone !== undefined) update.customer_phone = p.customer_phone;
+      
+      if (p.group_name !== undefined) update.group_name = p.group_name;
+      if (p.group_avatar_url !== undefined) update.group_avatar_url = p.group_avatar_url;
+      
+      if (p.remote_id !== undefined) update.remote_id = p.remote_id;
+      if (p.kind !== undefined) update.kind = p.kind;
+      if (p.status !== undefined) update.status = p.status;
+      
+      if (isChatOpen) {
+        update.unread_count = 0;
+      } else if (p.unread_count !== undefined) {
+        update.unread_count = p.unread_count;
+      }
+      
+      if (p.department_id !== undefined) update.department_id = p.department_id;
+      if (p.department_name !== undefined) update.department_name = p.department_name;
+      if (p.department_color !== undefined) update.department_color = p.department_color;
+      if (p.department_icon !== undefined) update.department_icon = p.department_icon;
+
+      bumpChatToTop(update);
     };
 
     // Listener para atualiza��o de m�dia em background
@@ -2085,7 +2206,7 @@ const scrollToBottom = useCallback(
       s.off("chat:agent-changed", onAgentChanged);
       s.off("chat:department-changed", onDepartmentChanged);
       s.off("send:interactive_message", onInteractiveMessage);
-      s.disconnect();
+      // DO NOT disconnect here, as the socket is managed by the parent effect
     };
   }, [
     appendMessageToCache,
@@ -2098,17 +2219,20 @@ const scrollToBottom = useCallback(
   // ✅ JOIN company room when socket is ready AND company is loaded
   useEffect(() => {
     if (!socketReady || !company?.id || !socketRef.current) {
+      console.log("[livechat] Skipping join room:", { socketReady, companyId: company?.id, hasSocket: !!socketRef.current });
       return;
     }
 
     const companyId = company.id;
     const socket = socketRef.current;
     
+    console.log("[livechat] Joining company room:", companyId);
     socket.emit("join", { companyId });
     
     // Cleanup: leave company room on unmount
     return () => {
       if (socket && companyId) {
+        console.log("[livechat] Leaving company room:", companyId);
         socket.emit("leave", { companyId });
       }
     };
@@ -2853,11 +2977,12 @@ const scrollToBottom = useCallback(
             });
             if (res.ok) {
               const data = await res.json();
+              const normalized = normalizeChat(data);
               setChats((prev) => {
-                if (prev.some((c) => c.id === data.id)) return prev;
-                return [data, ...prev];
+                if (prev.some((c) => c.id === normalized.id)) return prev;
+                return [normalized, ...prev];
               });
-              setCurrentChat(data);
+              setCurrentChat(normalized);
             }
           } catch (e) {
             console.error("Failed to fetch chat from URL", e);
@@ -2871,7 +2996,7 @@ const scrollToBottom = useCallback(
       // Actually, if we use navigate(), URL updates first.
       if (currentChat) setCurrentChat(null);
     }
-  }, [chatId, location.search, currentChat, setChats]);
+  }, [chatId, location.search, currentChat, setChats, normalizeChat]);
 
 
   // Load contacts when contacts section active
@@ -3124,6 +3249,20 @@ const scrollToBottom = useCallback(
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok || payload?.ok === false) {
+          // Check for limit error
+          if (response.status === 403 && payload?.code === "LIMIT_REACHED") {
+            setLimitData({
+              message: payload.message,
+              resource: payload.resource,
+              limit: payload.limit,
+              current: payload.current
+            });
+            setLimitModalOpen(true);
+            // Remove draft
+            updateMessageStatusInCache({ chatId: chat.id, draftId, error_reason: "Limit reached", delivery_status: "ERROR" });
+            return;
+          }
+
           const err = new Error(payload?.error || `HTTP ${response.status}`);
           (err as any).draftId = payload?.draftId ?? draftId;
           throw err;
@@ -3345,6 +3484,18 @@ const scrollToBottom = useCallback(
       const payload = done.payload || {};
       const inserted = (payload?.inserted ?? payload?.data ?? (done.ok ? payload : null)) as any;
       if (!done.ok || !inserted) {
+        // Check for limit error
+        if ((payload as any)?.code === "LIMIT_REACHED") {
+            setLimitData({
+              message: (payload as any).message,
+              resource: (payload as any).resource,
+              limit: (payload as any).limit,
+              current: (payload as any).current
+            });
+            setLimitModalOpen(true);
+            throw new Error("Limite do plano atingido");
+        }
+
         if ((payload as any)?.error === "mime_not_allowed") {
           alert(`Esse formato (${(payload as any)?.mimetype || "desconhecido"}) nao e suportado pelo WhatsApp. Tente outro navegador (OGG/AAC).`);
         }
@@ -4174,23 +4325,44 @@ const scrollToBottom = useCallback(
                     </svg>
                   </button>
                   
-                  <input
-                    className={`flex-1 rounded-xl px-3 py-2 text-sm ${
-                      isPrivateMode
-                        ? "bg-blue-50 border-2 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500"
-                        : "config-input"
-                    }`}
-                    placeholder={isRecording ? "Gravando áudio..." : isPrivateMode ? "Mensagem privada - use @nome para mencionar" : "Digite sua mensagem..."}
-                    value={text}
-                    onChange={handleTextChange}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        send();
-                      }
-                    }}
-                    disabled={isRecording}
-                  />
+                  {isPrivateMode ? (
+                    <MentionInput
+                      className={`flex-1 rounded-xl px-3 py-2 text-sm ${
+                        isPrivateMode
+                          ? "bg-blue-50 border-2 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500"
+                          : "config-input"
+                      }`}
+                      placeholder={isRecording ? "Gravando áudio..." : "Mensagem privada - use @nome para mencionar"}
+                      value={text}
+                      onChange={(val, extractedMentions) => {
+                        setText(val);
+                        setMentions(extractedMentions);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          send();
+                        }
+                      }}
+                      users={companyUsers}
+                      disabled={isRecording}
+                      autoFocus
+                    />
+                  ) : (
+                    <input
+                      className={`flex-1 rounded-xl px-3 py-2 text-sm config-input`}
+                      placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
+                      value={text}
+                      onChange={handleTextChange}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          send();
+                        }
+                      }}
+                      disabled={isRecording}
+                    />
+                  )}
                   
                   <Button
                     variant="gradient"
@@ -4241,6 +4413,16 @@ const scrollToBottom = useCallback(
           </Card>
         )}
       </div>
+
+      {/* Limit Modal */}
+      <LimitModal 
+        isOpen={limitModalOpen} 
+        onClose={() => setLimitModalOpen(false)}
+        message={limitData.message}
+        resource={limitData.resource}
+        limit={limitData.limit}
+        current={limitData.current}
+      />
 
       {showFirstInboxWizard && (
         <FirstInboxWizard

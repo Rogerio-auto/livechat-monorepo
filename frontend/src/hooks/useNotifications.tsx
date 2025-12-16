@@ -65,38 +65,10 @@ export function useNotifications() {
       console.log('[useNotifications] 🔌 Socket disconnected:', reason);
     });
 
-    // Listener para novas notificações
-    socketInstance.on('notification', (notification: Notification & { isNew?: boolean }) => {
-      console.log('[useNotifications] 🔔 New notification received:', notification);
-
-      setNotifications(prev => {
-        // Evitar duplicatas
-        if (prev.some(n => n.id === notification.id)) {
-          console.log('[useNotifications] ⚠️ Duplicate notification ignored:', notification.id);
-          return prev;
-        }
-        return [notification, ...prev];
-      });
-
-      if (!notification.is_read) {
-        setUnreadCount(prev => prev + 1);
-      }
-
-      // Reproduzir som
-      if (notification.sound_type && notification.sound_type !== 'silent') {
-        playSound(notification.sound_type);
-      }
-
-      // Mostrar notificação do navegador
-      if (permission === 'granted' && notification.isNew !== false) {
-        showBrowserNotification(notification);
-      }
-    });
-
     return () => {
       socketInstance.disconnect();
     };
-  }, [permission]);
+  }, []); // Empty dependency array to prevent re-connections
 
   // Registrar socket no cleanupService para desconectar no logout
   useEffect(() => {
@@ -354,6 +326,45 @@ export function useNotifications() {
       }
     }
   }, []);
+
+  // Listeners (Dynamic) - Attached separately to avoid reconnecting socket
+  useEffect(() => {
+    const socketInstance = socketRef.current;
+    if (!socketInstance) return;
+
+    const onNotification = (notification: Notification & { isNew?: boolean }) => {
+      console.log('[useNotifications] 🔔 New notification received:', notification);
+
+      setNotifications(prev => {
+        // Evitar duplicatas
+        if (prev.some(n => n.id === notification.id)) {
+          console.log('[useNotifications] ⚠️ Duplicate notification ignored:', notification.id);
+          return prev;
+        }
+        return [notification, ...prev];
+      });
+
+      if (!notification.is_read) {
+        setUnreadCount(prev => prev + 1);
+      }
+
+      // Reproduzir som
+      if (notification.sound_type && notification.sound_type !== 'silent') {
+        playSound(notification.sound_type);
+      }
+
+      // Mostrar notificação do navegador
+      if (permission === 'granted' && notification.isNew !== false) {
+        showBrowserNotification(notification);
+      }
+    };
+
+    socketInstance.on('notification', onNotification);
+
+    return () => {
+      socketInstance.off('notification', onNotification);
+    };
+  }, [permission, playSound, showBrowserNotification]);
 
   return {
     notifications,

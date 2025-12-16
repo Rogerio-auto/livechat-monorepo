@@ -184,8 +184,8 @@ export default function ChatList({
     const secondaryLine = secondaryParts.length > 0 ? secondaryParts.join(" - ") : defaultPreview;
 
     const avatarSource = isGroup
-      ? chat.group_avatar_url ?? chat.customer_avatar_url ?? chat.photo_url ?? null
-      : chat.customer_avatar_url ?? chat.photo_url ?? null;
+      ? chat.group_avatar_url || chat.customer_avatar_url || chat.photo_url || null
+      : chat.customer_avatar_url || chat.photo_url || null;
 
     return {
       ...chat,

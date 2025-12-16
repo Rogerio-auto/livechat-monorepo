@@ -9,6 +9,7 @@ import TemplateWizardModal from "./TemplateWizardModal";
 import TemplateDetailModal from "./TemplateDetailModal";
 import MetaTemplateSubmitModal from "./MetaTemplateSubmitModal";
 import type { Campaign } from "../../types/types";
+import { LimitModal } from "../ui/LimitModal";
 
 type Template = { id: string; name: string; kind: string; status?: string; meta_status?: string; meta_template_id?: string };
 type Inbox = { id: string; name: string; provider: string };
@@ -54,6 +55,10 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
 
+  // Limit Modal State
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
+  const [limitData, setLimitData] = useState<{ message?: string; resource?: string; limit?: number; current?: number }>({});
+
   // Check scroll position for arrows
   const checkScrollPosition = useCallback(() => {
     if (!templateScrollRef.current) return;
@@ -94,6 +99,19 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
       const contentType = res.headers.get("content-type");
       if (contentType?.includes("application/json")) {
         const errorData = await res.json().catch(() => ({}));
+        
+        // Check for limit error
+        if (res.status === 403 && errorData?.code === "LIMIT_REACHED") {
+          setLimitData({
+            message: errorData.message,
+            resource: errorData.resource,
+            limit: errorData.limit,
+            current: errorData.current
+          });
+          setLimitModalOpen(true);
+          throw new Error("Limite do plano atingido");
+        }
+
         const error: any = new Error(errorData.error || `HTTP ${res.status}`);
         error.data = errorData;
         throw error;
@@ -1059,6 +1077,15 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
             />
           )}
       </div>
+      {/* Limit Modal */}
+      <LimitModal 
+        isOpen={limitModalOpen} 
+        onClose={() => setLimitModalOpen(false)}
+        message={limitData.message}
+        resource={limitData.resource}
+        limit={limitData.limit}
+        current={limitData.current}
+      />
     </div>
   );
 }

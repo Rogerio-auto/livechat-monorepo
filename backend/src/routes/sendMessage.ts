@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
 import { publish, publishApp, EX_APP } from "../queue/rabbit.ts";
 import { requireAuth } from "../middlewares/requireAuth.ts";
+import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 
 const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
 const MEDIA_PUBLIC_BASE = (process.env.MEDIA_PUBLIC_BASE || "").replace(/\/+$/, "");
@@ -77,11 +78,12 @@ export async function sendChannelMessage(req: any, res: Response) {
 }
 
 export function registerSendMessageRoutes(app: Application) {
-  app.post("/inboxes/:inboxId/messages", sendChannelMessage);
+  app.post("/inboxes/:inboxId/messages", requireAuth, checkResourceLimit("messages_per_month"), sendChannelMessage);
 
   app.post(
     "/livechat/chats/:chatId/messages/media",
     requireAuth,
+    checkResourceLimit("messages_per_month"),
     upload.single("file"),
     async (req: Request, res: Response) => {
       try {

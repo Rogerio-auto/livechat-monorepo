@@ -16,6 +16,7 @@ interface MentionInputProps {
   users: User[];
   className?: string;
   autoFocus?: boolean;
+  disabled?: boolean;
 }
 
 export function MentionInput({
@@ -26,6 +27,7 @@ export function MentionInput({
   users,
   className,
   autoFocus,
+  disabled,
 }: MentionInputProps) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState("");
@@ -141,16 +143,20 @@ export function MentionInput({
     <div className="relative flex-1">
       <textarea
         ref={textareaRef}
-        className={className}
+        className={`w-full ${className || ''}`}
         placeholder={placeholder}
         value={displayValue}
         onChange={handleTextChange}
         onKeyDown={handleKeyDown}
+        disabled={disabled}
         autoFocus={autoFocus}
-        rows={3}
+        rows={1}
         style={{
           resize: "none",
           fontFamily: "inherit",
+          minHeight: "42px",
+          maxHeight: "120px",
+          overflowY: "auto"
         }}
       />
 

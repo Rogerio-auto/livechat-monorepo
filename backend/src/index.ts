@@ -70,6 +70,8 @@ import { registerDocumentRoutes } from "./routes/documents.js";
 import { registerDocumentTemplateRoutes } from "./routes/document-templates.js";
 import { registerMetaHealthRoutes } from "./routes/meta.health.js";
 import { registerCustomerOptInRoutes } from "./routes/customers.optin.js";
+import { webhookRouter } from "./routes/webhooks.js";
+import { checkoutRouter } from "./routes/checkout.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -110,6 +112,10 @@ app.use(
     credentials: true,
   }),
 );
+
+// ===== WEBHOOKS (RAW BODY) =====
+// Must be before express.json() to preserve signature
+app.use("/api/webhooks", webhookRouter);
 
 // ===== PARSERS =====
 app.use(cookieParser());
@@ -998,15 +1004,15 @@ io.on("connection", async (socket) => {
     
     // Join company room for multi-tenancy isolation
     try {
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
+      const { data: user } = await supabaseAdmin
+        .from("users")
         .select("company_id")
-        .eq("id", userId)
+        .eq("user_id", userId)
         .maybeSingle();
       
-      if (profile?.company_id) {
-        socket.join(`company:${profile.company_id}`);
-        console.log(`[Socket] ✅ User joined company room: company:${profile.company_id}`, { 
+      if (user?.company_id) {
+        socket.join(`company:${user.company_id}`);
+        console.log(`[Socket] ✅ User joined company room: company:${user.company_id}`, { 
           socketId: socket.id, 
           userId 
         });
@@ -1173,19 +1179,56 @@ io.on("connection", async (socket) => {
       const authUserId = await socketAuthUserId(socket);
       if (!authUserId) return ack?.({ ok: false, error: "Not authenticated" });
 
+      // Get user company_id
+      const { data: user } = await supabaseAdmin
+        .from("users")
+        .select("company_id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      
+      if (!user?.company_id) return ack?.({ ok: false, error: "User has no company" });
+
       const inboxId = (params?.inboxId as string) || undefined;
       const status = (params?.status as string) || undefined;
+      const kind = (params?.kind as string) || undefined;
+      const departmentId = (params?.department_id as string) || undefined;
       const q = (params?.q as string) || undefined;
       const limit = params?.limit ? Number(params.limit) : 20;
       const offset = params?.offset ? Number(params.offset) : 0;
 
       let query = supabaseAdmin
         .from("chats")
-        .select("id, external_id, status, last_message, last_message_at, inbox_id, customer_id, assignee_agent", { count: "exact" })
+        .select("id, external_id, status, last_message, last_message_at, inbox_id, customer_id, assignee_agent, kind, chat_type, remote_id, group_name, group_avatar_url, unread_count, inbox:inboxes!inner(company_id)", { count: "exact" })
+        .eq("inbox.company_id", user.company_id)
         .order("last_message_at", { ascending: false, nullsFirst: false });
       if (inboxId) query = query.eq("inbox_id", inboxId);
-      if (status && String(status).toUpperCase() !== "ALL") query = query.eq("status", status);
+      if (departmentId) query = query.eq("department_id", departmentId);
+      if (status && String(status).toUpperCase() !== "ALL") {
+        query = query.eq("status", status);
+        if (status === "PENDING") {
+          query = query.gt("unread_count", 0);
+        }
+      }
       if (q) query = query.ilike("last_message", `%${q}%`);
+
+      if (kind === "GROUP") {
+        query = query.or(
+          [
+            "kind.eq.GROUP",
+            "remote_id.ilike.%@g.us",
+            "chat_type.eq.GROUP",
+          ].join(","),
+        );
+      } else if (kind === "DIRECT") {
+        query = query.or("kind.eq.DIRECT,kind.is.null");
+        query = query.or("remote_id.is.null,remote_id.not.ilike.%@g.us");
+        query = query.or(
+          [
+            "chat_type.eq.CONTACT",
+            "chat_type.is.null",
+          ].join(","),
+        );
+      }
 
       const { data, error, count } = await query.range(offset, offset + Math.max(0, limit - 1));
       if (error) return ack?.({ ok: false, error: error.message });
@@ -1237,6 +1280,35 @@ io.on("connection", async (socket) => {
           }
         }
       } catch {}
+
+      // Enrich avatars from Redis
+      try {
+        const remoteIds = (items as any[]).map(c => c.remote_id || c.external_id).filter(Boolean);
+        if (remoteIds.length > 0) {
+          const avatarPromises = remoteIds.map(rid => rGet(k.avatar(user.company_id, rid)));
+          const avatars = await Promise.all(avatarPromises);
+          const avatarMap: Record<string, string> = {};
+          remoteIds.forEach((rid, i) => {
+            if (avatars[i]) avatarMap[rid] = avatars[i] as string;
+          });
+          
+          for (const chat of (items as any[])) {
+            const rid = chat.remote_id || chat.external_id;
+            const cached = rid ? avatarMap[rid] : null;
+            
+            const isGroup = chat.kind === 'GROUP' || chat.chat_type === 'GROUP' || (chat.remote_id && chat.remote_id.endsWith('@g.us'));
+            
+            if (isGroup) {
+               if (!chat.group_avatar_url && cached) chat.group_avatar_url = cached;
+               chat.customer_avatar_url = chat.group_avatar_url || cached || null;
+            } else {
+               chat.customer_avatar_url = cached || null;
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Failed to enrich avatars", e);
+      }
 
       // last sender of last message enrichment (best-effort)
       try {
@@ -3625,6 +3697,7 @@ app.post("/integrations/meta/webhook", metaWebhookPost);
 registerOnboardingRoutes(app);
 registerAdminRoutes(app);
 registerSubscriptionRoutes(app);
+app.use("/api/checkout", checkoutRouter);
 
 // autenticados
 startLivechatSocketBridge();

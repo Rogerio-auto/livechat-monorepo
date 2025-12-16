@@ -12,6 +12,31 @@ import { getAgentTemplateTools } from "../repos/agent.templates.repo.ts";
 import { addToolToAgent } from "../repos/tools.repo.ts";
 
 const updateAgentSchema = AgentSchema.partial();
+const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
+
+async function ensureAdminRole(req: any) {
+  const authId = String(req?.user?.id || "");
+  if (!authId) {
+    throw Object.assign(new Error("Não autenticado"), { status: 401 });
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from("users")
+    .select("role")
+    .eq("user_id", authId)
+    .maybeSingle();
+
+  if (userError) {
+    throw Object.assign(new Error(userError.message), { status: 500 });
+  }
+
+  const role = String((userData as any)?.role || "").toUpperCase();
+  if (!ADMIN_ROLES.includes(role)) {
+    throw Object.assign(new Error("Acesso negado. Apenas administradores."), { status: 403 });
+  }
+
+  return role;
+}
 
 async function resolveCompanyId(req: any) {
   const authId = String(req?.user?.id || "");
@@ -60,22 +85,7 @@ export function registerAgentsRoutes(app: Application) {
   // Admin: listar TODOS os agentes de TODAS as empresas
   app.get("/api/admin/agents", requireAuth, async (req: any, res) => {
     try {
-      // Verificar se usuário é ADMIN
-      const authId = String(req?.user?.id || "");
-      const { data: userData, error: userError } = await supabaseAdmin
-        .from("users")
-        .select("role")
-        .eq("user_id", authId)
-        .maybeSingle();
-      
-      if (userError) {
-        throw Object.assign(new Error(userError.message), { status: 500 });
-      }
-      
-      const role = String((userData as any)?.role || "").toUpperCase();
-      if (role !== "ADMIN") {
-        return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
-      }
+      await ensureAdminRole(req);
 
       // Buscar todos os agentes com nome da empresa
       const { data: agents, error: agentsError } = await supabaseAdmin
@@ -101,6 +111,80 @@ export function registerAgentsRoutes(app: Application) {
       })) || [];
 
       return res.json(result);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  // Admin: agentes por empresa específica
+  app.get("/api/admin/companies/:companyId/agents", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId } = req.params as { companyId?: string };
+      if (!companyId) {
+        return res.status(400).json({ error: "companyId obrigatório" });
+      }
+
+      const agents = await listAgentsFiltered(companyId);
+      return res.json(agents);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  app.get("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+      if (!companyId || !agentId) {
+        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+      }
+
+      const agent = await getAgent(companyId, agentId);
+      if (!agent) {
+        return res.status(404).json({ error: "Agente não encontrado" });
+      }
+
+      return res.json(agent);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  app.put("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+      if (!companyId || !agentId) {
+        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+      }
+
+      const parsed = updateAgentSchema.parse(req.body ?? {});
+      if (Object.keys(parsed).length === 0) {
+        return res.status(400).json({ error: "Nada para atualizar" });
+      }
+
+      const updated = await updateAgent(companyId, agentId, parsed);
+      return res.json(updated);
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  app.delete("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+      if (!companyId || !agentId) {
+        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+      }
+
+      await deleteAgent(companyId, agentId);
+      return res.json({ ok: true });
     } catch (error) {
       const { status, payload } = formatRouteError(error);
       return res.status(status).json(payload);
@@ -203,7 +287,7 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // POST /api/agents/from-template - criar agente a partir de template + respostas
-  app.post("/api/agents/from-template", requireAuth, async (req: any, res) => {
+  app.post("/api/agents/from-template", requireAuth, checkResourceLimit("ai_agents"), async (req: any, res) => {
     try {
       const companyId = await resolveCompanyId(req);
       const bodySchema = z.object({

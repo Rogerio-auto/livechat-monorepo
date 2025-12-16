@@ -9,7 +9,13 @@ import { executeTool, type ToolExecutionContext } from "./toolHandlers.ts";
 import { getAgentContext, appendMultipleToContext } from "./agentContext.ts";
 import { db } from "../pg.ts";
 
-export type ChatTurn = { role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; name?: string };
+export type ChatTurn = { 
+  role: "system" | "user" | "assistant" | "tool"; 
+  content: string | null; 
+  tool_call_id?: string; 
+  name?: string;
+  tool_calls?: any[];
+};
 
 /**
  * Processa mensagens de mídia (áudio/imagem) para extrair conteúdo textual
@@ -226,11 +232,11 @@ IMPORTANT TOOL USAGE POLICY:
     
     // Instrução específica para botões
     if (tools.some((t: any) => t.tool.key === 'send_interactive_buttons')) {
-      sysParts.push("SPECIFIC INSTRUCTION: You have access to 'send_interactive_buttons'. Use it whenever you need to offer choices to the user (e.g., menu options, yes/no questions). Do NOT write lists in text.");
+      sysParts.push("SPECIFIC INSTRUCTION: 'send_interactive_buttons' sends a message to the user. AFTER calling this tool, STOP immediately. Do NOT generate more text. Wait for the user to click.");
     }
     // Instrução específica para listas
     if (tools.some((t: any) => t.tool.key === 'send_interactive_list')) {
-      sysParts.push("SPECIFIC INSTRUCTION: You have access to 'send_interactive_list'. Use it whenever you need to offer a menu or a list of options to the user. Do NOT write lists in text.");
+      sysParts.push("SPECIFIC INSTRUCTION: 'send_interactive_list' sends a message to the user. AFTER calling this tool, STOP immediately. Do NOT generate more text. Wait for the user to select an option.");
     }
   }
 
@@ -240,6 +246,9 @@ CRITICAL EXCEPTION FOR OUTPUT FORMAT:
 If your instructions mention a specific JSON output format (like {"message": [...]}), YOU MUST IGNORE THAT FORMAT when calling a tool.
 - If you use a tool: DO NOT output JSON text. Just generate the tool call.
 - If you reply with text: Follow the required JSON format.
+
+CRITICAL FLOW CONTROL:
+- If you use a tool that interacts with the user (buttons, lists), YOU MUST STOP. Do not continue to the next step of your instructions in the same turn.
 `.trim());
 
   const system: ChatTurn = { role: "system", content: sysParts.join("\n\n").trim() || "Você é um atendente útil, breve e educado." };

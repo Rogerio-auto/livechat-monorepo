@@ -308,12 +308,12 @@ function measureJob<T>(
     .then((result) => {
       metrics[worker].processed += 1;
       const durationMs = Number((performance.now() - started).toFixed(1));
-      console.log("[metrics][worker]", {
-        worker,
-        durationMs,
-        processed: metrics[worker].processed,
-        ...meta,
-      });
+      // console.log("[metrics][worker]", {
+      //   worker,
+      //   durationMs,
+      //   processed: metrics[worker].processed,
+      //   ...meta,
+      // });
       return result;
     })
     .catch((error) => {
@@ -333,11 +333,11 @@ async function logQueueStats(): Promise<void> {
   for (const queue of queues) {
     try {
       const info = await getQueueInfo(queue);
-      console.log("[metrics][queue]", {
-        queue: info.queue,
-        depth: info.messageCount,
-        consumers: info.consumerCount,
-      });
+      // console.log("[metrics][queue]", {
+      //   queue: info.queue,
+      //   depth: info.messageCount,
+      //   consumers: info.consumerCount,
+      // });
     } catch (error) {
       console.error("[metrics][queue]", {
         queue,
@@ -385,13 +385,13 @@ async function flushDueBuffers(): Promise<void> {
           }
           const last = items[items.length - 1];
           if (!last) continue;
-      console.log("[BUFFER][FLUSH] 🔄 Flushing buffer", {
-        chatId: meta.chatId,
-        companyId: meta.companyId,
-        itemCount: items.length,
-        provider: last.provider,
-        inboxId: last.inboxId,
-      });
+      // console.log("[BUFFER][FLUSH] 🔄 Flushing buffer", {
+      //   chatId: meta.chatId,
+      //   companyId: meta.companyId,
+      //   itemCount: items.length,
+      //   provider: last.provider,
+      //   inboxId: last.inboxId,
+      // });
       // Re-check chat status and get ai_agent_id
       const statusRow = await db.oneOrNone<{ status: string | null; ai_agent_id: string | null }>(
         `select status, ai_agent_id from public.chats where id = $1`,
@@ -400,19 +400,19 @@ async function flushDueBuffers(): Promise<void> {
       const chatStatus = (statusRow?.status || "").toUpperCase();
       if (chatStatus !== "AI") {
         // drop silently
-        console.log("[BUFFER][FLUSH] ⏭️  Chat not in AI status, skipping", {
-          chatId: meta.chatId,
-          currentStatus: chatStatus,
-        });
+        // console.log("[BUFFER][FLUSH] ⏭️  Chat not in AI status, skipping", {
+        //   chatId: meta.chatId,
+        //   currentStatus: chatStatus,
+        // });
         continue;
       }
 
       const chatAgentId = statusRow?.ai_agent_id ?? null;
-      console.log("[BUFFER][FLUSH] 🤖 Preparing agent reply", {
-        chatId: meta.chatId,
-        agentId: chatAgentId,
-        messageCount: items.length,
-      });
+      // console.log("[BUFFER][FLUSH] 🤖 Preparing agent reply", {
+      //   chatId: meta.chatId,
+      //   agentId: chatAgentId,
+      //   messageCount: items.length,
+      // });
 
       // Aggregate user messages into a single prompt
       const lines = items
@@ -444,11 +444,11 @@ async function flushDueBuffers(): Promise<void> {
         });
         const reply = (ai.reply || "").trim();
         if (reply) {
-          console.log("[BUFFER][FLUSH] ✅ Agent replied successfully", {
-            chatId: meta.chatId,
-            agentId: ai.agentId,
-            replyLength: reply.length,
-          });
+          // console.log("[BUFFER][FLUSH] ✅ Agent replied successfully", {
+          //   chatId: meta.chatId,
+          //   agentId: ai.agentId,
+          //   replyLength: reply.length,
+          // });
           if (ai.agentId) {
             try {
               await db.none(
@@ -680,19 +680,19 @@ async function getCachedChatId(inboxId: string, remoteId: string): Promise<strin
         [cached, inboxId]
       );
       if (exists?.id) {
-        console.log('[worker][cache] Chat lookup HIT (validated in DB):', { inboxId, remoteId, chatId: cached });
+        // console.log('[worker][cache] Chat lookup HIT (validated in DB):', { inboxId, remoteId, chatId: cached });
         return cached;
       } else {
         // Cached ID is phantom - invalidate cache
         await rDel(cacheKey);
-        console.log('[worker][cache] Chat lookup HIT but phantom in DB, invalidated:', { inboxId, remoteId, cachedChatId: cached });
+        // console.log('[worker][cache] Chat lookup HIT but phantom in DB, invalidated:', { inboxId, remoteId, cachedChatId: cached });
       }
     } catch (error) {
       console.warn('[worker][cache] Failed to validate cached chatId:', { inboxId, remoteId, cached, error: error instanceof Error ? error.message : error });
     }
   }
 
-  console.log('[worker][cache] Chat lookup MISS:', { inboxId, remoteId });
+  // console.log('[worker][cache] Chat lookup MISS:', { inboxId, remoteId });
   const row = await db.oneOrNone<{ id: string }>(
     `SELECT id FROM public.chats WHERE inbox_id = $1 AND remote_id = $2 LIMIT 1`,
     [inboxId, remoteId]
@@ -701,7 +701,7 @@ async function getCachedChatId(inboxId: string, remoteId: string): Promise<strin
   if (row?.id) {
     // Cache for 1 hour
     await rSet(cacheKey, row.id, 3600);
-    console.log('[worker][cache] Chat lookup cached:', { inboxId, remoteId, chatId: row.id });
+    // console.log('[worker][cache] Chat lookup cached:', { inboxId, remoteId, chatId: row.id });
     return row.id;
   }
 
@@ -714,7 +714,7 @@ async function getCachedChatId(inboxId: string, remoteId: string): Promise<strin
 async function cacheChatLookup(inboxId: string, remoteId: string, chatId: string): Promise<void> {
   const cacheKey = k.chatLookup(inboxId, remoteId);
   await rSet(cacheKey, chatId, 3600); // 1 hour
-  console.log('[worker][cache] Chat lookup saved:', { inboxId, remoteId, chatId });
+  // console.log('[worker][cache] Chat lookup saved:', { inboxId, remoteId, chatId });
 }
 
 /**
@@ -733,14 +733,14 @@ async function cacheChatLookupBiDirectional(
   if (phoneFormatId) {
     const phoneKey = k.chatLookup(inboxId, phoneFormatId);
     await rSet(phoneKey, chatId, cacheDuration);
-    console.log('[worker][cache] Chat lookup saved (phone):', { inboxId, phoneFormat: phoneFormatId, chatId });
+    // console.log('[worker][cache] Chat lookup saved (phone):', { inboxId, phoneFormat: phoneFormatId, chatId });
   }
 
   // Cache under LID format if available
   if (lidFormatId) {
     const lidKey = k.chatLookup(inboxId, lidFormatId);
     await rSet(lidKey, chatId, cacheDuration);
-    console.log('[worker][cache] Chat lookup saved (LID):', { inboxId, lidFormat: lidFormatId, chatId });
+    // console.log('[worker][cache] Chat lookup saved (LID):', { inboxId, lidFormat: lidFormatId, chatId });
   }
 }
 
@@ -1565,18 +1565,18 @@ async function handleMetaInboundMessages(args: {
       continue;
     }
 
-    console.log("[META][inbound] Processing message", {
-      wamid,
-      participantWaId,
-      extractedPhone,
-      extractedLid,
-      remotePhone,
-      pushname,
-      participantName: metaContext.participantName,
-      isGroupMessage,
-      inboxId,
-      messageType: m?.type, // Log message type
-    });
+    // console.log("[META][inbound] Processing message", {
+    //   wamid,
+    //   participantWaId,
+    //   extractedPhone,
+    //   extractedLid,
+    //   remotePhone,
+    //   pushname,
+    //   participantName: metaContext.participantName,
+    //   isGroupMessage,
+    //   inboxId,
+    //   messageType: m?.type, // Log message type
+    // });
 
     // Ensure chat (group or direct)
     let chatId: string;
@@ -1589,7 +1589,7 @@ async function handleMetaInboundMessages(args: {
         groupAvatarUrl: metaContext.groupAvatarUrl ?? null,
       });
       chatId = ensured.chatId;
-      console.log("[META][inbound] Group chat ensured", { chatId, groupId: metaContext.groupId });
+      // console.log("[META][inbound] Group chat ensured", { chatId, groupId: metaContext.groupId });
     } else {
       const ensured = await ensureLeadCustomerChat({
         inboxId,
@@ -1600,14 +1600,14 @@ async function handleMetaInboundMessages(args: {
         lid: extractedLid,  // ✅ Passar o LID extraído
       });
       chatId = ensured.chatId;
-      console.log("[META][inbound] Direct chat ensured", {
-        chatId,
-        customerId: ensured.customerId,
-        leadId: ensured.leadId,
-        phone: remotePhone,
-        rawPhone: participantWaId,
-        lid: extractedLid,  // ✅ Log do LID
-      });
+      // console.log("[META][inbound] Direct chat ensured", {
+      //   chatId,
+      //   customerId: ensured.customerId,
+      //   leadId: ensured.leadId,
+      //   phone: remotePhone,
+      //   rawPhone: participantWaId,
+      //   lid: extractedLid,  // ✅ Log do LID
+      // });
     }
 
     const { content, type, caption, interactiveContent } = extractContentAndType(m);
@@ -1700,7 +1700,7 @@ async function handleMetaInboundMessages(args: {
           last_message_type: type,
         },
       });
-      console.log("[META][inbound][DRAFT] Optimistic message emitted", { chatId, wamid });
+      // console.log("[META][inbound][DRAFT] Optimistic message emitted", { chatId, wamid });
     } catch (err) {
       console.error("[META][inbound][DRAFT] Failed to emit draft", { chatId, wamid, error: err });
     }
@@ -1737,11 +1737,11 @@ async function handleMetaInboundMessages(args: {
           view_status: "DELIVERED", // Update from DRAFT to DELIVERED
         },
       });
-      console.log("[META][inbound][CONFIRMED] Draft replaced with real message", {
-        chatId,
-        messageId: inserted.id,
-        draftId: `draft-${wamid}`,
-      });
+      // console.log("[META][inbound][CONFIRMED] Draft replaced with real message", {
+      //   chatId,
+      //   messageId: inserted.id,
+      //   draftId: `draft-${wamid}`,
+      // });
     } catch (err) {
       console.error("[META][inbound][CONFIRMED] Failed to emit confirmed message", {
         chatId,
@@ -1761,10 +1761,10 @@ async function handleMetaInboundMessages(args: {
         [chatId]
       );
       if (updated) {
-        console.log("[UNREAD_COUNT][increment][META] Chat incremented", {
-          chatId,
-          newCount: updated.unread_count,
-        });
+        // console.log("[UNREAD_COUNT][increment][META] Chat incremented", {
+        //   chatId,
+        //   newCount: updated.unread_count,
+        // });
       }
     } catch (err) {
       console.warn("[UNREAD_COUNT][increment][META] Failed to increment", {
@@ -1838,16 +1838,16 @@ async function handleMetaInboundMessages(args: {
           const windowSec = Number(agent?.aggregation_window_sec || 0);
           const enabled = Boolean(agent?.aggregation_enabled) && windowSec > 0;
           const maxBatch = agent?.max_batch_messages ?? null;
-          console.log("[AGENT][AUTO-REPLY][META] 📥 Message received", {
-            chatId,
-            bodyLength: bodyText.length,
-            aggregationEnabled: enabled,
-            windowSec,
-            maxBatch,
-            agentId: chatAgentId,
-          });
+          // console.log("[AGENT][AUTO-REPLY][META] 📥 Message received", {
+          //   chatId,
+          //   bodyLength: bodyText.length,
+          //   aggregationEnabled: enabled,
+          //   windowSec,
+          //   maxBatch,
+          //   agentId: chatAgentId,
+          // });
           if (enabled) {
-            console.log("[AGENT][AUTO-REPLY][META] 📦 Enqueueing to buffer", { chatId });
+            // console.log("[AGENT][AUTO-REPLY][META] 📦 Enqueueing to buffer", { chatId });
             await bufferEnqueue({
               companyId,
               inboxId,
@@ -2455,15 +2455,15 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Unwrap common WAHA envelope shapes
   const msg = payload?.data ?? payload?.message ?? payload;
   
-  console.log('[WAHA][worker] 📥 Raw payload received:', {
-    hasPayloadData: !!payload?.data,
-    hasPayloadMessage: !!payload?.message,
-    msgKeys: msg ? Object.keys(msg).slice(0, 20) : [],
-    msgType: msg?.type,
-    msgHasMedia: msg?.hasMedia,
-    msgMediaKeys: msg?.media ? Object.keys(msg.media) : null,
-    fullPayload: JSON.stringify(payload).substring(0, 500) // Primeiros 500 chars
-  });
+  // console.log('[WAHA][worker] 📥 Raw payload received:', {
+  //   hasPayloadData: !!payload?.data,
+  //   hasPayloadMessage: !!payload?.message,
+  //   msgKeys: msg ? Object.keys(msg).slice(0, 20) : [],
+  //   msgType: msg?.type,
+  //   msgHasMedia: msg?.hasMedia,
+  //   msgMediaKeys: msg?.media ? Object.keys(msg.media) : null,
+  //   fullPayload: JSON.stringify(payload).substring(0, 500) // Primeiros 500 chars
+  // });
 
   const messageId = String(msg?.id || "");
   if (messageId) {
@@ -2521,11 +2521,11 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       resolvedPhone = resolved.phone;
       resolvedLid = resolved.lid;
       
-      console.log('[WAHA][worker] 🔍 Resolved contact LID/Phone from API:', {
-        chatJid,
-        resolvedPhone,
-        resolvedLid,
-      });
+      // console.log('[WAHA][worker] 🔍 Resolved contact LID/Phone from API:', {
+      //   chatJid,
+      //   resolvedPhone,
+      //   resolvedLid,
+      // });
     } catch (error) {
       console.warn('[WAHA][worker] ⚠️ Failed to resolve LID/Phone, using local extraction', {
         chatJid,
@@ -2542,20 +2542,20 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   const phoneForContact = resolvedPhone || phoneForLead;
   const lidForContact = resolvedLid || null;
   
-  console.log('[WAHA][worker] 📱 Contact identification:', { 
-    chatJid,
-    phoneForContact,
-    lidForContact,
-    isGroupChat: isGroupChat_check,
-    messageId 
-  });
+  // console.log('[WAHA][worker] 📱 Contact identification:', { 
+  //   chatJid,
+  //   phoneForContact,
+  //   lidForContact,
+  //   isGroupChat: isGroupChat_check,
+  //   messageId 
+  // });
 
   // ========== OPTIMIZATION: Try cache first ==========
   let cachedChatId = await getCachedChatId(job.inboxId, chatJid);
   
   if (cachedChatId) {
     chatId = cachedChatId;
-    console.log('[WAHA][worker] ⚡ Chat found in cache:', { chatId, chatJid });
+    // console.log('[WAHA][worker] ⚡ Chat found in cache:', { chatId, chatJid });
   } else if (isGroupChat) {
     groupMeta = extractWahaGroupMetadata(payload);
     rememberAvatar(job.companyId, chatJid, groupMeta?.avatarUrl ?? null);
@@ -2595,11 +2595,11 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     
     // Cache using bi-directional mapping
     await cacheChatLookupBiDirectional(job.inboxId, chatId, phoneFormatId, lidFormatId);
-    console.log('[WAHA][worker] 🔐 Chat cached with bi-directional mapping:', {
-      chatId,
-      phoneFormat: phoneFormatId,
-      lidFormat: lidFormatId,
-    });
+    // console.log('[WAHA][worker] 🔐 Chat cached with bi-directional mapping:', {
+    //   chatId,
+    //   phoneFormat: phoneFormatId,
+    //   lidFormat: lidFormatId,
+    // });
   }
   
   // Load group metadata if from cache and is group
@@ -2627,11 +2627,11 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
       if (existingMessage) {
         // Message already exists - this is an echo from system-sent message
-        console.log('[WAHA][fromMe=true] Message already exists (system echo), updating status only', {
-          messageId,
-          existingId: existingMessage.id,
-          chatId,
-        });
+        // console.log('[WAHA][fromMe=true] Message already exists (system echo), updating status only', {
+        //   messageId,
+        //   existingId: existingMessage.id,
+        //   chatId,
+        // });
 
         // Update status if changed
         if (ackStatus) {
@@ -2660,11 +2660,11 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       }
 
       // Message doesn't exist - this is from agent's phone
-      console.log('[WAHA][fromMe=true] New message from agent phone (not system)', {
-        messageId,
-        chatJid,
-        chatId,
-      });
+      // console.log('[WAHA][fromMe=true] New message from agent phone (not system)', {
+      //   messageId,
+      //   chatJid,
+      //   chatId,
+      // });
       sentFromDevice = 'whatsapp'; // Mark as sent from WhatsApp phone
       
     } catch (error) {
@@ -2682,16 +2682,16 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Extract media from WAHA payload but defer processing to background
   let mediaObj: any = msg?.media || null;
   
-  console.log('[WAHA][worker] 📦 Media object extraction:', {
-    hasMsgMedia: !!msg?.media,
-    hasMsgFile: !!msg?.file,
-    hasMsgUrl: !!msg?.url,
-    msgMedia: msg?.media,
-    msgFile: msg?.file,
-    msgUrl: msg?.url,
-    msgFilename: msg?.filename,
-    msgMimetype: msg?.mimetype
-  });
+  // console.log('[WAHA][worker] 📦 Media object extraction:', {
+  //   hasMsgMedia: !!msg?.media,
+  //   hasMsgFile: !!msg?.file,
+  //   hasMsgUrl: !!msg?.url,
+  //   msgMedia: msg?.media,
+  //   msgFile: msg?.file,
+  //   msgUrl: msg?.url,
+  //   msgFilename: msg?.filename,
+  //   msgMimetype: msg?.mimetype
+  // });
   
   if (!mediaObj && msg?.file) {
     // Outbound-style schema echoed back or custom webhook shape
@@ -2716,23 +2716,23 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   const hasMedia = Boolean(msg?.hasMedia || mediaObj);
   
-  console.log('[WAHA][worker] 🔍 Media detection:', {
-    hasMedia,
-    msgHasMedia: msg?.hasMedia,
-    hasMediaObj: !!mediaObj,
-    mediaObjKeys: mediaObj ? Object.keys(mediaObj) : [],
-    messageId,
-    chatJid
-  });
+  // console.log('[WAHA][worker] 🔍 Media detection:', {
+  //   hasMedia,
+  //   msgHasMedia: msg?.hasMedia,
+  //   hasMediaObj: !!mediaObj,
+  //   mediaObjKeys: mediaObj ? Object.keys(mediaObj) : [],
+  //   messageId,
+  //   chatJid
+  // });
 
   // Determine if inbox requires sensitive media handling
   const isSensitive = await checkIfInboxSensitive(job.inboxId);
   
-  console.log('[WAHA][worker] Media sensitivity:', {
-    inboxId: job.inboxId,
-    isSensitive,
-    hasMedia
-  });
+  // console.log('[WAHA][worker] Media sensitivity:', {
+  //   inboxId: job.inboxId,
+  //   isSensitive,
+  //   hasMedia
+  // });
   
   const messageType = deriveWahaMessageType(msg);
   const body =
@@ -2802,13 +2802,13 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // Extract caption from message (WAHA sends caption in body for media messages)
   const caption = hasMedia && body && body !== `[${messageType}]` ? body : null;
   
-  console.log('[WAHA][worker] 📝 Caption extraction:', {
-    hasMedia,
-    body,
-    messageType,
-    extractedCaption: caption,
-    messageId
-  });
+  // console.log('[WAHA][worker] 📝 Caption extraction:', {
+  //   hasMedia,
+  //   body,
+  //   messageType,
+  //   extractedCaption: caption,
+  //   messageId
+  // });
 
   // ========== STEP 1: INSERT MESSAGE WITHOUT MEDIA (FAST PATH) ==========
   const upsertResult = await upsertChatMessage({
@@ -2928,22 +2928,22 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   // ========== STEP 2: EMIT SOCKET IMMEDIATELY (BEFORE MEDIA PROCESSING) ==========
   try {
-    console.log("[worker][WAHA] 🔄 Starting socket emission process:", {
-      chatId,
-      companyId: job.companyId,
-      inboxId: job.inboxId,
-      messageId: mappedMessage.id,
-      sender_type: mappedMessage.sender_type,
-      body_preview: mappedMessage.body?.substring(0, 50),
-    });
+    // console.log("[worker][WAHA] 🔄 Starting socket emission process:", {
+    //   chatId,
+    //   companyId: job.companyId,
+    //   inboxId: job.inboxId,
+    //   messageId: mappedMessage.id,
+    //   sender_type: mappedMessage.sender_type,
+    //   body_preview: mappedMessage.body?.substring(0, 50),
+    // });
 
     const chatSummary = await fetchChatUpdateForSocket(chatId);
     
-    console.log("[worker][WAHA] 📊 Chat summary fetched:", {
-      chatId,
-      hasSummary: !!chatSummary,
-      summary_keys: chatSummary ? Object.keys(chatSummary) : [],
-    });
+    // console.log("[worker][WAHA] 📊 Chat summary fetched:", {
+    //   chatId,
+    //   hasSummary: !!chatSummary,
+    //   summary_keys: chatSummary ? Object.keys(chatSummary) : [],
+    // });
 
     const chatUpdatePayload = chatSummary
       ? {
@@ -2966,14 +2966,14 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           companyId: job.companyId,
         };
 
-    console.log("[worker][WAHA] 📦 Socket payload prepared:", {
-      chatId,
-      companyId: job.companyId,
-      has_chatUpdate: true,
-      chatUpdate_companyId: chatUpdatePayload.companyId,
-      chatUpdate_last_message_from: chatUpdatePayload.last_message_from,
-      chatUpdate_last_message_preview: chatUpdatePayload.last_message?.substring(0, 30),
-    });
+    // console.log("[worker][WAHA] 📦 Socket payload prepared:", {
+    //   chatId,
+    //   companyId: job.companyId,
+    //   has_chatUpdate: true,
+    //   chatUpdate_companyId: chatUpdatePayload.companyId,
+    //   chatUpdate_last_message_from: chatUpdatePayload.last_message_from,
+    //   chatUpdate_last_message_preview: chatUpdatePayload.last_message?.substring(0, 30),
+    // });
 
     const socketSuccess = await emitSocketWithRetry("socket.livechat.inbound", {
       kind: "livechat.inbound.message",
@@ -3048,9 +3048,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
           
           if (admins && admins.length > 0) {
             targetUserIds.push(...admins.map(a => a.id));
-            console.log(`[worker][WAHA] 🔔 Will notify ${admins.length} admins/managers`);
+            // console.log(`[worker][WAHA] 🔔 Will notify ${admins.length} admins/managers`);
           } else {
-            console.log(`[worker][WAHA] ⚠️ No admins found for company ${job.companyId}`);
+            // console.log(`[worker][WAHA] ⚠️ No admins found for company ${job.companyId}`);
           }
         }
 
@@ -3081,7 +3081,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
                 isNew: true
               }
             });
-            console.log(`[worker][WAHA] 📨 Socket event sent for user ${userId}`);
+            // console.log(`[worker][WAHA] 📨 Socket event sent for user ${userId}`);
           } catch (innerErr) {
             console.error(`[worker][WAHA] ❌ Failed to notify user ${userId}:`, innerErr);
           }
@@ -4838,6 +4838,7 @@ async function main(): Promise<void> {
       break;
     case "outbound":
       await startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH);
+      startCronJobs();
       break;
     case "all":
     default:
@@ -4846,6 +4847,7 @@ async function main(): Promise<void> {
         startInboundMediaWorkers(INBOUND_MEDIA_WORKERS, INBOUND_MEDIA_PREFETCH),
         startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH),
       ]);
+      startCronJobs();
       console.log(
         `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) running.`,
       );
@@ -5735,24 +5737,29 @@ async function tickCampaigns() {
 
 // Task reminders - roda a cada 1 minuto (DEBUG)
 import { checkAndSendReminders } from "./jobs/taskReminders.js";
-setInterval(() => {
-  console.log("[worker] ⏰ Triggering task reminder check...");
-  runWithDistributedLock("task:reminders", checkAndSendReminders, 50);
-}, 60_000);
-
-// Auto-criação de tarefas - roda a cada 6 horas
 import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";
-setInterval(() => runWithDistributedLock("auto:task", runAutoTaskCreation, 21000), 6 * 60 * 60_000);
-runAutoTaskCreation(); // Executar imediatamente na inicialização
-
-// Auto-follow-up de agentes - roda a cada 2 minutos
 import { runAutoAgentFollowup } from "./jobs/autoAgentFollowup.js";
-setInterval(() => runWithDistributedLock("auto:followup", runAutoAgentFollowup, 100), 2 * 60_000);
-runAutoAgentFollowup().catch(err => console.error("[worker] autoAgentFollowup init error:", err));
 
-// roda a cada 60s
-setInterval(tickCampaigns, 60_000);
-setInterval(() => runWithDistributedLock("sync:groups", syncWahaGroupMetadata, 240), 300_000);
+function startCronJobs() {
+  console.log("[worker] 🕒 Starting CRON jobs (Campaigns, Reminders, Auto-Tasks)...");
+
+  setInterval(() => {
+    console.log("[worker] ⏰ Triggering task reminder check...");
+    runWithDistributedLock("task:reminders", checkAndSendReminders, 50);
+  }, 60_000);
+
+  // Auto-criação de tarefas - roda a cada 6 horas
+  setInterval(() => runWithDistributedLock("auto:task", runAutoTaskCreation, 21000), 6 * 60 * 60_000);
+  runAutoTaskCreation(); // Executar imediatamente na inicialização
+
+  // Auto-follow-up de agentes - roda a cada 2 minutos
+  setInterval(() => runWithDistributedLock("auto:followup", runAutoAgentFollowup, 100), 2 * 60_000);
+  runAutoAgentFollowup().catch(err => console.error("[worker] autoAgentFollowup init error:", err));
+
+  // roda a cada 60s
+  setInterval(tickCampaigns, 60_000);
+  setInterval(() => runWithDistributedLock("sync:groups", syncWahaGroupMetadata, 240), 300_000);
+}
 
 if (!process.env.SKIP_WORKER_AUTOSTART) {
   main().catch((e) => {

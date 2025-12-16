@@ -210,6 +210,15 @@ function buildPrompt(agent: AgentRow | null, contextHistory: ChatTurn[], userMes
   // Instrução de segurança para erros de ferramentas
   sysParts.push("SYSTEM NOTE: Se o resultado de uma ferramenta (tool) for um erro (ex: HTTP 404, JSON error, Internal Error), NÃO tente solucionar esse erro técnico com o usuário. Apenas peça desculpas e diga que houve uma falha interna ao processar o pedido.");
 
+  // Política de uso de ferramentas (Forçar uso de interatividade)
+  sysParts.push(`
+IMPORTANT TOOL USAGE POLICY:
+1. ALWAYS check if a tool is available to perform the action before writing a text response.
+2. If a tool exists to send a specific type of message (like interactive buttons, lists, or templates), YOU MUST USE THE TOOL instead of describing the options in text.
+3. Do not ask for permission to use a tool if the user's intent implies it (e.g., if they need to choose an option, send the options button immediately).
+4. When using a tool, do not write a text message explaining what you are doing unless necessary. Let the tool's output speak for itself.
+`.trim());
+
   const system: ChatTurn = { role: "system", content: sysParts.join("\n\n").trim() || "Você é um atendente útil, breve e educado." };
   
   // Limitar histórico Redis aos últimos 12 turnos (excluindo system)

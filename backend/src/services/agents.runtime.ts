@@ -197,7 +197,7 @@ async function getOpenAISecretForCompany(companyId: string, integrationId?: stri
   return { apiKey: envKey, defaultModel: process.env.OPENAI_MODEL || null };
 }
 
-function buildPrompt(agent: AgentRow | null, contextHistory: ChatTurn[], userMessage: string): ChatTurn[] {
+function buildPrompt(agent: AgentRow | null, contextHistory: ChatTurn[], userMessage: string, tools?: any[]): ChatTurn[] {
   const sysParts: string[] = [];
   if (agent?.description) sysParts.push(String(agent.description));
   if (agent?.model_params && typeof agent.model_params === "object") {
@@ -217,6 +217,29 @@ IMPORTANT TOOL USAGE POLICY:
 2. If a tool exists to send a specific type of message (like interactive buttons, lists, or templates), YOU MUST USE THE TOOL instead of describing the options in text.
 3. Do not ask for permission to use a tool if the user's intent implies it (e.g., if they need to choose an option, send the options button immediately).
 4. When using a tool, do not write a text message explaining what you are doing unless necessary. Let the tool's output speak for itself.
+`.trim());
+
+  // Injetar descrições das ferramentas disponíveis para reforçar o uso
+  if (tools && tools.length > 0) {
+    const toolDescriptions = tools.map((t: any) => `- ${t.tool.key}: ${t.tool.description || t.tool.name}`).join("\n");
+    sysParts.push(`AVAILABLE TOOLS:\n${toolDescriptions}\n\nREMINDER: You must use these tools whenever applicable.`);
+    
+    // Instrução específica para botões
+    if (tools.some((t: any) => t.tool.key === 'send_interactive_buttons')) {
+      sysParts.push("SPECIFIC INSTRUCTION: You have access to 'send_interactive_buttons'. Use it whenever you need to offer choices to the user (e.g., menu options, yes/no questions). Do NOT write lists in text.");
+    }
+    // Instrução específica para listas
+    if (tools.some((t: any) => t.tool.key === 'send_interactive_list')) {
+      sysParts.push("SPECIFIC INSTRUCTION: You have access to 'send_interactive_list'. Use it whenever you need to offer a menu or a list of options to the user. Do NOT write lists in text.");
+    }
+  }
+
+  // Regra de exceção para formatos de saída JSON (conflito comum)
+  sysParts.push(`
+CRITICAL EXCEPTION FOR OUTPUT FORMAT:
+If your instructions mention a specific JSON output format (like {"message": [...]}), YOU MUST IGNORE THAT FORMAT when calling a tool.
+- If you use a tool: DO NOT output JSON text. Just generate the tool call.
+- If you reply with text: Follow the required JSON format.
 `.trim());
 
   const system: ChatTurn = { role: "system", content: sysParts.join("\n\n").trim() || "Você é um atendente útil, breve e educado." };
@@ -306,11 +329,12 @@ export async function runAgentReply(opts: {
   // 1. Buscar contexto do Redis
   const contextHistory = await getAgentContext(opts.chatId);
 
-  // 2. Construir mensagens iniciais (usando mensagem processada com mídia)
-  const messages = buildPrompt(agent, contextHistory, processedMessage);
-
-  // 3. Buscar ferramentas habilitadas do agente
+  // 2. Buscar ferramentas habilitadas do agente
   const agentTools = await listAgentTools({ agent_id: agent.id, is_enabled: true });
+
+  // 3. Construir mensagens iniciais (usando mensagem processada com mídia)
+  const messages = buildPrompt(agent, contextHistory, processedMessage, agentTools);
+
   // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
   function normalizeParametersSchema(raw: any): any | undefined {
     try {

@@ -199,17 +199,20 @@ export function registerAgentsRoutes(app: Application) {
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
       if (!companyId || !agentId) return res.status(400).json({ error: "Parâmetros obrigatórios" });
 
-      // Buscar ferramentas do agente para encontrar o token
-      const agentTools = await listAgentTools({ agent_id: agentId });
-      
-      // Procurar token em overrides de ferramentas HTTP
-      let token: string | null = null;
-      for (const at of agentTools) {
-        if (at.tool.handler_type === 'HTTP' && at.overrides?.headers?.Authorization) {
-          const auth = at.overrides.headers.Authorization as string;
-          if (auth.startsWith("Bearer ")) {
-            token = auth.replace("Bearer ", "");
-            break; // Encontrou um, assume que é o mesmo para todos
+      // 1. Tentar buscar do próprio agente (nova coluna api_token)
+      const agent = await getAgent(companyId, agentId);
+      let token: string | null = agent?.api_token || null;
+
+      // 2. Se não tiver, procurar token em overrides de ferramentas HTTP (fallback legado)
+      if (!token) {
+        const agentTools = await listAgentTools({ agent_id: agentId });
+        for (const at of agentTools) {
+          if (at.tool.handler_type === 'HTTP' && at.overrides?.headers?.Authorization) {
+            const auth = at.overrides.headers.Authorization as string;
+            if (auth.startsWith("Bearer ")) {
+              token = auth.replace("Bearer ", "");
+              break; 
+            }
           }
         }
       }
@@ -231,7 +234,19 @@ export function registerAgentsRoutes(app: Application) {
       // 1. Gerar novo token
       const newToken = generateAgentToken(agentId);
 
-      // 2. Atualizar todas as ferramentas HTTP deste agente
+      // 2. Salvar token na tabela agents (persistência garantida)
+      const { error: updateError } = await supabaseAdmin
+        .from("agents")
+        .update({ api_token: newToken })
+        .eq("id", agentId)
+        .eq("company_id", companyId);
+
+      if (updateError) {
+        console.error("Erro ao salvar token do agente:", updateError);
+        throw new Error("Falha ao salvar token no banco de dados");
+      }
+
+      // 3. Atualizar todas as ferramentas HTTP deste agente (para manter compatibilidade)
       const agentTools = await listAgentTools({ agent_id: agentId });
       let updatedCount = 0;
 

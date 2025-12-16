@@ -2,7 +2,7 @@
 import type { AgentInput } from "../types/integrations.ts";
 
 const TABLE = "agents";
-const SELECT_COLUMNS = "id, company_id, name, description, status, integration_openai_id, model, model_params, aggregation_enabled, aggregation_window_sec, max_batch_messages, reply_if_idle_sec, media_config, tools_policy, allow_handoff, ignore_group_messages, enabled_inbox_ids, transcription_model, vision_model, created_at, updated_at";
+const SELECT_COLUMNS = "id, company_id, name, description, status, integration_openai_id, model, model_params, aggregation_enabled, aggregation_window_sec, max_batch_messages, reply_if_idle_sec, media_config, tools_policy, allow_handoff, ignore_group_messages, enabled_inbox_ids, transcription_model, vision_model, api_token, created_at, updated_at";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -26,6 +26,7 @@ type AgentRowInternal = {
   enabled_inbox_ids: string[] | null;
   transcription_model?: string | null;
   vision_model?: string | null;
+  api_token?: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -50,6 +51,7 @@ export type AgentRow = {
   enabled_inbox_ids: string[];
   transcription_model?: string | null;
   vision_model?: string | null;
+  api_token?: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -75,6 +77,7 @@ function mapAgent(row: AgentRowInternal): AgentRow {
     enabled_inbox_ids: Array.isArray(row.enabled_inbox_ids) ? row.enabled_inbox_ids : [],
     transcription_model: row.transcription_model ?? null,
     vision_model: row.vision_model ?? null,
+    api_token: row.api_token ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at ?? null,
   };

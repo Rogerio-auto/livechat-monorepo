@@ -305,24 +305,34 @@ export async function runAgentReply(opts: {
   // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
   function normalizeParametersSchema(raw: any): any | undefined {
     try {
+      // Se for string, tenta fazer parse
+      let schema = raw;
+      if (typeof raw === "string") {
+        try {
+          schema = JSON.parse(raw);
+        } catch (e) {
+          console.warn("[AGENT][RUNTIME] Failed to parse tool schema JSON", { raw });
+        }
+      }
+
       // Already a valid JSON Schema object
-      if (raw && typeof raw === "object") {
+      if (schema && typeof schema === "object") {
         // Case: mistakenly stored full OpenAI tool object
-        if (raw.type === "function" && raw.function && typeof raw.function === "object") {
-          const p = (raw.function as any).parameters;
+        if (schema.type === "function" && schema.function && typeof schema.function === "object") {
+          const p = (schema.function as any).parameters;
           return p && typeof p === "object" ? p : { type: "object", properties: {} };
         }
         // Case: mistakenly stored { parameters: {...} }
-        if (raw.parameters && typeof raw.parameters === "object" && !raw.type) {
-          return raw.parameters;
+        if (schema.parameters && typeof schema.parameters === "object" && !schema.type) {
+          return schema.parameters;
         }
         // If it has a top-level 'function' field by mistake
-        if (raw.function && typeof raw.function === "object" && raw.function.parameters) {
-          return raw.function.parameters;
+        if (schema.function && typeof schema.function === "object" && schema.function.parameters) {
+          return schema.function.parameters;
         }
         // Ensure it is an object schema
-        if (raw.type === "object" || raw.properties || raw.required) {
-          return { type: "object", additionalProperties: true, ...raw };
+        if (schema.type === "object" || schema.properties || schema.required) {
+          return { type: "object", additionalProperties: true, ...schema };
         }
       }
       // Fallback: allow any object

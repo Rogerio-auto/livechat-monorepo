@@ -4,7 +4,8 @@ import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin, supabaseAnon } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
-import { getRedis, rSet } from "../lib/redis.ts";
+import { getRedis, rSet, clearCompanyListCaches, clearMessageCache } from "../lib/redis.ts";
+import db from "../pg.ts";
 
 // Middleware para verificar se é ADMIN
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -523,6 +524,46 @@ export function registerCompanyRoutes(app: express.Application) {
           await redis.del(...keys);
           deletedCount += keys.length;
         }
+      }
+
+      // Limpar caches de lista (LiveChat)
+      await clearCompanyListCaches(companyId);
+
+      // Limpar contexto dos agentes e caches de mensagens
+      try {
+        const chats = await db.any<{ id: string }>(
+          `SELECT id FROM chats WHERE company_id = $1`,
+          [companyId]
+        );
+        
+        if (chats.length > 0) {
+          const chatIds = chats.map(c => c.id);
+          
+          // 1. Agent Context & Chat Details
+          const keysToDelete = chatIds.flatMap(id => [
+            `agent:context:${id}`, // Memória do agente
+            `lc:chat:${id}`        // Cache de detalhes do chat
+          ]);
+
+          // Deletar em batches
+          const BATCH_SIZE = 500;
+          for (let i = 0; i < keysToDelete.length; i += BATCH_SIZE) {
+              const batch = keysToDelete.slice(i, i + BATCH_SIZE);
+              if (batch.length > 0) {
+                const deleted = await redis.del(...batch);
+                deletedCount += deleted;
+              }
+          }
+
+          // 2. Limpar cache de mensagens (mais pesado, fazer em background ou sequencial)
+          // Vamos limpar apenas os sets de mensagens para invalidar
+          for (const chatId of chatIds) {
+             // Não vamos aguardar cada um individualmente para não bloquear muito tempo
+             clearMessageCache(chatId).catch(err => console.warn(`Failed to clear msg cache for ${chatId}`, err));
+          }
+        }
+      } catch (err) {
+        console.error(`[ADMIN] Erro ao limpar contexto de agentes:`, err);
       }
       
       console.log(`[ADMIN] Cache reset for company ${companyId}. Deleted ${deletedCount} keys.`);

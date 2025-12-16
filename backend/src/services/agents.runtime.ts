@@ -424,6 +424,11 @@ export async function runAgentReply(opts: {
   };
 
   // 5. Loop de function calling
+  // Array para armazenar os novos turnos gerados nesta execução (User + Assistant calls + Tool results + Final Assistant)
+  const executionTurns: ChatTurn[] = [
+    { role: "user", content: opts.userMessage }
+  ];
+
   let resp = await client.chat.completions.create({
     model,
     messages: messages as any,
@@ -447,12 +452,14 @@ export async function runAgentReply(opts: {
       tools: toolCalls.map((tc: any) => tc.function.name)
     });
 
-    // Adicionar mensagem do assistente ao histórico
-    messages.push({
+    // Adicionar mensagem do assistente (com tool_calls) ao histórico local e de execução
+    const assistantMsg: any = {
       role: "assistant",
       content: resp.choices[0].message.content || "",
-      ...resp.choices[0].message as any
-    });
+      tool_calls: resp.choices[0].message.tool_calls
+    };
+    messages.push(assistantMsg);
+    executionTurns.push(assistantMsg);
 
     // Executar cada tool call
     const toolResults = await Promise.all(
@@ -467,6 +474,7 @@ export async function runAgentReply(opts: {
           return {
             tool_call_id: tc.id,
             role: "tool" as const,
+            name: tc.function.name,
             content: JSON.stringify({ error: `Tool '${tc.function.name}' not found or not enabled` })
           };
         }
@@ -489,6 +497,7 @@ export async function runAgentReply(opts: {
           return {
             tool_call_id: tc.id,
             role: "tool" as const,
+            name: tc.function.name,
             content: JSON.stringify(result)
           };
         } catch (error: any) {
@@ -500,6 +509,7 @@ export async function runAgentReply(opts: {
           return {
             tool_call_id: tc.id,
             role: "tool" as const,
+            name: tc.function.name,
             content: JSON.stringify({ error: error.message || String(error) })
           };
         }
@@ -508,6 +518,7 @@ export async function runAgentReply(opts: {
 
     // Adicionar resultados ao histórico
     messages.push(...toolResults as any);
+    executionTurns.push(...toolResults as any);
 
     console.log("[AGENT][RUNTIME] 🔄 Continuing conversation after tools", {
       callId,
@@ -539,12 +550,9 @@ export async function runAgentReply(opts: {
     iterations,
   });
 
-  // 6. Salvar contexto atualizado no Redis
-  const newTurns: ChatTurn[] = [
-    { role: "user", content: opts.userMessage },
-    { role: "assistant", content: reply }
-  ];
-  await appendMultipleToContext(opts.chatId, newTurns);
+  // 6. Salvar contexto atualizado no Redis (incluindo tool calls intermediários)
+  executionTurns.push({ role: "assistant", content: reply });
+  await appendMultipleToContext(opts.chatId, executionTurns);
 
   return { reply, usage: resp.usage ?? undefined, agentId: agent.id, model };
 }

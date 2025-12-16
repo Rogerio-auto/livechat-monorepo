@@ -365,6 +365,10 @@ export async function runAgentReply(opts: {
     ? agentTools.map(at => {
         const base = normalizeParametersSchema(at.tool.schema);
         const parameters = stripCustomerIdIfCustomersUpdate(base, at);
+        
+        // Log para debug
+        console.log(`[AGENT][RUNTIME] Tool definition for ${at.tool.key}:`, JSON.stringify(parameters));
+
         return {
           type: "function",
           function: {

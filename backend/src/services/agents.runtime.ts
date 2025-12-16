@@ -272,14 +272,14 @@ export async function runAgentReply(opts: {
 }): Promise<{ reply: string; usage?: any; agentId?: string | null; model?: string; skipped?: boolean; reason?: string }>
 {
   const callId = `${opts.chatId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  console.log("[AGENT][RUNTIME] 🚀 runAgentReply called", {
-    callId,
-    chatId: opts.chatId,
-    companyId: opts.companyId,
-    agentId: opts.agentId,
-    inboxId: opts.inboxId,
-    messageLength: opts.userMessage?.length || 0,
-  });
+  // console.log("[AGENT][RUNTIME] 🚀 runAgentReply called", {
+  //   callId,
+  //   chatId: opts.chatId,
+  //   companyId: opts.companyId,
+  //   agentId: opts.agentId,
+  //   inboxId: opts.inboxId,
+  //   messageLength: opts.userMessage?.length || 0,
+  // });
 
   const agent = await getAgent(opts.companyId, opts.agentId);
   if (!agent) {
@@ -287,12 +287,12 @@ export async function runAgentReply(opts: {
     throw new Error("Nenhum agente ativo/configurado para esta empresa/inbox");
   }
 
-  console.log("[AGENT][RUNTIME] ✅ Agent loaded", {
-    callId,
-    agentId: agent.id,
-    agentName: agent.name,
-    hasOpenAIIntegration: !!agent.integration_openai_id,
-  });
+  // console.log("[AGENT][RUNTIME] ✅ Agent loaded", {
+  //   callId,
+  //   agentId: agent.id,
+  //   agentName: agent.name,
+  //   hasOpenAIIntegration: !!agent.integration_openai_id,
+  // });
 
   // VALIDAÇÃO: Verificar se há integração OpenAI configurada
   if (!agent.integration_openai_id) {
@@ -409,7 +409,7 @@ export async function runAgentReply(opts: {
         const parameters = stripCustomerIdIfCustomersUpdate(base, at);
         
         // Log para debug
-        console.log(`[AGENT][RUNTIME] Tool definition for ${at.tool.key}:`, JSON.stringify(parameters));
+        // console.log(`[AGENT][RUNTIME] Tool definition for ${at.tool.key}:`, JSON.stringify(parameters));
 
         return {
           type: "function",
@@ -454,12 +454,12 @@ export async function runAgentReply(opts: {
     const toolCalls = resp.choices[0].message.tool_calls as any[];
     if (!toolCalls || toolCalls.length === 0) break;
 
-    console.log("[AGENT][RUNTIME] 🔧 Tool calls detected", {
-      callId,
-      iteration: iterations,
-      toolCallCount: toolCalls.length,
-      tools: toolCalls.map((tc: any) => tc.function.name)
-    });
+    // console.log("[AGENT][RUNTIME] 🔧 Tool calls detected", {
+    //   callId,
+    //   iteration: iterations,
+    //   toolCallCount: toolCalls.length,
+    //   tools: toolCalls.map((tc: any) => tc.function.name)
+    // });
 
     // Adicionar mensagem do assistente (com tool_calls) ao histórico local e de execução
     const assistantMsg: any = {
@@ -490,19 +490,19 @@ export async function runAgentReply(opts: {
 
         try {
           const params = JSON.parse(tc.function.arguments);
-          console.log("[AGENT][RUNTIME] 🛠️ Executing tool", {
-            callId,
-            toolName: tc.function.name,
-            params
-          });
+          // console.log("[AGENT][RUNTIME] 🛠️ Executing tool", {
+          //   callId,
+          //   toolName: tc.function.name,
+          //   params
+          // });
           const result = await executeTool(tool.tool, tool, params, toolContext);
-          console.log("[AGENT][RUNTIME] ✅ Tool execution success", {
-            callId,
-            toolName: tc.function.name,
-            success: result.success,
-            hasData: !!result.data,
-            error: result.error
-          });
+          // console.log("[AGENT][RUNTIME] ✅ Tool execution success", {
+          //   callId,
+          //   toolName: tc.function.name,
+          //   success: result.success,
+          //   hasData: !!result.data,
+          //   error: result.error
+          // });
           return {
             tool_call_id: tc.id,
             role: "tool" as const,
@@ -529,11 +529,11 @@ export async function runAgentReply(opts: {
     messages.push(...toolResults as any);
     executionTurns.push(...toolResults as any);
 
-    console.log("[AGENT][RUNTIME] 🔄 Continuing conversation after tools", {
-      callId,
-      iteration: iterations,
-      messageCount: messages.length
-    });
+    // console.log("[AGENT][RUNTIME] 🔄 Continuing conversation after tools", {
+    //   callId,
+    //   iteration: iterations,
+    //   messageCount: messages.length
+    // });
 
     // Continuar conversa
     resp = await client.chat.completions.create({
@@ -548,16 +548,16 @@ export async function runAgentReply(opts: {
   const reply = resp.choices[0]?.message?.content || '';
   const finishReason = resp.choices[0]?.finish_reason;
 
-  console.log("[AGENT][RUNTIME] 💬 Reply generated", {
-    callId,
-    chatId: opts.chatId,
-    agentId: agent.id,
-    replyLength: reply.length,
-    tokensUsed: resp.usage?.total_tokens || 0,
-    model,
-    finishReason,
-    iterations,
-  });
+  // console.log("[AGENT][RUNTIME] 💬 Reply generated", {
+  //   callId,
+  //   chatId: opts.chatId,
+  //   agentId: agent.id,
+  //   replyLength: reply.length,
+  //   tokensUsed: resp.usage?.total_tokens || 0,
+  //   model,
+  //   finishReason,
+  //   iterations,
+  // });
 
   // 6. Salvar contexto atualizado no Redis (incluindo tool calls intermediários)
   executionTurns.push({ role: "assistant", content: reply });

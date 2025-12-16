@@ -1051,7 +1051,8 @@ function extractContentAndType(m: any): { content: string; type: string; caption
         interactiveContent: m?.system ?? null,
       };
     default:
-      return { content: `[${t.toUpperCase()}]`, type: t.toUpperCase(), caption: null };
+      // Fallback to TEXT for unknown types to prevent DB enum errors
+      return { content: `[${t.toUpperCase()}]`, type: "TEXT", caption: null };
   }
 }
 

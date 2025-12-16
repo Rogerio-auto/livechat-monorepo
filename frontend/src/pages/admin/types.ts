@@ -38,6 +38,8 @@ export type CompanyCounts = {
 export type CompanyUsage = {
   messages: number;
   lastMessageAt: string | null;
+  storage_used?: string;
+  tokens_used?: number;
 };
 
 export type CompanyFinance = {

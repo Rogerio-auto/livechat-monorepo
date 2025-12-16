@@ -116,7 +116,53 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     }
 
     const { data, error } = await supabaseAdmin.auth.getUser(token);
-    if (error || !data?.user) return res.status(401).json({ error: "Invalid token" });
+    
+    // ====== AGENT AUTHENTICATION BYPASS ======
+    // Se o token não for válido no Supabase Auth, verificamos se é um token de agente
+    if (error || !data?.user) {
+      try {
+        const jwt = await import("jsonwebtoken");
+        const { SUPABASE_JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY } = await import("../config/env.ts");
+        const secret = SUPABASE_JWT_SECRET || SUPABASE_SERVICE_ROLE_KEY;
+        
+        if (secret) {
+          const decoded = jwt.verify(token, secret) as any;
+          // Verifica se é um token de agente (gerado por generateAgentToken)
+          if (decoded && decoded.sub && decoded.user_metadata?.is_agent) {
+            console.log(`[requireAuth] 🤖 Agent authenticated: ${decoded.sub}`);
+            
+            // Buscar company_id do agente
+            const { data: agentData } = await supabaseAdmin
+              .from("agents")
+              .select("company_id, name")
+              .eq("id", decoded.sub)
+              .single();
+
+            if (agentData) {
+              (req as any).user = {
+                id: decoded.sub, // Agent ID acts as User ID
+                public_user_id: null,
+                email: `agent-${decoded.sub}@system.local`,
+                company_id: agentData.company_id,
+                is_agent: true,
+                agent_name: agentData.name
+              };
+              (req as any).profile = {
+                role: "AGENT",
+                company_id: agentData.company_id
+              };
+              return next();
+            }
+          }
+        }
+      } catch (agentAuthErr) {
+        // Token inválido ou erro na verificação, continua para retornar 401
+        // console.warn("[requireAuth] Agent auth check failed:", agentAuthErr);
+      }
+      
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    
     const supaUser = data.user;
 
     const { row: profile, error: profileError } = await resolveUserCompany(supaUser.id);

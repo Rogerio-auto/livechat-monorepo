@@ -88,7 +88,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
     const { data, error } = await supabaseAdmin
       .from("chat_messages")
       .select(
-        "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, caption, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id",
+        "id, chat_id, content, is_from_customer, sender_id, created_at, type, view_status, media_url, caption, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id, interactive_content",
       )
       .eq("chat_id", chatId)
       .order("created_at", { ascending: false })
@@ -122,6 +122,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
         remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
         remote_sender_is_admin: row.remote_sender_is_admin ?? null,
         replied_message_id: row.replied_message_id ?? null,
+        interactive_content: row.interactive_content ?? null,
       }));
 
     // Transform encrypted media URLs to proxy URLs

@@ -24,6 +24,7 @@ export const FRONTEND_ORIGINS: string[] = Array.from(
 export const SUPABASE_URL = process.env.SUPABASE_URL as string;
 export const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY as string;
 export const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY as string;
+export const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET as string;
 export const SUPABASE_MEDIA_BUCKET = process.env.SUPABASE_MEDIA_BUCKET || "chat-uploads";
 
 export const JWT_COOKIE_NAME = process.env.JWT_COOKIE_NAME || "sb_access_token";

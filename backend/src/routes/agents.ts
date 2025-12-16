@@ -9,7 +9,8 @@ import { AgentSchema } from "../types/integrations.ts";
 import { runAgentReply } from "../services/agents.runtime.ts";
 import type { ChatTurn } from "../services/agents.runtime.ts";
 import { getAgentTemplateTools } from "../repos/agent.templates.repo.ts";
-import { addToolToAgent } from "../repos/tools.repo.ts";
+import { addToolToAgent, getToolById, listAgentTools, updateAgentTool } from "../repos/tools.repo.ts";
+import { generateAgentToken } from "../services/tokens.ts";
 
 const updateAgentSchema = AgentSchema.partial();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -191,6 +192,74 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
+  // GET /api/admin/companies/:companyId/agents/:agentId/token
+  app.get("/api/admin/companies/:companyId/agents/:agentId/token", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+      if (!companyId || !agentId) return res.status(400).json({ error: "Parâmetros obrigatórios" });
+
+      // Buscar ferramentas do agente para encontrar o token
+      const agentTools = await listAgentTools({ agent_id: agentId });
+      
+      // Procurar token em overrides de ferramentas HTTP
+      let token: string | null = null;
+      for (const at of agentTools) {
+        if (at.tool.handler_type === 'HTTP' && at.overrides?.headers?.Authorization) {
+          const auth = at.overrides.headers.Authorization as string;
+          if (auth.startsWith("Bearer ")) {
+            token = auth.replace("Bearer ", "");
+            break; // Encontrou um, assume que é o mesmo para todos
+          }
+        }
+      }
+
+      return res.json({ token });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  // POST /api/admin/companies/:companyId/agents/:agentId/token/regenerate
+  app.post("/api/admin/companies/:companyId/agents/:agentId/token/regenerate", requireAuth, async (req: any, res) => {
+    try {
+      await ensureAdminRole(req);
+      const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
+      if (!companyId || !agentId) return res.status(400).json({ error: "Parâmetros obrigatórios" });
+
+      // 1. Gerar novo token
+      const newToken = generateAgentToken(agentId);
+
+      // 2. Atualizar todas as ferramentas HTTP deste agente
+      const agentTools = await listAgentTools({ agent_id: agentId });
+      let updatedCount = 0;
+
+      for (const at of agentTools) {
+        // Verificar se é HTTP (pela definição da tool)
+        if (at.tool.handler_type === 'HTTP') {
+          const currentOverrides = at.overrides || {};
+          const newOverrides = {
+            ...currentOverrides,
+            headers: {
+              ...(currentOverrides.headers as Record<string, any> || {}),
+              Authorization: `Bearer ${newToken}`,
+              "Content-Type": "application/json"
+            }
+          };
+
+          await updateAgentTool(agentId, at.tool_id, { overrides: newOverrides });
+          updatedCount++;
+        }
+      }
+
+      return res.json({ token: newToken, updated_tools: updatedCount });
+    } catch (error) {
+      const { status, payload } = formatRouteError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
   // Nova rota: agentes com métricas de desempenho
   app.get("/api/agents/metrics", requireAuth, async (req: any, res) => {
     try {
@@ -348,9 +417,29 @@ export function registerAgentsRoutes(app: Application) {
         const templateTools = await getAgentTemplateTools(template_id);
         if (templateTools && templateTools.length > 0) {
           for (const tt of templateTools) {
+            let overrides = tt.overrides || {};
+
+            // Auto-generate token for HTTP tools to prevent "Cannot GET /login"
+            try {
+              const toolDef = await getToolById(tt.tool_id);
+              if (toolDef && toolDef.handler_type === 'HTTP') {
+                const token = generateAgentToken(created.id);
+                overrides = {
+                  ...overrides,
+                  headers: {
+                    ...(overrides.headers as Record<string, any> || {}),
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                  }
+                };
+              }
+            } catch (err) {
+              console.warn(`[agents/from-template] Failed to check tool type for ${tt.tool_id}`, err);
+            }
+
             await addToolToAgent(created.id, tt.tool_id, {
               is_enabled: true,
-              overrides: tt.overrides || {},
+              overrides: overrides,
             });
           }
         }

@@ -1,27 +1,64 @@
-import { FiActivity, FiDatabase, FiUsers } from 'react-icons/fi';
+import { useEffect, useState } from 'react';
+import { FiActivity, FiDatabase, FiUsers, FiDollarSign } from 'react-icons/fi';
 
-const CARDS = [
-  {
-    title: 'Empresas Ativas',
-    value: '--',
-    description: 'Total monitorado em tempo real',
-    icon: FiUsers,
-  },
-  {
-    title: 'Workers',
-    value: 'OK',
-    description: 'Filas, cache e automações',
-    icon: FiActivity,
-  },
-  {
-    title: 'Uso de Recursos',
-    value: 'Em coleta',
-    description: 'Storage, mensagens e agentes',
-    icon: FiDatabase,
-  },
-];
+type AdminStats = {
+  kpis: {
+    mrr: number;
+    total_companies: number;
+    active_companies: number;
+    total_users: number;
+  };
+  infra: {
+    database: string;
+    redis: string;
+    rabbitmq: string;
+    storage: string;
+  };
+};
 
 export function AdminDashboard() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:5000';
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch(`${API}/api/admin/stats`, { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json();
+          setStats(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch admin stats', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchStats();
+  }, [API]);
+
+  const CARDS = [
+    {
+      title: 'MRR (Estimado)',
+      value: stats ? `R$ ${stats.kpis.mrr.toLocaleString('pt-BR')}` : '--',
+      description: 'Receita recorrente mensal',
+      icon: FiDollarSign,
+    },
+    {
+      title: 'Empresas Ativas',
+      value: stats ? `${stats.kpis.active_companies} / ${stats.kpis.total_companies}` : '--',
+      description: 'Total monitorado em tempo real',
+      icon: FiUsers,
+    },
+    {
+      title: 'Infraestrutura',
+      value: stats ? 'Saudável' : '--', // Simplificado por enquanto
+      description: 'Banco, Redis e Filas operacionais',
+      icon: FiActivity,
+    },
+  ];
+
   return (
     <section className="space-y-8">
       <div className="space-y-2">
@@ -41,7 +78,9 @@ export function AdminDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{card.title}</p>
-                <p className="mt-3 text-3xl font-semibold">{card.value}</p>
+                <p className="mt-3 text-3xl font-semibold">
+                  {loading ? <span className="animate-pulse">...</span> : card.value}
+                </p>
                 <p className="mt-2 text-sm text-slate-400">{card.description}</p>
               </div>
               <card.icon className="text-3xl text-slate-300" />
@@ -51,10 +90,18 @@ export function AdminDashboard() {
       </div>
 
       <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-8 text-slate-300">
-        <p>
-          Esta é uma versão inicial do novo portal do administrador. Os indicadores acima serão conectados aos
-          serviços do backend durante as próximas fases do rollout.
-        </p>
+        <h3 className="mb-4 text-lg font-medium text-white">Status dos Serviços</h3>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {stats && Object.entries(stats.infra).map(([service, status]) => (
+            <div key={service} className="flex items-center gap-3 rounded-lg bg-slate-950/50 p-4">
+              <div className={`h-2 w-2 rounded-full ${status === 'healthy' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+              <div>
+                <p className="text-xs uppercase text-slate-500">{service}</p>
+                <p className="text-sm font-medium capitalize text-white">{status}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );

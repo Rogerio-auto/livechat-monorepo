@@ -78,6 +78,7 @@ export type Message = {
   delivery_status?: string | null;
   client_draft_id?: string | null;
   error_reason?: string | null;
+  interactive_content?: any | null;
 };
 
 export type Inbox = {

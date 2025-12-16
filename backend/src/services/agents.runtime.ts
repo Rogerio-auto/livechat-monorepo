@@ -206,6 +206,10 @@ function buildPrompt(agent: AgentRow | null, contextHistory: ChatTurn[], userMes
       sysParts.push(`Instrucoes do agente: ${rules}`);
     } catch {}
   }
+  
+  // Instrução de segurança para erros de ferramentas
+  sysParts.push("SYSTEM NOTE: Se o resultado de uma ferramenta (tool) for um erro (ex: HTTP 404, JSON error, Internal Error), NÃO tente solucionar esse erro técnico com o usuário. Apenas peça desculpas e diga que houve uma falha interna ao processar o pedido.");
+
   const system: ChatTurn = { role: "system", content: sysParts.join("\n\n").trim() || "Você é um atendente útil, breve e educado." };
   
   // Limitar histórico Redis aos últimos 12 turnos (excluindo system)

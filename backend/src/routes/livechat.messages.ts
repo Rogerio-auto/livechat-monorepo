@@ -24,7 +24,8 @@ router.get("/:id", requireAuth, async (req, res) => {
         media_public_url,
         media_storage_path,
         is_media_sensitive,
-        reply_to_message_id
+        reply_to_message_id,
+        interactive_content
       `)
       .eq("id", id)
       .maybeSingle();

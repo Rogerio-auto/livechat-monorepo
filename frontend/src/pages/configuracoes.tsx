@@ -69,6 +69,7 @@ const DEFAULT_META: MetaProviderConfig = {
   phone_number_id: "",
   waba_id: "",
   webhook_verify_token: "",
+  app_secret: "",
 };
 
 const pickFirstDefined = (...values: Array<string | null | undefined>) => {
@@ -88,6 +89,7 @@ const toFormMeta = (
   phone_number_id: String(pickFirstDefined(meta?.phone_number_id, fallback?.phone_number_id)),
   waba_id: String(pickFirstDefined(meta?.waba_id, fallback?.waba_id)),
   webhook_verify_token: String(pickFirstDefined(meta?.webhook_verify_token, fallback?.webhook_verify_token)),
+  app_secret: String(pickFirstDefined(meta?.app_secret, fallback?.app_secret)),
 });
 
 const toFormWaha = (waha?: WahaProviderConfig | null): WahaProviderConfig => ({
@@ -116,6 +118,7 @@ const buildMetaPayload = (meta?: MetaProviderConfig | null) => {
   assign("phone_number_id");
   assign("waba_id");
   assign("webhook_verify_token");
+  assign("app_secret");
   return Object.keys(result).length > 0 ? result : undefined;
 };
 

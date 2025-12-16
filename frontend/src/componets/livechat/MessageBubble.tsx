@@ -321,14 +321,119 @@ export function MessageBubble({
       </div>
     );
   } else if (messageType === "TEMPLATE") {
+    const template = m.interactive_content; // We store template data here too
     bubbleContent = (
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-1 text-xs text-purple-400 mb-1">
           <FiLayers className="w-3.5 h-3.5" /> Template
         </div>
-        <div>{textBody || "[Template]"}</div>
+        
+        {/* Render Media if present (handled by worker-media) */}
+        {mediaUrl && (
+           <div className="mb-2">
+             {m.media_mime?.startsWith("image") || mediaUrl.match(/\.(jpeg|jpg|gif|png)$/i) ? (
+               <img src={mediaUrl} alt="Template Media" className="rounded-lg max-h-48 object-cover w-full cursor-pointer" onClick={openLightbox} />
+             ) : m.media_mime?.startsWith("video") || mediaUrl.match(/\.(mp4|mov)$/i) ? (
+               <video src={mediaUrl} controls className="rounded-lg max-h-48 w-full" />
+             ) : (
+               <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-90">Ver mídia anexa</a>
+             )}
+           </div>
+        )}
+
+        {template?.name ? (
+           <div className="text-sm">
+             <span className="opacity-70">Nome:</span> <span className="font-medium">{template.name}</span>
+             {template.language?.code && <span className="ml-2 opacity-60 text-xs">({template.language.code})</span>}
+           </div>
+        ) : (
+           <div>{textBody || "[Template]"}</div>
+        )}
       </div>
     );
+  } else if (messageType === "BUTTON") {
+    const button = m.interactive_content;
+    bubbleContent = (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1 text-xs text-blue-400 mb-1">
+          <FiCheck className="w-3.5 h-3.5" /> Botão
+        </div>
+        <div className="font-medium">{button?.text || textBody || "[Botão]"}</div>
+        {button?.payload && <div className="text-[10px] opacity-50 font-mono">{button.payload}</div>}
+      </div>
+    );
+  } else if (messageType === "ORDER") {
+    const order = m.interactive_content;
+    bubbleContent = (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-1 text-xs text-green-400 mb-1">
+          <FiCheck className="w-3.5 h-3.5" /> Pedido
+        </div>
+        <div className="font-medium">Pedido do Catálogo</div>
+        {order?.catalog_id && <div className="text-xs opacity-70">Catálogo: {order.catalog_id}</div>}
+        {order?.product_items && (
+           <div className="text-xs opacity-80">{order.product_items.length} itens</div>
+        )}
+      </div>
+    );
+  } else if (messageType === "INTERACTIVE") {
+    const interactive = m.interactive_content;
+    if (!interactive) {
+      bubbleContent = (
+        <div className="flex flex-col gap-1">
+           <div className="text-xs opacity-70 italic">[Interativo]</div>
+           <div>{textBody || "[Conteúdo interativo]"}</div>
+        </div>
+      );
+    } else {
+      const type = interactive.type;
+      const header = interactive.header;
+      const body = interactive.body;
+      const footer = interactive.footer;
+      const action = interactive.action;
+
+      bubbleContent = (
+        <div className="flex flex-col gap-2 min-w-[200px]">
+          {header?.type === "text" && <div className="font-bold text-sm">{header.text}</div>}
+          
+          {body?.text && <div className="whitespace-pre-wrap break-words">{body.text}</div>}
+          
+          {footer?.text && <div className="text-xs opacity-70 border-t border-white/10 pt-1 mt-1">{footer.text}</div>}
+
+          {type === "button" && action?.buttons && (
+             <div className="flex flex-col gap-2 mt-2">
+               {action.buttons.map((btn: any, idx: number) => (
+                 <div 
+                   key={idx} 
+                   className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-90"
+                 >
+                   {btn.reply?.title || btn.type}
+                 </div>
+               ))}
+             </div>
+          )}
+
+          {type === "list" && action?.sections && (
+             <div className="flex flex-col gap-2 mt-2">
+               <div className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-80">
+                 {action.button || "Ver opções"}
+               </div>
+               {action.sections.map((section: any, sIdx: number) => (
+                 <div key={sIdx} className="flex flex-col gap-1">
+                   {section.title && <div className="text-xs font-bold opacity-70 mt-1 uppercase tracking-wider">{section.title}</div>}
+                   {section.rows?.map((row: any, rIdx: number) => (
+                     <div key={rIdx} className="py-1.5 px-2 border-l-2 border-white/20 pl-2 text-sm hover:bg-white/5 rounded-r">
+                       <div className="font-medium">{row.title}</div>
+                       {row.description && <div className="text-xs opacity-70">{row.description}</div>}
+                     </div>
+                   ))}
+                 </div>
+               ))}
+             </div>
+          )}
+        </div>
+      );
+    }
   } else {
     bubbleContent = textBody || (messageType ? `[${messageType}]` : "");
   }

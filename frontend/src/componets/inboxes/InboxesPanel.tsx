@@ -40,6 +40,7 @@ const DEFAULT_META: MetaProviderConfig = {
   phone_number_id: "",
   waba_id: "",
   webhook_verify_token: "",
+  app_secret: "",
 };
 
 const WAHA_CONNECTED_STATUSES = new Set(["WORKING", "CONNECTED", "READY", "OPEN", "RUNNING"]);

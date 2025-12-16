@@ -100,6 +100,71 @@ export function CompanyDetails() {
     }
   }, [fetchCompany]);
 
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const handleResetCache = async () => {
+    if (!companyId) return;
+    if (!confirm("Tem certeza que deseja limpar o cache desta empresa? Isso desconectará sessões ativas.")) return;
+    
+    setActionLoading('cache');
+    try {
+      const res = await fetch(`${API}/api/admin/companies/${companyId}/cache/reset`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Falha ao resetar cache');
+      alert('Cache limpo com sucesso!');
+    } catch (err) {
+      alert('Erro ao limpar cache');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    if (!companyId || !company) return;
+    const isActive = company.status !== 'inactive';
+    const action = isActive ? 'suspender' : 'ativar';
+    if (!confirm(`Tem certeza que deseja ${action} esta empresa?`)) return;
+
+    setActionLoading('status');
+    try {
+      const res = await fetch(`${API}/api/admin/companies/${companyId}/toggle-status`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Falha ao alterar status');
+      await fetchCompany(); // Reload data
+    } catch (err) {
+      alert('Erro ao alterar status');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleImpersonate = async () => {
+    if (!companyId) return;
+    if (!confirm("Você será desconectado da sua conta de admin e logado como um usuário desta empresa. Continuar?")) return;
+
+    setActionLoading('impersonate');
+    try {
+      const res = await fetch(`${API}/api/admin/companies/${companyId}/impersonate`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      
+      if (!res.ok) throw new Error('Falha ao gerar sessão de acesso');
+      
+      // O backend já setou o cookie. Redirecionar para o dashboard.
+      window.location.href = '/dashboard';
+    } catch (err) {
+      alert('Erro ao tentar logar como empresa: ' + (err instanceof Error ? err.message : String(err)));
+      console.error(err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   useEffect(() => {
     if (!companyId || !company?.name) {
       return;
@@ -207,23 +272,29 @@ export function CompanyDetails() {
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10"
+              onClick={handleImpersonate}
+              disabled={!!actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
             >
-              <FiPlayCircle />
+              {actionLoading === 'impersonate' ? <FiRefreshCw className="animate-spin" /> : <FiPlayCircle />}
               Logar como Empresa
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-2xl border border-orange-400/40 px-4 py-2 text-sm text-orange-200 transition hover:bg-orange-500/10"
+              onClick={handleToggleStatus}
+              disabled={!!actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-orange-400/40 px-4 py-2 text-sm text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
             >
-              <FiPauseCircle />
-              Suspender
+              {actionLoading === 'status' ? <FiRefreshCw className="animate-spin" /> : <FiPauseCircle />}
+              {company.status === 'inactive' ? 'Ativar' : 'Suspender'}
             </button>
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 transition hover:bg-emerald-500/10"
+              onClick={handleResetCache}
+              disabled={!!actionLoading}
+              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 transition hover:bg-emerald-500/10 disabled:opacity-50"
             >
-              <FiRefreshCw />
+              <FiRefreshCw className={actionLoading === 'cache' ? 'animate-spin' : ''} />
               Resetar Cache
             </button>
           </div>

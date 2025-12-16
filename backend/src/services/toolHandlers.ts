@@ -623,10 +623,19 @@ async function handleHTTP(
   });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // If response is not JSON, treat as text
+    data = text;
+  }
 
   if (!res.ok) {
-    throw new Error(`HTTP error ${res.status}: ${data?.error || res.statusText}`);
+    const errorDetails = (typeof data === 'object' && data?.error) 
+      ? data.error 
+      : (typeof data === 'string' ? data : res.statusText);
+    throw new Error(`HTTP error ${res.status}: ${errorDetails}`);
   }
 
   return { success: true, data };

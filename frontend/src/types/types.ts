@@ -24,6 +24,7 @@ provider_api_key?: string | null;
 phone_number_id?: string | null;
 waba_id?: string | null;
 webhook_verify_token?: string | null;
+app_secret?: string | null;
 };
 
 

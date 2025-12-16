@@ -1,8 +1,10 @@
 import express from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin, supabaseAnon } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
+import { getRedis, rSet } from "../lib/redis.ts";
 
 // Middleware para verificar se é ADMIN
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -183,6 +185,8 @@ export function registerCompanyRoutes(app: express.Application) {
           usage: {
             messages: messagesCount || 0,
             lastMessageAt: lastMessage?.created_at ?? null,
+            storage_used: "0 MB", // TODO: Implement real storage calculation
+            tokens_used: 0, // TODO: Implement real token usage tracking
           },
           finance: {
             plan: rawCompany.plan ?? null,
@@ -497,6 +501,126 @@ export function registerCompanyRoutes(app: express.Application) {
     } catch (e: any) {
       console.error(`[ADMIN DELETE] Erro geral:`, e);
       return res.status(500).json({ error: e?.message || "Erro ao deletar empresa" });
+    }
+  });
+
+  // POST Reset Cache
+  app.post("/api/admin/companies/:companyId/cache/reset", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    try {
+      const redis = getRedis();
+      // Padrões de chaves para limpar
+      const patterns = [
+        `company:${companyId}:*`,
+        `session:${companyId}:*`,
+        `chat:${companyId}:*`
+      ];
+      
+      let deletedCount = 0;
+      for (const pattern of patterns) {
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+          deletedCount += keys.length;
+        }
+      }
+      
+      console.log(`[ADMIN] Cache reset for company ${companyId}. Deleted ${deletedCount} keys.`);
+      return res.json({ success: true, deletedCount });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST Suspend/Activate
+  app.post("/api/admin/companies/:companyId/toggle-status", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    try {
+      // Buscar status atual
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("is_active")
+        .eq("id", companyId)
+        .single();
+        
+      if (!company) return res.status(404).json({ error: "Empresa não encontrada" });
+      
+      const newStatus = !company.is_active;
+      
+      const { error } = await supabaseAdmin
+        .from("companies")
+        .update({ is_active: newStatus })
+        .eq("id", companyId);
+        
+      if (error) throw error;
+      
+      return res.json({ success: true, is_active: newStatus });
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST Impersonate
+  app.post("/api/admin/companies/:companyId/impersonate", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    try {
+      // Buscar um usuário admin desta empresa
+      const { data: user } = await supabaseAdmin
+        .from("users")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("role", "ADMIN")
+        .limit(1)
+        .maybeSingle();
+        
+      let targetUser = user;
+
+      if (!targetUser) {
+        // Tenta qualquer usuário se não tiver admin
+        const { data: anyUser } = await supabaseAdmin
+          .from("users")
+          .select("*")
+          .eq("company_id", companyId)
+          .limit(1)
+          .maybeSingle();
+          
+        if (!anyUser) return res.status(404).json({ error: "Nenhum usuário encontrado nesta empresa" });
+        targetUser = anyUser;
+      }
+      
+      // Gerar token de sessão manual e injetar no Redis
+      // Isso bypassa a verificação do Supabase Auth e usa o cache do requireAuth
+      const sessionToken = crypto.randomUUID();
+      const tokenHash = Buffer.from(sessionToken).toString("base64").slice(0, 32);
+      const cacheKey = `auth:token:${tokenHash}`;
+      
+      const authData = {
+        user: {
+          id: targetUser.user_id,
+          email: targetUser.email,
+          app_metadata: { provider: "impersonation" },
+          user_metadata: { company_id: companyId, role: targetUser.role },
+          aud: "authenticated",
+          role: "authenticated"
+        },
+        profile: targetUser
+      };
+      
+      // Salvar no Redis por 1 hora (3600s)
+      await rSet(cacheKey, authData, 3600);
+      
+      // Setar cookie
+      res.cookie(process.env.JWT_COOKIE_NAME || "sb_access_token", sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 3600 * 1000, // 1 hour
+        path: "/"
+      });
+      
+      return res.json({ success: true, user: targetUser });
+    } catch (e: any) {
+      console.error("Impersonate error:", e);
+      return res.status(500).json({ error: e.message });
     }
   });
 }

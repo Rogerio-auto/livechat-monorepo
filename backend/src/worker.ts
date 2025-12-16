@@ -977,7 +977,7 @@ function getPushName(value: any): string | null {
   );
 }
 
-function extractContentAndType(m: any): { content: string; type: string; caption: string | null } {
+function extractContentAndType(m: any): { content: string; type: string; caption: string | null; interactiveContent?: any | null } {
   const t = String(m?.type || "text").toLowerCase();
 
   switch (t) {
@@ -1015,6 +1015,41 @@ function extractContentAndType(m: any): { content: string; type: string; caption
       };
     case "contacts":
       return { content: "[CONTACTS]", type: "CONTACTS", caption: null };
+    case "interactive":
+      return {
+        content: "[INTERACTIVE]",
+        type: "INTERACTIVE",
+        caption: null,
+        interactiveContent: m?.interactive ?? null,
+      };
+    case "button":
+      return {
+        content: m?.button?.text ?? "[BUTTON]",
+        type: "BUTTON",
+        caption: null,
+        interactiveContent: m?.button ?? null,
+      };
+    case "template":
+      return {
+        content: m?.template?.name ? `[TEMPLATE] ${m.template.name}` : "[TEMPLATE]",
+        type: "TEMPLATE",
+        caption: null,
+        interactiveContent: m?.template ?? null,
+      };
+    case "order":
+      return {
+        content: "[ORDER]",
+        type: "ORDER",
+        caption: null,
+        interactiveContent: m?.order ?? null,
+      };
+    case "system":
+      return {
+        content: m?.system?.body ?? "[SYSTEM]",
+        type: "SYSTEM",
+        caption: null,
+        interactiveContent: m?.system ?? null,
+      };
     default:
       return { content: `[${t.toUpperCase()}]`, type: t.toUpperCase(), caption: null };
   }
@@ -1518,7 +1553,12 @@ async function handleMetaInboundMessages(args: {
     
     // ✅ Extrair número e LID do participantWaId
     const { phone: extractedPhone, lid: extractedLid } = extractPhoneAndLid(participantWaId);
-    const remotePhone = extractedPhone ? normalizeMsisdn(extractedPhone) : null;
+    let remotePhone = extractedPhone ? normalizeMsisdn(extractedPhone) : null;
+
+    // Allow alphanumeric senders (e.g. "WhatsApp")
+    if (!remotePhone && extractedPhone && /[a-zA-Z]/.test(extractedPhone)) {
+      remotePhone = extractedPhone;
+    }
 
     if (!remotePhone && !isGroupMessage) {
       console.warn("[META][inbound] message without valid 'from'", { wamid, participantWaId });
@@ -1535,6 +1575,7 @@ async function handleMetaInboundMessages(args: {
       participantName: metaContext.participantName,
       isGroupMessage,
       inboxId,
+      messageType: m?.type, // Log message type
     });
 
     // Ensure chat (group or direct)
@@ -1569,7 +1610,7 @@ async function handleMetaInboundMessages(args: {
       });
     }
 
-    const { content, type, caption } = extractContentAndType(m);
+    const { content, type, caption, interactiveContent } = extractContentAndType(m);
     
     // Parse timestamp corretamente (pode vir como number ou string)
     let createdAt: Date | null = null;
@@ -1671,6 +1712,7 @@ async function handleMetaInboundMessages(args: {
       content,
       type,
       caption,
+      interactiveContent,
       remoteParticipantId,
       remoteSenderId: metaContext.participantId ?? participantWaId ?? null,
       remoteSenderName: metaContext.participantName ?? pushname ?? null,
@@ -1733,15 +1775,37 @@ async function handleMetaInboundMessages(args: {
 
     // Enqueue media job if needed
     const msgType = String(m?.type || "").toLowerCase();
-    const mediaRoot = ["document", "image", "audio", "video", "sticker"].includes(msgType)
+    let mediaRoot = ["document", "image", "audio", "video", "sticker"].includes(msgType)
       ? (m as any)?.[msgType] ?? null
       : null;
+    
+    // Check for media in template header
+    if (msgType === "template" && !mediaRoot) {
+      const components = (m as any)?.template?.components;
+      if (Array.isArray(components)) {
+        const header = components.find((c: any) => c.type === "header");
+        if (header && header.parameters && Array.isArray(header.parameters)) {
+           const mediaParam = header.parameters.find((p: any) => ["image", "video", "document"].includes(p.type));
+           if (mediaParam) {
+             mediaRoot = mediaParam[mediaParam.type];
+             // Force type to be the media type so the media worker handles it correctly
+             // But we keep the message type as TEMPLATE in the DB
+           }
+        }
+      }
+    }
+
     const mediaId =
       mediaRoot && typeof mediaRoot?.id === "string" && mediaRoot.id.trim() ? mediaRoot.id.trim() : null;
     const mediaFilename =
       mediaRoot && typeof mediaRoot?.filename === "string" && mediaRoot.filename.trim()
         ? mediaRoot.filename.trim()
         : null;
+    
+    // Determine media type for the job (if it came from template, use the inner type)
+    const jobMediaType = (msgType === "template" && mediaRoot) 
+       ? (mediaRoot.mime_type?.startsWith("image") ? "image" : mediaRoot.mime_type?.startsWith("video") ? "video" : "document")
+       : msgType;
 
     await enqueueInboundMediaJob({
       provider: "META",
@@ -1752,7 +1816,7 @@ async function handleMetaInboundMessages(args: {
       externalId: wamid,
       media: mediaId
         ? {
-            type: msgType,
+            type: jobMediaType,
             mediaId,
             filename: mediaFilename,
           }

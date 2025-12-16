@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { FiArrowLeft, FiEdit2, FiEye, FiEyeOff, FiPlus, FiRefreshCw, FiTrash2, FiX } from 'react-icons/fi';
+import { FiArrowLeft, FiEdit2, FiEye, FiEyeOff, FiPlus, FiRefreshCw, FiTrash2, FiX, FiLock, FiCopy } from 'react-icons/fi';
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom';
 import type { CompanyOutletContext } from '../types';
 import type { AgentTool, Tool } from '../../../types/types';
@@ -365,6 +365,11 @@ function AgentEditorPanel({
   const [availableTools, setAvailableTools] = useState<Tool[]>([]);
   const [availableLoading, setAvailableLoading] = useState(false);
 
+  // Token Management
+  const [token, setToken] = useState<string | null>(null);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+
   useEffect(() => {
     setForm(buildFormState(agent));
     setLocalError(null);
@@ -415,11 +420,55 @@ function AgentEditorPanel({
     }
   }, [agentTools, companyId]);
 
+  const loadToken = useCallback(async () => {
+    if (!companyId || !agent.id) return;
+    setTokenLoading(true);
+    setTokenError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/companies/${companyId}/agents/${agent.id}/token`,
+        { credentials: 'include' }
+      );
+      if (!response.ok) throw new Error(await parseError(response));
+      const data = await response.json();
+      setToken(data.token);
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : 'Erro ao carregar token');
+    } finally {
+      setTokenLoading(false);
+    }
+  }, [companyId, agent.id]);
+
+  const handleRegenerateToken = async () => {
+    if (!window.confirm("Isso irá gerar um novo token e atualizar todas as ferramentas HTTP deste agente. Continuar?")) return;
+    
+    setTokenLoading(true);
+    setTokenError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/admin/companies/${companyId}/agents/${agent.id}/token/regenerate`,
+        { 
+          method: 'POST',
+          credentials: 'include' 
+        }
+      );
+      if (!response.ok) throw new Error(await parseError(response));
+      const data = await response.json();
+      setToken(data.token);
+      alert(`Token regenerado com sucesso! ${data.updated_tools} ferramentas atualizadas.`);
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : 'Erro ao regenerar token');
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadAgentTools();
+    loadToken();
     setToolsModalOpen(false);
     setAvailableTools([]);
-  }, [loadAgentTools]);
+  }, [loadAgentTools, loadToken]);
 
   const updateField = (field: keyof AgentFormState, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -709,6 +758,65 @@ function AgentEditorPanel({
             </button>
           </div>
         </form>
+
+        <section className="mt-8 space-y-4 rounded-2xl border border-white/10 bg-slate-950/40 p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-white">Autenticação e Segurança</h3>
+              <p className="text-sm text-slate-400">
+                Gerencie o token de acesso usado pelo agente para se comunicar com ferramentas internas.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRegenerateToken}
+              disabled={tokenLoading}
+              className="inline-flex items-center gap-2 rounded-2xl bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FiRefreshCw className={tokenLoading ? "animate-spin" : ""} />
+              Regenerar Token
+            </button>
+          </div>
+
+          {tokenError && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+              {tokenError}
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                  <FiLock />
+                </div>
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-xs font-medium uppercase tracking-wider text-slate-500">Token Atual</span>
+                  <code className="truncate text-sm text-slate-200 font-mono">
+                    {token ? token : "Nenhum token configurado"}
+                  </code>
+                </div>
+              </div>
+              {token && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(token);
+                    alert("Token copiado!");
+                  }}
+                  className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"
+                  title="Copiar Token"
+                >
+                  <FiCopy />
+                </button>
+              )}
+            </div>
+            {!token && !tokenLoading && (
+              <p className="mt-2 text-xs text-amber-400">
+                ⚠️ Este agente não possui um token configurado. Ferramentas HTTP podem falhar. Clique em "Regenerar Token" para corrigir.
+              </p>
+            )}
+          </div>
+        </section>
 
         <section className="mt-8 space-y-4 rounded-2xl border border-white/10 bg-slate-950/40 p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

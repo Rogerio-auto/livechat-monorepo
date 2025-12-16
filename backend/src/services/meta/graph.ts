@@ -61,6 +61,11 @@ async function graphFetch(
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message = (data as any)?.error?.message || `Meta API error (${response.status})`;
+    
+    if (message.includes("appsecret_proof")) {
+      throw new Error(`Meta API Error: ${message}. Please verify that the 'App Secret' in your Inbox settings matches the App Secret in your Meta App Dashboard.`);
+    }
+
     throw new Error(message);
   }
   return data;

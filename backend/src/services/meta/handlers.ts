@@ -1,6 +1,6 @@
 // src/services/meta/handlers.ts
 import crypto from "node:crypto";
-import { getInboxByPhoneNumberId } from "./store.ts";
+import { getInboxByPhoneNumberId, getDecryptedCredsForInbox } from "./store.ts";
 import { EX_META, publish } from "../../queue/rabbit.ts"; // <- PLURAL "queues"
 
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "";
@@ -18,12 +18,12 @@ export async function verifyMetaWebhook(query: any) {
 }
 
 /** Validação de assinatura (x-hub-signature-256) */
-function isValidSignature(rawBody: Buffer | string, signatureHeader?: string) {
-  if (!APP_SECRET) return true; // em dev, pode pular
+function isValidSignature(rawBody: Buffer | string, signatureHeader: string | undefined, secret: string) {
+  if (!secret) return true; // Se não tem segredo configurado, passa (cuidado em prod)
   if (!signatureHeader) return false;
   const [scheme, hash] = signatureHeader.split("=");
   if (scheme !== "sha256" || !hash) return false;
-  const expected = crypto.createHmac("sha256", APP_SECRET).update(rawBody).digest("hex");
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   try {
     return crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(expected));
   } catch {
@@ -31,8 +31,43 @@ function isValidSignature(rawBody: Buffer | string, signatureHeader?: string) {
   }
 }
 
-export function validateSignatureOrThrow(rawBody: Buffer | string, signatureHeader?: string) {
-  if (!isValidSignature(rawBody, signatureHeader)) {
+export async function validateSignatureOrThrow(rawBody: Buffer | string, signatureHeader: string | undefined, body: any) {
+  // 1. Tenta extrair phone_number_id para buscar o segredo no banco
+  let dbAppSecret: string | undefined;
+  
+  try {
+    const entries = Array.isArray(body?.entry) ? body.entry : [];
+    let phoneNumberId: string | undefined;
+
+    for (const entry of entries) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const ch of changes) {
+        const val = ch?.value || {};
+        if (val?.metadata?.phone_number_id) {
+          phoneNumberId = val.metadata.phone_number_id;
+          break;
+        }
+      }
+      if (phoneNumberId) break;
+    }
+
+    if (phoneNumberId) {
+      const inbox = await getInboxByPhoneNumberId(phoneNumberId);
+      if (inbox) {
+        const creds = await getDecryptedCredsForInbox(inbox.id);
+        if (creds.app_secret) {
+          dbAppSecret = creds.app_secret;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[META] Erro ao buscar app_secret do banco para validação:", err);
+  }
+
+  // 2. Usa o segredo do banco OU o da env var
+  const secretToUse = dbAppSecret || APP_SECRET;
+
+  if (!isValidSignature(rawBody, signatureHeader, secretToUse)) {
     const err: any = new Error("Invalid webhook signature");
     err.status = 403;
     throw err;

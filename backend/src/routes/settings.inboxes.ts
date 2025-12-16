@@ -25,7 +25,7 @@ type InboxSecretRow = {
 };
 
 const INBOX_SELECT =
-  "id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, webhook_verify_token, created_at, updated_at, company_id, waha_db_name";
+  "id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, webhook_verify_token, app_secret, created_at, updated_at, company_id, waha_db_name";
 
 const META_PROVIDER = "META_CLOUD";
 const WAHA_PROVIDER = "WAHA";
@@ -37,6 +37,7 @@ const metaConfigSchema = z
     phone_number_id: metaFieldSchema,
     waba_id: metaFieldSchema,
     webhook_verify_token: metaFieldSchema,
+    app_secret: metaFieldSchema,
     refresh_token: z.union([z.string().min(1), z.null()]).optional(),
     provider_api_key: z.union([z.string().min(1), z.null()]).optional(),
   })
@@ -150,6 +151,7 @@ function buildProviderConfig(row: any, secret?: InboxSecretRow | null) {
       phone_number_id: row?.phone_number_id ?? null,
       waba_id: row?.waba_id ?? null,
       webhook_verify_token: row?.webhook_verify_token ?? null,
+      app_secret: row?.app_secret ?? null,
     };
     if (secret?.refresh_token !== undefined) {
       meta.refresh_token = decryptSecret(secret?.refresh_token);
@@ -410,6 +412,7 @@ export function registerSettingsInboxesRoutes(app: Application) {
         insert.phone_number_id = normalizeString(meta.phone_number_id);
         insert.waba_id = normalizeString(meta.waba_id);
         insert.webhook_verify_token = normalizeString(meta.webhook_verify_token);
+        insert.app_secret = normalizeString(meta.app_secret);
       }
       if (provider === WAHA_PROVIDER && wahaSessionId) {
         insert.phone_number_id = wahaSessionId;
@@ -600,6 +603,9 @@ export function registerSettingsInboxesRoutes(app: Application) {
           }
           if (meta.webhook_verify_token !== undefined) {
             update.webhook_verify_token = normalizeString(meta.webhook_verify_token);
+          }
+          if (meta.app_secret !== undefined) {
+            update.app_secret = normalizeString(meta.app_secret);
           }
           assignSecret("access_token", meta.access_token);
           assignSecret("refresh_token", meta.refresh_token);

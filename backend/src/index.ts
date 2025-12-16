@@ -63,6 +63,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerAdminRoutes } from "./routes/admin.js";
+import { registerAdminStatsRoutes } from "./routes/admin.stats.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerAutomationRulesRoutes } from "./routes/automationRules.js";
@@ -119,7 +120,12 @@ app.use("/api/webhooks", webhookRouter);
 
 // ===== PARSERS =====
 app.use(cookieParser());
-app.use(express.json({ limit: "100mb" }));
+app.use(express.json({
+  limit: "100mb",
+  verify: (req: any, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 
 // Configurar express-session para onboarding
@@ -3696,6 +3702,7 @@ app.post("/integrations/meta/webhook", metaWebhookPost);
 // ONBOARDING (precisa vir ANTES dos routers globais /api que tem requireAuth)
 registerOnboardingRoutes(app);
 registerAdminRoutes(app);
+registerAdminStatsRoutes(app);
 registerSubscriptionRoutes(app);
 app.use("/api/checkout", checkoutRouter);
 

@@ -267,8 +267,16 @@ function parseReminderChannels(channels: any): string[] {
 
   if (typeof channels === "string") {
     try {
-      return JSON.parse(channels);
+      const parsed = JSON.parse(channels);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+      return ["IN_APP"];
     } catch {
+      // Se falhar o parse, verifica se é uma string simples de canal
+      if (["IN_APP", "EMAIL", "WHATSAPP"].includes(channels)) {
+        return [channels];
+      }
       return ["IN_APP"];
     }
   }

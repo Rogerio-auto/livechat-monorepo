@@ -18,6 +18,7 @@ const DEFAULT_META: MetaProviderConfig = {
   phone_number_id: "",
   waba_id: "",
   webhook_verify_token: "",
+  app_secret: "",
 };
 
 const generateToken = () =>
@@ -62,6 +63,17 @@ export default function MetaConfig({ value, onChange, disabled }: MetaConfigProp
             value={meta.waba_id ?? ""}
             onChange={(e) => update("waba_id", e.target.value)}
             placeholder="10203040506070"
+            disabled={disabled}
+          />
+        </div>
+        <div>
+          <label className={LABEL}>App Secret</label>
+          <input
+            className={INPUT}
+            type="password"
+            value={meta.app_secret ?? ""}
+            onChange={(e) => update("app_secret", e.target.value)}
+            placeholder="App Secret do Painel Meta"
             disabled={disabled}
           />
         </div>

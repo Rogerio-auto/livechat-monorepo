@@ -431,6 +431,7 @@ type InsertedInboundMessage = {
   media_url?: string | null;
   media_public_url?: string | null;
   media_storage_path?: string | null;
+  interactive_content?: any | null;
 };
 
 type InsertedOutboundMessage = {
@@ -476,6 +477,9 @@ type UpsertChatMessageArgs = {
   
   // 📝 Caption for media messages
   caption?: string | null;
+
+  // 🧩 Interactive content (buttons, lists)
+  interactiveContent?: any | null;
   
   createdAt?: string | Date | null;
   remoteParticipantId?: string | null;
@@ -870,7 +874,7 @@ export async function ensureLeadCustomerChat(args: {
   rawPhone?: string | null;
   lid?: string | null;
 }) {
-  const msisdn = normalizeMsisdn(args.phone);
+  const msisdn = /[a-zA-Z]/.test(args.phone) ? args.phone : normalizeMsisdn(args.phone);
   const externalIdCandidate = extractExternalId(args.rawPhone ?? null) ?? extractExternalId(args.phone);
   const rawName = typeof args.name === "string" ? args.name.trim() : "";
   const fallbackName =
@@ -1216,14 +1220,14 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
              media_url, media_sha256,
                sent_from_device,
              remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone,
-             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, caption, created_at,
+             remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, caption, interactive_content, created_at,
              company_id, inbox_id)
           values
             ($1, $2, $3, $4, $5, $6, $7,
              $8, $9, $10, $11,
              $12, $13,
                $14,
-               $15, $16, $17, $18, $19, $20, $21, $22, coalesce($23::timestamptz, now()),
+               $15, $16, $17, $18, $19, $20, $21, $22, $24, coalesce($23::timestamptz, now()),
                (select company_id from public.chats where id = $1 limit 1),
                (select inbox_id from public.chats where id = $1 limit 1))
           on conflict (chat_id, external_id) do update
@@ -1246,6 +1250,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
                 remote_sender_is_admin     = coalesce(excluded.remote_sender_is_admin,     public.chat_messages.remote_sender_is_admin),
                 replied_message_id         = coalesce(excluded.replied_message_id,         public.chat_messages.replied_message_id),
                 caption                    = coalesce(excluded.caption,                    public.chat_messages.caption),
+                interactive_content        = coalesce(excluded.interactive_content,        public.chat_messages.interactive_content),
                 updated_at  = now()
           returning id,
                     chat_id,
@@ -1263,6 +1268,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
                     remote_sender_avatar_url,
                     remote_sender_is_admin,
                     replied_message_id,
+                    interactive_content,
                     (xmax = 0) as inserted
         `,
         [
@@ -1293,6 +1299,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.repliedMessageId ?? null,
           args.caption ?? null,
           createdAtIso,
+          args.interactiveContent ?? null,
         ],
       );
       if (!row) return null;
@@ -1463,6 +1470,7 @@ export async function insertInboundMessage(args: {
   remoteSenderAvatarUrl?: string | null;
   remoteSenderIsAdmin?: boolean | null;
   repliedMessageId?: string | null;
+  interactiveContent?: any | null;
   createdAt?: string | Date | null;
 }): Promise<InsertedInboundMessage | null> {
   console.log("[META][store] insertInboundMessage payload", args);
@@ -1474,6 +1482,7 @@ export async function insertInboundMessage(args: {
     type: args.type ?? "TEXT",
     viewStatus: "Pending",
     caption: args.caption ?? null,
+    interactiveContent: args.interactiveContent ?? null,
     remoteParticipantId: args.remoteParticipantId ?? null,
     remoteSenderId: args.remoteSenderId ?? null,
     remoteSenderName: args.remoteSenderName ?? null,
@@ -1523,6 +1532,7 @@ export async function insertInboundMessage(args: {
     media_url: result.message.media_url ?? null,
     media_public_url: result.message.media_public_url ?? null,
     media_storage_path: result.message.media_storage_path ?? null,
+    interactive_content: result.message.interactive_content ?? null,
   };
 }
 

@@ -632,7 +632,7 @@ export function registerCompanyRoutes(app: express.Application) {
       // Gerar token de sessão manual e injetar no Redis
       // Isso bypassa a verificação do Supabase Auth e usa o cache do requireAuth
       const sessionToken = crypto.randomUUID();
-      const tokenHash = Buffer.from(sessionToken).toString("base64").slice(0, 32);
+      const tokenHash = crypto.createHash("sha256").update(sessionToken).digest("hex");
       const cacheKey = `auth:token:${tokenHash}`;
       
       const authData = {

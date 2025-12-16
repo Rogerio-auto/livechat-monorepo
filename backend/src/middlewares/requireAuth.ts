@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { JWT_COOKIE_NAME } from "../config/env.ts";
@@ -98,8 +99,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (!token) token = (req as any).cookies?.[JWT_COOKIE_NAME];
     if (!token) return res.status(401).json({ error: "Not authenticated" });
 
-    // ✅ Cache de autenticação por token hash
-    const tokenHash = Buffer.from(token).toString("base64").slice(0, 32);
+    // ✅ Cache de autenticação por token hash (SHA-256 para garantir unicidade)
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
     const cacheKey = `auth:token:${tokenHash}`;
     
     try {

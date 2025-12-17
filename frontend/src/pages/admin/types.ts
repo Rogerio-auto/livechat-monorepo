@@ -46,6 +46,7 @@ export type CompanyFinance = {
   plan: string | null;
   status: string | null;
   isActive: boolean;
+  trialDaysRemaining?: number;
 };
 
 export type CompanyAnalytics = {

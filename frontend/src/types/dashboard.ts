@@ -92,6 +92,7 @@ export interface DashboardFilters {
 export type DashboardTab = 
   | "overview" 
   | "attendance" 
+  | "tasks"
   | "ai-agents" 
   | "campaigns" 
   | "sales" 

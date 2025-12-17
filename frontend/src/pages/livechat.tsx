@@ -3864,11 +3864,11 @@ const scrollToBottom = useCallback(
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+    <div className="flex h-screen w-full overflow-hidden bg-(--color-surface) text-(--color-text)">
       
       {/* Global Sidebar */}
       <Sidebar mobileOpen={menuOpen} onRequestClose={() => setMenuOpen(false)} className="peer" />
-      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
+      <FloatingNotificationBell className="left-20 peer-hover:left-76" />
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pl-16 transition-all duration-300">
@@ -3877,10 +3877,10 @@ const scrollToBottom = useCallback(
           <>
             {/* Chat List Column */}
             <div 
-              className="flex flex-col border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] backdrop-blur-sm z-10 h-full relative "
+              className="flex flex-col border-r border-(--color-border) bg-(--color-surface) backdrop-blur-sm z-10 h-full relative "
               style={{ width: chatListWidth }}
             >
-              <div className="shrink-0 p-3 border-b border-[color:var(--color-border)]">
+              <div className="shrink-0 p-3 border-b border-(--color-border)">
                 <div className="mb-3 flex items-center gap-2 relative">
                   <button 
                     onClick={() => setLocalMenuOpen(!localMenuOpen)}
@@ -3910,7 +3910,7 @@ const scrollToBottom = useCallback(
                   )}
 
                   <div className="relative flex-1">
-                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[color:var(--color-text-muted)]" />
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-(--color-text-muted)" />
                     <input
                       className="config-input w-full rounded-xl pl-9 pr-3 py-2 text-sm"
                       placeholder="Buscar conversa ou contato"
@@ -3939,7 +3939,7 @@ const scrollToBottom = useCallback(
                       <span className="hidden xl:inline">Filtros</span>
                       {activeFilterCount > 0 && (
                         <span
-                          className="min-w-[1.25rem] rounded-full px-1 text-center text-xs font-semibold"
+                          className="min-w-5 rounded-full px-1 text-center text-xs font-semibold"
                           style={{
                             backgroundColor: "color-mix(in srgb, var(--color-primary) 85%, transparent)",
                             color: "var(--color-on-primary)",
@@ -4297,7 +4297,7 @@ const scrollToBottom = useCallback(
                 <div ref={bottomRef} />
               </div>
 
-              <div className="border-t border-[color:var(--color-border)] p-4 bg-[color:var(--color-surface)] backdrop-blur-sm">
+              <div className="border-t border-(--color-border) p-4 bg-(--color-surface) backdrop-blur-sm">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
@@ -4395,7 +4395,7 @@ const scrollToBottom = useCallback(
                       className={`flex-1 rounded-xl px-3 py-2 text-sm ${
                         isPrivateMode
                           ? "bg-blue-50 border-2 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500"
-                          : "bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-text)]"
+                          : "bg-(--color-surface-muted) border border-(--color-border) text-(--color-text)"
                       }`}
                       placeholder={isRecording ? "Gravando áudio..." : "Mensagem privada - use @nome para mencionar"}
                       value={text}
@@ -4415,7 +4415,7 @@ const scrollToBottom = useCallback(
                     />
                   ) : (
                     <input
-                      className={`flex-1 rounded-xl px-3 py-2 text-sm bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-text)] placeholder-[color:var(--color-text-muted)] focus:outline-none focus:border-[color:var(--color-primary)]`}
+                      className={`flex-1 rounded-xl px-3 py-2 text-sm bg-(--color-surface-muted) border border-(--color-border) text-(--color-text) placeholder-(--color-text-muted) focus:outline-none focus:border-(--color-primary)`}
                       placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
                       value={text}
                       onChange={handleTextChange}

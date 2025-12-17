@@ -57,6 +57,7 @@ export function CompanyOverview() {
   };
 
   const handleStatusChange = async (newStatus: string) => {
+    if (!company) return;
     if (!confirm(`Tem certeza que deseja alterar o status para ${newStatus}?`)) return;
     try {
       await fetch(`${API}/api/admin/companies/${company.id}/subscription/status`, {
@@ -72,6 +73,7 @@ export function CompanyOverview() {
   };
 
   const handleExtend = async () => {
+    if (!company) return;
     if (!extendingDays) return;
     try {
       await fetch(`${API}/api/admin/companies/${company.id}/subscription/extend`, {

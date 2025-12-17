@@ -16,6 +16,7 @@ export type Chat = {
   group_name?: string | null;
   group_avatar_url?: string | null;
   customer_name?: string | null;
+  customer_email?: string | null;
   customer_phone?: string | null;
   customer_avatar_url?: string | null;
   photo_url?: string | null;

@@ -1050,6 +1050,13 @@ function extractContentAndType(m: any): { content: string; type: string; caption
         caption: null,
         interactiveContent: m?.system ?? null,
       };
+    case "unsupported":
+      const errorDetails = m?.errors?.[0]?.error_data?.details || m?.errors?.[0]?.message || "Unknown error";
+      return {
+        content: `[UNSUPPORTED] ${errorDetails}`,
+        type: "TEXT",
+        caption: null,
+      };
     default:
       console.warn("[META][inbound] Unknown message type:", t, JSON.stringify(m, null, 2));
       // Fallback to TEXT for unknown types to prevent DB enum errors
@@ -1579,7 +1586,7 @@ async function handleMetaInboundMessages(args: {
       inboxId,
       messageType: m?.type, // Log message type
     });
-    console.log("[META][inbound] Payload:", JSON.stringify(m, null, 2));
+    // console.log("[META][inbound] Payload:", JSON.stringify(m, null, 2));
 
     // Ensure chat (group or direct)
     let chatId: string;

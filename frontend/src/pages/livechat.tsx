@@ -6,22 +6,24 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { cleanupService } from "../services/cleanupService";
 import { useCompany } from "../hooks/useCompany";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
-import LivechatMenu, {
-  type LivechatSection,
-} from "../componets/livechat/LivechatMenu";
+import Sidebar from "../componets/Sidbars/sidebar";
+import LivechatMenu, { type LivechatSection } from "../componets/livechat/LivechatMenu";
 import { ChatHeader } from "../componets/livechat/ChatHeader";
 import { MessageBubble } from "../componets/livechat/MessageBubble";
 import { LabelsManager } from "../componets/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/types";
-import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare } from "react-icons/fi";
+import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
 import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
+import { ContactInfoPanel } from "../componets/livechat/ContactInfoPanel";
 import { MentionInput } from "../components/MentionInput";
 import { Button, Card } from "../components/ui";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+
+import { FloatingNotificationBell } from "../components/notifications/FloatingNotificationBell";
 
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -100,6 +102,42 @@ import { LimitModal } from "../components/ui/LimitModal";
 export default function LiveChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [localMenuOpen, setLocalMenuOpen] = useState(false);
+  const [menuCollapsed, setMenuCollapsed] = useState(true);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
+  const [chatListWidth, setChatListWidth] = useState(350);
+  const isResizingRef = useRef(false);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const newWidth = e.clientX - 64; // Subtract sidebar width
+      if (newWidth > 250 && newWidth < 600) {
+        setChatListWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.body.style.cursor = 'default';
+      document.body.style.userSelect = 'auto';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  const startResizing = (e: React.MouseEvent) => {
+    isResizingRef.current = true;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
   
   // Limit Modal State
   const [limitModalOpen, setLimitModalOpen] = useState(false);
@@ -3826,25 +3864,51 @@ const scrollToBottom = useCallback(
   }
 
   return (
-    <section className="livechat-theme flex flex-col gap-3 pb-3 text-[color:var(--color-text)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-1.5rem)] xl:pb-0 xl:overflow-hidden">
-      <div className="grid flex-1 grid-cols-12 gap-3 xl:gap-4 xl:overflow-hidden">
-        <div className="col-span-12 xl:col-span-2">
-          <div className="livechat-panel rounded-[28px] p-4 shadow-[0_24px_70px_-55px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:sticky xl:top-[calc(var(--app-topbar-height,4rem)+1.5rem)] xl:h-[calc(100vh-var(--app-topbar-height,4rem)-3rem)] xl:overflow-hidden">
-            <div className="xl:h-full xl:overflow-y-auto">
-              <LivechatMenu section={section} onChange={setSection} />
-            </div>
-          </div>
-        </div>
+    <div className="flex h-screen w-full overflow-hidden bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+      
+      {/* Global Sidebar */}
+      <Sidebar mobileOpen={menuOpen} onRequestClose={() => setMenuOpen(false)} className="peer" />
+      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
 
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pl-16 transition-all duration-300">
+        <section className="livechat-theme flex flex-1 overflow-hidden relative h-full">
         {(section === "all" || section === "unanswered") && (
           <>
-            <Card
-              gradient={false}
-              padding="md"
-              className="livechat-card col-span-12 md:col-span-5 lg:col-span-4 xl:col-span-3 flex min-h-[520px] flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
+            {/* Chat List Column */}
+            <div 
+              className="flex flex-col border-r border-[color:var(--color-border)] bg-[color:var(--color-surface)] backdrop-blur-sm z-10 h-full relative "
+              style={{ width: chatListWidth }}
             >
-              <div className="shrink-0">
-                <div className="mb-4 flex items-center gap-2">
+              <div className="shrink-0 p-3 border-b border-[color:var(--color-border)]">
+                <div className="mb-3 flex items-center gap-2 relative">
+                  <button 
+                    onClick={() => setLocalMenuOpen(!localMenuOpen)}
+                    className="p-2.5 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
+                    title="Menu do Livechat"
+                  >
+                    <FiMenu size={20} />
+                  </button>
+                  
+                  {/* Local Menu Dropdown */}
+                  {localMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-30" 
+                        onClick={() => setLocalMenuOpen(false)} 
+                      />
+                      <div className="absolute top-full left-0 mt-2 w-56 livechat-card rounded-xl z-40 p-2 animate-in fade-in zoom-in-95 duration-100">
+                        <LivechatMenu 
+                          section={section} 
+                          onChange={(s) => {
+                            setSection(s);
+                            setLocalMenuOpen(false);
+                          }} 
+                        />
+                      </div>
+                    </>
+                  )}
+
                   <div className="relative flex-1">
                     <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[color:var(--color-text-muted)]" />
                     <input
@@ -3872,7 +3936,7 @@ const scrollToBottom = useCallback(
                       }}
                     >
                       <FiFilter size={16} />
-                      <span>Filtros</span>
+                      <span className="hidden xl:inline">Filtros</span>
                       {activeFilterCount > 0 && (
                         <span
                           className="min-w-[1.25rem] rounded-full px-1 text-center text-xs font-semibold"
@@ -4037,8 +4101,7 @@ const scrollToBottom = useCallback(
               <div
                 ref={chatsListRef}
                 onScroll={handleChatsScroll}
-                className="livechat-muted-surface flex-1 min-h-0 overflow-y-auto rounded-2xl p-2
-              scrollbar-thin scrollbar-track-transparent
+                className="flex-1 min-h-0 overflow-y-auto scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
               [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
@@ -4073,13 +4136,15 @@ const scrollToBottom = useCallback(
                   </div>
                 )}
               </div>
-            </Card>
+            {/* Chat Area */}
+            <div 
+              className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/50 z-50 transition-colors"
+              onMouseDown={startResizing}
+            />
+            </div>
 
-            <Card
-              gradient={false}
-              padding="md"
-              className="livechat-card col-span-12 md:col-span-7 lg:col-span-8 xl:col-span-7 flex flex-col overflow-hidden shadow-[0_40px_100px_-70px_rgba(8,12,20,0.88)] backdrop-blur-sm xl:min-h-0 xl:h-full"
-            >
+            {/* Chat Area */}
+            <div className="flex-1 flex flex-col overflow-hidden relative min-w-0 h-full">
               {!currentChat ? (
                 <div className="flex h-full flex-col items-center justify-center text-center opacity-60">
                   <div className="mb-4 rounded-full bg-gray-100 p-6 dark:bg-gray-800">
@@ -4093,6 +4158,7 @@ const scrollToBottom = useCallback(
               <ChatHeader
                 apiBase={API}
                 chat={currentChat}
+                onToggleInfo={() => setInfoPanelOpen((prev) => !prev)}
                 inboxId={currentChat?.inbox_id ?? null}
                 departments={departments}
                 departmentsLoading={departmentsLoading}
@@ -4145,8 +4211,7 @@ const scrollToBottom = useCallback(
               <div
                 ref={messagesContainerRef}
                 onScroll={handleMessagesScroll}
-                className="livechat-muted-surface flex-1 overflow-auto rounded-2xl px-4 py-3 space-y-1.5 pr-2
-              scrollbar-thin scrollbar-track-transparent
+                className="flex-1 overflow-auto p-4 space-y-1.5 scrollbar-thin scrollbar-track-transparent
               [&::-webkit-scrollbar]:w-2
               [&::-webkit-scrollbar-thumb]:rounded-full
               [&::-webkit-scrollbar-thumb]:bg-[color-mix(in_srgb,var(--color-text)_12%,var(--color-bg))]
@@ -4232,7 +4297,7 @@ const scrollToBottom = useCallback(
                 <div ref={bottomRef} />
               </div>
 
-              <div className="livechat-blur-panel mt-4 rounded-2xl p-3 shadow-[0_24px_70px_-65px_rgba(8,12,20,0.85)]">
+              <div className="border-t border-[color:var(--color-border)] p-4 bg-[color:var(--color-surface)] backdrop-blur-sm">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
@@ -4270,7 +4335,7 @@ const scrollToBottom = useCallback(
                     className="mb-3 grid max-w-[260px] grid-cols-8 gap-1 rounded-xl border p-2 text-xl shadow"
                     style={{
                       borderColor: "var(--color-border)",
-                      backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 70%, transparent)",
+                      backgroundColor: "var(--color-surface)",
                     }}
                   >
                     {"????????????????"
@@ -4330,7 +4395,7 @@ const scrollToBottom = useCallback(
                       className={`flex-1 rounded-xl px-3 py-2 text-sm ${
                         isPrivateMode
                           ? "bg-blue-50 border-2 border-blue-500 dark:bg-blue-900/20 dark:border-blue-500"
-                          : "config-input"
+                          : "bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-text)]"
                       }`}
                       placeholder={isRecording ? "Gravando áudio..." : "Mensagem privada - use @nome para mencionar"}
                       value={text}
@@ -4350,7 +4415,7 @@ const scrollToBottom = useCallback(
                     />
                   ) : (
                     <input
-                      className={`flex-1 rounded-xl px-3 py-2 text-sm config-input`}
+                      className={`flex-1 rounded-xl px-3 py-2 text-sm bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-text)] placeholder-[color:var(--color-text-muted)] focus:outline-none focus:border-[color:var(--color-primary)]`}
                       placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
                       value={text}
                       onChange={handleTextChange}
@@ -4383,36 +4448,67 @@ const scrollToBottom = useCallback(
               </div>
               </>
               )}
-            </Card>
+            </div>
+            {infoPanelOpen && currentChat && (
+              <ContactInfoPanel 
+                chat={currentChat} 
+                apiBase={API}
+                onClose={() => setInfoPanelOpen(false)} 
+              />
+            )}
           </>
         )}
 
-          {section === "labels" && (
-            <Card
-              gradient={false}
-              padding="lg"
-              className="livechat-card col-span-12 xl:col-span-10 flex min-h-[520px] flex-col shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full xl:overflow-hidden"
-            >
-            <LabelsManager apiBase={API} />
-          </Card>
+        {section === "labels" && (
+          <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
+            <div className="mb-4 flex items-center gap-2">
+              <button 
+                onClick={() => setMenuOpen(true)}
+                className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
+              >
+                <FiMenu size={20} />
+              </button>
+              <h2 className="text-xl font-semibold">Labels</h2>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <LabelsManager apiBase={API} />
+            </div>
+          </div>
         )}
 
         {section === "contacts" && (
-            <div className="livechat-card col-span-12 xl:col-span-10 flex min-h-[520px] flex-col rounded-[28px] p-4 shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full xl:overflow-hidden">
-            <ContactsCRM apiBase={API} socket={socketRef.current} />
+          <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
+            <div className="mb-4 flex items-center gap-2">
+              <button 
+                onClick={() => setMenuOpen(true)}
+                className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
+              >
+                <FiMenu size={20} />
+              </button>
+              <h2 className="text-xl font-semibold">Contatos</h2>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <ContactsCRM apiBase={API} socket={socketRef.current} />
+            </div>
           </div>
         )}
 
         {section === "campaigns" && (
-          <Card
-            gradient={false}
-            padding="md"
-              className="livechat-card col-span-12 xl:col-span-10 flex flex-col overflow-hidden shadow-[0_32px_90px_-60px_rgba(8,12,20,0.85)] backdrop-blur-sm xl:min-h-0 xl:h-full"
-          >
-            <CampaignsPanel apiBase={API} />
-          </Card>
+          <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
+            <div className="mb-4 flex items-center gap-2">
+              <button 
+                onClick={() => setMenuOpen(true)}
+                className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
+              >
+                <FiMenu size={20} />
+              </button>
+              <h2 className="text-xl font-semibold">Campanhas</h2>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <CampaignsPanel apiBase={API} />
+            </div>
+          </div>
         )}
-      </div>
 
       {/* Limit Modal */}
       <LimitModal 
@@ -4446,7 +4542,9 @@ const scrollToBottom = useCallback(
           }}
         />
       )}
-    </section>
+        </section>
+      </main>
+    </div>
   );
 }
 

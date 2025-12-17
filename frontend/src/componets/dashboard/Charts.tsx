@@ -12,17 +12,17 @@ interface ChartContainerProps {
 export function ChartContainer({ title, loading = false, children, action }: ChartContainerProps) {
   if (loading) {
     return (
-      <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-lg">
+      <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
         <div className="absolute inset-0 bg-white/0 backdrop-blur-sm" />
-        <div className="relative mb-4 h-4 w-48 animate-pulse rounded bg-[rgba(47,180,99,0.18)] dark:bg-[rgba(27,58,41,0.6)]" />
-        <div className="relative h-64 animate-pulse rounded bg-[rgba(47,180,99,0.18)] dark:bg-[rgba(27,58,41,0.6)]" />
+        <div className="relative mb-4 h-4 w-48 animate-pulse rounded bg-[color:var(--color-surface-muted)]" />
+        <div className="relative h-64 animate-pulse rounded bg-[color:var(--color-surface-muted)]" />
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
-      <div className="pointer-events-none absolute inset-x-0 -top-10 h-32 bg-linear-to-b from-[rgba(47,180,99,0.16)] via-transparent to-transparent" />
+    <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+      <div className="pointer-events-none absolute inset-x-0 -top-10 h-32 bg-gradient-to-b from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
       <div className="mb-4 flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
           {title}
@@ -46,7 +46,7 @@ export function LineChartComponent({
   data,
   dataKey,
   xAxisKey = "name",
-  color = "#2fb463",
+  color = "var(--color-primary)",
   height = 220,
 }: LineChartComponentProps) {
   return (
@@ -94,7 +94,7 @@ export function BarChartComponent({
   data,
   dataKeys,
   xAxisKey = "name",
-  colors = ["#2fb463", "#74e69e"],
+  colors = ["var(--color-primary)", "var(--color-primary-muted, #74e69e)"],
   height = 220,
   horizontal = false,
 }: BarChartComponentProps) {

@@ -17,6 +17,8 @@ import {
   FaCogs,
   FaFileAlt,
   FaTimes,
+  FaMoon,
+  FaSun,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
@@ -127,16 +129,17 @@ const adminLinks: SidebarLink[] = [
 type SidebarProps = {
   mobileOpen?: boolean;
   onRequestClose?: () => void;
+  staticPosition?: boolean;
 };
 
-export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarProps = {}) {
+export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosition = false, className = "" }: SidebarProps & { className?: string } = {}) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const { features } = useSubscription();
   const navigate = useNavigate();
   const location = useLocation();
   const API =
     import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
-  const { registerUserTheme } = useTheme();
+  const { registerUserTheme, theme, toggleTheme } = useTheme();
 
   useEffect(() => {
     (async () => {
@@ -200,7 +203,9 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
   return (
     <>
       <aside
-        className="group fixed inset-y-0 left-0 z-40 hidden w-[var(--sidebar-expanded-width,18rem)] flex-col overflow-hidden border-r border-black/30 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-[0_50px_120px_-60px_rgba(1,15,9,0.8)] lg:flex"
+        className={`group z-40 hidden flex-col overflow-hidden border-r border-white/5 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-xl transition-all duration-300 ease-in-out md:flex w-[64px] hover:w-[18rem] ${
+          staticPosition ? "relative h-full" : "fixed inset-y-0 left-0"
+        } ${className}`}
         style={{ backdropFilter: "blur(8px)" }}
       >
         <SidebarContent
@@ -210,7 +215,8 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
           isAdmin={profile?.role?.toUpperCase() === "ADMIN"}
           logout={logout}
           onNavigate={handleNav}
-          forceExpanded
+          theme={theme}
+          toggleTheme={toggleTheme}
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
       </aside>
@@ -249,6 +255,8 @@ export default function Sidebar({ mobileOpen = false, onRequestClose }: SidebarP
             logout={logout}
             onNavigate={handleNav}
             forceExpanded
+            theme={theme}
+            toggleTheme={toggleTheme}
           />
         </aside>
       </div>
@@ -264,6 +272,8 @@ type SidebarContentProps = {
   logout: () => Promise<void> | void;
   onNavigate?: () => void;
   forceExpanded?: boolean;
+  theme: "light" | "dark";
+  toggleTheme: () => void;
 };
 
 function SidebarContent({
@@ -274,6 +284,8 @@ function SidebarContent({
   logout,
   onNavigate,
   forceExpanded,
+  theme,
+  toggleTheme,
 }: SidebarContentProps) {
   const metaLabel = profile?.companyId ? `ID ${profile.companyId}` : "Operações";
 
@@ -381,6 +393,25 @@ function SidebarContent({
       <div className="border-t border-white/10 px-3 py-4">
         <button
           type="button"
+          onClick={toggleTheme}
+          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-white/80 transition-all duration-200 hover:bg-white/10"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-lg text-white">
+            {theme === "dark" ? <FaSun /> : <FaMoon />}
+          </span>
+          <span
+            className={`text-sm font-semibold tracking-wide ${
+              forceExpanded
+                ? "opacity-100"
+                : "-translate-x-2 opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+            }`}
+          >
+            {theme === "dark" ? "Modo Claro" : "Modo Escuro"}
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => {
             logout();
             onNavigate?.();
@@ -432,10 +463,10 @@ function SidebarItem({ icon, label, to, active, onClick, forceExpanded, onNaviga
   const classes = to
     ? `${baseClasses} ${
         active
-          ? "bg-white/10 text-white shadow-[0_18px_35px_-18px_rgba(0,0,0,0.9)] ring-1 ring-white/20"
-          : "text-white/70 hover:bg-white/10"
+          ? "bg-white/10 text-white shadow-sm ring-1 ring-white/10"
+          : "text-white/70 hover:bg-white/5"
       }`
-    : `${baseClasses} text-white/80 hover:bg-white/10`;
+    : `${baseClasses} text-white/80 hover:bg-white/5`;
 
   const iconColor = active ? "text-[#7bf0b0]" : "text-white";
 

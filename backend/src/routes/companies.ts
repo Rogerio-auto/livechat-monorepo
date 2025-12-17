@@ -664,4 +664,70 @@ export function registerCompanyRoutes(app: express.Application) {
       return res.status(500).json({ error: e.message });
     }
   });
+
+  // POST Change Plan
+  app.post("/api/admin/companies/:companyId/plan", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    const { planId, planName } = req.body;
+
+    if (!planId) {
+      return res.status(400).json({ error: "planId is required" });
+    }
+
+    try {
+      // 1. Update Subscription
+      const { changePlan } = await import("../services/subscriptions.js");
+      await changePlan(companyId, planId);
+
+      // 2. Update Company (legacy field) - REMOVED to avoid Enum errors
+      // The 'plan' column in companies table is an ENUM and might not match the planName.
+      // We rely on the 'subscriptions' table now.
+      /*
+      const { error } = await supabaseAdmin
+        .from("companies")
+        .update({ plan: planName })
+        .eq("id", companyId);
+      if (error) console.warn("Failed to update legacy plan field:", error);
+      */
+
+      return res.json({ success: true, plan: planName });
+    } catch (e: any) {
+      console.error("Change plan error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST Update Subscription Status (Activate/Cancel)
+  app.post("/api/admin/companies/:companyId/subscription/status", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    const { status } = req.body; // 'active', 'canceled', 'trial', etc.
+
+    if (!status) return res.status(400).json({ error: "status is required" });
+
+    try {
+      const { updateSubscriptionStatus } = await import("../services/subscriptions.js");
+      await updateSubscriptionStatus(companyId, status);
+      return res.json({ success: true, status });
+    } catch (e: any) {
+      console.error("Update status error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
+
+  // POST Extend Subscription
+  app.post("/api/admin/companies/:companyId/subscription/extend", requireAuth, requireAdmin, async (req: any, res) => {
+    const { companyId } = req.params;
+    const { days } = req.body;
+
+    if (!days || isNaN(days)) return res.status(400).json({ error: "days is required" });
+
+    try {
+      const { extendSubscription } = await import("../services/subscriptions.js");
+      await extendSubscription(companyId, Number(days));
+      return res.json({ success: true, days });
+    } catch (e: any) {
+      console.error("Extend subscription error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  });
 }

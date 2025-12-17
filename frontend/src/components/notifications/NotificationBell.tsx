@@ -22,7 +22,11 @@ const PRIORITY_COLORS: Record<string, string> = {
   URGENT: "bg-red-500",
 };
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  placement?: 'top' | 'bottom';
+}
+
+export function NotificationBell({ placement = 'bottom' }: NotificationBellProps) {
   const {
     notifications,
     unreadCount,
@@ -108,7 +112,11 @@ export function NotificationBell() {
 
       {/* Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-[9999] max-h-[600px] flex flex-col">
+        <div 
+          className={`absolute left-0 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-[9999] max-h-[600px] flex flex-col
+            ${placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
+          `}
+        >
           {/* Header */}
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-center justify-between mb-4">

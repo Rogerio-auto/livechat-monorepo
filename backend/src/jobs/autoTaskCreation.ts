@@ -256,6 +256,11 @@ async function createFollowUpTask(lead: InactiveLead): Promise<void> {
         })
       : "Data desconhecida";
 
+    if (!lead.assigned_to_id) {
+      console.warn(`[AutoTask] ⚠️ Lead ${lead.id} sem responsável. Pulando criação de task.`);
+      return;
+    }
+
     const taskInput: CreateTaskInput = {
       title: `Follow-up: ${lead.name}`,
       description: `Lead sem interação há ${daysSinceInteraction} dias. Entrar em contato para dar seguimento.
@@ -276,7 +281,7 @@ async function createFollowUpTask(lead: InactiveLead): Promise<void> {
       company_id: lead.company_id,
       related_lead_id: lead.id,
       assigned_to: lead.assigned_to_id,
-      created_by: "SYSTEM", // Marcado como criado pelo sistema
+      created_by: lead.assigned_to_id, // Marcado como criado pelo responsável
       is_auto_generated: true,
     };
 
@@ -320,6 +325,11 @@ async function createEventPrepTask(event: UpcomingEvent): Promise<void> {
       minute: "2-digit",
     });
 
+    if (!event.created_by_id) {
+      console.warn(`[AutoTask] ⚠️ Evento ${event.id} sem criador definido. Pulando criação de task.`);
+      return;
+    }
+
     const taskInput: CreateTaskInput = {
       title: `Preparar: ${event.title}`,
       description: `Preparação para evento agendado para amanhã.
@@ -341,7 +351,7 @@ async function createEventPrepTask(event: UpcomingEvent): Promise<void> {
       related_customer_id: event.customer_id,
       related_lead_id: event.lead_id,
       assigned_to: event.created_by_id,
-      created_by: "SYSTEM",
+      created_by: event.created_by_id,
       is_auto_generated: true,
     };
 

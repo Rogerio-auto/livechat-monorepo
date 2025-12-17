@@ -69,6 +69,7 @@ type ChatHeaderProps = {
 	aiAgentId?: string | null;
 	aiAgentName?: string | null;
 	onAssignAIAgent?: (agentId: string | null) => Promise<void> | void;
+  onToggleInfo?: () => void;
 };
 
 type Panel = "tags" | "agents" | "stage" | "status" | "department" | "ai-agents" | null;
@@ -98,6 +99,7 @@ export function ChatHeader({
 	onChangeStatus,
 	departments,
 	departmentsLoading,
+  onToggleInfo,
 	selectedDepartmentId,
 	onChangeDepartment,
 	isDepartmentChanging,
@@ -679,7 +681,7 @@ export function ChatHeader({
 	const panelContent = renderPanel();
 
 	return (
-		<div className="relative mb-4">
+		<div className="relative mb-4 mx-4 mt-4 p-4 rounded-xl bg-(--color-surface) border border-(--color-border) shadow-sm">
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<div className="flex flex-1 items-start gap-3">
 					<AvatarCircle name={chatTitle} />
@@ -693,6 +695,15 @@ export function ChatHeader({
 								{statusLabel}
 							</span>
 						)}
+            {onToggleInfo && (
+              <button 
+                onClick={onToggleInfo}
+                className="ml-2 p-1.5 rounded-full hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                title="Ver informações do contato"
+              >
+                <FiUser size={16} />
+              </button>
+            )}
 					</div>
 
 					<div className="flex flex-wrap items-center gap-2 text-xs text-(--color-text-muted)">

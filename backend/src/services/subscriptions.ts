@@ -528,3 +528,56 @@ export async function changePlan(companyId: string, newPlanId: string): Promise<
 export async function deletePlan(planId: string): Promise<void> {
   await db.none(`DELETE FROM public.plans WHERE id = $1`, [planId]);
 }
+
+/**
+ * Atualizar status da assinatura
+ */
+export async function updateSubscriptionStatus(companyId: string, status: SubscriptionStatus): Promise<void> {
+  await db.none(
+    `UPDATE public.subscriptions 
+     SET status = $2, updated_at = NOW() 
+     WHERE company_id = $1`,
+    [companyId, status]
+  );
+  
+  // Invalidate cache
+  try {
+    const { redis } = await import("../lib/redis.ts");
+    await redis.del(`subscription:${companyId}`);
+  } catch (e) {}
+}
+
+/**
+ * Estender assinatura (adicionar dias ao trial ou ao período atual)
+ */
+export async function extendSubscription(companyId: string, days: number): Promise<void> {
+  // Primeiro, buscar a assinatura para saber se é trial ou active
+  const sub = await getSubscription(companyId);
+  if (!sub) throw new Error("Subscription not found");
+
+  if (sub.status === 'trial') {
+    await db.none(
+      `UPDATE public.subscriptions 
+       SET trial_ends_at = COALESCE(trial_ends_at, NOW()) + make_interval(days => $2),
+           updated_at = NOW()
+       WHERE company_id = $1`,
+      [companyId, days]
+    );
+  } else {
+    // Se for ativa, estende o current_period_end e next_billing_date
+    await db.none(
+      `UPDATE public.subscriptions 
+       SET current_period_end = COALESCE(current_period_end, NOW()) + make_interval(days => $2),
+           next_billing_date = COALESCE(next_billing_date, NOW()) + make_interval(days => $2),
+           updated_at = NOW()
+       WHERE company_id = $1`,
+      [companyId, days]
+    );
+  }
+
+  // Invalidate cache
+  try {
+    const { redis } = await import("../lib/redis.ts");
+    await redis.del(`subscription:${companyId}`);
+  } catch (e) {}
+}

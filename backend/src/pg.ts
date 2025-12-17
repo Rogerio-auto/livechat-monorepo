@@ -35,6 +35,10 @@ const isLocal = (s?: string | null) => !!s && /localhost|127\.0\.0\.1/i.test(s ?
 const isSslForced = typeof PGSSL === "string" && ["1", "true", "t", "yes", "on", "require"].includes(PGSSL.toLowerCase());
 
 function resolveSsl(target?: string | null) {
+  // Force SSL for Supabase/Supavisor connections unless explicitly disabled
+  if (target && (target.includes('supabase.com') || target.includes('supabase.co'))) {
+    return { rejectUnauthorized: false };
+  }
   if (isSslForced) return { rejectUnauthorized: false };
   if (!target) return undefined;
   return isLocal(target) ? undefined : { rejectUnauthorized: false };

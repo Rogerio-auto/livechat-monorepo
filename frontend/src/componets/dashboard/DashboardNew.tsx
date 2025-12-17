@@ -25,9 +25,13 @@ import {
   FiTarget,
   FiSend,
   FiUser,
+  FiCheckSquare,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
+import Sidebar from "../Sidbars/sidebar";
 import type { DashboardTab } from "../../types/dashboard";
+
+import { FloatingNotificationBell } from "../../components/notifications/FloatingNotificationBell";
 
 export function DashboardNew() {
   const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
@@ -36,6 +40,7 @@ export function DashboardNew() {
   const tabs: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: "Visão Geral", icon: <FiActivity /> },
     { id: "attendance", label: "Atendimento", icon: <FiMessageSquare /> },
+    { id: "tasks", label: "Tarefas", icon: <FiCheckSquare /> },
     { id: "ai-agents", label: "Agentes AI", icon: <FiUser /> },
     { id: "campaigns", label: "Campanhas", icon: <FiSend /> },
     { id: "sales", label: "Vendas", icon: <FiTarget /> },
@@ -43,22 +48,19 @@ export function DashboardNew() {
   ];
 
   return (
-    <div className="livechat-theme w-full min-h-screen pb-12 transition-colors duration-500">
-      <div className="mx-auto w-full max-w-[var(--page-max-width)] space-y-6 px-3 pb-8 pt-6 sm:px-6 lg:px-8">
-        <TrialBanner />
-        <div className="livechat-card rounded-3xl">
-          <div className="px-5 py-6 md:px-10 md:py-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-3xl font-bold text-[var(--color-text)]">Dashboard</h1>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  Acompanhe as métricas e performance do seu negócio
-                </p>
+    <div className="flex h-screen w-full overflow-hidden bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+      <Sidebar className="peer" />
+      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pl-16 transition-all duration-300">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+          <div className="w-full space-y-6">
+            <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-0">
+              <div className="px-4 md:px-6 py-6 border-b border-[color:var(--color-border)]">
+                <h1 className="text-2xl font-bold text-[color:var(--color-heading)]">Dashboard</h1>
+                <p className="text-sm text-[color:var(--color-text-muted)]">Acompanhe as métricas e performance do seu negócio</p>
               </div>
-            </div>
-
-            <div className="mt-6 rounded-2xl livechat-muted-surface p-2 shadow-inner backdrop-blur-md">
-              <div className="flex flex-wrap gap-2">
+              <div className="p-4 md:p-6">
+                <div className="flex flex-wrap gap-2">
                 {tabs.map((tab) => {
                   const isActive = activeTab === tab.id;
                   return (
@@ -67,15 +69,15 @@ export function DashboardNew() {
                       onClick={() => setActiveTab(tab.id)}
                       className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
                         isActive
-                          ? "bg-[#2fb463] text-white shadow-[0_18px_48px_-24px_rgba(47,180,99,0.55)]"
-                          : "text-[var(--color-text-muted)] hover:bg-[rgba(47,180,99,0.12)] hover:text-[var(--color-primary)] dark:hover:bg-[rgba(116,230,158,0.12)]"
+                          ? "bg-[color:var(--color-primary)] text-white shadow-lg shadow-[color:var(--color-primary)]/20"
+                          : "text-[var(--color-text-muted)] hover:bg-[color:var(--color-surface-muted)] hover:text-[var(--color-primary)]"
                       }`}
                     >
                       <span
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl border border-white/40 transition-all ${
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
                           isActive
-                            ? "bg-white/25 text-white"
-                            : "bg-[rgba(47,180,99,0.1)] text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]"
+                            ? "bg-white/20 border-white/20 text-white"
+                            : "bg-[color:var(--color-surface-muted)] border-[color:var(--color-border)] text-[color:var(--color-text-muted)] group-hover:text-[color:var(--color-primary)] group-hover:border-[color:var(--color-primary)]/30"
                         }`}
                       >
                         {tab.icon}
@@ -90,6 +92,7 @@ export function DashboardNew() {
             <div className="mt-8">
               {activeTab === "overview" && <OverviewTab />}
               {activeTab === "attendance" && <AttendanceTab />}
+              {activeTab === "tasks" && <TasksTab />}
               {activeTab === "ai-agents" && <AIAgentsTab />}
               {activeTab === "campaigns" && <CampaignsTab />}
               {activeTab === "sales" && <SalesTab />}
@@ -98,6 +101,7 @@ export function DashboardNew() {
           </div>
         </div>
       </div>
+      </main>
     </div>
   );
 }
@@ -176,9 +180,9 @@ function OverviewTab() {
 
       {/* Alertas */}
       <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl flex flex-col max-h-[600px]">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
-          <div className="relative flex-1 overflow-y-auto">
+        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-5 shadow-sm flex flex-col max-h-[600px]">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
+          <div className="relative flex-1 overflow-y-auto custom-scrollbar">
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Alertas e Pendências
             </h3>
@@ -187,15 +191,10 @@ function OverviewTab() {
         </div>
       </div>
 
-      {/* Tasks Widget */}
-      <div className="col-span-12 lg:col-span-4">
-        <TasksWidget />
-      </div>
-
       {/* Conversas Recentes */}
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(90,211,139,0.12)] via-transparent to-transparent" />
+        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
           <div className="relative">
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Conversas Recentes
@@ -205,78 +204,46 @@ function OverviewTab() {
                 {[1, 2, 3].map((i) => (
                   <div
                     key={i}
-                    className="h-16 animate-pulse rounded-xl bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]"
+                    className="h-16 animate-pulse rounded-xl bg-[color:var(--color-surface-muted)]"
                   />
                 ))}
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full border-separate border-spacing-0">
                   <thead>
-                    <tr className="border-b border-[var(--color-border)]">
-                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                        Cliente
-                      </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                        Status
-                      </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                        Última Mensagem
-                      </th>
-                      <th className="py-3 px-4 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-                        Ações
-                      </th>
+                    <tr className="border-b border-[color:var(--color-border)]">
+                      <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Cliente</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Status</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Última Mensagem</th>
+                      <th className="py-3 px-4 text-left text-xs font-bold uppercase tracking-wider text-[color:var(--color-text-muted)]">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentChats.map((chat: any) => (
-                      <tr
-                        key={chat.id}
-                        className="border-b border-[var(--color-border)] transition-colors hover:bg-[rgba(47,180,99,0.08)] dark:hover:bg-[rgba(27,58,41,0.7)]"
-                      >
+                      <tr key={chat.id} className="border-b border-[color:var(--color-border)] hover:bg-[color:var(--color-surface-muted)] transition-colors">
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(47,180,99,0.16)] text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-primary)]">
                               <FiUser />
                             </div>
                             <div>
-                              <div className="font-semibold text-[var(--color-text)]">
-                                {chat.customer_name || "Sem nome"}
-                              </div>
-                              <div className="text-xs text-[var(--color-text-muted)]">
-                                {chat.customer_phone}
-                              </div>
+                              <div className="font-semibold text-[color:var(--color-heading)]">{chat.customer_name || "Sem nome"}</div>
+                              <div className="text-xs text-[color:var(--color-text-muted)]">{chat.customer_phone}</div>
                             </div>
                           </div>
                         </td>
                         <td className="py-3 px-4">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              chat.status === "OPEN"
-                                ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
-                                : chat.status === "PENDING"
-                                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-                                : "bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300"
-                            }`}
-                          >
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] text-[color:var(--color-text)]">
                             {chat.status}
                           </span>
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-sm text-[var(--color-text)]">
-                            {chat.last_message?.substring(0, 50) || "..."}
-                          </div>
-                          <div className="mt-1 text-xs text-[var(--color-text-muted)]">
-                            {chat.last_message_at
-                              ? new Date(chat.last_message_at).toLocaleString("pt-BR")
-                              : "-"}
-                          </div>
+                          <div className="text-sm text-[color:var(--color-text)]">{chat.last_message?.substring(0, 50) || "..."}</div>
+                          <div className="mt-1 text-xs text-[color:var(--color-text-muted)]">{chat.last_message_at ? new Date(chat.last_message_at).toLocaleString("pt-BR") : "-"}</div>
                         </td>
                         <td className="py-3 px-4">
-                          <button
-                            onClick={() => navigate(`/livechat?chat=${chat.id}`)}
-                            className="text-sm font-semibold text-[#2fb463] hover:underline dark:text-[#74e69e]"
-                          >
+                          <button onClick={() => navigate(`/livechat?chat=${chat.id}`)} className="text-sm font-semibold text-[color:var(--color-primary)] hover:underline">
                             Abrir →
                           </button>
                         </td>
@@ -313,7 +280,7 @@ function AttendanceTab() {
               agentes: d.fromAgent,
             }))}
             dataKeys={["clientes", "agentes"]}
-            colors={["#2fb463", "#74e69e"]}
+            colors={["var(--color-primary)", "var(--color-primary-muted, #74e69e)"]}
           />
         </ChartContainer>
       </div>
@@ -332,8 +299,8 @@ function AttendanceTab() {
       </div>
 
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
+        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
           <div className="relative">
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Estatísticas por Inbox
@@ -342,7 +309,7 @@ function AttendanceTab() {
               {inboxStats.map((inbox) => (
                 <div
                   key={inbox.id}
-                  className="livechat-muted-surface rounded-xl p-4 shadow-sm"
+                  className="bg-[color:var(--color-surface-muted)] rounded-xl p-4 shadow-sm border border-[color:var(--color-border)]"
                 >
                   <div className="mb-2 font-semibold text-[var(--color-text)]">
                     {inbox.name}
@@ -359,7 +326,7 @@ function AttendanceTab() {
                     </div>
                     <div>
                       <div className="text-xs uppercase tracking-wide text-[var(--color-text-muted)]">Ativos</div>
-                      <div className="text-xl font-bold text-[#2fb463] dark:text-[#74e69e]">
+                      <div className="text-xl font-bold text-[color:var(--color-primary)]">
                         {inbox.stats.active_contacts}
                       </div>
                     </div>
@@ -370,6 +337,15 @@ function AttendanceTab() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Tab: Tarefas
+function TasksTab() {
+  return (
+    <div className="w-full">
+      <TasksWidget />
     </div>
   );
 }
@@ -390,15 +366,15 @@ function AIAgentsTab() {
               total: agent.total_chats,
             }))}
             dataKeys={["ativos", "total"]}
-            colors={["#2fb463", "#74e69e"]}
+            colors={["var(--color-primary)", "var(--color-primary-muted, #74e69e)"]}
             horizontal
           />
         </ChartContainer>
       </div>
 
       <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
+        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
           <div className="relative space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Status dos Agentes
@@ -406,7 +382,7 @@ function AIAgentsTab() {
             {agents.map((agent) => (
               <div
                 key={agent.id}
-                className="livechat-muted-surface rounded-xl p-3 shadow-sm"
+                className="bg-[color:var(--color-surface-muted)] rounded-xl p-3 shadow-sm border border-[color:var(--color-border)]"
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-semibold text-[var(--color-text)]">
@@ -414,7 +390,7 @@ function AIAgentsTab() {
                   </span>
                   <span
                     className={`flex h-2.5 w-2.5 rounded-full ${
-                      agent.is_active ? "bg-emerald-500" : "bg-slate-400"
+                      agent.is_active ? "bg-[color:var(--color-primary)]" : "bg-slate-400"
                     }`}
                   />
                 </div>
@@ -484,7 +460,7 @@ function CampaignsTab() {
             ]}
             dataKey="value"
             nameKey="name"
-            colors={["#2fb463", "#F59E0B", "#74e69e", "#EF4444"]}
+            colors={["var(--color-primary)", "#F59E0B", "var(--color-primary-muted, #74e69e)", "#EF4444"]}
           />
         </ChartContainer>
       </div>
@@ -546,7 +522,7 @@ function SalesTab() {
               leads: stage.count,
             }))}
             dataKeys={["leads"]}
-            colors={["#2fb463"]}
+            colors={["var(--color-primary)"]}
             horizontal
             height={Math.max(200, funnel.length * 40)}
           />
@@ -563,8 +539,8 @@ function CustomersTab() {
   return (
     <div className="grid grid-cols-12 gap-4 md:gap-6">
       <div className="col-span-12">
-        <div className="relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[rgba(47,180,99,0.12)] via-transparent to-transparent" />
+        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
           <div className="relative">
             <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
               Top 10 Clientes por Interação (Últimos 30 Dias)
@@ -574,7 +550,7 @@ function CustomersTab() {
                 {[1, 2, 3, 4, 5].map((i) => (
                   <div
                     key={i}
-                    className="h-14 animate-pulse rounded-xl bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]"
+                    className="h-14 animate-pulse rounded-xl bg-[color:var(--color-surface-muted)]"
                   />
                 ))}
               </div>
@@ -583,9 +559,9 @@ function CustomersTab() {
                 {topCustomers.map((customer, index) => (
                   <div
                     key={customer.id}
-                    className="flex items-center gap-4 rounded-xl livechat-muted-surface p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
+                    className="flex items-center gap-4 rounded-xl bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(47,180,99,0.16)] font-bold text-[#1f8b49] dark:bg-[rgba(116,230,158,0.16)] dark:text-[#74e69e]">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[color:var(--color-primary)]/10 font-bold text-[color:var(--color-primary)]">
                       #{index + 1}
                     </div>
                     <div className="flex-1">
@@ -597,7 +573,7 @@ function CustomersTab() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-[#2fb463] dark:text-[#74e69e]">
+                      <div className="text-lg font-bold text-[color:var(--color-primary)]">
                         {customer.messageCount}
                       </div>
                       <div className="text-xs text-[var(--color-text-muted)]">mensagens</div>

@@ -4,6 +4,7 @@ import Sidebar from "../Sidbars/sidebar";
 import { TopBar } from "./TopBar";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { io, Socket } from "socket.io-client";
+import { FloatingNotificationBell } from "../../components/notifications/FloatingNotificationBell";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -146,13 +147,22 @@ export function AppLayout() {
     };
   }, [location.pathname, location.search]); // Re-attach listener when location changes
 
+  const isLiveChat = location.pathname.startsWith("/livechat");
+
+  if (isLiveChat || location.pathname === "/dashboard") {
+    return (
+      <div className="w-full min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
+        <Outlet />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
-      <Sidebar mobileOpen={mobileOpen} onRequestClose={() => setMobileOpen(false)} />
-
-      <div className="flex min-h-screen flex-col lg:pl-[var(--sidebar-expanded-width,18rem)]">
-        <TopBar onMenuClick={() => setMobileOpen(true)} />
-
+      <Sidebar mobileOpen={mobileOpen} onRequestClose={() => setMobileOpen(false)} className="peer" />
+      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
+      <div className="flex min-h-screen flex-col md:pl-[64px]">
+        {/* TopBar removido para dashboard */}
         <main className="app-shell flex-1 py-6">
           <div className="app-shell__inner space-y-6">
             <Outlet />

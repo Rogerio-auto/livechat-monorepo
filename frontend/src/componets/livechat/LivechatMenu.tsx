@@ -10,6 +10,7 @@ export type LivechatSection =
 type Props = {
   section: LivechatSection;
   onChange: (s: LivechatSection) => void;
+  collapsed?: boolean;
 };
 
 const items: Array<{ key: LivechatSection; label: string; Icon: React.ComponentType<any> }> = [
@@ -20,9 +21,9 @@ const items: Array<{ key: LivechatSection; label: string; Icon: React.ComponentT
   { key: "labels", label: "Labels", Icon: FiTag },
 ];
 
-export default function LivechatMenu({ section, onChange }: Props) {
+export default function LivechatMenu({ section, onChange, collapsed = false }: Props) {
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_18px_40px_-35px_rgba(8,12,20,0.9)] p-3 flex flex-col gap-1 text-[var(--color-text)] transition-colors duration-300">
+    <div className="flex flex-col gap-1 px-2">
       {items.map(({ key, label, Icon }) => {
         const active = key === section;
         const buttonClass = active
@@ -38,11 +39,12 @@ export default function LivechatMenu({ section, onChange }: Props) {
           <button
             key={key}
             onClick={() => onChange(key)}
-            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${buttonClass}`}
+            className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-150 ${buttonClass} ${collapsed ? 'justify-center px-2' : ''}`}
             style={style}
+            title={collapsed ? label : undefined}
           >
-            <Icon className={active ? "text-[var(--color-highlight)]" : "text-[var(--color-text-muted)]"} />
-            <span className="truncate">{label}</span>
+            <Icon className={`${active ? "text-[var(--color-highlight)]" : "text-[var(--color-text-muted)]"} ${collapsed ? 'w-5 h-5' : ''}`} />
+            {!collapsed && <span className="truncate">{label}</span>}
           </button>
         );
       })}

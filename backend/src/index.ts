@@ -226,6 +226,36 @@ async function handleSocketBroadcast(event: any) {
     if (payload.chatId && (payload.messageId || payload.externalId)) {
       io.to(`chat:${payload.chatId}`).emit("message:status", payload);
     }
+    return;
+  }
+
+  if (event?.kind === "livechat.media.ready") {
+    const { chatId, messageId, media_url, media_public_url, media_storage_path, caption, chatUpdate, companyId } = event;
+    if (chatId) {
+      io.to(`chat:${chatId}`).emit("message:media-ready", {
+        messageId,
+        media_url,
+        media_public_url,
+        media_storage_path,
+        caption
+      });
+    }
+    if (chatUpdate) {
+      if (companyId) {
+        io.to(`company:${companyId}`).emit("chat:updated", chatUpdate);
+      } else {
+        io.emit("chat:updated", chatUpdate);
+      }
+    }
+    return;
+  }
+
+  if (event?.kind === "notification") {
+    const { userId, notification } = event;
+    if (userId && notification) {
+      io.to(`user:${userId}`).emit("notification", notification);
+    }
+    return;
   }
 }
 

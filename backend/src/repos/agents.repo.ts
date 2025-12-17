@@ -174,21 +174,41 @@ export async function getAgent(companyId: string, id: string): Promise<AgentRow 
 
 export async function getActiveAgentForInbox(
   companyId: string,
-  _inboxId?: string,
+  inboxId?: string,
 ): Promise<AgentRow | null> {
-  // Schema atual não possui coluna inbox_id. Estratégia: pegar o mais recente ACTIVE com allow_handoff=true
+  // Busca todos os agentes ativos da empresa
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select(SELECT_COLUMNS)
     .eq("company_id", companyId)
     .eq("status", "ACTIVE")
     .eq("allow_handoff", true)
-    .order("updated_at", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("updated_at", { ascending: false });
+
   if (error) throw new Error(error.message);
-  return data ? mapAgent(data as AgentRowInternal) : null;
+  if (!data || data.length === 0) return null;
+
+  const agents = (data as AgentRowInternal[]).map(mapAgent);
+
+  // Se temos um inboxId, tentamos encontrar o melhor agente para ele
+  if (inboxId) {
+    // 1. Prioridade: Agente configurado EXPLICITAMENTE para esta inbox
+    const specificAgent = agents.find(a => 
+      a.enabled_inbox_ids && a.enabled_inbox_ids.includes(inboxId)
+    );
+    if (specificAgent) return specificAgent;
+
+    // 2. Fallback: Agente GLOBAL (sem restrição de inbox)
+    // Consideramos global se a lista de inboxes estiver vazia
+    const globalAgent = agents.find(a => 
+      !a.enabled_inbox_ids || a.enabled_inbox_ids.length === 0
+    );
+    if (globalAgent) return globalAgent;
+  }
+
+  // Se não foi pedido inbox específico ou não achou nenhum compatível,
+  // retorna o primeiro da lista (comportamento legado/padrão)
+  return agents[0];
 }
 
 export async function updateAgent(

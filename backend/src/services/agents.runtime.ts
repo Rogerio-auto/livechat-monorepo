@@ -284,7 +284,12 @@ export async function runAgentReply(opts: {
   const agent = await getAgent(opts.companyId, opts.agentId);
   if (!agent) {
     console.warn("[AGENT][RUNTIME] ❌ No active agent found", { callId, companyId: opts.companyId });
-    throw new Error("Nenhum agente ativo/configurado para esta empresa/inbox");
+    return {
+      reply: "",
+      skipped: true,
+      reason: "Nenhum agente ativo/configurado para esta empresa/inbox",
+      agentId: null,
+    };
   }
 
   // console.log("[AGENT][RUNTIME] ✅ Agent loaded", {

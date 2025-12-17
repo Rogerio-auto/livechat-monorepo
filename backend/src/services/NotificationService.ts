@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO, hasIO } from "../lib/io.ts";
+import { publish, EX_APP } from "../queue/rabbit.ts";
 
 export type NotificationType = 
   | "SYSTEM"
@@ -147,7 +148,20 @@ export class NotificationService {
           console.warn("[NotificationService] ⚠️ Failed to emit socket event (IO error):", socketError);
         }
       } else {
-        console.log("[NotificationService] ℹ️ Skipping direct socket emit (no IO instance)");
+        console.log("[NotificationService] ℹ️ Skipping direct socket emit (no IO instance), trying RabbitMQ...");
+        try {
+          await publish(EX_APP, "socket.notification", {
+            kind: "notification",
+            userId: input.userId,
+            notification: {
+              ...notification,
+              isNew: true,
+            }
+          });
+          console.log("[NotificationService] ✅ Notification event published to RabbitMQ");
+        } catch (mqError) {
+          console.warn("[NotificationService] ⚠️ Failed to publish notification event to RabbitMQ:", mqError);
+        }
       }
 
       console.log(`[NotificationService] ✅ Notification created for user ${input.userId}:`, {

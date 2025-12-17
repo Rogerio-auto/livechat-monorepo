@@ -2422,33 +2422,36 @@ async function processMediaInBackground(args: {
 
     // Emit socket update with media
     try {
-      const io = getIO();
-      if (io) {
-        // Buscar o caption da mensagem para enviar no evento
-        const messageData = await db.oneOrNone<{ caption: string | null }>(
-          'SELECT caption FROM public.chat_messages WHERE id = $1',
-          [messageId]
-        );
-        
-        io.to(`chat:${chatId}`).emit("message:media-ready", {
-          messageId,
-          media_url: buildProxyUrl(publicUrl),
-          media_public_url: publicUrl,
-          media_storage_path: mediaInfo.storagePath,
-          caption: messageData?.caption ?? null,
-        });
-        
-        io.emit("chat:updated", {
+      // Buscar o caption da mensagem para enviar no evento
+      const messageData = await db.oneOrNone<{ caption: string | null }>(
+        'SELECT caption FROM public.chat_messages WHERE id = $1',
+        [messageId]
+      );
+
+      const socketPayload = {
+        kind: "livechat.media.ready",
+        chatId,
+        messageId,
+        media_url: buildProxyUrl(publicUrl),
+        media_public_url: publicUrl,
+        media_storage_path: mediaInfo.storagePath,
+        caption: messageData?.caption ?? null,
+        companyId,
+        chatUpdate: {
           chatId,
           last_message_media_url: buildProxyUrl(publicUrl),
-        });
-        
-        console.log('[WAHA][background] 📡 Socket events emitted:', { messageId, chatId, hasCaption: !!messageData?.caption });
+        }
+      };
+
+      const socketSuccess = await emitSocketWithRetry("socket.livechat.media", socketPayload);
+      
+      if (socketSuccess) {
+        console.log('[WAHA][background] 📡 Socket events emitted via queue:', { messageId, chatId, hasCaption: !!messageData?.caption });
       } else {
-        console.warn('[WAHA][background] ⚠️ Socket.IO not available, skipping real-time update');
+        console.warn('[WAHA][background] ⚠️ Failed to emit socket events via queue');
       }
     } catch (ioError) {
-      console.warn('[WAHA][background] ⚠️ Failed to emit socket events:', ioError instanceof Error ? ioError.message : ioError);
+      console.warn('[WAHA][background] ⚠️ Failed to prepare/emit socket events:', ioError instanceof Error ? ioError.message : ioError);
     }
 
     console.log('[WAHA][background] 🎉 Media processing complete:', { messageId, chatId });

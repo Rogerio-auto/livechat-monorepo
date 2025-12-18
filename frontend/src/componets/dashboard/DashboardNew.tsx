@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TrialBanner } from "../../components/subscription/TrialBanner";
 import { KPICard, formatTime } from "./KPICard";
 import { AlertsPanel } from "./AlertsPanel";
 import { TasksWidget } from "../../components/tasks/TasksWidget";
 import { ChartContainer, LineChartComponent, BarChartComponent, PieChartComponent } from "./Charts";
+import { io } from "socket.io-client";
 import {
   useDashboardOverview,
   useMessageVolume,
@@ -13,6 +14,7 @@ import {
   useCampaignStats,
   useInboxStats,
   useAgentMetrics,
+  useAgentMonitoring,
   useLeadStats,
   useRecentChats,
 } from "../../hooks/useDashboard";
@@ -26,16 +28,25 @@ import {
   FiSend,
   FiUser,
   FiCheckSquare,
+  FiAlertCircle,
+  FiZap,
 } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import Sidebar from "../Sidbars/sidebar";
 import type { DashboardTab } from "../../types/dashboard";
 
 import { FloatingNotificationBell } from "../../components/notifications/FloatingNotificationBell";
 
 export function DashboardNew() {
-  const [activeTab, setActiveTab] = useState<DashboardTab>("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get("tab") as DashboardTab) || "overview";
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
   const navigate = useNavigate();
+
+  const handleTabChange = (tabId: DashboardTab) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
 
   const tabs: { id: DashboardTab; label: string; icon: React.ReactNode }[] = [
     { id: "overview", label: "Visão Geral", icon: <FiActivity /> },
@@ -66,7 +77,7 @@ export function DashboardNew() {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
+                      onClick={() => handleTabChange(tab.id)}
                       className={`group flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 ${
                         isActive
                           ? "bg-[color:var(--color-primary)] text-white shadow-lg shadow-[color:var(--color-primary)]/20"
@@ -352,53 +363,236 @@ function TasksTab() {
 
 // Tab: Agentes AI
 function AIAgentsTab() {
-  const { data: agents, loading: agentsLoading } = useAgentMetrics();
+  const navigate = useNavigate();
+  const { data: monitoring, loading: monitoringLoading, refetch } = useAgentMonitoring();
+  const [liveActivity, setLiveActivity] = useState<any[]>([]);
+
+  useEffect(() => {
+    const socket = io(import.meta.env.VITE_API_URL || "http://localhost:5000", {
+      withCredentials: true,
+      transports: ["websocket"],
+    });
+
+    socket.on("agent:activity", (activity) => {
+      setLiveActivity((prev) => [
+        { ...activity, timestamp: new Date() },
+        ...prev
+      ].slice(0, 5));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  if (monitoringLoading) {
+    return (
+      <div className="grid grid-cols-12 gap-4 md:gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="col-span-12 md:col-span-3 h-32 animate-pulse rounded-2xl bg-[color:var(--color-surface-muted)]" />
+        ))}
+        <div className="col-span-12 lg:col-span-8 h-80 animate-pulse rounded-2xl bg-[color:var(--color-surface-muted)]" />
+        <div className="col-span-12 lg:col-span-4 h-80 animate-pulse rounded-2xl bg-[color:var(--color-surface-muted)]" />
+      </div>
+    );
+  }
+
+  const summary = monitoring?.summary || { totalConversations: 0, totalErrors: 0, activeAgents: 0, totalAgents: 0 };
+  const charts = monitoring?.charts || { conversationsOverTime: [] };
+  const agents = monitoring?.agents || [];
+  const recentErrors = monitoring?.recentErrors || [];
 
   return (
-    <div className="grid grid-cols-12 gap-4 md:gap-6">
-      <div className="col-span-12 lg:col-span-8">
-        <ChartContainer title="Performance dos Agentes AI" loading={agentsLoading}>
-          <BarChartComponent
-            data={agents.map((agent) => ({
-              name: agent.name,
-              value: agent.total_chats,
-              ativos: agent.active_chats,
-              total: agent.total_chats,
-            }))}
-            dataKeys={["ativos", "total"]}
-            colors={["var(--color-primary)", "var(--color-primary-muted, #74e69e)"]}
-            horizontal
+    <div className="space-y-6">
+      {/* KPIs */}
+      <div className="grid grid-cols-12 gap-4 md:gap-6">
+        <div className="col-span-12 md:col-span-3">
+          <KPICard
+            title="Conversas Totais"
+            value={summary.totalConversations}
+            icon={<FiMessageSquare size={20} />}
+            accentColor="blue"
           />
-        </ChartContainer>
+        </div>
+        <div className="col-span-12 md:col-span-3">
+          <KPICard
+            title="Erros Detectados"
+            value={summary.totalErrors}
+            icon={<FiAlertCircle size={20} />}
+            accentColor="red"
+          />
+        </div>
+        <div className="col-span-12 md:col-span-3">
+          <KPICard
+            title="Agentes Ativos"
+            value={summary.activeAgents}
+            icon={<FiZap size={20} />}
+            accentColor="green"
+          />
+        </div>
+        <div className="col-span-12 md:col-span-3">
+          <KPICard
+            title="Taxa de Sucesso"
+            value={summary.totalConversations > 0 ? (((summary.totalConversations - summary.totalErrors) / summary.totalConversations) * 100).toFixed(1) : "100"}
+            suffix="%"
+            icon={<FiTrendingUp size={20} />}
+            accentColor="teal"
+          />
+        </div>
       </div>
 
-      <div className="col-span-12 lg:col-span-4">
-        <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
-          <div className="relative space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
-              Status dos Agentes
-            </h3>
-            {agents.map((agent) => (
-              <div
-                key={agent.id}
-                className="bg-[color:var(--color-surface-muted)] rounded-xl p-3 shadow-sm border border-[color:var(--color-border)]"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-[var(--color-text)]">
-                    {agent.name}
-                  </span>
-                  <span
-                    className={`flex h-2.5 w-2.5 rounded-full ${
-                      agent.is_active ? "bg-[color:var(--color-primary)]" : "bg-slate-400"
-                    }`}
-                  />
-                </div>
-                <div className="text-xs text-[var(--color-text-muted)]">
-                  {agent.active_chats} chats ativos • {agent.total_chats} total
-                </div>
+      <div className="grid grid-cols-12 gap-4 md:gap-6">
+        {/* Gráfico de Volume */}
+        <div className="col-span-12 lg:col-span-8">
+          <ChartContainer title="Volume de Conversas vs Erros">
+            <LineChartComponent
+              data={charts.conversationsOverTime}
+              dataKeys={["total", "errors"]}
+              colors={["var(--color-primary)", "#EF4444"]}
+            />
+          </ChartContainer>
+        </div>
+
+        {/* Lista de Agentes e Atividade */}
+        <div className="col-span-12 lg:col-span-4 flex flex-col gap-4 md:gap-6">
+          <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm flex-1">
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
+            <div className="relative space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                  Status dos Agentes
+                </h3>
               </div>
-            ))}
+              <div className="space-y-3 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
+                {agents.map((agent: any) => (
+                  <div
+                    key={agent.id}
+                    className="bg-[color:var(--color-surface-muted)] rounded-xl p-3 border border-[color:var(--color-border)] transition-all hover:border-[color:var(--color-primary)]/30 group/agent"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-semibold text-sm text-[var(--color-text)]">
+                        {agent.name}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => navigate(`/agents/${agent.id}/playground`)}
+                          className="opacity-0 group-hover/agent:opacity-100 p-1 hover:bg-[color:var(--color-primary)]/10 rounded text-[color:var(--color-primary)] transition-all"
+                          title="Playground"
+                        >
+                          <FiZap size={14} />
+                        </button>
+                        <button 
+                          onClick={() => navigate(`/agents/${agent.id}`)}
+                          className="opacity-0 group-hover/agent:opacity-100 p-1 hover:bg-[color:var(--color-primary)]/10 rounded text-[color:var(--color-primary)] transition-all"
+                          title="Detalhes"
+                        >
+                          <FiActivity size={14} />
+                        </button>
+                        <span
+                          className={`flex h-2 w-2 rounded-full ${
+                            agent.status === 'ACTIVE' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-slate-400"
+                          }`}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-[var(--color-text-muted)]">
+                      <span>{agent.metrics?.total_conversations || 0} conversas</span>
+                      <span className={agent.metrics?.error_count > 0 ? "text-rose-400 font-bold" : ""}>
+                        {agent.metrics?.error_count || 0} erros
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
+             <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)] mb-4 flex items-center gap-2">
+               <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+               Atividade em Tempo Real
+             </h3>
+             <div className="space-y-3">
+               {liveActivity.length === 0 ? (
+                 <div className="text-[10px] text-[var(--color-text-muted)] italic">Aguardando atividade...</div>
+               ) : (
+                 liveActivity.map((act, i) => (
+                   <div key={i} className="flex items-start gap-3 text-[10px] animate-in fade-in slide-in-from-left-2 duration-300">
+                     <div className="mt-1 p-1 bg-[color:var(--color-primary)]/10 rounded text-[color:var(--color-primary)]">
+                       <FiMessageSquare size={10} />
+                     </div>
+                     <div className="flex-1 min-w-0">
+                       <div className="font-bold text-[var(--color-text)] truncate">{act.agentName || 'Agente'}</div>
+                       <div className="text-[var(--color-text-muted)] truncate">{act.message || 'Processando mensagem...'}</div>
+                     </div>
+                     <div className="text-[var(--color-text-muted)] whitespace-nowrap">
+                       {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                     </div>
+                   </div>
+                 ))
+               )}
+             </div>
+          </div>
+        </div>
+
+        {/* Erros Recentes */}
+        <div className="col-span-12">
+          <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] overflow-hidden shadow-sm">
+            <div className="px-6 py-4 border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)]/30 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[var(--color-text)] flex items-center gap-2">
+                <FiAlertCircle className="text-rose-500" /> Erros Recentes de Agentes
+              </h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="text-[10px] uppercase tracking-wider text-[var(--color-text-muted)] border-b border-[color:var(--color-border)]">
+                    <th className="px-6 py-3 font-bold">Data/Hora</th>
+                    <th className="px-6 py-3 font-bold">Agente</th>
+                    <th className="px-6 py-3 font-bold">Tipo de Erro</th>
+                    <th className="px-6 py-3 font-bold">Mensagem</th>
+                    <th className="px-6 py-3 font-bold">Gravidade</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[color:var(--color-border)]">
+                  {recentErrors.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center text-sm text-[var(--color-text-muted)] italic">
+                        Nenhum erro detectado recentemente. Ótimo trabalho!
+                      </td>
+                    </tr>
+                  ) : (
+                    recentErrors.map((error: any) => (
+                      <tr key={error.id} className="hover:bg-[color:var(--color-surface-muted)]/50 transition-colors">
+                        <td className="px-6 py-4 text-xs text-[var(--color-text-muted)]">
+                          {new Date(error.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 text-xs font-semibold text-[var(--color-text)]">
+                          {agents.find((a: any) => a.id === error.agent_id)?.name || 'Agente Desconhecido'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 rounded-md bg-[color:var(--color-surface-muted)] text-[10px] font-mono text-[var(--color-text-muted)] border border-[color:var(--color-border)]">
+                            {error.error_type}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs text-[var(--color-text-muted)] max-w-xs truncate">
+                          {error.error_message}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                            error.severity === 'CRITICAL' ? 'bg-rose-500/10 text-rose-500' :
+                            error.severity === 'HIGH' ? 'bg-orange-500/10 text-orange-500' :
+                            'bg-blue-500/10 text-blue-500'
+                          }`}>
+                            {error.severity}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

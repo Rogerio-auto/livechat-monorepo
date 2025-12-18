@@ -319,3 +319,29 @@ export function useRecentChats(limit = 10) {
 
   return { data, loading, error };
 }
+
+// Hook para monitoramento detalhado de agentes AI
+export function useAgentMonitoring() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const result = await fetchJson<any>(`${API_BASE}/api/agents-monitoring/stats`);
+      setData(result);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to fetch agent monitoring stats");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, loading, error, refetch: fetchData };
+}

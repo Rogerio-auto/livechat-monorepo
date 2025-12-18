@@ -3491,7 +3491,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       // 1. Get chat details to determine provider
       const { data: chat, error: chatError } = await supabaseAdmin
         .from("chats")
-        .select("id, inbox_id, company_id")
+        .select("id, inbox_id, company_id, status, department_id, kind")
         .eq("id", chatId)
         .maybeSingle();
 
@@ -3600,6 +3600,31 @@ export function registerLivechatChatRoutes(app: express.Application) {
               chatId,
               error: chatUpdateError.message,
             });
+          }
+
+          // Invalidate cache
+          try {
+            const chatData = chat as any;
+            const statuses = ["ALL", chatData.status].filter(Boolean);
+            const kinds = ["ALL", chatData.kind].filter(Boolean);
+            const inboxes = [chatData.inbox_id, null];
+            const departments = [chatData.department_id, null];
+            
+            const indexKeys: string[] = [];
+            for (const inbox of inboxes) {
+              for (const s of statuses) {
+                for (const k_ of kinds) {
+                  for (const d of departments) {
+                    indexKeys.push(k.listIndex(chatData.company_id, inbox, s, k_, d));
+                  }
+                }
+              }
+            }
+            await clearListCacheIndexes(indexKeys);
+            await rDel(k.chat(chatId));
+            console.log("[READ_RECEIPTS][livechat/mark-read] Cache invalidated", { chatId });
+          } catch (cacheErr) {
+            console.warn("[READ_RECEIPTS][livechat/mark-read] Cache invalidation failed", cacheErr);
           }
 
           console.log("[READ_RECEIPTS][livechat/mark-read] WAHA messages marked as read", {
@@ -3728,6 +3753,31 @@ export function registerLivechatChatRoutes(app: express.Application) {
               chatId,
               error: chatUpdateError.message,
             });
+          }
+
+          // Invalidate cache
+          try {
+            const chatData = chat as any;
+            const statuses = ["ALL", chatData.status].filter(Boolean);
+            const kinds = ["ALL", chatData.kind].filter(Boolean);
+            const inboxes = [chatData.inbox_id, null];
+            const departments = [chatData.department_id, null];
+            
+            const indexKeys: string[] = [];
+            for (const inbox of inboxes) {
+              for (const s of statuses) {
+                for (const k_ of kinds) {
+                  for (const d of departments) {
+                    indexKeys.push(k.listIndex(chatData.company_id, inbox, s, k_, d));
+                  }
+                }
+              }
+            }
+            await clearListCacheIndexes(indexKeys);
+            await rDel(k.chat(chatId));
+            console.log("[READ_RECEIPTS][livechat/mark-read] Cache invalidated (META)", { chatId });
+          } catch (cacheErr) {
+            console.warn("[READ_RECEIPTS][livechat/mark-read] Cache invalidation failed (META)", cacheErr);
           }
 
           console.log("[READ_RECEIPTS][livechat/mark-read] META messages marked as read", {

@@ -8,6 +8,10 @@ import { listAgentTools } from "../repos/tools.repo.ts";
 import { executeTool, type ToolExecutionContext } from "./toolHandlers.ts";
 import { getAgentContext, appendMultipleToContext } from "./agentContext.ts";
 import { db } from "../pg.ts";
+import { AgentMonitoringService } from "./agentMonitoring.ts";
+import { getIO } from "../lib/io.js";
+import { AgentMetricsRepository } from "../repos/agent_metrics.repo.ts";
+import { logOpenAIUsage, checkAIUsagePermission } from "./openai.usage.service.ts";
 
 export type ChatTurn = { 
   role: "system" | "user" | "assistant" | "tool"; 
@@ -64,6 +68,23 @@ async function processMediaMessage(opts: {
           language: "pt",
         });
 
+        // 🆕 Log de uso de transcrição
+        const durationSeconds = Math.ceil(audioBuffer.byteLength / 16000); // Estimativa
+        await logOpenAIUsage({
+          companyId: opts.agent.company_id,
+          integrationId: opts.agent.integration_openai_id || undefined,
+          agentId: opts.agent.id,
+          chatId: opts.chatId,
+          model: opts.agent.transcription_model,
+          promptTokens: durationSeconds * 60, // Conversão para "tokens"
+          completionTokens: 0,
+          requestType: 'transcription',
+          requestMetadata: {
+            duration_seconds: durationSeconds,
+            audio_size_bytes: audioBuffer.byteLength,
+          },
+        }).catch(console.error);
+
         const transcribedText = transcription.text || "";
         console.log("[agents][transcription] Audio transcribed", {
           chatId: opts.chatId,
@@ -103,6 +124,22 @@ async function processMediaMessage(opts: {
           ],
           max_tokens: 500,
         });
+
+        // 🆕 Log de uso de visão
+        await logOpenAIUsage({
+          companyId: opts.agent.company_id,
+          integrationId: opts.agent.integration_openai_id || undefined,
+          agentId: opts.agent.id,
+          chatId: opts.chatId,
+          model: opts.agent.vision_model,
+          promptTokens: visionResponse.usage?.prompt_tokens || 0,
+          completionTokens: visionResponse.usage?.completion_tokens || 0,
+          requestType: 'vision',
+          requestMetadata: {
+            image_url: imageUrl,
+            finish_reason: visionResponse.choices[0]?.finish_reason,
+          },
+        }).catch(console.error);
 
         const description = visionResponse.choices[0]?.message?.content || "";
         console.log("[agents][vision] Image analyzed", {
@@ -275,6 +312,7 @@ export async function runAgentReply(opts: {
   leadId?: string;
   userId?: string;
   isPlayground?: boolean;
+  agentOverride?: any;
 }): Promise<{ 
   reply: string; 
   usage?: any; 
@@ -286,308 +324,347 @@ export async function runAgentReply(opts: {
 }>
 {
   const callId = `${opts.chatId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-  // console.log("[AGENT][RUNTIME] 🚀 runAgentReply called", {
-  //   callId,
-  //   chatId: opts.chatId,
-  //   companyId: opts.companyId,
-  //   agentId: opts.agentId,
-  //   inboxId: opts.inboxId,
-  //   messageLength: opts.userMessage?.length || 0,
-  // });
+  const startTime = Date.now();
+  
+  let agent: any = null;
+  let model: string = "gpt-4o-mini";
+  let executionTurns: ChatTurn[] = [];
 
-  const agent = await getAgent(opts.companyId, opts.agentId);
-  if (!agent) {
-    console.warn("[AGENT][RUNTIME] ❌ No active agent found", { callId, companyId: opts.companyId });
-    return {
-      reply: "",
-      skipped: true,
-      reason: "Nenhum agente ativo/configurado para esta empresa/inbox",
-      agentId: null,
-    };
-  }
+  try {
+    agent = await getAgent(opts.companyId, opts.agentId);
+    
+    if (opts.agentOverride) {
+      agent = { ...(agent || {}), ...opts.agentOverride };
+    }
 
-  // console.log("[AGENT][RUNTIME] ✅ Agent loaded", {
-  //   callId,
-  //   agentId: agent.id,
-  //   agentName: agent.name,
-  //   hasOpenAIIntegration: !!agent.integration_openai_id,
-  // });
-
-  // VALIDAÇÃO: Verificar se há integração OpenAI configurada
-  if (!agent.integration_openai_id) {
-    console.log(`[AGENT][RUNTIME] ⏭️  Agent ${agent.id} without OpenAI integration`, { callId });
-    return {
-      reply: "",
-      skipped: true,
-      reason: "Agente sem integração OpenAI configurada",
-      agentId: agent.id,
-    };
-  }
-
-  // VALIDAÇÃO: Verificar se agente deve responder nesta inbox e tipo de chat
-  if (opts.inboxId && opts.chatId) {
-    const validation = await shouldAgentRespond(agent, opts.inboxId, opts.chatId);
-    if (!validation.allowed) {
-      console.log(`[AGENT][RUNTIME] ⏭️  Not responding in chat ${opts.chatId}: ${validation.reason}`, { callId });
-      return { 
-        reply: "", 
-        skipped: true, 
-        reason: validation.reason,
-        agentId: agent.id 
+    if (!agent) {
+      console.warn("[AGENT][RUNTIME] ❌ No active agent found", { callId, companyId: opts.companyId });
+      return {
+        reply: "",
+        skipped: true,
+        reason: "Nenhum agente ativo/configurado para esta empresa/inbox",
+        agentId: null,
       };
     }
-  }
 
-  const { apiKey, defaultModel } = await getOpenAISecretForCompany(opts.companyId, agent.integration_openai_id ?? undefined);
-
-  const model = (agent.model || defaultModel || process.env.OPENAI_MODEL || "gpt-4o-mini").toString();
-  const temperature = typeof agent.model_params?.temperature === "number" ? agent.model_params.temperature : 0.2;
-  const maxTokens = typeof agent.model_params?.max_tokens === "number" ? agent.model_params.max_tokens : 1024;
-
-  const client = new OpenAI({ apiKey });
-
-  // PROCESSAMENTO DE MÍDIA: Transcrição de áudio e análise de imagem
-  const processedMessage = await processMediaMessage({
-    chatId: opts.chatId,
-    userMessage: opts.userMessage,
-    agent,
-    apiKey,
-  });
-
-  // 1. Buscar contexto do Redis
-  const contextHistory = await getAgentContext(opts.chatId);
-
-  // 2. Buscar ferramentas habilitadas do agente
-  const agentTools = await listAgentTools({ agent_id: agent.id, is_enabled: true });
-
-  // 3. Construir mensagens iniciais (usando mensagem processada com mídia)
-  const messages = buildPrompt(agent, contextHistory, processedMessage, agentTools);
-
-  // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
-  function normalizeParametersSchema(raw: any): any | undefined {
-    try {
-      // Se for string, tenta fazer parse
-      let schema = raw;
-      if (typeof raw === "string") {
-        try {
-          schema = JSON.parse(raw);
-        } catch (e) {
-          console.warn("[AGENT][RUNTIME] Failed to parse tool schema JSON", { raw });
-        }
-      }
-
-      // Already a valid JSON Schema object
-      if (schema && typeof schema === "object") {
-        // Case: mistakenly stored full OpenAI tool object
-        if (schema.type === "function" && schema.function && typeof schema.function === "object") {
-          const p = (schema.function as any).parameters;
-          return p && typeof p === "object" ? p : { type: "object", properties: {} };
-        }
-        // Case: mistakenly stored { parameters: {...} }
-        if (schema.parameters && typeof schema.parameters === "object" && !schema.type) {
-          return schema.parameters;
-        }
-        // If it has a top-level 'function' field by mistake
-        if (schema.function && typeof schema.function === "object" && schema.function.parameters) {
-          return schema.function.parameters;
-        }
-        // Ensure it is an object schema
-        if (schema.type === "object" || schema.properties || schema.required) {
-          return { type: "object", additionalProperties: true, ...schema };
-        }
-      }
-      // Fallback: allow any object
-      return { type: "object", additionalProperties: true };
-    } catch {
-      return { type: "object", additionalProperties: true };
+    // 🆕 VALIDAÇÃO DE SEGURANÇA: Assinatura e Faturas
+    const permission = await checkAIUsagePermission(opts.companyId);
+    if (!permission.allowed) {
+      console.warn("[AGENT][RUNTIME] 🔒 Usage blocked:", { companyId: opts.companyId, reason: permission.reason });
+      return {
+        reply: `Desculpe, o serviço de IA está temporariamente indisponível para esta conta. Motivo: ${permission.reason}`,
+        skipped: true,
+        reason: permission.reason,
+        agentId: agent.id,
+      };
     }
-  }
 
-  function stripCustomerIdIfCustomersUpdate(parameters: any, at: any): any {
-    try {
-      const isCustomersUpdate = at?.tool?.handler_type === "INTERNAL_DB"
-        && at?.tool?.handler_config?.table === "customers"
-        && at?.tool?.handler_config?.action === "update";
-      if (!isCustomersUpdate || !parameters || typeof parameters !== "object") return parameters;
-      const p = { ...parameters };
-      if (p.properties && typeof p.properties === "object") {
-        p.properties = { ...p.properties };
-        delete p.properties.customer_id;
-      }
-      if (Array.isArray(p.required)) {
-        p.required = p.required.filter((r: any) => r !== "customer_id");
-      }
-      if (!p.type) p.type = "object";
-      return p;
-    } catch { return parameters; }
-  }
+    // VALIDAÇÃO: Verificar se há integração OpenAI configurada
+    if (!agent.integration_openai_id) {
+      console.log(`[AGENT][RUNTIME] ⏭️  Agent ${agent.id} without OpenAI integration`, { callId });
+      return {
+        reply: "",
+        skipped: true,
+        reason: "Agente sem integração OpenAI configurada",
+        agentId: agent.id,
+      };
+    }
 
-  const tools: any[] | undefined = agentTools.length > 0
-    ? agentTools.map(at => {
-        const base = normalizeParametersSchema(at.tool.schema);
-        const parameters = stripCustomerIdIfCustomersUpdate(base, at);
-        
-        // Log para debug
-        // console.log(`[AGENT][RUNTIME] Tool definition for ${at.tool.key}:`, JSON.stringify(parameters));
-
-        return {
-          type: "function",
-          function: {
-            name: at.tool.key,
-            description: at.tool.description || at.tool.name || undefined,
-            parameters,
-          }
+    // VALIDAÇÃO: Verificar se agente deve responder nesta inbox e tipo de chat
+    if (opts.inboxId && opts.chatId) {
+      const validation = await shouldAgentRespond(agent, opts.inboxId, opts.chatId);
+      if (!validation.allowed) {
+        console.log(`[AGENT][RUNTIME] ⏭️  Not responding in chat ${opts.chatId}: ${validation.reason}`, { callId });
+        return { 
+          reply: "", 
+          skipped: true, 
+          reason: validation.reason,
+          agentId: agent.id 
         };
-      })
-    : undefined;
+      }
+    }
 
-  // 4. Context para toolHandlers
-  const toolContext: ToolExecutionContext = {
-    agentId: agent.id,
-    chatId: opts.chatId,
-    contactId: opts.contactId,
-    leadId: opts.leadId,
-    userId: opts.userId,
-    companyId: opts.companyId, // Add companyId for knowledge base queries
-    isPlayground: opts.isPlayground,
-  };
+    const { apiKey, defaultModel } = await getOpenAISecretForCompany(opts.companyId, agent.integration_openai_id ?? undefined);
 
-  // 5. Loop de function calling
-  // Array para armazenar os novos turnos gerados nesta execução (User + Assistant calls + Tool results + Final Assistant)
-  const executionTurns: ChatTurn[] = [
-    { role: "user", content: opts.userMessage }
-  ];
+    model = (agent.model || defaultModel || process.env.OPENAI_MODEL || "gpt-4o-mini").toString();
+    const temperature = typeof agent.model_params?.temperature === "number" ? agent.model_params.temperature : 0.2;
+    const maxTokens = typeof agent.model_params?.max_tokens === "number" ? agent.model_params.max_tokens : 1024;
 
-  let resp = await client.chat.completions.create({
-    model,
-    messages: messages as any,
-    tools,
-    temperature,
-    max_tokens: maxTokens,
-  });
+    const client = new OpenAI({ apiKey });
 
-  let iterations = 0;
-  const MAX_ITERATIONS = 5;
+    // PROCESSAMENTO DE MÍDIA: Transcrição de áudio e análise de imagem
+    const processedMessage = await processMediaMessage({
+      chatId: opts.chatId,
+      userMessage: opts.userMessage,
+      agent,
+      apiKey,
+    });
 
-  while (resp.choices[0]?.finish_reason === 'tool_calls' && iterations < MAX_ITERATIONS) {
-    iterations++;
-    const toolCalls = resp.choices[0].message.tool_calls as any[];
-    if (!toolCalls || toolCalls.length === 0) break;
+    // 1. Buscar contexto do Redis
+    const contextHistory = await getAgentContext(opts.chatId);
 
-    // console.log("[AGENT][RUNTIME] 🔧 Tool calls detected", {
-    //   callId,
-    //   iteration: iterations,
-    //   toolCallCount: toolCalls.length,
-    //   tools: toolCalls.map((tc: any) => tc.function.name)
-    // });
+    // 2. Buscar ferramentas habilitadas do agente
+    const agentTools = await listAgentTools({ agent_id: agent.id, is_enabled: true });
 
-    // Adicionar mensagem do assistente (com tool_calls) ao histórico local e de execução
-    const assistantMsg: any = {
-      role: "assistant",
-      content: resp.choices[0].message.content || "",
-      tool_calls: resp.choices[0].message.tool_calls
+    // 3. Construir mensagens iniciais (usando mensagem processada com mídia)
+    const messages = buildPrompt(agent, contextHistory, processedMessage, agentTools);
+
+    // Converter tools do nosso catálogo (schema = parâmetros) para o formato da OpenAI (type=function)
+    function normalizeParametersSchema(raw: any): any | undefined {
+      try {
+        let schema = raw;
+        if (typeof raw === "string") {
+          try {
+            schema = JSON.parse(raw);
+          } catch (e) {
+            console.warn("[AGENT][RUNTIME] Failed to parse tool schema JSON", { raw });
+          }
+        }
+        if (schema && typeof schema === "object") {
+          if (schema.type === "function" && schema.function && typeof schema.function === "object") {
+            const p = (schema.function as any).parameters;
+            return p && typeof p === "object" ? p : { type: "object", properties: {} };
+          }
+          if (schema.parameters && typeof schema.parameters === "object" && !schema.type) {
+            return schema.parameters;
+          }
+          if (schema.function && typeof schema.function === "object" && schema.function.parameters) {
+            return schema.function.parameters;
+          }
+          if (schema.type === "object" || schema.properties || schema.required) {
+            return { type: "object", additionalProperties: true, ...schema };
+          }
+        }
+        return { type: "object", additionalProperties: true };
+      } catch {
+        return { type: "object", additionalProperties: true };
+      }
+    }
+
+    function stripCustomerIdIfCustomersUpdate(parameters: any, at: any): any {
+      try {
+        const isCustomersUpdate = at?.tool?.handler_type === "INTERNAL_DB"
+          && at?.tool?.handler_config?.table === "customers"
+          && at?.tool?.handler_config?.action === "update";
+        if (!isCustomersUpdate || !parameters || typeof parameters !== "object") return parameters;
+        const p = { ...parameters };
+        if (p.properties && typeof p.properties === "object") {
+          p.properties = { ...p.properties };
+          delete p.properties.customer_id;
+        }
+        if (Array.isArray(p.required)) {
+          p.required = p.required.filter((r: any) => r !== "customer_id");
+        }
+        if (!p.type) p.type = "object";
+        return p;
+      } catch { return parameters; }
+    }
+
+    const tools: any[] | undefined = agentTools.length > 0
+      ? agentTools.map(at => {
+          const base = normalizeParametersSchema(at.tool.schema);
+          const parameters = stripCustomerIdIfCustomersUpdate(base, at);
+          return {
+            type: "function",
+            function: {
+              name: at.tool.key,
+              description: at.tool.description || at.tool.name || undefined,
+              parameters,
+            }
+          };
+        })
+      : undefined;
+
+    // 4. Context para toolHandlers
+    const toolContext: ToolExecutionContext = {
+      agentId: agent.id,
+      chatId: opts.chatId,
+      contactId: opts.contactId,
+      leadId: opts.leadId,
+      userId: opts.userId,
+      companyId: opts.companyId,
+      isPlayground: opts.isPlayground,
     };
-    messages.push(assistantMsg);
-    executionTurns.push(assistantMsg);
 
-    // Executar cada tool call
-    const toolResults = await Promise.all(
-      toolCalls.map(async (tc: any) => {
-        const tool = agentTools.find(at => at.tool.key === tc.function.name);
-        if (!tool) {
-          console.log("[AGENT][RUNTIME] ❌ Tool not found", {
-            callId,
-            toolName: tc.function.name,
-            availableTools: agentTools.map(at => at.tool.key)
-          });
-          return {
-            tool_call_id: tc.id,
-            role: "tool" as const,
-            name: tc.function.name,
-            content: JSON.stringify({ error: `Tool '${tc.function.name}' not found or not enabled` })
-          };
-        }
+    // 5. Loop de function calling
+    executionTurns = [
+      { role: "user", content: opts.userMessage }
+    ];
 
-        try {
-          const params = JSON.parse(tc.function.arguments);
-          // console.log("[AGENT][RUNTIME] 🛠️ Executing tool", {
-          //   callId,
-          //   toolName: tc.function.name,
-          //   params
-          // });
-          const result = await executeTool(tool.tool, tool, params, toolContext);
-          // console.log("[AGENT][RUNTIME] ✅ Tool execution success", {
-          //   callId,
-          //   toolName: tc.function.name,
-          //   success: result.success,
-          //   hasData: !!result.data,
-          //   error: result.error
-          // });
-          return {
-            tool_call_id: tc.id,
-            role: "tool" as const,
-            name: tc.function.name,
-            content: JSON.stringify(result)
-          };
-        } catch (error: any) {
-          console.error("[AGENT][RUNTIME] ❌ Tool execution failed", {
-            callId,
-            toolName: tc.function.name,
-            error: error.message || String(error)
-          });
-          return {
-            tool_call_id: tc.id,
-            role: "tool" as const,
-            name: tc.function.name,
-            content: JSON.stringify({ error: error.message || String(error) })
-          };
-        }
-      })
-    );
-
-    // Adicionar resultados ao histórico
-    messages.push(...toolResults as any);
-    executionTurns.push(...toolResults as any);
-
-    // console.log("[AGENT][RUNTIME] 🔄 Continuing conversation after tools", {
-    //   callId,
-    //   iteration: iterations,
-    //   messageCount: messages.length
-    // });
-
-    // Continuar conversa
-    resp = await client.chat.completions.create({
+    let resp = await client.chat.completions.create({
       model,
       messages: messages as any,
       tools,
       temperature,
       max_tokens: maxTokens,
     });
+
+    // 🆕 Log de uso (primeira chamada)
+    await logOpenAIUsage({
+      companyId: opts.companyId,
+      integrationId: agent.integration_openai_id || undefined,
+      agentId: agent.id,
+      chatId: opts.chatId,
+      model,
+      promptTokens: resp.usage?.prompt_tokens || 0,
+      completionTokens: resp.usage?.completion_tokens || 0,
+      requestType: 'chat',
+      requestMetadata: {
+        tools_count: tools?.length || 0,
+        finish_reason: resp.choices[0]?.finish_reason,
+        has_tool_calls: !!resp.choices[0]?.message?.tool_calls,
+        iteration: 0
+      },
+    }).catch(err => console.error('[Agent Runtime] Failed to log usage:', err));
+
+    let iterations = 0;
+    const MAX_ITERATIONS = 5;
+
+    while (resp.choices[0]?.finish_reason === 'tool_calls' && iterations < MAX_ITERATIONS) {
+      iterations++;
+      const toolCalls = resp.choices[0].message.tool_calls as any[];
+      if (!toolCalls || toolCalls.length === 0) break;
+
+      const assistantMsg: any = {
+        role: "assistant",
+        content: resp.choices[0].message.content || "",
+        tool_calls: resp.choices[0].message.tool_calls
+      };
+      messages.push(assistantMsg);
+      executionTurns.push(assistantMsg);
+
+      const toolResults = await Promise.all(
+        toolCalls.map(async (tc: any) => {
+          const tool = agentTools.find(at => at.tool.key === tc.function.name);
+          if (!tool) {
+            return {
+              tool_call_id: tc.id,
+              role: "tool" as const,
+              name: tc.function.name,
+              content: JSON.stringify({ error: `Tool '${tc.function.name}' not found or not enabled` })
+            };
+          }
+
+          try {
+            const params = JSON.parse(tc.function.arguments);
+            const result = await executeTool(tool.tool, tool, params, toolContext);
+            return {
+              tool_call_id: tc.id,
+              role: "tool" as const,
+              name: tc.function.name,
+              content: JSON.stringify(result)
+            };
+          } catch (error: any) {
+            return {
+              tool_call_id: tc.id,
+              role: "tool" as const,
+              name: tc.function.name,
+              content: JSON.stringify({ error: error.message || String(error) })
+            };
+          }
+        })
+      );
+
+      messages.push(...toolResults as any);
+      executionTurns.push(...toolResults as any);
+
+      resp = await client.chat.completions.create({
+        model,
+        messages: messages as any,
+        tools,
+        temperature,
+        max_tokens: maxTokens,
+      });
+
+      // 🆕 Log de uso (iterações de ferramentas)
+      await logOpenAIUsage({
+        companyId: opts.companyId,
+        integrationId: agent.integration_openai_id || undefined,
+        agentId: agent.id,
+        chatId: opts.chatId,
+        model,
+        promptTokens: resp.usage?.prompt_tokens || 0,
+        completionTokens: resp.usage?.completion_tokens || 0,
+        requestType: 'chat',
+        requestMetadata: {
+          tools_count: tools?.length || 0,
+          finish_reason: resp.choices[0]?.finish_reason,
+          has_tool_calls: !!resp.choices[0]?.message?.tool_calls,
+          iteration: iterations
+        },
+      }).catch(err => console.error('[Agent Runtime] Failed to log usage:', err));
+    }
+
+    const reply = resp.choices[0]?.message?.content || '';
+    const finishReason = resp.choices[0]?.finish_reason;
+
+    // 6. Salvar contexto atualizado no Redis (incluindo tool calls intermediários)
+    executionTurns.push({ role: "assistant", content: reply });
+    await appendMultipleToContext(opts.chatId, executionTurns);
+
+    // MONITORAMENTO: Log de métricas e emissão de evento
+    const duration = Date.now() - startTime;
+    const usage = resp.usage;
+    
+    // Atualizar métricas de forma assíncrona para não bloquear a resposta
+    AgentMetricsRepository.updateMetrics(agent.id, opts.companyId, 'day', {
+      total_conversations: 1,
+      total_tokens: usage?.total_tokens || 0,
+      total_cost: calculateCost(model, usage?.prompt_tokens || 0, usage?.completion_tokens || 0)
+    }).catch(err => console.error("Error updating metrics:", err));
+
+    // Emitir evento via WebSocket
+    const io = getIO();
+    if (io) {
+      io.to(`company:${opts.companyId}`).emit('agent:activity', {
+        agentId: agent.id,
+        agentName: agent.name,
+        chatId: opts.chatId,
+        type: 'message',
+        duration,
+        tokens: usage?.total_tokens || 0
+      });
+    }
+
+    return { 
+      reply, 
+      usage: resp.usage ?? undefined, 
+      agentId: agent.id, 
+      model,
+      steps: executionTurns 
+    };
+  } catch (error: any) {
+    console.error("[AGENT][RUNTIME] ❌ Critical error in runAgentReply:", error);
+    
+    // Logar erro no banco
+    if (opts.agentId) {
+      AgentMonitoringService.logAgentError({
+        agentId: opts.agentId,
+        companyId: opts.companyId,
+        chatId: opts.chatId,
+        errorType: 'RUNTIME_ERROR',
+        errorMessage: error.message || 'Unknown error',
+        severity: 'HIGH',
+        metadata: { stack: error.stack, opts }
+      }).catch(err => console.error("Error logging agent error:", err));
+    }
+
+    return {
+      reply: "Desculpe, ocorreu um erro interno ao processar sua solicitação.",
+      agentId: opts.agentId,
+      reason: error.message
+    };
   }
+}
 
-  const reply = resp.choices[0]?.message?.content || '';
-  const finishReason = resp.choices[0]?.finish_reason;
-
-  // console.log("[AGENT][RUNTIME] 💬 Reply generated", {
-  //   callId,
-  //   chatId: opts.chatId,
-  //   agentId: agent.id,
-  //   replyLength: reply.length,
-  //   tokensUsed: resp.usage?.total_tokens || 0,
-  //   model,
-  //   finishReason,
-  //   iterations,
-  // });
-
-  // 6. Salvar contexto atualizado no Redis (incluindo tool calls intermediários)
-  executionTurns.push({ role: "assistant", content: reply });
-  await appendMultipleToContext(opts.chatId, executionTurns);
-
-  return { 
-    reply, 
-    usage: resp.usage ?? undefined, 
-    agentId: agent.id, 
-    model,
-    steps: executionTurns 
+function calculateCost(model: string, promptTokens: number, completionTokens: number): number {
+  // Preços aproximados por 1k tokens
+  const rates: Record<string, { prompt: number, completion: number }> = {
+    'gpt-4o': { prompt: 0.005, completion: 0.015 },
+    'gpt-4o-mini': { prompt: 0.00015, completion: 0.0006 },
+    'gpt-3.5-turbo': { prompt: 0.0005, completion: 0.0015 }
   };
+  
+  const rate = rates[model] || rates['gpt-4o-mini'];
+  return (promptTokens / 1000 * rate.prompt) + (completionTokens / 1000 * rate.completion);
 }

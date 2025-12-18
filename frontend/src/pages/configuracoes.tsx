@@ -1,12 +1,13 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaCalendar, FaPlus, FaTrash, FaEdit, FaLock, FaUsers, FaEye, FaCog, FaBan, FaCheck } from "react-icons/fa";
+import { FaCalendar, FaPlus, FaTrash, FaEdit, FaLock, FaUsers, FaEye, FaCog, FaBan, FaCheck, FaMoneyBillWave } from "react-icons/fa";
 import Sidebar from "../componets/Sidbars/sidebar";
 import SettingsNav from "../componets/settings/SettingsNav";
 import EmpresaPanel, { type CompanyForm } from "../componets/company/EmpresaPanel";
 import PerfilPanel, { type ProfileForm } from "../componets/profile/PerfilPanel";
 import InboxesPanel from "../componets/inboxes/InboxesPanel";
 import IntegracoesPanel from "../componets/integrations/IntegracoesPanel";
+import OpenAIBillingPanel from "../componets/billing/OpenAIBillingPanel";
 import { SimplifiedAgentPanel } from "../componets/agents/SimplifiedAgentPanel";
 import { KnowledgeBasePanel } from "../componets/knowledge/KnowledgeBasePanel";
 import AgentesPanel from "../componets/users/AgentesPanel";
@@ -27,6 +28,7 @@ const SECTIONS = [
   { id: "perfil", title: "Perfil", subtitle: "Seu nome, avatar e senha" },
   { id: "inboxes", title: "Caixas de entrada", subtitle: "Canais conectados", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
   { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
+  { id: "billing", title: "Faturamento", subtitle: "Uso de IA e faturas", restrictTo: ["ADMIN", "MANAGER"] },
   { id: "ia", title: "IA", subtitle: "Agentes e modelos" },
   { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
   { id: "departamentos", title: "Departamentos", subtitle: "Organizar em departamentos", restrictTo: ["ADMIN", "MANAGER"] },
@@ -893,6 +895,21 @@ export default function ConfiguracoesPage() {
                   <p className="text-gray-600 dark:text-gray-400 mt-1">Conecte ferramentas externas</p>
                 </div>
                 <IntegracoesPanel />
+              </div>
+            )}
+
+            {tab === "billing" && (
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
+                      <FaMoneyBillWave className="w-6 h-6 text-green-600 dark:text-green-400" />
+                    </div>
+                    Faturamento e Uso de IA
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">Acompanhe o consumo de tokens e faturas</p>
+                </div>
+                <OpenAIBillingPanel />
               </div>
             )}
             

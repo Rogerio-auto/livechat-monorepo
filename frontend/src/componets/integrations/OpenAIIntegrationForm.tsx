@@ -46,6 +46,7 @@ type DefaultModelMode = "option" | "custom" | "";
 type FormState = {
   name: string;
   api_key: string;
+  auto_generate: boolean;
   org_id: string;
   project_id: string;
   default_model_mode: DefaultModelMode;
@@ -60,6 +61,7 @@ type FormState = {
 const INITIAL_FORM: FormState = {
   name: "",
   api_key: "",
+  auto_generate: true,
   org_id: "",
   project_id: "",
   default_model_mode: "",
@@ -131,6 +133,7 @@ export default function OpenAIIntegrationForm({
       setForm({
         name: integration.name ?? "",
         api_key: "",
+        auto_generate: Boolean(integration.auto_generated),
         org_id: integration.org_id ?? "",
         project_id: integration.project_id ?? "",
         default_model_mode: defaultModel ? (defaultModelIsOption ? "option" : "custom") : "",
@@ -237,13 +240,15 @@ export default function OpenAIIntegrationForm({
       return;
     }
     const trimmedApiKey = form.api_key.trim();
-    if (mode === "create" && trimmedApiKey.length < 10) {
-      setValidationError("Informe a API Key (mínimo 10 caracteres).");
-      return;
-    }
-    if (mode === "edit" && trimmedApiKey && trimmedApiKey.length < 10) {
-      setValidationError("A nova API Key deve ter ao menos 10 caracteres.");
-      return;
+    if (!form.auto_generate) {
+      if (mode === "create" && trimmedApiKey.length < 10) {
+        setValidationError("Informe a API Key (mínimo 10 caracteres).");
+        return;
+      }
+      if (mode === "edit" && trimmedApiKey && trimmedApiKey.length < 10) {
+        setValidationError("A nova API Key deve ter ao menos 10 caracteres.");
+        return;
+      }
     }
 
     const resolvedDefaultModel =
@@ -275,8 +280,11 @@ export default function OpenAIIntegrationForm({
     if (mode === "create") {
       const payload: OpenAIIntegrationCreatePayload = {
         name: trimmedName,
-        api_key: trimmedApiKey,
+        auto_generate: form.auto_generate,
       };
+      if (!form.auto_generate) {
+        payload.api_key = trimmedApiKey;
+      }
       const orgId = normalizeOptionalString(form.org_id);
       const projectId = normalizeOptionalString(form.project_id);
       if (orgId !== null) payload.org_id = orgId;
@@ -395,8 +403,8 @@ export default function OpenAIIntegrationForm({
             </div>
           )}
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className={LABEL}>Nome *</label>
+            <div className="md:col-span-2">
+              <label className={LABEL}>Nome da Integração *</label>
               <input
                 className={INPUT_BASE}
                 value={form.name}
@@ -404,46 +412,16 @@ export default function OpenAIIntegrationForm({
                   setForm((prev) => ({ ...prev, name: event.target.value }))
                 }
                 disabled={submitting}
-                placeholder="Ex: OpenAI principal"
+                placeholder="Ex: OpenAI Empresa"
               />
+              <p className="mt-2 text-xs text-blue-400 flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Uma nova chave de API será gerada automaticamente para esta empresa.
+              </p>
             </div>
-            <div>
-              <label className={LABEL}>API Key {mode === "create" ? "*" : "(opcional)"}</label>
-              <input
-                className={INPUT_BASE}
-                type="password"
-                value={form.api_key}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, api_key: event.target.value }))
-                }
-                disabled={submitting}
-                placeholder="sk-..."
-              />
-            </div>
-            <div>
-              <label className={LABEL}>Organization ID</label>
-              <input
-                className={INPUT_BASE}
-                value={form.org_id}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, org_id: event.target.value }))
-                }
-                disabled={submitting}
-                placeholder="org_..."
-              />
-            </div>
-            <div>
-              <label className={LABEL}>Project ID</label>
-              <input
-                className={INPUT_BASE}
-                value={form.project_id}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, project_id: event.target.value }))
-                }
-                disabled={submitting}
-                placeholder="proj_..."
-              />
-            </div>
+            
             <div>
               <label className={LABEL}>Modelo padrão</label>
               <select

@@ -499,6 +499,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
   last_message_from?: "CUSTOMER" | "AGENT" | null;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_avatar_url?: string | null;
   customer_id: string | null;
   kind?: string | null;
   group_name?: string | null;
@@ -517,6 +518,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     last_message_at: string | null;
     customer_name: string | null;
     customer_phone: string | null;
+    customer_avatar_url: string | null;
     customer_id: string | null;
     kind: string | null;
     group_name: string | null;
@@ -541,6 +543,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             ag.name as ai_agent_name,
             cust.name as customer_name,
             cust.phone as customer_phone,
+            cust.avatar_url as customer_avatar_url,
             cust.id as customer_id
        from public.chats ch
   left join public.inboxes ib on ib.id = ch.inbox_id
@@ -559,6 +562,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
     last_message_at: row.last_message_at,
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
+    customer_avatar_url: row.customer_avatar_url,
     customer_id: row.customer_id,
     kind: row.kind,
     group_name: row.group_name,
@@ -1708,6 +1712,8 @@ async function handleMetaInboundMessages(args: {
           last_message_at: createdAt?.toISOString() || draftTimestamp,
           last_message_from: "CUSTOMER",
           last_message_type: type,
+          customer_name: metaContext.participantName ?? pushname ?? null,
+          customer_avatar_url: metaContext.participantAvatarUrl ?? null,
         },
       });
       // console.log("[META][inbound][DRAFT] Optimistic message emitted", { chatId, wamid });
@@ -5752,9 +5758,10 @@ async function tickCampaigns() {
 import { checkAndSendReminders } from "./jobs/taskReminders.js";
 import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";
 import { runAutoAgentFollowup } from "./jobs/autoAgentFollowup.js";
+import { dailyConsolidationJob, weeklyOpenAISyncJob, monthlyCleanupJob, stripeSyncJob } from "./jobs/sync-openai-usage.job.js";
 
 function startCronJobs() {
-  console.log("[worker] 🕒 Starting CRON jobs (Campaigns, Reminders, Auto-Tasks)...");
+  console.log("[worker] 🕒 Starting CRON jobs (Campaigns, Reminders, Auto-Tasks, OpenAI)...");
 
   setInterval(() => {
     console.log("[worker] ⏰ Triggering task reminder check...");
@@ -5768,6 +5775,18 @@ function startCronJobs() {
   // Auto-follow-up de agentes - roda a cada 2 minutos
   setInterval(() => runWithDistributedLock("auto:followup", runAutoAgentFollowup, 100), 2 * 60_000);
   runAutoAgentFollowup().catch(err => console.error("[worker] autoAgentFollowup init error:", err));
+
+  // OpenAI Usage Consolidation - roda a cada 24 horas
+  setInterval(() => runWithDistributedLock("openai:consolidation", dailyConsolidationJob, 23 * 60 * 60), 24 * 60 * 60_000);
+  
+  // Stripe Sync - roda a cada 24 horas (após a consolidação)
+  setInterval(() => runWithDistributedLock("openai:stripe-sync", stripeSyncJob, 23 * 60 * 60), 24 * 60 * 60_000 + 3600_000);
+
+  // OpenAI Project Sync - roda a cada 7 dias
+  setInterval(() => runWithDistributedLock("openai:sync", weeklyOpenAISyncJob, 6 * 24 * 60 * 60), 7 * 24 * 60 * 60_000);
+
+  // OpenAI Cleanup - roda a cada 30 dias
+  setInterval(() => runWithDistributedLock("openai:cleanup", monthlyCleanupJob, 29 * 24 * 60 * 60), 30 * 24 * 60 * 60_000);
 
   // roda a cada 60s
   setInterval(tickCampaigns, 60_000);

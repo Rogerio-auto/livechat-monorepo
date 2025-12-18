@@ -1,9 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { FiArrowLeft, FiCpu, FiLayers, FiMonitor } from 'react-icons/fi';
+import { FiArrowLeft, FiCpu, FiLayers, FiMonitor, FiBox, FiActivity } from 'react-icons/fi';
 
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/admin/dashboard', icon: FiMonitor, exact: true },
   { label: 'Empresas', to: '/admin/companies', icon: FiLayers },
+  { label: 'Templates', to: '/admin/templates', icon: FiBox },
+  { label: 'Ferramentas', to: '/admin/tools', icon: FiActivity },
   { label: 'Infraestrutura', to: '/admin/infrastructure', icon: FiCpu },
 ];
 

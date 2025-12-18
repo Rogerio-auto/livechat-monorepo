@@ -97,6 +97,30 @@ function formatDateSeparator(dateString: string) {
   return format(date, "dd/MM/yyyy");
 }
 
+function isGenericName(name: string | null | undefined) {
+  if (!name) return true;
+  const cleaned = name.replace(/\D/g, "");
+  // Se for apenas números e longo (telefone), ou se contiver @ (remote id), ou se for um UUID
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(name);
+  return (cleaned.length >= 8 && /^\d+$/.test(cleaned)) || name.includes("@") || isUuid;
+}
+
+function pickBetterName(newName: string | null | undefined, oldName: string | null | undefined) {
+  if (!newName || newName.trim() === "") return oldName || null;
+  if (!oldName || oldName.trim() === "") return newName || null;
+  
+  const newIsGeneric = isGenericName(newName);
+  const oldIsGeneric = isGenericName(oldName);
+  
+  // Se o novo nome for real e o antigo genérico, prefere o novo
+  if (!newIsGeneric && oldIsGeneric) return newName;
+  // Se o novo for genérico e o antigo real, prefere o antigo
+  if (newIsGeneric && !oldIsGeneric) return oldName;
+  
+  // Caso contrário, fica com o novo (ou o que for mais longo se ambos forem reais)
+  return newName;
+}
+
 import { LimitModal } from "../components/ui/LimitModal";
 
 export default function LiveChatPage() {
@@ -242,6 +266,14 @@ export default function LiveChatPage() {
   const chatsStoreRef = useRef<Record<string, { items: Chat[]; total: number; offset: number; hasMore: boolean }>>({});
   const currentChatsKeyRef = useRef<string | null>(null);
   const chatsReqIdRef = useRef(0);
+  const metadataCacheRef = useRef<Record<string, { 
+    display_name?: string | null, 
+    customer_name?: string | null,
+    group_name?: string | null,
+    customer_avatar_url?: string | null,
+    group_avatar_url?: string | null,
+    photo_url?: string | null
+  }>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
   const activeFilterCount = useMemo(() => {
@@ -409,7 +441,10 @@ export default function LiveChatPage() {
       base.id,
     ].filter((value) => typeof value === "string" && value.trim() !== "") as string[];
 
-    const resolvedName = nameCandidates.length > 0 ? nameCandidates[0] : null;
+    // Priorizar nomes que não sejam genéricos (UUID ou Telefone)
+    const nonGenericCandidates = nameCandidates.filter(n => !isGenericName(n));
+    const resolvedName = nonGenericCandidates.length > 0 ? nonGenericCandidates[0] : (nameCandidates.length > 0 ? nameCandidates[0] : null);
+    
     base.display_name = resolvedName;
     if (!resolvedName && base.customer_name) {
       base.display_name = base.customer_name;
@@ -420,6 +455,30 @@ export default function LiveChatPage() {
 
     const maybeGroupSize = base.group_size ?? (raw as any)?.group_size ?? (raw as any)?.participants_count ?? null;
     base.group_size = typeof maybeGroupSize === "number" && Number.isFinite(maybeGroupSize) ? maybeGroupSize : null;
+
+    // APLICAR CACHE (Sticky Metadata) para evitar perda de nome/foto em atualizações parciais ou resets
+    const chatId = base.id;
+    if (chatId) {
+      const cached = metadataCacheRef.current[chatId];
+      if (cached) {
+        base.display_name = pickBetterName(base.display_name, cached.display_name);
+        base.customer_name = pickBetterName(base.customer_name, cached.customer_name);
+        base.group_name = pickBetterName(base.group_name, cached.group_name);
+        base.customer_avatar_url = base.customer_avatar_url || cached.customer_avatar_url || null;
+        base.group_avatar_url = base.group_avatar_url || cached.group_avatar_url || null;
+        base.photo_url = base.photo_url || cached.photo_url || null;
+      }
+      
+      // ATUALIZAR CACHE com os melhores valores atuais
+      metadataCacheRef.current[chatId] = {
+        display_name: base.display_name,
+        customer_name: base.customer_name,
+        group_name: base.group_name,
+        customer_avatar_url: base.customer_avatar_url,
+        group_avatar_url: base.group_avatar_url,
+        photo_url: base.photo_url
+      };
+    }
 
     base.department_id = typeof base.department_id === "string" && base.department_id.trim()
       ? base.department_id
@@ -1192,28 +1251,35 @@ const bumpChatToTop = useCallback((update: {
         ? update.last_message_media_url ?? current.last_message_media_url ?? null
         : current.last_message_media_url ?? null,
       customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
-        ? update.customer_name ?? current.customer_name ?? null
-        : current.customer_name ?? null,
+        ? pickBetterName(update.customer_name, current.customer_name)
+        : current.customer_name || null,
       customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
-        ? update.customer_phone ?? current.customer_phone ?? null
-        : current.customer_phone ?? null,
+        ? update.customer_phone || current.customer_phone || null
+        : current.customer_phone || null,
       group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
-        ? update.group_name ?? current.group_name ?? null
-        : current.group_name ?? null,
+        ? pickBetterName(update.group_name, current.group_name)
+        : current.group_name || null,
       group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
-        ? update.group_avatar_url ?? current.group_avatar_url ?? null
-        : current.group_avatar_url ?? null,
+        ? update.group_avatar_url || current.group_avatar_url || null
+        : current.group_avatar_url || null,
+      customer_avatar_url: Object.prototype.hasOwnProperty.call(update, "customer_avatar_url")
+        ? update.customer_avatar_url || current.customer_avatar_url || null
+        : current.customer_avatar_url || null,
+      photo_url: Object.prototype.hasOwnProperty.call(update, "photo_url")
+        ? (update as any).photo_url || (current as any).photo_url || null
+        : (current as any).photo_url || null,
       remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
-        ? update.remote_id ?? current.remote_id ?? null
-        : current.remote_id ?? null,
+        ? update.remote_id || current.remote_id || null
+        : current.remote_id || null,
       kind: update.kind ?? current.kind ?? null,
       status: update.status ?? current.status,
-        ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
-          ? (update as any).ai_agent_id ?? (current as any)?.ai_agent_id ?? null
-          : (current as any)?.ai_agent_id ?? null,
-        ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
-          ? (update as any).ai_agent_name ?? (current as any)?.ai_agent_name ?? null
-          : (current as any)?.ai_agent_name ?? null,
+      display_name: pickBetterName(update.display_name, current.display_name),
+      ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
+        ? (update as any).ai_agent_id ?? (current as any)?.ai_agent_id ?? null
+        : (current as any)?.ai_agent_id ?? null,
+      ai_agent_name: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_name")
+        ? (update as any).ai_agent_name ?? (current as any)?.ai_agent_name ?? null
+        : (current as any)?.ai_agent_name ?? null,
       unread_count: Object.prototype.hasOwnProperty.call(update, "unread_count")
         ? update.unread_count ?? current.unread_count ?? 0
         : current.unread_count ?? 0,
@@ -1254,22 +1320,29 @@ const bumpChatToTop = useCallback((update: {
           ? update.last_message_media_url ?? prev.last_message_media_url ?? null
           : prev.last_message_media_url ?? null,
         customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
-          ? update.customer_name ?? prev.customer_name ?? null
-          : prev.customer_name ?? null,
+          ? pickBetterName(update.customer_name, prev.customer_name)
+          : prev.customer_name || null,
         customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
-          ? update.customer_phone ?? prev.customer_phone ?? null
-          : prev.customer_phone ?? null,
+          ? update.customer_phone || prev.customer_phone || null
+          : prev.customer_phone || null,
         group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
-          ? update.group_name ?? prev.group_name ?? null
-          : prev.group_name ?? null,
+          ? pickBetterName(update.group_name, prev.group_name)
+          : prev.group_name || null,
         group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
-          ? update.group_avatar_url ?? prev.group_avatar_url ?? null
-          : prev.group_avatar_url ?? null,
+          ? update.group_avatar_url || prev.group_avatar_url || null
+          : prev.group_avatar_url || null,
+        customer_avatar_url: Object.prototype.hasOwnProperty.call(update, "customer_avatar_url")
+          ? update.customer_avatar_url || prev.customer_avatar_url || null
+          : prev.customer_avatar_url || null,
+        photo_url: Object.prototype.hasOwnProperty.call(update, "photo_url")
+          ? (update as any).photo_url || (prev as any).photo_url || null
+          : (prev as any).photo_url || null,
         remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
-          ? update.remote_id ?? prev.remote_id ?? null
-          : prev.remote_id ?? null,
+          ? update.remote_id || prev.remote_id || null
+          : prev.remote_id || null,
         kind: update.kind ?? prev.kind ?? null,
         status: update.status ?? prev.status,
+        display_name: pickBetterName(update.display_name, prev.display_name),
         ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
           ? (update as any).ai_agent_id ?? (prev as any)?.ai_agent_id ?? null
           : (prev as any)?.ai_agent_id ?? null,
@@ -1318,22 +1391,29 @@ const bumpChatToTop = useCallback((update: {
           ? update.last_message_media_url ?? prev.last_message_media_url ?? null
           : prev.last_message_media_url ?? null,
         customer_name: Object.prototype.hasOwnProperty.call(update, "customer_name")
-          ? update.customer_name ?? prev.customer_name ?? null
-          : prev.customer_name ?? null,
+          ? pickBetterName(update.customer_name, prev.customer_name)
+          : prev.customer_name || null,
         customer_phone: Object.prototype.hasOwnProperty.call(update, "customer_phone")
-          ? update.customer_phone ?? prev.customer_phone ?? null
-          : prev.customer_phone ?? null,
+          ? update.customer_phone || prev.customer_phone || null
+          : prev.customer_phone || null,
         group_name: Object.prototype.hasOwnProperty.call(update, "group_name")
-          ? update.group_name ?? prev.group_name ?? null
-          : prev.group_name ?? null,
+          ? pickBetterName(update.group_name, prev.group_name)
+          : prev.group_name || null,
         group_avatar_url: Object.prototype.hasOwnProperty.call(update, "group_avatar_url")
-          ? update.group_avatar_url ?? prev.group_avatar_url ?? null
-          : prev.group_avatar_url ?? null,
+          ? update.group_avatar_url || prev.group_avatar_url || null
+          : prev.group_avatar_url || null,
+        customer_avatar_url: Object.prototype.hasOwnProperty.call(update, "customer_avatar_url")
+          ? update.customer_avatar_url || prev.customer_avatar_url || null
+          : prev.customer_avatar_url || null,
+        photo_url: Object.prototype.hasOwnProperty.call(update, "photo_url")
+          ? (update as any).photo_url || (prev as any).photo_url || null
+          : (prev as any).photo_url || null,
         remote_id: Object.prototype.hasOwnProperty.call(update, "remote_id")
-          ? update.remote_id ?? prev.remote_id ?? null
-          : prev.remote_id ?? null,
+          ? update.remote_id || prev.remote_id || null
+          : prev.remote_id || null,
         kind: update.kind ?? prev.kind ?? null,
         status: update.status ?? prev.status,
+        display_name: pickBetterName(update.display_name, prev.display_name),
         ai_agent_id: Object.prototype.hasOwnProperty.call(update as any, "ai_agent_id")
           ? (update as any).ai_agent_id ?? (prev as any)?.ai_agent_id ?? null
           : (prev as any)?.ai_agent_id ?? null,
@@ -1989,7 +2069,11 @@ const scrollToBottom = useCallback(
         remote_id: Object.prototype.hasOwnProperty.call(m, "remote_id") ? (m as any).remote_id ?? null : undefined,
         kind: Object.prototype.hasOwnProperty.call(m, "kind") ? (m as any).kind ?? null : undefined,
         unread_count: nextUnreadCount,
-      });
+        // Preservar/Atualizar nome e foto se vierem na mensagem
+        customer_name: m.remote_sender_name,
+        customer_avatar_url: m.remote_sender_avatar_url,
+        photo_url: m.remote_sender_avatar_url,
+      } as any);
     };
 
     const onMessageStatus = (payload: any) => {
@@ -2043,6 +2127,8 @@ const scrollToBottom = useCallback(
       
       if (p.group_name !== undefined) update.group_name = p.group_name;
       if (p.group_avatar_url !== undefined) update.group_avatar_url = p.group_avatar_url;
+      if (p.customer_avatar_url !== undefined) update.customer_avatar_url = p.customer_avatar_url;
+      if (p.photo_url !== undefined) update.photo_url = p.photo_url;
       
       if (p.remote_id !== undefined) update.remote_id = p.remote_id;
       if (p.kind !== undefined) update.kind = p.kind;
@@ -2402,7 +2488,21 @@ const scrollToBottom = useCallback(
 
         setChats((prev) => {
           if (effectiveReset) {
-            nextList = [...normalizedItems].sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
+            // MERGE com o estado anterior para preservar nomes e fotos reais
+            const merged = normalizedItems.map(nc => {
+              const existing = prev.find(p => p.id === nc.id);
+              if (!existing) return nc;
+              return {
+                ...nc,
+                display_name: pickBetterName(nc.display_name, existing.display_name),
+                customer_name: pickBetterName(nc.customer_name, existing.customer_name),
+                group_name: pickBetterName(nc.group_name, existing.group_name),
+                group_avatar_url: nc.group_avatar_url || existing.group_avatar_url || null,
+                customer_avatar_url: nc.customer_avatar_url || existing.customer_avatar_url || null,
+                photo_url: (nc as any).photo_url || (existing as any).photo_url || null,
+              };
+            });
+            nextList = [...merged].sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
             console.debug("[livechat] setChats(reset)", { nextCount: nextList.length });
             return nextList;
           }

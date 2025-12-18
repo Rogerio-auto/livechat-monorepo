@@ -110,34 +110,73 @@ async function handleCheckoutSessionCompleted(session: any) {
 }
 
 async function handleInvoicePaymentSucceeded(invoice: any) {
+  const customerId = invoice.customer;
   const subscriptionId = invoice.subscription;
-  if (!subscriptionId) return;
 
-  // Extend the subscription period based on the invoice
-  // This is optional if you rely on 'status=active', but good for record keeping
-  console.log(`[Stripe] Payment succeeded for subscription ${subscriptionId}`);
-  
-  // You might want to update current_period_end here if you track it locally
+  console.log(`[Stripe] Invoice payment succeeded: ${invoice.id} for customer ${customerId}`);
+
+  // 1. Atualizar status da assinatura principal
+  if (subscriptionId) {
+    await db.none(
+      `UPDATE public.subscriptions 
+       SET status = 'active', 
+           current_period_start = to_timestamp($1),
+           current_period_end = to_timestamp($2),
+           updated_at = NOW()
+       WHERE stripe_subscription_id = $3`,
+      [invoice.period_start, invoice.period_end, subscriptionId]
+    );
+  }
+
+  // 2. Marcar faturas de IA como pagas se estiverem vinculadas a este invoice
+  // O Stripe permite adicionar metadados aos InvoiceItems que aparecem no invoice
+  const { data: lineItems } = await stripe.invoices.listLineItems(invoice.id);
+  for (const item of lineItems) {
+    const companyId = item.metadata?.company_id;
+    const billingMonth = item.metadata?.billing_month;
+    const type = item.metadata?.type;
+
+    if (type === 'openai_usage' && companyId && billingMonth) {
+      await db.none(
+        `UPDATE public.company_monthly_bills 
+         SET status = 'paid', paid_at = NOW(), updated_at = NOW()
+         WHERE company_id = $1 AND billing_month = $2`,
+        [companyId, billingMonth]
+      );
+      console.log(`[Stripe] AI Bill marked as PAID for company ${companyId} (${billingMonth})`);
+    }
+  }
 }
 
 async function handleInvoicePaymentFailed(invoice: any) {
   const subscriptionId = invoice.subscription;
-  if (!subscriptionId) return;
+  console.log(`[Stripe] Invoice payment failed: ${invoice.id}`);
 
-  console.warn(`[Stripe] Payment failed for subscription ${subscriptionId}`);
+  if (subscriptionId) {
+    const result = await db.oneOrNone(
+      `UPDATE public.subscriptions 
+       SET status = 'past_due', updated_at = NOW()
+       WHERE stripe_subscription_id = $1
+       RETURNING company_id`,
+      [subscriptionId]
+    );
 
-  // Mark as past_due
-  const result = await db.oneOrNone(
-    `UPDATE public.subscriptions 
-     SET status = 'past_due',
-         updated_at = NOW()
-     WHERE stripe_subscription_id = $1
-     RETURNING company_id`,
-    [subscriptionId]
-  );
-
-  if (result?.company_id) {
-    await rDel(`subscription:${result.company_id}`);
+    if (result?.company_id) {
+      await rDel(`subscription:${result.company_id}`);
+      
+      // Marcar faturas de IA como past_due para bloquear o bot
+      const { data: lineItems } = await stripe.invoices.listLineItems(invoice.id);
+      for (const item of lineItems) {
+        if (item.metadata?.type === 'openai_usage' && item.metadata?.billing_month) {
+          await db.none(
+            `UPDATE public.company_monthly_bills 
+             SET status = 'past_due', updated_at = NOW()
+             WHERE company_id = $1 AND billing_month = $2`,
+            [result.company_id, item.metadata.billing_month]
+          );
+        }
+      }
+    }
   }
 }
 

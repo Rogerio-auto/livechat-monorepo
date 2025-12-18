@@ -16,6 +16,8 @@ import { ResetPassword } from './pages/reset-password'
 import { TarefasPage } from './pages/tarefas'
 import { AutomationRulesPage } from './pages/AutomationRulesPage'
 import PerfilPage from './pages/perfil'
+import AgentDetails from './pages/agents/AgentDetails'
+import AgentPlayground from './pages/agents/AgentPlayground'
 import { SubscriptionSuccessPage } from './pages/subscription-success'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
@@ -32,6 +34,10 @@ import { CompanyAgents } from './pages/admin/companies-views/CompanyAgents'
 import { CompanyUsers } from './pages/admin/companies-views/CompanyUsers'
 import { CompanyLogs } from './pages/admin/companies-views/CompanyLogs'
 import { SystemHealth } from './pages/admin/infrastructure/SystemHealth'
+import TemplateList from './pages/admin/Templates/TemplateList'
+import TemplateEditor from './pages/admin/Templates/TemplateEditor'
+import TemplateTester from './pages/admin/Templates/TemplateTester'
+import ToolMonitoring from './pages/admin/Tools/ToolMonitoring'
 
 
 function App() {
@@ -98,6 +104,11 @@ function App() {
             
             <Route path='/configuracoes' element={<ConfiguracoesPage/>}/>
             <Route path='/subscription' element={<SubscriptionPage/>}/>
+            
+            {/* Monitoramento de Agentes */}
+            <Route path='/agents-monitoring' element={<Navigate to="/dashboard?tab=ai-agents" replace />} />
+            <Route path='/agents/:agentId' element={<AgentDetails/>}/>
+            <Route path='/agents/:agentId/playground' element={<AgentPlayground/>}/>
           </Route>
           
           <Route
@@ -120,6 +131,9 @@ function App() {
               <Route path='logs' element={<CompanyLogs />} />
             </Route>
             <Route path='infrastructure' element={<SystemHealth />} />
+            <Route path='templates' element={<TemplateList />} />
+            <Route path='templates/new' element={<TemplateEditor />} />
+            <Route path='templates/:id' element={<TemplateEditor />} />            <Route path="templates/:id/test" element={<TemplateTester />} />            <Route path='tools' element={<ToolMonitoring />} />
           </Route>
           
 

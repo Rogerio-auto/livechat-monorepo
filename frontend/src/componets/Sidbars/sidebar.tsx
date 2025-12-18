@@ -19,6 +19,8 @@ import {
   FaTimes,
   FaMoon,
   FaSun,
+  FaRobot,
+  FaChartLine,
 } from "react-icons/fa";
 import Logo from "../../assets/icon.png";
 import { useTheme } from "../../context/ThemeContext";
@@ -38,7 +40,7 @@ type SidebarLink = {
   to: string;
   icon: ReactNode;
   label: string;
-  isActive: (path: string) => boolean;
+  isActive: (path: string, search: string) => boolean;
   feature?: string;
 };
 
@@ -122,7 +124,7 @@ const adminLinks: SidebarLink[] = [
     to: "/admin",
     icon: <FaShieldAlt />,
     label: "Admin",
-    isActive: (path) => path.startsWith("/admin"),
+    isActive: (path, search) => path.startsWith("/admin"),
   },
 ];
 
@@ -360,7 +362,7 @@ function SidebarContent({
             to={item.to}
             icon={item.icon}
             label={item.label}
-            active={item.isActive(locationPath)}
+            active={item.isActive(locationPath, location.search)}
             forceExpanded={forceExpanded}
             onNavigate={onNavigate}
           />
@@ -381,7 +383,7 @@ function SidebarContent({
                 to={item.to}
                 icon={item.icon}
                 label={item.label}
-                active={item.isActive(locationPath)}
+                active={item.isActive(locationPath, location.search)}
                 forceExpanded={forceExpanded}
                 onNavigate={onNavigate}
               />

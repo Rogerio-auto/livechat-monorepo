@@ -254,7 +254,12 @@ CRITICAL FLOW CONTROL:
   const system: ChatTurn = { role: "system", content: sysParts.join("\n\n").trim() || "Você é um atendente útil, breve e educado." };
   
   // Limitar histórico Redis aos últimos 12 turnos (excluindo system)
-  const recentHistory = contextHistory.filter(t => t.role !== "system").slice(-12);
+  let recentHistory = contextHistory.filter(t => t.role !== "system").slice(-12);
+
+  // Sanitize: Remove orphaned tool messages at the start (caused by slicing)
+  while (recentHistory.length > 0 && recentHistory[0].role === "tool") {
+    recentHistory.shift();
+  }
   
   const finalUser: ChatTurn = { role: "user", content: userMessage };
   return [system, ...recentHistory, finalUser];
@@ -269,7 +274,16 @@ export async function runAgentReply(opts: {
   contactId?: string;
   leadId?: string;
   userId?: string;
-}): Promise<{ reply: string; usage?: any; agentId?: string | null; model?: string; skipped?: boolean; reason?: string }>
+  isPlayground?: boolean;
+}): Promise<{ 
+  reply: string; 
+  usage?: any; 
+  agentId?: string | null; 
+  model?: string; 
+  skipped?: boolean; 
+  reason?: string;
+  steps?: any[];
+}>
 {
   const callId = `${opts.chatId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
   // console.log("[AGENT][RUNTIME] 🚀 runAgentReply called", {
@@ -435,6 +449,7 @@ export async function runAgentReply(opts: {
     leadId: opts.leadId,
     userId: opts.userId,
     companyId: opts.companyId, // Add companyId for knowledge base queries
+    isPlayground: opts.isPlayground,
   };
 
   // 5. Loop de function calling
@@ -568,5 +583,11 @@ export async function runAgentReply(opts: {
   executionTurns.push({ role: "assistant", content: reply });
   await appendMultipleToContext(opts.chatId, executionTurns);
 
-  return { reply, usage: resp.usage ?? undefined, agentId: agent.id, model };
+  return { 
+    reply, 
+    usage: resp.usage ?? undefined, 
+    agentId: agent.id, 
+    model,
+    steps: executionTurns 
+  };
 }

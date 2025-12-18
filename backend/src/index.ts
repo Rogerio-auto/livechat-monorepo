@@ -64,6 +64,7 @@ import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
 import { registerOnboardingRoutes } from "./routes/onboarding.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerAdminStatsRoutes } from "./routes/admin.stats.js";
+import adminAgentsRouter from "./routes/admin/agents.js";
 import { registerSubscriptionRoutes } from "./routes/subscriptions.js";
 import { registerTaskRoutes } from "./routes/tasks.js";
 import { registerAutomationRulesRoutes } from "./routes/automationRules.js";
@@ -3733,6 +3734,7 @@ app.post("/integrations/meta/webhook", metaWebhookPost);
 registerOnboardingRoutes(app);
 registerAdminRoutes(app);
 registerAdminStatsRoutes(app);
+app.use("/api/admin", adminAgentsRouter);
 registerSubscriptionRoutes(app);
 app.use("/api/checkout", checkoutRouter);
 

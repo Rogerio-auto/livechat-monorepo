@@ -34,7 +34,7 @@ export async function notifySystemAlert(params: {
         priority: params.priority || "URGENT",
         userId: admin.user_id,
         companyId: params.companyId,
-        data: params.data || null,
+        data: params.data || undefined,
         actionUrl: params.actionUrl || "/dashboard",
       })
     );
@@ -186,7 +186,7 @@ export async function notifyNewMessage(params: {
         senderPhone: params.senderPhone
       },
       actionUrl: `/dashboard/chats/${params.chatId}`,
-      category: "message"
+      category: "chat"
     });
 
   } catch (error) {

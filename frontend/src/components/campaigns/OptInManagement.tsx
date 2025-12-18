@@ -53,7 +53,7 @@ export function OptInManagement({ customer, showBulkImport = false }: OptInManag
     
     setLoading(true);
     try {
-      const response = await api.get(`/customers/${customer.id}/opt-in-status`);
+      const response = await api.get(`/api/customers/${customer.id}/opt-in-status`);
       setStatus(response.data);
     } catch (error: any) {
       console.error("Erro ao buscar status:", error);
@@ -68,7 +68,7 @@ export function OptInManagement({ customer, showBulkImport = false }: OptInManag
     
     setLoading(true);
     try {
-      await api.post(`/customers/${customer.id}/opt-in`, {
+      await api.post(`/api/customers/${customer.id}/opt-in`, {
         method,
         source: source || undefined,
       });
@@ -93,7 +93,7 @@ export function OptInManagement({ customer, showBulkImport = false }: OptInManag
     
     setLoading(true);
     try {
-      await api.post(`/customers/${customer.id}/opt-out`);
+      await api.post(`/api/customers/${customer.id}/opt-out`);
       
       setMessage({ type: 'success', text: 'Opt-out registrado com sucesso!' });
       fetchStatus();
@@ -123,7 +123,7 @@ export function OptInManagement({ customer, showBulkImport = false }: OptInManag
     
     setLoading(true);
     try {
-      const response = await api.post(`/customers/opt-in/bulk`, {
+      const response = await api.post(`/api/customers/opt-in/bulk`, {
         phones: phoneList,
         method: bulkMethod,
         source: bulkSource || undefined,

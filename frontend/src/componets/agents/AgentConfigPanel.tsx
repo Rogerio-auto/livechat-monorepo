@@ -40,6 +40,8 @@ const CHAT_MODELS: ModelOption[] = [
   { id: "gpt-4o-mini", name: "GPT-4o Mini", description: "Rápido e econômico", provider: "OpenAI" },
   { id: "gpt-4-turbo", name: "GPT-4 Turbo", description: "Alto desempenho", provider: "OpenAI" },
   { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", description: "Econômico e rápido", provider: "OpenAI" },
+  { id: "o1-preview", name: "o1 Preview", description: "Novo modelo de raciocínio avançado", provider: "OpenAI" },
+  { id: "o1-mini", name: "o1 Mini", description: "Raciocínio rápido e eficiente", provider: "OpenAI" },
 ];
 
 const TRANSCRIPTION_MODELS: ModelOption[] = [
@@ -260,18 +262,40 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">Modelo Principal</label>
-              <select
-                value={config.model || ""}
-                onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
-              >
-                <option value="">Selecione um modelo</option>
-                {CHAT_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} - {m.description}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={config.model || ""}
+                  onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 appearance-none"
+                >
+                  <option value="">Selecione um modelo</option>
+                  {CHAT_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} - {m.description}
+                    </option>
+                  ))}
+                  <option value="custom">Outro (Digitar manualmente)</option>
+                </select>
+                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </div>
+              
+              {/* Campo de texto livre caso o modelo não esteja na lista (ou usuário escolha 'custom') */}
+              {(!CHAT_MODELS.find(m => m.id === config.model) && config.model) && (
+                 <div className="mt-2">
+                    <label className="block text-xs text-gray-400 mb-1">Nome do modelo personalizado:</label>
+                    <input 
+                      type="text"
+                      value={config.model || ""}
+                      onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                      className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                      placeholder="Ex: gpt-4-32k"
+                    />
+                 </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -42,6 +42,8 @@ export interface TaskTemplate {
   priority: string;
   due_date_offset?: string; // "+1d", "+2h", etc
   assigned_to?: string; // "{{lead.assigned_to_id}}", "{{rule.created_by}}", or UUID
+  assigned_to_id?: string;
+  kanban_column_id?: string;
   metadata?: Record<string, any>;
 }
 

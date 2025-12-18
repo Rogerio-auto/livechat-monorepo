@@ -14,6 +14,7 @@ export type ToolExecutionContext = {
   leadId?: string;
   userId?: string;
   companyId?: string; // Added for knowledge base queries
+  isPlayground?: boolean;
 };
 
 export type ToolExecutionResult = {
@@ -124,6 +125,22 @@ async function handleInternalDB(
           .maybeSingle();
         if (!chatErr && chatRow?.customer_id) {
           params.customer_id = chatRow.customer_id;
+        }
+      } catch {}
+    }
+
+    // Fallback para Playground: se ainda não tem customer_id, pega o primeiro da empresa
+    if (!params.customer_id && context.isPlayground && context.companyId) {
+      try {
+        const { data: firstCustomer } = await supabaseAdmin
+          .from("customers")
+          .select("id")
+          .eq("company_id", context.companyId)
+          .limit(1)
+          .maybeSingle();
+        if (firstCustomer?.id) {
+          params.customer_id = firstCustomer.id;
+          console.log(`[toolHandlers] Playground mode: using fallback customer_id ${params.customer_id}`);
         }
       } catch {}
     }
@@ -346,6 +363,20 @@ async function handleInternalDB(
     }
 
     // 6. Execute operation
+    if (context.isPlayground && (action === "insert" || action === "update" || action === "upsert" || action === "delete")) {
+      console.log(`[toolHandlers] Playground mode: SIMULATING ${action} on table ${table}`, finalParams);
+      
+      // Retornar um mock que parece um resultado real do banco
+      return { 
+        success: true, 
+        data: action === "delete" ? null : [{ 
+          id: finalParams.id || "playground-mock-id", 
+          ...finalParams, 
+          created_at: new Date().toISOString() 
+        }] 
+      };
+    }
+
     if (action === "insert") {
       const { data, error } = await supabaseAdmin.from(table).insert(finalParams).select();
       if (error) throw new Error(`DB insert error: ${error.message}`);
@@ -613,6 +644,21 @@ async function handleHTTP(
   const { url, method, headers } = config;
   if (!url) throw new Error("handler_config.url is required for HTTP");
 
+  // Simulação para Playground em métodos de escrita
+  const isWrite = ["POST", "PUT", "PATCH", "DELETE"].includes((method || "POST").toUpperCase());
+  if (context.isPlayground && isWrite) {
+    console.log(`[toolHandlers] Playground mode: SIMULATING HTTP ${method || 'POST'} to ${url}`);
+    return { 
+      success: true, 
+      data: { 
+        message: "Simulação de chamada externa (Playground)",
+        url: url,
+        method: method || "POST",
+        params: params 
+      } 
+    };
+  }
+
   const fetchHeaders = new Headers(headers || {});
   if (!fetchHeaders.has("Content-Type")) fetchHeaders.set("Content-Type", "application/json");
 
@@ -649,6 +695,19 @@ async function handleWorkflow(
   context: ToolExecutionContext
 ): Promise<ToolExecutionResult> {
   const { action, emit_event, target_queue } = config;
+
+  // Simulação para Playground
+  if (context.isPlayground && action === "handoff") {
+    console.log(`[toolHandlers] Playground mode: SIMULATING handoff to ${target_queue || 'human'}`);
+    return { 
+      success: true, 
+      data: { 
+        message: "Simulação de transferência (Playground)",
+        target_queue: target_queue || "human_support",
+        reason: params.reason
+      } 
+    };
+  }
 
   if (action === "handoff") {
     const targetAgentId = params.target_agent_id || null;
@@ -821,22 +880,30 @@ async function handleSocket(
 
   // 1. Validar provider da inbox se necessário (para ferramentas interativas)
   if (validate_inbox) {
-    // Join com customers para pegar o telefone
-    const { data: chatData, error } = await supabaseAdmin
-      .from("chats")
-      .select("inbox_id, customers(phone), inboxes!inner(provider)")
-      .eq("id", context.chatId)
-      .single();
+    // No Playground, simulamos os dados da inbox para não quebrar a execução
+    if (context.isPlayground) {
+      inboxId = "playground-inbox";
+      customerPhone = "5511999999999";
+      provider = "META_CLOUD";
+    } else {
+      // Join com customers para pegar o telefone
+      const { data: chatData, error } = await supabaseAdmin
+        .from("chats")
+        .select("inbox_id, customers(phone), inboxes!inner(provider)")
+        .eq("id", context.chatId)
+        .single();
 
-    if (error || !chatData?.inboxes) {
-      console.error("[SOCKET] Error fetching chat data:", error);
-      throw new Error("Não foi possível identificar a inbox do chat (Erro DB)");
+      if (error || !chatData?.inboxes) {
+        console.error("[SOCKET] Error fetching chat data:", error);
+        throw new Error("Não foi possível identificar a inbox do chat (Erro DB)");
+      }
+
+      inboxId = chatData.inbox_id;
+      // Acessar telefone via relação customers
+      customerPhone = (chatData.customers as any)?.phone;
+      provider = (chatData.inboxes as any).provider?.toUpperCase();
     }
 
-    inboxId = chatData.inbox_id;
-    // Acessar telefone via relação customers
-    customerPhone = (chatData.customers as any)?.phone;
-    provider = (chatData.inboxes as any).provider?.toUpperCase();
     const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
 
     if (!allowedProviders.includes(provider)) {
@@ -849,6 +916,18 @@ async function handleSocket(
 
   // 2. Enviar via Meta API se for o caso
   if (provider === "META_CLOUD" && inboxId && customerPhone) {
+    // No Playground, apenas simulamos o envio com sucesso
+    if (context.isPlayground) {
+      console.log(`[SOCKET] Playground mode: skipping real Meta API call for ${event}`);
+      return { 
+        success: true, 
+        data: { 
+          message: "Simulação de envio interativo (Playground)",
+          params: params 
+        } 
+      };
+    }
+
     try {
       if (event === "send:interactive_message") {
         // Validação básica de botões

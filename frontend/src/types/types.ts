@@ -102,6 +102,7 @@ export type OpenAIIntegrationCreatePayload = {
   default_model?: string | null;
   models_allowed?: string[];
   usage_limits?: OpenAIIntegrationUsageLimits;
+  is_active?: boolean;
 };
 
 export type OpenAIUsageLog = {
@@ -129,8 +130,6 @@ export type CompanyMonthlyBill = {
   stripe_payment_intent_id?: string;
   paid_at?: string;
   created_at: string;
-};
-  is_active?: boolean;
 };
 
 export type OpenAIIntegrationUpdatePayload = Partial<OpenAIIntegrationCreatePayload>;

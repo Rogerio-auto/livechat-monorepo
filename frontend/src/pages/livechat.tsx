@@ -1184,6 +1184,8 @@ const bumpChatToTop = useCallback((update: {
   customer_phone?: string | null;
   group_name?: string | null;
   group_avatar_url?: string | null;
+  customer_avatar_url?: string | null;
+  display_name?: string | null;
   remote_id?: string | null;
   kind?: string | null;
   status?: string;

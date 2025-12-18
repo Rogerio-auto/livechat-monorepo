@@ -36,19 +36,26 @@ export function ChartContainer({ title, loading = false, children, action }: Cha
 
 interface LineChartComponentProps {
   data: ChartDataPoint[];
-  dataKey: string;
+  dataKey?: string;
+  dataKeys?: string[];
   xAxisKey?: string;
   color?: string;
+  colors?: string[];
   height?: number;
 }
 
 export function LineChartComponent({
   data,
   dataKey,
+  dataKeys,
   xAxisKey = "name",
   color = "var(--color-primary)",
+  colors,
   height = 220,
 }: LineChartComponentProps) {
+  const keys = dataKeys || (dataKey ? [dataKey] : []);
+  const lineColors = colors || [color];
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data}>
@@ -69,13 +76,16 @@ export function LineChartComponent({
             borderRadius: "8px",
           }}
         />
-        <Line 
-          type="monotone" 
-          dataKey={dataKey} 
-          stroke={color} 
-          strokeWidth={2}
-          dot={{ fill: color, r: 4 }}
-        />
+        {keys.map((key, index) => (
+          <Line 
+            key={key}
+            type="monotone" 
+            dataKey={key} 
+            stroke={lineColors[index % lineColors.length]} 
+            strokeWidth={2}
+            dot={{ fill: lineColors[index % lineColors.length], r: 4 }}
+          />
+        ))}
       </LineChart>
     </ResponsiveContainer>
   );

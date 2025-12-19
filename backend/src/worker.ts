@@ -5827,7 +5827,9 @@ function startCronJobs() {
   setInterval(() => runWithDistributedLock("openai:sync", weeklyOpenAISyncJob, 6 * 24 * 60 * 60), 7 * 24 * 60 * 60_000);
 
   // OpenAI Cleanup - roda a cada 30 dias
-  setInterval(() => runWithDistributedLock("openai:cleanup", monthlyCleanupJob, 29 * 24 * 60 * 60), 30 * 24 * 60 * 60_000);
+  // OBS: setInterval tem limite de ~24 dias (2^31-1 ms). 30 dias causa overflow e roda instantaneamente.
+  // Solução: Rodar verificação a cada 1 dia. O lock de 29 dias impede execução duplicada.
+  setInterval(() => runWithDistributedLock("openai:cleanup", monthlyCleanupJob, 29 * 24 * 60 * 60), 24 * 60 * 60_000);
 
   // roda a cada 60s
   setInterval(tickCampaigns, 60_000);

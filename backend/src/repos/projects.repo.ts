@@ -303,11 +303,15 @@ export async function moveProjectStage(
   if (error) throw new Error(error.message);
 
   // Registrar mudança de estágio
-  await createProjectActivity(projectId, userId, "stage_change", {
-    title: "Estágio alterado",
-    from_stage_id: project.current_stage_id || undefined,
-    to_stage_id: newStageId,
-  });
+  try {
+    await createProjectActivity(projectId, userId, "stage_change", {
+      title: "Estágio alterado",
+      from_stage_id: project.current_stage_id || undefined,
+      to_stage_id: newStageId,
+    });
+  } catch (err) {
+    console.error("[DEBUG] Failed to create project activity (ignoring):", err);
+  }
 
   return data;
 }

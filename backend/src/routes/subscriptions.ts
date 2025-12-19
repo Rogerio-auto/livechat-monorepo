@@ -50,7 +50,8 @@ export function registerSubscriptionRoutes(app: express.Application) {
       console.error("[subscriptions] Error getting current subscription:", error);
       res.status(500).json({ 
         error: "Failed to get subscription",
-        message: error instanceof Error ? error.message : "Unknown error"
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined
       });
     }
   });

@@ -31,7 +31,8 @@ import ProjectTasks from "../../components/projects/ProjectTasks";
 import ProjectComments from "../../components/projects/ProjectComments";
 import ProjectAttachments from "../../components/projects/ProjectAttachments";
 import ProjectTimeline from "../../components/projects/ProjectTimeline";
-import ProjectForm from "../../components/projects/ProjectForm";
+import { useConfirmation } from "../../hooks/useConfirmation";
+import { ConfirmationModal } from "../../components/ui/ConfirmationModal";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -41,8 +42,8 @@ const ProjectDetails: React.FC = () => {
   const [project, setProject] = useState<ProjectWithDetails | null>(null);
   const [template, setTemplate] = useState<TemplateWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
-  const [showEditForm, setShowEditForm] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const { confirm, modalProps } = useConfirmation();
 
   useEffect(() => {
     fetchProjectDetails();
@@ -77,9 +78,15 @@ const ProjectDetails: React.FC = () => {
   };
 
   const handleDeleteProject = async () => {
-    if (!window.confirm("Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.")) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Excluir Projeto",
+      message: "Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita e todos os dados relacionados serão perdidos.",
+      confirmText: "Excluir",
+      cancelText: "Cancelar",
+      type: "danger"
+    });
+
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`${API}/projects/${id}`, {
@@ -142,13 +149,16 @@ const ProjectDetails: React.FC = () => {
   return (
     <div className="h-full flex flex-col livechat-theme relative overflow-visible">
       {/* Header */}
-      <div className="sticky top-0 livechat-panel border-b border-[color:var(--color-border)] px-6 py-4 shadow-sm z-[1000] overflow-visible">
-        <div className="max-w-[1600px] mx-auto overflow-visible">
-          <div className="flex items-center justify-between overflow-visible">
-            <div className="flex items-center gap-4 overflow-visible">
+      <div 
+        className="relative border-b border-[color:var(--color-border)] px-6 py-4 z-[50]"
+        style={{ overflow: 'visible', backgroundColor: 'var(--color-surface)', color: 'var(--color-text)' }}
+      >
+        <div className="max-w-[1600px] mx-auto" style={{ overflow: 'visible' }}>
+          <div className="flex items-center justify-between" style={{ overflow: 'visible' }}>
+            <div className="flex items-center gap-4" style={{ overflow: 'visible' }}>
               <button 
                 onClick={() => navigate("/projects")}
-                className="p-2 hover:bg-[color:var(--color-surface-muted)] rounded-xl transition-colors text-[color:var(--color-text-muted)]"
+                className="p-2 hover:bg-[color:var(--color-surface-muted)] rounded-md transition-colors text-[color:var(--color-text-muted)]"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
@@ -171,19 +181,11 @@ const ProjectDetails: React.FC = () => {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 relative overflow-visible">
-              <button 
-                onClick={() => setShowEditForm(true)}
-                className="p-2 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-surface-muted)] rounded-lg transition-all border border-[color:var(--color-border)]"
-                title="Configurações do Projeto"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              
-              <div className="relative overflow-visible">
+            <div className="flex items-center gap-2 relative" style={{ overflow: 'visible' }}>
+              <div className="relative" style={{ overflow: 'visible' }}>
                 <button 
                   onClick={() => setShowActions(!showActions)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[color:var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-all text-xs font-bold shadow-sm active:scale-95"
+                  className="flex items-center gap-2 px-4 py-2 bg-[color:var(--color-primary)] text-white rounded-md hover:opacity-90 transition-all text-xs font-bold shadow-sm active:scale-95"
                 >
                   Ações
                 </button>
@@ -194,10 +196,10 @@ const ProjectDetails: React.FC = () => {
                       className="fixed inset-0 z-[9998]" 
                       onClick={() => setShowActions(false)}
                     />
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl shadow-2xl z-[9999] py-2 animate-in fade-in zoom-in duration-200">
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg shadow-2xl z-[9999] py-2 animate-in fade-in zoom-in duration-200">
                       <button
                         onClick={() => {
-                          setShowEditForm(true);
+                          navigate(`/projects/${id}/edit`);
                           setShowActions(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-[color:var(--color-text)] hover:bg-[color:var(--color-surface-muted)] transition-colors"
@@ -225,21 +227,11 @@ const ProjectDetails: React.FC = () => {
         </div>
       </div>
 
-      {/* Edit Form Modal */}
-      {showEditForm && template && (
-        <ProjectForm
-          template={template}
-          project={project}
-          onClose={() => setShowEditForm(false)}
-          onSuccess={() => {
-            setShowEditForm(false);
-            fetchProjectDetails();
-          }}
-        />
-      )}
-
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[color:var(--color-bg)] relative z-0">
+      <div 
+        className="flex-1 overflow-y-auto p-6 custom-scrollbar bg-[color:var(--color-bg)] relative"
+        style={{ zIndex: 0 }}
+      >
         <div className="max-w-[1600px] mx-auto">
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -248,7 +240,7 @@ const ProjectDetails: React.FC = () => {
               
               {/* Quick Info Row */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="livechat-card p-4 rounded-xl shadow-sm">
+                <div className="livechat-card p-4 rounded-lg shadow-sm">
                   <div className="flex items-center gap-2 text-[color:var(--color-text-muted)] mb-2">
                     <Calendar className="w-4 h-4" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Datas</span>
@@ -258,7 +250,7 @@ const ProjectDetails: React.FC = () => {
                     <p className="text-xs text-[color:var(--color-text-muted)]">Prazo: <span className="font-semibold text-[color:var(--color-text)]">{project.estimated_end_date ? format(new Date(project.estimated_end_date), "dd/MM/yyyy") : "-"}</span></p>
                   </div>
                 </div>
-                <div className="livechat-card p-4 rounded-xl shadow-sm">
+                <div className="livechat-card p-4 rounded-lg shadow-sm">
                   <div className="flex items-center gap-2 text-[color:var(--color-text-muted)] mb-2">
                     <Tag className="w-4 h-4" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Financeiro</span>
@@ -266,7 +258,7 @@ const ProjectDetails: React.FC = () => {
                   <p className="text-lg font-bold text-[color:var(--color-text)]">R$ {(project.estimated_value || 0).toLocaleString()}</p>
                   <p className="text-[10px] text-[color:var(--color-text-muted)]">Orçamento Estimado</p>
                 </div>
-                <div className="livechat-card p-4 rounded-xl shadow-sm">
+                <div className="livechat-card p-4 rounded-lg shadow-sm">
                   <div className="flex items-center gap-2 text-[color:var(--color-text-muted)] mb-2">
                     <CheckCircle2 className="w-4 h-4" />
                     <span className="text-[10px] font-bold uppercase tracking-wider">Progresso</span>
@@ -281,7 +273,7 @@ const ProjectDetails: React.FC = () => {
               </div>
 
               {/* Description Card */}
-              <div className="livechat-card p-5 rounded-xl shadow-sm">
+              <div className="livechat-card p-5 rounded-lg shadow-sm">
                 <h3 className="text-sm font-bold text-[color:var(--color-text)] mb-3 flex items-center gap-2">
                   <LayoutGrid className="w-4 h-4 text-[color:var(--color-primary)]" />
                   Descrição
@@ -292,7 +284,7 @@ const ProjectDetails: React.FC = () => {
                   <div className="mt-4 pt-4 border-t border-[color:var(--color-border)]">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {Object.entries(project.custom_fields).map(([key, value]: [string, any], idx: number) => (
-                        <div key={idx} className="p-2 bg-[color:var(--color-surface-muted)] rounded-lg border border-[color:var(--color-border)]">
+                        <div key={idx} className="p-2 bg-[color:var(--color-surface-muted)] rounded-md border border-[color:var(--color-border)]">
                           <span className="block text-[9px] font-bold text-[color:var(--color-text-muted)] uppercase mb-0.5">{key}</span>
                           <span className="text-xs font-semibold text-[color:var(--color-text)] truncate block">{String(value)}</span>
                         </div>
@@ -302,88 +294,50 @@ const ProjectDetails: React.FC = () => {
                 )}
               </div>
 
-              {/* Tasks Card */}
-              <div className="livechat-card rounded-xl shadow-sm flex flex-col">
-                <div className="p-5 border-b border-[color:var(--color-border)] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckSquare className="w-4 h-4 text-[color:var(--color-primary)]" />
-                    <h3 className="text-sm font-bold text-[color:var(--color-text)]">Tarefas</h3>
-                  </div>
-                  <span className="text-[10px] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] px-2 py-0.5 rounded-full font-bold">
-                    {project.progress_percentage}% Concluído
-                  </span>
-                </div>
-                <div className="p-5 min-h-[300px]">
-                  {id && <ProjectTasks projectId={id} />}
-                </div>
+              {/* Tasks Section */}
+              <div className="livechat-card rounded-lg shadow-sm overflow-hidden">
+                <ProjectTasks 
+                  tasks={project.tasks || []} 
+                  projectId={project.id}
+                  onUpdate={fetchProjectDetails}
+                />
+              </div>
+
+              {/* Comments Section */}
+              <div className="livechat-card rounded-lg shadow-sm overflow-hidden">
+                <ProjectComments 
+                  comments={project.comments || []} 
+                  projectId={project.id}
+                  onUpdate={fetchProjectDetails}
+                />
               </div>
             </div>
 
             {/* Right Column: Sidebar (4 cols) */}
             <div className="lg:col-span-4 space-y-6">
-              {/* Team Card */}
-              <div className="livechat-card p-5 rounded-xl shadow-sm">
-                <h3 className="text-[10px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wider mb-4">Equipe e Cliente</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[color:var(--color-primary)] font-bold text-sm">
-                      {project.owner?.name?.charAt(0) || "U"}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-[color:var(--color-text)]">{project.owner?.name || "Sem responsável"}</p>
-                      <p className="text-[10px] text-[color:var(--color-text-muted)]">Responsável</p>
-                    </div>
-                  </div>
-                  <div className="pt-4 border-t border-[color:var(--color-border)]">
-                    <p className="text-sm font-semibold text-[color:var(--color-text)]">{project.customer_name || "Sem cliente"}</p>
-                    <p className="text-[10px] text-[color:var(--color-text-muted)] mt-0.5">{project.customer_phone || project.customer_email || "Sem contato"}</p>
-                  </div>
-                </div>
+              
+              {/* Attachments */}
+              <div className="livechat-card rounded-lg shadow-sm overflow-hidden">
+                <ProjectAttachments 
+                  attachments={project.attachments || []} 
+                  projectId={project.id}
+                  onUpdate={fetchProjectDetails}
+                />
               </div>
 
-              {/* Attachments Card */}
-              <div className="livechat-card rounded-xl shadow-sm flex flex-col">
-                <div className="p-4 border-b border-[color:var(--color-border)]">
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-[color:var(--color-primary)]" />
-                    <h3 className="text-[10px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wider">Arquivos</h3>
-                  </div>
-                </div>
-                <div className="p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
-                  {id && <ProjectAttachments projectId={id} />}
-                </div>
+              {/* Timeline */}
+              <div className="livechat-card rounded-lg shadow-sm overflow-hidden">
+                <ProjectTimeline 
+                  history={project.history || []} 
+                />
               </div>
 
-              {/* Comments Card */}
-              <div className="livechat-card rounded-xl shadow-sm flex flex-col">
-                <div className="p-4 border-b border-[color:var(--color-border)]">
-                  <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-[color:var(--color-primary)]" />
-                    <h3 className="text-[10px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wider">Comentários</h3>
-                  </div>
-                </div>
-                <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
-                  {id && <ProjectComments projectId={id} />}
-                </div>
-              </div>
-
-              {/* History Card */}
-              <div className="livechat-card rounded-xl shadow-sm flex flex-col">
-                <div className="p-4 border-b border-[color:var(--color-border)]">
-                  <div className="flex items-center gap-2">
-                    <History className="w-4 h-4 text-[color:var(--color-primary)]" />
-                    <h3 className="text-[10px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wider">Histórico</h3>
-                  </div>
-                </div>
-                <div className="p-4 max-h-[300px] overflow-y-auto custom-scrollbar">
-                  {id && <ProjectTimeline projectId={id} />}
-                </div>
-              </div>
             </div>
           </div>
-
         </div>
       </div>
+
+      <ConfirmationModal {...modalProps} />
     </div>
   );
 };

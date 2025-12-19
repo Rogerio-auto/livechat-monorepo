@@ -111,6 +111,7 @@ function App() {
             {/* Gestão de Projetos */}
             <Route path='/projects' element={<ProjectsList/>}/>
             <Route path='/projects/new' element={<ProjectCreate/>}/>
+            <Route path='/projects/:id/edit' element={<ProjectCreate/>}/>
             <Route path='/projects/kanban' element={<ProjectKanban/>}/>
             <Route path='/projects/:id' element={<ProjectDetails/>}/>
             

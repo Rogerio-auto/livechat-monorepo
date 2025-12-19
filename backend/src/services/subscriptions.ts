@@ -124,10 +124,10 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
     console.warn("[subscriptions] Cache read error:", cacheError);
   }
 
-  const row = await db.oneOrNone<Subscription & { plan: string }>(
+  const row = await db.oneOrNone<Subscription & { plan_json: any }>(
     `SELECT 
       s.*,
-      row_to_json(p.*) as plan
+      to_jsonb(p.*) as plan_json
     FROM public.subscriptions s
     INNER JOIN public.plans p ON p.id = s.plan_id
     WHERE s.company_id = $1
@@ -139,8 +139,13 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
 
   const result = {
     ...row,
-    plan: typeof row.plan === "string" ? JSON.parse(row.plan) : row.plan,
+    plan: typeof row.plan_json === "string" ? JSON.parse(row.plan_json) : row.plan_json,
   } as SubscriptionWithPlan;
+
+  // Remove temporary field
+  if ('plan_json' in result) {
+    delete (result as any).plan_json;
+  }
 
   // ✅ Salvar no cache
   try {

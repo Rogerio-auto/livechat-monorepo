@@ -44,7 +44,9 @@ const CreateProjectSchema = z.object({
   tags: z.array(z.string()).optional(),
 });
 
-const UpdateProjectSchema = CreateProjectSchema.partial().omit({ template_id: true });
+const UpdateProjectSchema = CreateProjectSchema.partial().omit({ template_id: true }).extend({
+  status: z.string().optional(),
+});
 
 const CreateCommentSchema = z.object({
   content: z.string().min(1, "Comentário não pode ser vazio"),
@@ -218,11 +220,16 @@ export function registerProjectRoutes(app: Application) {
       const userId = getUserId(req);
       const { id } = req.params;
 
+      console.log(`[DEBUG] Updating project ${id} with body:`, req.body);
+
       const validated = UpdateProjectSchema.parse(req.body);
       const project = await updateProject(companyId, id, userId, validated);
 
+      console.log(`[DEBUG] Project updated:`, project);
+
       return res.json(project);
     } catch (error) {
+      console.error(`[DEBUG] Error updating project:`, error);
       const { status, payload } = handleError(error);
       return res.status(status).json(payload);
     }
@@ -257,14 +264,19 @@ export function registerProjectRoutes(app: Application) {
       const { id } = req.params;
       const { stage_id } = req.body;
 
+      console.log(`[DEBUG] PATCH /projects/${id}/move - Stage: ${stage_id}`);
+
       if (!stage_id) {
         return res.status(400).json({ error: "stage_id is required" });
       }
 
       const project = await moveProjectStage(companyId, id, userId, stage_id);
 
+      console.log(`[DEBUG] Project moved successfully`);
+
       return res.json(project);
     } catch (error) {
+      console.error(`[DEBUG] Error moving project:`, error);
       const { status, payload } = handleError(error);
       return res.status(status).json(payload);
     }

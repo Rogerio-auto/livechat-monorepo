@@ -1,35 +1,80 @@
 // frontend/src/components/projects/ProjectForm.tsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
 import type { TemplateWithDetails, Project, ProjectCustomField } from "../../types/projects";
-import { Button } from "../ui/Button";
+import { Search, Calendar, AlertCircle, CheckCircle2, Layout, ArrowRight, X } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const API = import.meta.env.VITE_API_URL;
 
 type Props = {
   template: TemplateWithDetails;
   project?: Project;
-  onClose:  () => void;
+  onClose: () => void;
   onSuccess: () => void;
+  isModal?: boolean;
 };
 
-export default function ProjectForm({ template, project, onClose, onSuccess }: Props) {
+export default function ProjectForm({ template, project, onClose, onSuccess, isModal = true }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   const [formData, setFormData] = useState({
     title: project?.title || '',
     description: project?.description || '',
     customer_name: project?.customer_name || '',
     customer_email: project?.customer_email || '',
     customer_phone: project?.customer_phone || '',
-    estimated_value:  project?.estimated_value || '',
+    estimated_value: project?.estimated_value || '',
     start_date: project?.start_date || '',
     estimated_end_date: project?.estimated_end_date || '',
     priority: project?.priority || 'medium',
     custom_fields: project?.custom_fields || {},
   });
+
+  const [allLeads, setAllLeads] = useState<any[]>([]);
+  const [showLeadSuggestions, setShowLeadSuggestions] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetchJson<any[]>(`${API}/leads`).then(setAllLeads).catch(console.error);
+  }, []);
+
+  const handleSelectLead = async (lead: any) => {
+    setSelectedLead(lead);
+    updateField('customer_name', lead.name);
+    updateField('customer_email', lead.email || '');
+    setShowLeadSuggestions(false);
+
+    if (lead.customer_id) {
+      try {
+        const customer = await fetchJson<any>(`${API}/customers/${lead.customer_id}`);
+        if (customer && customer.phone) {
+          updateField('customer_phone', customer.phone);
+        } else {
+          updateField('customer_phone', lead.phone || '');
+        }
+      } catch (error) {
+        console.error("Error fetching customer:", error);
+        updateField('customer_phone', lead.phone || '');
+      }
+    } else {
+      updateField('customer_phone', lead.phone || '');
+    }
+  };
+
+  const handleClearLead = () => {
+    setSelectedLead(null);
+    updateField('customer_name', '');
+    updateField('customer_email', '');
+    updateField('customer_phone', '');
+  };
+
+  const filteredLeads = allLeads.filter(l =>
+    (l.name?.toLowerCase() || "").includes(formData.customer_name.toLowerCase())
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,7 +109,7 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
       }
 
       onSuccess();
-    } catch (err:  any) {
+    } catch (err: any) {
       setError(err.message || 'Erro ao salvar projeto');
     } finally {
       setLoading(false);
@@ -82,71 +127,176 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
     }));
   };
 
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 livechat-theme">
-      <div className="bg-[color:var(--color-surface)] rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-[color:var(--color-border)]">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-[color:var(--color-border)]">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-bold text-[color:var(--color-text)]">
-              {project ? 'Editar Projeto' : 'Novo Projeto'}
-            </h2>
-            <button
-              onClick={onClose}
-              className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)]"
-            >
-              ✕
-            </button>
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case "urgent": return "bg-red-500";
+      case "high": return "bg-orange-500";
+      case "medium": return "bg-[color:var(--color-primary)]";
+      default: return "bg-[color:var(--color-text-muted)]";
+    }
+  };
+
+  const formContent = (
+    <div className={`${isModal ? 'p-6' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12'}`}>
+      {/* Header */}
+      {!isModal && (
+        <div className="mb-10">
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+            <span>Projetos</span>
+            <span>/</span>
+            <span className="text-gray-900 font-medium">{project ? 'Editar Projeto' : 'Novo Projeto'}</span>
           </div>
-          <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
-            {template.icon} {template.name}
+          <h1 className="text-3xl font-bold text-gray-900">{project ? 'Editar Projeto' : 'Configuração do Projeto'}</h1>
+          <p className="mt-2 text-gray-600">
+            {project 
+              ? <>Edite as informações do projeto baseado no template <span className="font-semibold text-indigo-600">{template.name}</span>.</>
+              : <>Preencha as informações abaixo para iniciar um novo projeto baseado no template <span className="font-semibold text-indigo-600">{template.name}</span>.</>
+            }
           </p>
         </div>
+      )}
 
-        {/* Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-4 bg-[color:var(--color-bg)]">
-          {error && (
-            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500">
-              ⚠️ {error}
-            </div>
-          )}
+      <div className={`grid grid-cols-1 ${!isModal ? 'lg:grid-cols-3 gap-12' : 'gap-6'}`}>
+        {/* Left Column - Form */}
+        <div className={`${!isModal ? 'lg:col-span-2' : ''} space-y-10`}>
+          <form id="project-form" onSubmit={handleSubmit}>
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
+                <AlertCircle className="w-5 h-5" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <div className="space-y-6">
-            {/* Informações Básicas */}
-            <section>
-              <h3 className="text-lg font-semibold text-[color:var(--color-text)] mb-4">
-                Informações Básicas
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
-                    Título do Projeto <span className="text-red-500">*</span>
+            {/* Section: Basic Info */}
+            <div className="border-b border-gray-200 pb-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Informações Principais</h2>
+              <p className="text-sm text-gray-500 mb-6">Dados essenciais para identificação do projeto.</p>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Título do Projeto
                   </label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => updateField('title', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
-                    placeholder="Ex: Sistema Fotovoltaico 10kWp"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    placeholder="Ex: Instalação Solar - Residência Silva"
                     required
                   />
                 </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Descrição
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => updateField('description', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
-                    rows={3}
-                    placeholder="Descreva o projeto..."
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    rows={4}
+                    placeholder="Descreva os detalhes e objetivos deste projeto..."
                   />
+                  <p className="mt-1 text-xs text-gray-500">Breve resumo do escopo do projeto.</p>
                 </div>
+              </div>
+            </div>
 
+            {/* Section: Client */}
+            <div className="border-b border-gray-200 py-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Cliente</h2>
+              <p className="text-sm text-gray-500 mb-6">Vincule este projeto a um cliente ou lead existente.</p>
+
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Buscar Cliente
+                  </label>
+                  
+                  {selectedLead ? (
+                    <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                          {selectedLead.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-gray-900">{selectedLead.name}</div>
+                          <div className="text-sm text-gray-500 flex items-center gap-2">
+                            <span>{formData.customer_phone}</span>
+                            {formData.customer_email && (
+                              <>
+                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                <span>{formData.customer_email}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleClearLead}
+                        className="text-gray-400 hover:text-red-500 transition-colors p-2"
+                        title="Remover cliente"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={formData.customer_name}
+                          onChange={(e) => {
+                            updateField('customer_name', e.target.value);
+                            setShowLeadSuggestions(true);
+                          }}
+                          onFocus={() => setShowLeadSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowLeadSuggestions(false), 200)}
+                          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                          placeholder="Digite o nome do cliente..."
+                          autoComplete="off"
+                        />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                      </div>
+                      
+                      {showLeadSuggestions && formData.customer_name && (
+                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                          {filteredLeads.length > 0 ? (
+                            filteredLeads.map(lead => (
+                              <button
+                                key={lead.id}
+                                type="button"
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  handleSelectLead(lead);
+                                }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-50 text-sm border-b border-gray-100 last:border-0 transition-colors"
+                              >
+                                <div className="font-medium text-gray-900">{lead.name}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">{lead.phone} {lead.email ? `• ${lead.email}` : ''}</div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-4 py-3 text-sm text-gray-500">Nenhum cliente encontrado</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Section: Details */}
+            <div className="border-b border-gray-200 py-10">
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">Detalhes Operacionais</h2>
+              <p className="text-sm text-gray-500 mb-6">Defina prazos, valores e prioridade.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Valor Estimado (R$)
                   </label>
                   <input
@@ -154,19 +304,19 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
                     step="0.01"
                     value={formData.estimated_value}
                     onChange={(e) => updateField('estimated_value', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                     placeholder="0,00"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Prioridade
                   </label>
                   <select
                     value={formData.priority}
                     onChange={(e) => updateField('priority', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
                   >
                     <option value="low">Baixa</option>
                     <option value="medium">Média</option>
@@ -176,85 +326,38 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Data de Início
                   </label>
                   <input
                     type="date"
                     value={formData.start_date}
                     onChange={(e) => updateField('start_date', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Previsão de Término
                   </label>
                   <input
                     type="date"
                     value={formData.estimated_end_date}
                     onChange={(e) => updateField('estimated_end_date', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                   />
                 </div>
               </div>
-            </section>
+            </div>
 
-            {/* Informações do Cliente */}
-            <section>
-              <h3 className="text-lg font-semibold text-[color:var(--color-text)] mb-4">
-                Informações do Cliente
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
-                    Nome do Cliente
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.customer_name}
-                    onChange={(e) => updateField('customer_name', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
-                    placeholder="Nome completo"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
-                    Telefone
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.customer_phone}
-                    onChange={(e) => updateField('customer_phone', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
-                    placeholder="(00) 00000-0000"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.customer_email}
-                    onChange={(e) => updateField('customer_email', e.target.value)}
-                    className="w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
-                    placeholder="email@exemplo.com"
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Campos Customizados */}
+            {/* Section: Custom Fields */}
             {template.custom_fields?.length > 0 && (
-              <section>
-                <h3 className="text-lg font-semibold text-[color:var(--color-text)] mb-4">
-                  Informações Específicas
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="py-10">
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Informações Específicas</h2>
+                <p className="text-sm text-gray-500 mb-6">Campos personalizados do template {template.name}.</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {template.custom_fields.map((field) => (
                     <CustomFieldInput
                       key={field.id}
@@ -264,29 +367,130 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
                     />
                   ))}
                 </div>
-              </section>
+              </div>
             )}
-          </div>
-        </form>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-[color:var(--color-border)] flex justify-end gap-3 bg-[color:var(--color-surface)]">
-          <button 
-            onClick={onClose} 
-            disabled={loading}
-            className="px-4 py-2 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] transition-colors"
-          >
-            Cancelar
-          </button>
-          <button 
-            onClick={handleSubmit} 
-            disabled={loading}
-            className="px-6 py-2 bg-[color:var(--color-primary)] text-white rounded-lg hover:opacity-90 transition-all font-bold disabled:opacity-50"
-          >
-            {loading ? 'Salvando...' : project ? 'Salvar Alterações' : 'Criar Projeto'}
-          </button>
+            <div className="flex items-center justify-end gap-4 pt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-6 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-8 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-100 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    {project ? 'Salvando...' : 'Criando...'}
+                  </>
+                ) : (
+                  <>
+                    {project ? 'Salvar Alterações' : 'Criar Projeto'}
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Right Column - Preview */}
+        <div className={`hidden ${!isModal ? 'lg:block' : ''}`}>
+          <div className="sticky top-8 space-y-8">
+            
+            {/* Template Info Card */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Template Selecionado</h3>
+              <div className="flex items-start gap-4">
+                <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+                  <Layout className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-gray-900">{template.name}</h4>
+                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">{template.description}</p>
+                </div>
+              </div>
+              <div className="mt-6 flex items-center gap-3 text-xs font-medium text-gray-500">
+                <span className="bg-gray-100 px-2.5 py-1 rounded-md">{template.stages_count || 0} Estágios</span>
+                <span className="bg-gray-100 px-2.5 py-1 rounded-md">{template.fields_count || 0} Campos</span>
+              </div>
+            </div>
+
+            {/* Preview Card */}
+            <div>
+              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                Pré-visualização
+              </h3>
+              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-lg transform scale-100 transition-all">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-white ${getPriorityColor(formData.priority)}`}>
+                    {formData.priority}
+                  </div>
+                </div>
+
+                <h4 className="font-bold text-gray-900 mb-2 line-clamp-2">
+                  {formData.title || "Título do Projeto"}
+                </h4>
+                
+                <p className="text-sm text-gray-500 line-clamp-2 mb-4 min-h-[2.5rem]">
+                  {formData.description || "A descrição do projeto aparecerá aqui..."}
+                </p>
+
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <Calendar className="w-4 h-4" />
+                    <span className="text-xs font-medium">
+                      {formData.estimated_end_date 
+                        ? format(new Date(formData.estimated_end_date), "dd MMM", { locale: ptBR }) 
+                        : "Prazo"}
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    {selectedLead && (
+                      <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600" title={selectedLead.name}>
+                        {selectedLead.name.charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-center text-gray-400 mt-3">
+                É assim que o projeto aparecerá no quadro Kanban.
+              </p>
+            </div>
+
+          </div>
         </div>
       </div>
+    </div>
+  );
+
+  if (isModal) {
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-y-auto relative">
+           <button 
+             onClick={onClose} 
+             className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors z-10"
+           >
+             <X className="w-5 h-5" />
+           </button>
+           {formContent}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen bg-white">
+      {formContent}
     </div>
   );
 }
@@ -296,11 +500,11 @@ export default function ProjectForm({ template, project, onClose, onSuccess }: P
 type CustomFieldInputProps = {
   field: ProjectCustomField;
   value: any;
-  onChange: (value:  any) => void;
+  onChange: (value: any) => void;
 };
 
 function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
-  const baseClass = "w-full px-4 py-2 border border-[color:var(--color-border)] rounded-lg bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none";
+  const baseClass = "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all";
 
   const renderInput = () => {
     switch (field.field_type) {
@@ -324,7 +528,7 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
         return (
           <input
             type="number"
-            step={field.field_type === 'currency' ?  '0.01' : 'any'}
+            step={field.field_type === 'currency' ? '0.01' : 'any'}
             value={value || ''}
             onChange={(e) => onChange(parseFloat(e.target.value) || null)}
             className={baseClass}
@@ -346,7 +550,7 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
           />
         );
 
-      case 'datetime': 
+      case 'datetime':
         return (
           <input
             type="datetime-local"
@@ -371,31 +575,36 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
 
       case 'select':
         return (
-          <select
-            value={value || ''}
-            onChange={(e) => onChange(e.target.value)}
-            className={baseClass}
-            required={field.is_required}
-          >
-            <option value="">Selecione...</option>
-            {field.field_options?.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+          <>
+            <input
+              type="text"
+              list={`list-${field.id}`}
+              value={value || ''}
+              onChange={(e) => onChange(e.target.value)}
+              className={baseClass}
+              placeholder={field.field_placeholder || 'Selecione ou digite...'}
+              required={field.is_required}
+            />
+            {field.options && field.options.length > 0 && (
+              <datalist id={`list-${field.id}`}>
+                {field.options.map((opt) => (
+                  <option key={opt} value={opt} />
+                ))}
+              </datalist>
+            )}
+          </>
         );
 
-      case 'boolean':
+      case 'checkbox':
         return (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
             <input
               type="checkbox"
-              checked={value || false}
+              checked={!!value}
               onChange={(e) => onChange(e.target.checked)}
-              className="w-5 h-5 text-[color:var(--color-primary)] border-[color:var(--color-border)] rounded focus:ring-[color:var(--color-primary)]"
+              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
             />
-            <span className="text-sm text-[color:var(--color-text-muted)]">
+            <span className="text-sm text-gray-700 font-medium">
               {field.field_placeholder || 'Sim'}
             </span>
           </div>
@@ -408,27 +617,18 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
             value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className={baseClass}
-            placeholder={field.field_placeholder || ''}
             required={field.is_required}
           />
         );
     }
   };
 
-  const colSpan = field.field_type === 'textarea' ? 'md:col-span-2' :  '';
-
   return (
-    <div className={colSpan}>
-      <label className="block text-sm font-medium text-[color:var(--color-text-muted)] mb-2">
-        {field.field_label}
-        {field.is_required && <span className="text-red-500 ml-1">*</span>}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">
+        {field.field_label} {field.is_required && <span className="text-red-500">*</span>}
       </label>
       {renderInput()}
-      {field.field_help_text && (
-        <p className="text-xs text-[color:var(--color-text-muted)] opacity-60 mt-1">
-          {field.field_help_text}
-        </p>
-      )}
     </div>
   );
 }

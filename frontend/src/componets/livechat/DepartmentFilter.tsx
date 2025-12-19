@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FiFilter, FiX } from "react-icons/fi";
+import { getAccessToken } from "../../utils/api";
 
 type Department = {
   id: string;
@@ -29,7 +30,12 @@ export function DepartmentFilter({ selectedDepartmentId, onSelectDepartment, ref
 
   const loadDepartments = async () => {
     try {
+      const token = getAccessToken();
+      const headers = new Headers();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${API}/api/departments/stats/summary`, {
+        headers,
         credentials: "include",
       });
       

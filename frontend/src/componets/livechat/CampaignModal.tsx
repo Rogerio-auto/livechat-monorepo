@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/Input";
 import type { Campaign } from "../../types/types";
 import TemplatePicker from "./TemplatePicker";
 import CampaignUploadRecipientsModal from "./CampaignUploadRecipientsModal";
+import { getAccessToken } from "../../utils/api";
 
 type Inbox = { id: string; name?: string; provider?: string };
 type Template = { id: string; name: string; kind: string };
@@ -66,11 +67,18 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
   const [commitInfo, setCommitInfo] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
 
+  const fetchWithAuth = async (url: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers || {});
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, { ...init, headers, credentials: "include" });
+  };
+
   useEffect(() => {
     if (!open) return;
     
     // Carregar inboxes
-    fetch(`${apiBase}/livechat/inboxes`, { credentials: "include" })
+    fetchWithAuth(`${apiBase}/livechat/inboxes`)
       .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
       .then((data) => setInboxes(Array.isArray(data) ? data : []))
       .catch(() => setInboxes([]));
@@ -81,9 +89,7 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
 
   const loadStats = async () => {
     try {
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/stats`, { 
-        credentials: "include" 
-      });
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -99,9 +105,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
 
     try {
       // 1. Atualizar dados básicos da campanha
-      const updateRes = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}`, {
+      const updateRes = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
         method: "PATCH",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name,
@@ -120,9 +125,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
 
       // 2. Se template foi selecionado, criar/atualizar step
       if (form.template_id) {
-        const stepRes = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/steps`, {
+        const stepRes = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/steps`, {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             position: 1,
@@ -140,9 +144,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
       // 3. Gerar audiência automaticamente se tiver inbox
       if (form.inbox_id) {
         try {
-          await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/commit`, {
+          await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/commit`, {
             method: "POST",
-            credentials: "include",
           });
         } catch (e) {
           console.warn("Aviso: Não foi possível gerar audiência automaticamente.");
@@ -177,9 +180,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
         created_before: filters.created_before || undefined,
         limit: Number(filters.limit || 1000),
       };
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/preview`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/preview`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -215,9 +217,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
         dry_run: false,
         limit: Number(filters.limit || 1000),
       };
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/commit`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/commit`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -237,9 +238,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
     const newStatus = campaign.status === "RUNNING" ? "PAUSED" : "RUNNING";
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
         method: "PATCH",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -258,9 +258,8 @@ export default function CampaignModal({ apiBase, campaign, templates, open, onCl
     if (!confirm(`Excluir campanha "${campaign.name}"? Essa ação é irreversível.`)) return;
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
         method: "DELETE",
-        credentials: "include",
       });
       if (!res.ok) throw new Error(await res.text());
       if (onDeleted) onDeleted(campaign.id);

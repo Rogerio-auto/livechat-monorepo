@@ -2494,7 +2494,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           let query = supabaseAdmin
             .from("chat_messages")
             .select(
-              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, media_storage_path, media_public_url, caption, is_media_sensitive, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id",
+              "id, chat_id, content, is_from_customer, sender_id, sender_name, sender_avatar_url, created_at, type, view_status, media_url, media_storage_path, media_public_url, caption, is_media_sensitive, remote_participant_id, remote_sender_id, remote_sender_name, remote_sender_phone, remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, replied_message_external_id, interactive_content",
             )
             .eq("chat_id", id)
             .order("created_at", { ascending: false })
@@ -2570,6 +2570,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           remote_sender_avatar_url: row.remote_sender_avatar_url ?? null,
           remote_sender_is_admin: row.remote_sender_is_admin ?? null,
           replied_message_id: row.replied_message_id ?? null,
+          interactive_content: row.interactive_content ?? null,
         }));
 
       let mappedPrivate: any[] = [];

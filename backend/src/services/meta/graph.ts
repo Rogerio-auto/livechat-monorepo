@@ -214,7 +214,7 @@ export async function sendInteractiveButtons({
   buttons: Array<{ id: string; title: string }>;
   footer?: string;
   senderSupabaseId?: string | null;
-}): Promise<{ wamid: string }> {
+}): Promise<{ wamid: string; message: any }> {
   const creds = await getDecryptedCredsForInbox(inboxId);
   const graphCreds = toGraphCreds(creds);
 
@@ -283,7 +283,7 @@ export async function sendInteractiveButtons({
   }
 
   // Salva mensagem no banco
-  await insertOutboundMessage({
+  const upsert = await insertOutboundMessage({
     chatId,
     inboxId,
     customerId: "", // Will be set by trigger
@@ -291,6 +291,7 @@ export async function sendInteractiveButtons({
     content: message,
     type: "INTERACTIVE",
     senderId: senderSupabaseId,
+    interactiveContent: payload.interactive,
   });
 
   console.log("[META][INTERACTIVE] ✅ Interactive message sent", {
@@ -299,7 +300,7 @@ export async function sendInteractiveButtons({
     buttonsCount: buttons.length,
   });
 
-  return { wamid };
+  return { wamid, message: upsert?.message };
 }
 
 /**
@@ -324,7 +325,7 @@ export async function sendInteractiveList({
   sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
   footer?: string;
   senderSupabaseId?: string | null;
-}): Promise<{ wamid: string }> {
+}): Promise<{ wamid: string; message: any }> {
   const creds = await getDecryptedCredsForInbox(inboxId);
   const graphCreds = toGraphCreds(creds);
 
@@ -410,7 +411,7 @@ export async function sendInteractiveList({
   }
 
   // Salva mensagem no banco
-  await insertOutboundMessage({
+  const upsert = await insertOutboundMessage({
     chatId,
     inboxId,
     customerId: "", // Will be set by trigger
@@ -418,6 +419,7 @@ export async function sendInteractiveList({
     content: message,
     type: "INTERACTIVE",
     senderId: senderSupabaseId,
+    interactiveContent: payload.interactive,
   });
 
   console.log("[META][INTERACTIVE] ✅ Interactive list sent", {
@@ -426,6 +428,6 @@ export async function sendInteractiveList({
     totalRows,
   });
 
-  return { wamid };
+  return { wamid, message: upsert?.message };
 }
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { FiUpload, FiX, FiCheckCircle, FiAlertCircle, FiFile } from "react-icons/fi";
 import { Button } from "../../components/ui/Button";
+import { getAccessToken } from "../../utils/api";
 
 type UploadStats = {
   total: number;
@@ -90,10 +91,15 @@ export default function CampaignUploadRecipientsModal({
       const formData = new FormData();
       formData.append("file", file);
 
+      const token = getAccessToken();
+      const headers = new Headers();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const response = await fetch(
         `${apiBase}/livechat/campaigns/${campaignId}/upload-recipients`,
         {
           method: "POST",
+          headers,
           credentials: "include",
           body: formData,
         }

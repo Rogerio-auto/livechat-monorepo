@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import { useNavigate } from "react-router-dom";
+import { getAccessToken } from "../../utils/api";
 
 /* ================== Types ================== */
 type Contact = {
@@ -84,7 +85,16 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
   const [newForm, setNewForm] = useState<Partial<Contact>>({ name: "", phone: "", email: "", instagram: "", facebook: "", twitter: "", telegram: "", website: "", notes: "" });
 
   const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
-    const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...init });
+    const token = getAccessToken();
+    const headers = new Headers(init?.headers || {});
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Content-Type", "application/json");
+
+    const res = await fetch(url, { 
+      credentials: "include", 
+      ...init,
+      headers,
+    });
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
       try { const p = await res.json(); msg = (p as any)?.error || msg; } catch { }

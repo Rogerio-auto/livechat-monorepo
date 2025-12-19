@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { FaWhatsapp, FaCloud, FaServer, FaCheck, FaArrowRight, FaArrowLeft } from "react-icons/fa";
 import { SiMeta } from "react-icons/si";
+import { getAccessToken } from "../../utils/api";
 
 type Provider = "META_CLOUD" | "WAHA" | null;
 
@@ -87,9 +88,13 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
       
       try {
         const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
         
         console.log("[FirstInboxWizard] 🔄 Buscando company_id...");
         const userProfile = await fetch(`${API}/me/profile`, {
+          headers,
           credentials: "include"
         }).then(res => res.json());
 
@@ -119,7 +124,10 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         const sessionResponse = await fetch(`${API}/waha/sessions`, {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": token ? `Bearer ${token}` : ""
+          },
           body: JSON.stringify({ name: sessionId, start: true })
         });
 
@@ -135,7 +143,10 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         console.log("[FirstInboxWizard] 📷 Obtendo QR Code...");
         const qrResponse = await fetch(
           `${API}/waha/sessions/${encodeURIComponent(sessionId)}/auth/qr?format=image`,
-          { credentials: "include" }
+          { 
+            headers: { "Authorization": token ? `Bearer ${token}` : "" },
+            credentials: "include" 
+          }
         );
 
         if (qrResponse.ok) {

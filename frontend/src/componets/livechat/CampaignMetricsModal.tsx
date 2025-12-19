@@ -3,6 +3,7 @@ import { FiX, FiUsers, FiCheck, FiAlertCircle, FiClock, FiSend, FiRefreshCw } fr
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import type { Campaign } from "../../types/types";
+import { getAccessToken } from "../../utils/api";
 
 type CampaignStats = {
   total_recipients: number;
@@ -29,7 +30,12 @@ export default function CampaignMetricsModal({ apiBase, campaign, open, onClose 
     setLoading(true);
     setError(null);
     try {
+      const token = getAccessToken();
+      const headers = new Headers();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/stats`, {
+        headers,
         credentials: "include",
       });
       if (res.ok) {

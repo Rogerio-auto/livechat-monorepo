@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getAccessToken } from "../utils/api";
 import {
   Crown,
   Zap,
@@ -102,10 +103,14 @@ export default function SubscriptionPage() {
 
   const loadSubscriptionData = async () => {
     try {
+      const token = getAccessToken();
+      const headers = new Headers();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const [subRes, plansRes, usageRes] = await Promise.all([
-        fetch("/api/subscriptions/current", { credentials: "include" }),
-        fetch("/api/subscriptions/plans", { credentials: "include" }),
-        fetch("/api/subscriptions/usage", { credentials: "include" }),
+        fetch("/api/subscriptions/current", { headers, credentials: "include" }),
+        fetch("/api/subscriptions/plans", { headers, credentials: "include" }),
+        fetch("/api/subscriptions/usage", { headers, credentials: "include" }),
       ]);
 
       const [subData, plansData, usageData] = await Promise.all([
@@ -129,10 +134,14 @@ export default function SubscriptionPage() {
   const handleUpgrade = async (planId: string) => {
     setUpgrading(planId);
     try {
+      const token = getAccessToken();
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch("/api/checkout/session", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ planId, interval: "monthly" }),
       });
 
@@ -157,10 +166,14 @@ export default function SubscriptionPage() {
   const handlePortal = async () => {
     setManaging(true);
     try {
+      const token = getAccessToken();
+      const headers = new Headers({ "Content-Type": "application/json" });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch("/api/checkout/portal", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
       });
 
       if (res.ok) {

@@ -5,6 +5,8 @@ export type UserProfile = {
   name: string;
   email?: string;
   role: string;
+  company_id: string;
+  industry?: string;
 };
 
 export function useUserProfile() {

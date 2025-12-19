@@ -65,12 +65,25 @@ export function registerAuthRoutes(app: express.Application) {
     
     const user = req.user || {};
     const profile = req.profile || {};
+    const companyId = user.company_id || profile.company_id;
+
+    // Buscar indústria da empresa
+    let industry = null;
+    if (companyId) {
+      const { data: company } = await supabaseAdmin
+        .from("companies")
+        .select("industry")
+        .eq("id", companyId)
+        .single();
+      industry = company?.industry;
+    }
     
     const response = { 
       id: user.id || profile.id,
       email: user.email || profile.email,
       role: profile.role || "USER",
-      company_id: user.company_id || profile.company_id,
+      company_id: companyId,
+      industry: industry, // ✅ Adicionado nicho da empresa
       name: profile.name || user.name || user.email,
       phone: profile.phone || user.phone || null,
       theme_preference: profile.theme_preference || "system", // ✅ Já vem do cache do requireAuth

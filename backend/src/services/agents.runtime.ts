@@ -519,11 +519,24 @@ export async function runAgentReply(opts: {
 
     let iterations = 0;
     const MAX_ITERATIONS = 5;
+    let accumulatedReply = "";
 
     while (resp.choices[0]?.finish_reason === 'tool_calls' && iterations < MAX_ITERATIONS) {
       iterations++;
       const toolCalls = resp.choices[0].message.tool_calls as any[];
       if (!toolCalls || toolCalls.length === 0) break;
+
+      // Acumular conteúdo textual se houver (antes de chamar a ferramenta)
+      // ⚠️ Se o agente estiver chamando uma ferramenta de mensagem interativa, 
+      // evitamos acumular o texto do 'content' para não duplicar a mensagem no chat.
+      const isSendingInteractive = toolCalls.some(tc => 
+        tc.function.name === 'send_interactive_buttons' || 
+        tc.function.name === 'send_interactive_list'
+      );
+
+      if (resp.choices[0].message.content && !isSendingInteractive) {
+        accumulatedReply += resp.choices[0].message.content + "\n";
+      }
 
       const assistantMsg: any = {
         role: "assistant",
@@ -595,7 +608,8 @@ export async function runAgentReply(opts: {
       }).catch(err => console.error('[Agent Runtime] Failed to log usage:', err));
     }
 
-    const reply = resp.choices[0]?.message?.content || '';
+    const finalContent = resp.choices[0]?.message?.content || '';
+    const reply = (accumulatedReply + finalContent).trim();
     const finishReason = resp.choices[0]?.finish_reason;
 
     // 6. Salvar contexto atualizado no Redis (incluindo tool calls intermediários)

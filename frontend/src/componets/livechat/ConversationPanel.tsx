@@ -7,6 +7,7 @@ import {
   type CSSProperties,
 } from "react";
 import type { Chat } from "./types";
+import { getAccessToken } from "../../utils/api";
 type Agent = {
   id: string;
   user_id?: string;
@@ -59,12 +60,15 @@ const SECTION_DEFAULT_STATE: Record<string, boolean> = {
   meeting: false,
 };
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = getAccessToken();
+  const headers = new Headers(init?.headers || {});
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  headers.set("Content-Type", "application/json");
+
   const res = await fetch(url, {
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
     ...init,
+    headers,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -296,11 +300,16 @@ export function ConversationPanel({
       customerId: string,
     ): Promise<any | null> => {
       try {
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
         const res = await fetch(
           `${apiBase}
 /leads/by-customer/${customerId}
 `,
           {
+            headers,
             credentials: "include",
           },
         );

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { FiBarChart2, FiPlay, FiPause, FiXCircle, FiTrash2, FiRefreshCw, FiDownload, FiPlus, FiMessageSquare, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { toast } from "../../hooks/useToast";
+import { getAccessToken } from "../../utils/api";
 import CampaignModalWizard from "./CampaignModalWizard";
 import CampaignMetricsModal from "./CampaignMetricsModal";
 import TemplateCard from "./TemplateCard";
@@ -90,9 +91,13 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
   }, [templates, checkScrollPosition]);
 
   async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const headers = new Headers({ "Content-Type": "application/json", ...(init?.headers || {}) });
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
     const res = await fetch(url, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+      headers,
       ...(init || {}),
     });
     if (!res.ok) {
@@ -194,11 +199,15 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
     idsToLoad.forEach(id => loadedCampaignTemplatesRef.current.add(id));
     
     try {
+      const token = getAccessToken();
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       // Fetch campaign steps for all campaigns - silently fail if campaign was deleted
       const stepsPromises = idsToLoad.map(id =>
         fetch(`${apiBase}/livechat/campaigns/${id}/steps`, {
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers,
         })
           .then(res => res.ok ? res.json() : [])
           .catch(() => [])
@@ -236,11 +245,15 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
     idsToLoad.forEach(id => loadedCampaignStatsRef.current.add(id));
     
     try {
+      const token = getAccessToken();
+      const headers: any = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       // Fetch stats for all campaigns - silently fail if campaign was deleted
       const promises = idsToLoad.map(id =>
         fetch(`${apiBase}/livechat/campaigns/${id}/stats`, {
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers,
         })
           .then(res => res.ok ? res.json() : null)
           .catch(() => null)

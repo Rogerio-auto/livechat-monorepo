@@ -6,6 +6,7 @@ import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import type { Campaign } from "../../types/types";
+import { getAccessToken } from "../../utils/api";
 
 
 
@@ -45,17 +46,26 @@ export default function CampaignEditorDrawer({
 
   useEffect(() => {
     // carrega inboxes
-    fetch(`${apiBase}/livechat/inboxes`, { credentials: "include" })
+    const token = getAccessToken();
+    const headers = new Headers();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    fetch(`${apiBase}/livechat/inboxes`, { headers, credentials: "include" })
       .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
       .then((data) => setInboxes(Array.isArray(data) ? data : []))
       .catch(() => setInboxes([]));
   }, [apiBase]);
 
   async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+    const token = getAccessToken();
+    const headers = new Headers(init?.headers || {});
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    headers.set("Content-Type", "application/json");
+
     const res = await fetch(url, {
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
-      ...(init || {}),
+      ...init,
+      headers,
     });
     if (!res.ok) {
       const msg = await res.text().catch(() => "");
@@ -406,7 +416,14 @@ function ReadyBlock({ apiBase, campaignId }: { apiBase: string; campaignId: stri
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/livechat/campaigns/${campaignId}/requirements`, { credentials: "include" });
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
+        const res = await fetch(`${apiBase}/livechat/campaigns/${campaignId}/requirements`, { 
+          headers,
+          credentials: "include" 
+        });
         if (res.ok) {
           const data = await res.json();
           setStatus(data);

@@ -98,8 +98,14 @@ const links: SidebarLink[] = [
     feature: "calendar_module",
   },
   {
-    to: "/funil",
+    to: "/projects",
     icon: <FaProjectDiagram />,
+    label: "Projetos",
+    isActive: (path) => path.startsWith("/projects"),
+  },
+  {
+    to: "/funil",
+    icon: <FaChartLine />,
     label: "Funil de Vendas",
     isActive: (path) => path.startsWith("/funil"),
   },
@@ -124,7 +130,13 @@ const adminLinks: SidebarLink[] = [
     to: "/admin",
     icon: <FaShieldAlt />,
     label: "Admin",
-    isActive: (path, search) => path.startsWith("/admin"),
+    isActive: (path, search) => path.startsWith("/admin") && !path.includes("projects/templates"),
+  },
+  {
+    to: "/admin/projects/templates",
+    icon: <FaProjectDiagram />,
+    label: "Templates de Projeto",
+    isActive: (path) => path.startsWith("/admin/projects/templates"),
   },
 ];
 
@@ -136,16 +148,19 @@ type SidebarProps = {
 
 export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosition = false, className = "" }: SidebarProps & { className?: string } = {}) {
   const [profile, setProfile] = useState<Profile | null>(null);
-  const { features } = useSubscription();
+  const { features, loading: subscriptionLoading } = useSubscription();
   const navigate = useNavigate();
   const location = useLocation();
   const API =
     import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
   const { registerUserTheme, theme, toggleTheme } = useTheme();
 
+  const [profileLoading, setProfileLoading] = useState(true);
+
   useEffect(() => {
     (async () => {
       try {
+        setProfileLoading(true);
         // Fetch Profile
         const res = await fetch(`${API}/me/profile`, {
           credentials: "include",
@@ -156,6 +171,8 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
         setProfile(me);
       } catch {
         setProfile(null);
+      } finally {
+        setProfileLoading(false);
       }
     })();
   }, [API]);
@@ -201,6 +218,22 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
   };
 
   const handleNav = () => onRequestClose?.();
+
+  // Se estiver carregando o perfil ou a assinatura, mostramos um estado de loading ou nada
+  // para evitar o "flicker" de links sumindo/aparecendo
+  if (profileLoading || subscriptionLoading) {
+    return (
+      <aside
+        className={`group z-40 hidden flex-col overflow-hidden border-r border-white/5 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-xl transition-all duration-300 ease-in-out md:flex w-[64px] ${
+          staticPosition ? "relative h-full" : "fixed inset-y-0 left-0"
+        } ${className}`}
+      >
+        <div className="flex h-full items-center justify-center">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <>

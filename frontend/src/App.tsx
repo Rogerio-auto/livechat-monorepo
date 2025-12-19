@@ -38,6 +38,12 @@ import TemplateList from './pages/admin/Templates/TemplateList'
 import TemplateEditor from './pages/admin/Templates/TemplateEditor'
 import TemplateTester from './pages/admin/Templates/TemplateTester'
 import ToolMonitoring from './pages/admin/Tools/ToolMonitoring'
+import ProjectsList from './pages/projects/ProjectsList'
+import ProjectKanban from './pages/projects/ProjectKanban'
+import ProjectDetails from './pages/projects/ProjectDetails'
+import ProjectCreate from './pages/projects/ProjectCreate'
+import ProjectTemplates from './pages/projects/ProjectTemplates'
+import ProjectTemplateEditor from './pages/projects/ProjectTemplateEditor'
 
 
 function App() {
@@ -101,6 +107,12 @@ function App() {
                 <GaleriaPage/>
               </FeatureGuard>
             }/>
+
+            {/* Gestão de Projetos */}
+            <Route path='/projects' element={<ProjectsList/>}/>
+            <Route path='/projects/new' element={<ProjectCreate/>}/>
+            <Route path='/projects/kanban' element={<ProjectKanban/>}/>
+            <Route path='/projects/:id' element={<ProjectDetails/>}/>
             
             <Route path='/configuracoes' element={<ConfiguracoesPage/>}/>
             <Route path='/subscription' element={<SubscriptionPage/>}/>
@@ -133,7 +145,11 @@ function App() {
             <Route path='infrastructure' element={<SystemHealth />} />
             <Route path='templates' element={<TemplateList />} />
             <Route path='templates/new' element={<TemplateEditor />} />
-            <Route path='templates/:id' element={<TemplateEditor />} />            <Route path="templates/:id/test" element={<TemplateTester />} />            <Route path='tools' element={<ToolMonitoring />} />
+            <Route path='templates/:id' element={<TemplateEditor />} />
+            <Route path="templates/:id/test" element={<TemplateTester />} />
+            <Route path='tools' element={<ToolMonitoring />} />
+            <Route path='projects/templates' element={<ProjectTemplates />} />
+            <Route path='projects/templates/:id' element={<ProjectTemplateEditor />} />
           </Route>
           
 

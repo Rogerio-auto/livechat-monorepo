@@ -78,6 +78,8 @@ import { registerMetaHealthRoutes } from "./routes/meta.health.js";
 import { registerCustomerOptInRoutes } from "./routes/customers.optin.js";
 import { webhookRouter } from "./routes/webhooks.js";
 import { checkoutRouter } from "./routes/checkout.js";
+import { registerProjectTemplateRoutes } from "./routes/project-templates.js";
+import { registerProjectRoutes } from "./routes/projects.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -3766,6 +3768,8 @@ registerProductRoutes(app);
 registerMetaTemplatesRoutes(app);
 registerDocumentRoutes(app);
 registerDocumentTemplateRoutes(app);
+registerProjectTemplateRoutes(app);
+registerProjectRoutes(app);
 // ATENÇÃO: Esses routers aplicam requireAuth globalmente em /api/*
 // Por isso o onboarding precisa estar registrado ANTES
 app.use("/api", templateToolsRouter);

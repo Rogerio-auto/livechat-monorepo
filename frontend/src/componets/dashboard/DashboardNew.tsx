@@ -32,10 +32,7 @@ import {
   FiZap,
 } from "react-icons/fi";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import Sidebar from "../Sidbars/sidebar";
 import type { DashboardTab } from "../../types/dashboard";
-
-import { FloatingNotificationBell } from "../../components/notifications/FloatingNotificationBell";
 
 export function DashboardNew() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -59,11 +56,8 @@ export function DashboardNew() {
   ];
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
-      <Sidebar className="peer" />
-      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pl-16 transition-all duration-300">
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
+    <main className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-8">
           <div className="w-full space-y-6">
             <div className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-0">
               <div className="px-4 md:px-6 py-6 border-b border-[color:var(--color-border)]">
@@ -97,6 +91,7 @@ export function DashboardNew() {
                     </button>
                   );
                 })}
+                </div>
               </div>
             </div>
 
@@ -111,9 +106,7 @@ export function DashboardNew() {
             </div>
           </div>
         </div>
-      </div>
       </main>
-    </div>
   );
 }
 

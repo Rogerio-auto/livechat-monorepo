@@ -2,11 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction,
 import { createPortal } from "react-dom";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "../utils/api";
-import { useNavigate, useLocation, useParams } from "react-router-dom";
+import { useNavigate, useLocation, useParams, useOutletContext } from "react-router-dom";
 import { cleanupService } from "../services/cleanupService";
 import { useCompany } from "../hooks/useCompany";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
-import Sidebar from "../componets/Sidbars/sidebar";
 import LivechatMenu, { type LivechatSection } from "../componets/livechat/LivechatMenu";
 import { ChatHeader } from "../componets/livechat/ChatHeader";
 import { MessageBubble } from "../componets/livechat/MessageBubble";
@@ -22,8 +21,6 @@ import { MentionInput } from "../components/MentionInput";
 import { Button, Card } from "../components/ui";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-import { FloatingNotificationBell } from "../components/notifications/FloatingNotificationBell";
 
 const API =
   (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
@@ -126,7 +123,7 @@ import { LimitModal } from "../components/ui/LimitModal";
 export default function LiveChatPage() {
   const navigate = useNavigate();
   const { chatId } = useParams();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { setMobileOpen } = useOutletContext<{ setMobileOpen: (open: boolean) => void }>();
   const [localMenuOpen, setLocalMenuOpen] = useState(false);
   const [menuCollapsed, setMenuCollapsed] = useState(true);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
@@ -136,7 +133,8 @@ export default function LiveChatPage() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingRef.current) return;
-      const newWidth = e.clientX - 64; // Subtract sidebar width
+      // Subtract global sidebar (64px) + local livechat menu (64px)
+      const newWidth = e.clientX - 128; 
       if (newWidth > 250 && newWidth < 600) {
         setChatListWidth(newWidth);
       }
@@ -254,7 +252,8 @@ export default function LiveChatPage() {
   const currentChatIdRef = useRef<string | null>(null);
   const chatsTotalRef = useRef(0);
   const hasMoreChatsRef = useRef(true);
-  const messagesCache = useMemo(() => new Map<string, Message[]>(), []);
+  const messagesCacheRef = useRef<Map<string, Message[]>>(new Map());
+  const messagesCache = messagesCacheRef.current;
   const messageLatencyRef = useRef<Map<string, number>>(new Map());
   const draftsRef = useRef<Map<string, { chatId: string; content: string; type: string; createdAt: string }>>(
     new Map(),
@@ -272,7 +271,8 @@ export default function LiveChatPage() {
     group_name?: string | null,
     customer_avatar_url?: string | null,
     group_avatar_url?: string | null,
-    photo_url?: string | null
+    photo_url?: string | null,
+    unread_count?: number | null
   }>>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
@@ -459,6 +459,11 @@ export default function LiveChatPage() {
     // APLICAR CACHE (Sticky Metadata) para evitar perda de nome/foto em atualizações parciais ou resets
     const chatId = base.id;
     if (chatId) {
+      // ✅ CORREÇÃO: Se o chat está aberto, o unread_count DEVE ser 0
+      if (currentChatIdRef.current === chatId) {
+        base.unread_count = 0;
+      }
+
       const cached = metadataCacheRef.current[chatId];
       if (cached) {
         base.display_name = pickBetterName(base.display_name, cached.display_name);
@@ -476,7 +481,8 @@ export default function LiveChatPage() {
         group_name: base.group_name,
         customer_avatar_url: base.customer_avatar_url,
         group_avatar_url: base.group_avatar_url,
-        photo_url: base.photo_url
+        photo_url: base.photo_url,
+        unread_count: base.unread_count
       };
     }
 
@@ -573,10 +579,14 @@ export default function LiveChatPage() {
     const prevStatus = (prev as any)?.status ?? null;
     patchChatLocal(chatId, { status: nextStatus } as any);
     try {
+      const headers = new Headers({ "Content-Type": "application/json" });
+      const token = getAccessToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${API}/livechat/chats/${chatId}/status`, {
         method: "PUT",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ status: nextStatus }),
       });
       if (!res.ok) {
@@ -607,10 +617,15 @@ export default function LiveChatPage() {
       patchChatLocal(chatId, { unread_count: 0 } as any);
       
       console.log("[READ_RECEIPTS] 📤 Enviando mark-read para API", { chatId });
+      
+      const headers = new Headers({ "Content-Type": "application/json" });
+      const token = getAccessToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${API}/livechat/chats/${chatId}/mark-read`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
       });
       if (!res.ok) {
         // 404 = chat não existe ou sem permissão - silenciar (comum após logout/troca de empresa)
@@ -917,7 +932,15 @@ export default function LiveChatPage() {
 
   async function getMyBoardId() {
     if (boardIdRef.current) return boardIdRef.current;
-    const res = await fetch(`${API}/kanban/my-board`, { credentials: "include" });
+    
+    const headers = new Headers();
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
+    const res = await fetch(`${API}/kanban/my-board`, { 
+      credentials: "include",
+      headers
+    });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json?.error || "Falha ao carregar board");
     boardIdRef.current = json.id as string;
@@ -994,10 +1017,14 @@ export default function LiveChatPage() {
 
       console.log('[livechat] Payload enviado para /kanban/cards/ensure:', payload);
 
+      const headers = new Headers({ "Content-Type": "application/json" });
+      const token = getAccessToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${API}/kanban/cards/ensure`, {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -1035,10 +1062,14 @@ export default function LiveChatPage() {
       prev.map((c) => (c.id === chatId ? { ...c, note } : c)),
     );
     try {
+      const headers = new Headers({ "Content-Type": "application/json" });
+      const token = getAccessToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
       const res = await fetch(`${API}/livechat/chats/${chatId}/note`, {
         method: "PATCH",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ note }),
       });
       if (!res.ok) {
@@ -1630,7 +1661,7 @@ const scrollToBottom = useCallback(
     // Ensure sender_type is set correctly
     // If missing or invalid, derive from is_from_customer
     let senderType = raw.sender_type;
-    if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER" && senderType !== "SYSTEM")) {
+    if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER" && senderType !== "SYSTEM" && senderType !== "AI")) {
       // Map boolean is_from_customer to string sender_type
       if (typeof raw.is_from_customer === "boolean") {
         senderType = raw.is_from_customer ? "CUSTOMER" : "AGENT";
@@ -1643,6 +1674,7 @@ const scrollToBottom = useCallback(
     
     const normalized = {
       ...raw,
+      chat_id: raw.chat_id ?? raw.chatId ?? null,
       sender_type: senderType,
       media_url: raw.media_url ?? null,
       type: raw.type ?? "TEXT",
@@ -1769,19 +1801,18 @@ const scrollToBottom = useCallback(
         updated = sortMessagesAsc([...existing, normalized]);
       }
       messagesCache.set(chatId, updated);
-      if (currentChatIdRef.current === chatId) {
-        console.log('[appendMessageToCache] Updating messages state:', {
-          chatId,
-          currentChatId: currentChatIdRef.current,
-          updatedCount: updated.length,
-        });
+      
+      const isCurrent = currentChatIdRef.current === chatId;
+      console.log('[appendMessageToCache] Cache updated:', {
+        chatId,
+        isCurrent,
+        currentChatId: currentChatIdRef.current,
+        count: updated.length
+      });
+
+      if (isCurrent) {
         setMessages(updated);
         scrollToBottom();
-      } else {
-        console.log('[appendMessageToCache] Not updating state - different chat:', {
-          messageChatId: chatId,
-          currentChatId: currentChatIdRef.current,
-        });
       }
     },
     [normalizeMessage, scrollToBottom, setMessages, messagesCache],
@@ -1960,6 +1991,10 @@ const scrollToBottom = useCallback(
     s.on("connect", () => {
       console.log("[livechat] Socket connected!", s.id);
       setSocketReady(true);
+      if (company?.id) {
+        console.log("[livechat] Joining company room:", company.id);
+        s.emit("join:company", { companyId: company.id });
+      }
     });
 
     s.on("disconnect", (reason) => {
@@ -1995,13 +2030,13 @@ const scrollToBottom = useCallback(
     if (!s) return;
 
     const onMessageNew = (m: Message) => {
-      console.debug('[Socket] 📨 message:new received:', {
+      console.log('[Socket] 📨 message:new received:', {
+        id: m.id,
         chatId: m.chat_id,
         body: m.body?.substring(0, 50),
         sender_type: m.sender_type,
-        media_url: m.media_url,
-        is_private: m.is_private,
-        type: m.type,
+        currentChatId: currentChatIdRef.current,
+        isMatch: currentChatIdRef.current === m.chat_id
       });
       
       appendMessageToCache(m);
@@ -2139,6 +2174,11 @@ const scrollToBottom = useCallback(
       if (isChatOpen) {
         update.unread_count = 0;
       } else if (p.unread_count !== undefined) {
+        // Se o chat não está aberto, mas temos um valor local de 0 (porque acabamos de ler)
+        // e o valor do socket é > 0, talvez o socket esteja atrasado.
+        // No entanto, se for uma mensagem NOVA, o unread_count deveria ser incrementado.
+        // Para evitar que o contador "volte" para um valor antigo, poderíamos comparar,
+        // mas o socket costuma ser a fonte da verdade para o contador global.
         update.unread_count = p.unread_count;
       }
       
@@ -2228,88 +2268,7 @@ const scrollToBottom = useCallback(
 
     // Listener para envio de mensagens interativas (botões)
     const onInteractiveMessage = async (payload: any) => {
-      console.log("[SOCKET] Received send:interactive_message", payload);
-      
-      const { chatId, message, buttons, footer, agentId } = payload;
-      
-      if (!chatId || !message || !Array.isArray(buttons) || buttons.length === 0) {
-        console.error("[SOCKET] Invalid interactive message payload", payload);
-        return;
-      }
-
-      // Buscar chat para obter inbox_id e customer_phone
-      const chat = chatsRef.current.find((c) => c.id === chatId);
-      if (!chat) {
-        console.error("[SOCKET] Chat not found for interactive message", { chatId });
-        return;
-      }
-
-      const inbox = inboxes.find((i) => i.id === chat.inbox_id);
-      const isMetaCloud = inbox?.provider?.toUpperCase() === "META_CLOUD";
-
-      if (!isMetaCloud) {
-        console.error("[SOCKET] Interactive buttons only work with META_CLOUD provider", {
-          chatId,
-          provider: inbox?.provider,
-        });
-        return;
-      }
-
-      try {
-        // Criar draft otimista usando crypto.randomUUID se disponível
-        const draftId = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function" 
-          ? crypto.randomUUID() 
-          : `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const createdAt = new Date().toISOString();
-        
-        const displayMessage = `${message}\n\n${buttons.map((b: any) => `• ${b.title}`).join('\n')}`;
-        
-        const draft = {
-          id: draftId,
-          chat_id: chatId,
-          content: displayMessage,
-          type: "INTERACTIVE",
-          is_from_customer: false,
-          created_at: createdAt,
-          view_status: "sending",
-          sender_id: null,
-          sender_name: "Agente IA",
-          media_url: null,
-        };
-
-        appendMessageToCache(draft as any);
-
-        // Enviar via API do backend
-        const response = await fetchJson<any>(`${API}/api/meta/send-interactive-buttons`, {
-          method: "POST",
-          body: JSON.stringify({
-            inboxId: chat.inbox_id,
-            chatId: chat.id,
-            customerPhone: chat.customer_phone,
-            message,
-            buttons,
-            footer: footer || undefined,
-          }),
-        });
-
-        console.log("[SOCKET] Interactive message sent successfully", {
-          chatId,
-          wamid: response.wamid,
-          buttonsCount: buttons.length,
-        });
-
-        // Atualizar status do draft
-        updateMessageStatusInCache({
-          chatId,
-          draftId,
-          view_status: "sent",
-          delivery_status: "sent",
-          merge: { view_status: "sent" },
-        });
-      } catch (error: any) {
-        console.error("[SOCKET] Failed to send interactive message", error);
-        alert(`Erro ao enviar botões: ${error.message || "Erro desconhecido"}`);
-      }
+      console.log("[SOCKET] Received send:interactive_message (handled by backend)", payload);
     };
 
     s.on("message:new", onMessageNew);
@@ -2494,6 +2453,10 @@ const scrollToBottom = useCallback(
             const merged = normalizedItems.map(nc => {
               const existing = prev.find(p => p.id === nc.id);
               if (!existing) return nc;
+              
+              // Se o chat está aberto, o unread_count DEVE ser 0
+              const isChatOpen = currentChatIdRef.current === nc.id;
+              
               return {
                 ...nc,
                 display_name: pickBetterName(nc.display_name, existing.display_name),
@@ -2502,6 +2465,9 @@ const scrollToBottom = useCallback(
                 group_avatar_url: nc.group_avatar_url || existing.group_avatar_url || null,
                 customer_avatar_url: nc.customer_avatar_url || existing.customer_avatar_url || null,
                 photo_url: (nc as any).photo_url || (existing as any).photo_url || null,
+                // Preservar unread_count 0 se o chat estiver aberto ou se já estava 0 localmente
+                // Isso evita que o contador "volte" se a API retornar dado atrasado
+                unread_count: isChatOpen ? 0 : (existing.unread_count === 0 ? 0 : nc.unread_count),
               };
             });
             nextList = [...merged].sort((a, b) => new Date(b.last_message_at || b.created_at).getTime() - new Date(a.last_message_at || a.created_at).getTime());
@@ -2753,14 +2719,19 @@ const scrollToBottom = useCallback(
       if (effectiveBefore) params.set("before", effectiveBefore);
 
       try {
+        const headers = new Headers({
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "Pragma": "no-cache",
+          "Expires": "0",
+        });
+        
+        const token = getAccessToken();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
         const res = await fetch(`${API}/livechat/chats/${chatId}/messages?${params.toString()}`, {
           credentials: "include",
           cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-          },
+          headers,
         });
         const headerBefore = res.headers.get("X-Next-Before");
         const textBody = await res.text();
@@ -2811,12 +2782,28 @@ const scrollToBottom = useCallback(
 
         const existing = messagesCache.get(chatId) ?? [];
         const prevCount = existing.length;
-        const combined = reset ? normalizedList : mergeMessagesAscending(existing, normalizedList);
+        
+        let combined: Message[];
+        if (reset) {
+          // MERGE: Se for reset, ainda assim queremos manter mensagens que chegaram via socket
+          // que podem ser mais novas que as retornadas pela API (race condition)
+          const apiIds = new Set(normalizedList.map(m => m.id));
+          const socketOnly = existing.filter(m => !apiIds.has(m.id) && !m.id?.startsWith('draft-'));
+          combined = sortMessagesAsc([...normalizedList, ...socketOnly]);
+        } else {
+          combined = mergeMessagesAscending(existing, normalizedList);
+        }
+        
         messagesCache.set(chatId, combined);
         messagesMetaRef.current[chatId] = { nextBefore, hasMore };
 
         const isLatest = messagesRequestRef.current === requestId;
         if (isLatest && currentChatIdRef.current === chatId) {
+          console.log('[loadMessages] Setting messages state:', {
+            chatId,
+            count: combined.length,
+            reset
+          });
           setMessages(combined);
           setMessagesHasMore(hasMore);
           if (reset) {
@@ -3207,8 +3194,13 @@ const scrollToBottom = useCallback(
     (async () => {
       try {
         // First check if user has access to any inbox
+        const headers = new Headers();
+        const token = getAccessToken();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
         const myInboxesRes = await fetch(`${API}/livechat/inboxes/my`, {
           credentials: "include",
+          headers
         });
         
         if (!myInboxesRes.ok) {
@@ -3243,6 +3235,7 @@ const scrollToBottom = useCallback(
           try {
             const wizardRes = await fetch(`${API}/livechat/inboxes/should-show-wizard`, {
               credentials: "include",
+              headers
             });
             if (wizardRes.ok) {
               const data = await wizardRes.json();
@@ -3966,56 +3959,39 @@ const scrollToBottom = useCallback(
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-(--color-surface) text-(--color-text)">
-      
-      {/* Global Sidebar */}
-      <Sidebar mobileOpen={menuOpen} onRequestClose={() => setMenuOpen(false)} className="peer" />
-      <FloatingNotificationBell className="left-20 peer-hover:left-76" />
+    <div className="flex-1 flex overflow-hidden livechat-theme h-full">
+      {/* Menu Local do Livechat (Coluna de Ícones) - Oculto em mobile */}
+      <div className="hidden md:flex w-16 flex-col border-r border-(--color-border) bg-(--color-surface) py-4 shrink-0 z-20">
+        <LivechatMenu 
+          section={section} 
+          onChange={setSection} 
+          collapsed={true} 
+        />
+      </div>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden md:pl-16 transition-all duration-300">
-        <section className="livechat-theme flex flex-1 overflow-hidden relative h-full">
+      <section className="flex flex-1 overflow-hidden relative h-full">
         {(section === "all" || section === "unanswered") && (
           <>
             {/* Chat List Column */}
             <div 
-              className="flex flex-col border-r border-(--color-border) bg-(--color-surface) backdrop-blur-sm z-10 h-full relative "
-              style={{ width: chatListWidth }}
+              className={`flex flex-col border-r border-(--color-border) bg-(--color-surface) backdrop-blur-sm z-10 h-full relative ${chatId ? 'hidden md:flex' : 'flex w-full md:w-auto'}`}
+              style={typeof window !== 'undefined' && window.innerWidth >= 768 ? { width: chatListWidth } : {}}
             >
               <div className="shrink-0 p-3 border-b border-(--color-border)">
                 <div className="mb-3 flex items-center gap-2 relative">
+                  {/* Global Sidebar Toggle (Mobile Only) */}
                   <button 
-                    onClick={() => setLocalMenuOpen(!localMenuOpen)}
-                    className="p-2.5 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
-                    title="Menu do Livechat"
+                    onClick={() => setMobileOpen(true)}
+                    className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
                   >
                     <FiMenu size={20} />
                   </button>
-                  
-                  {/* Local Menu Dropdown */}
-                  {localMenuOpen && (
-                    <>
-                      <div 
-                        className="fixed inset-0 z-30" 
-                        onClick={() => setLocalMenuOpen(false)} 
-                      />
-                      <div className="absolute top-full left-0 mt-2 w-56 livechat-card rounded-xl z-40 p-2 animate-in fade-in zoom-in-95 duration-100">
-                        <LivechatMenu 
-                          section={section} 
-                          onChange={(s) => {
-                            setSection(s);
-                            setLocalMenuOpen(false);
-                          }} 
-                        />
-                      </div>
-                    </>
-                  )}
 
                   <div className="relative flex-1">
                     <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-(--color-text-muted)" />
                     <input
                       className="config-input w-full rounded-xl pl-9 pr-3 py-2 text-sm"
-                      placeholder="Buscar conversa ou contato"
+                      placeholder="Buscar conversa..."
                       value={q}
                       onChange={(e) => setQ(e.target.value)}
                     />
@@ -4290,9 +4266,13 @@ const scrollToBottom = useCallback(
                 onAssignAIAgent={async (agentId) => {
                   if (!currentChat) return;
                   try {
+                    const headers = new Headers({ "Content-Type": "application/json" });
+                    const token = getAccessToken();
+                    if (token) headers.set("Authorization", `Bearer ${token}`);
+
                     const response = await fetch(`${API}/livechat/chats/${currentChat.id}/ai-agent`, {
                       method: "PUT",
-                      headers: { "Content-Type": "application/json" },
+                      headers,
                       credentials: "include",
                       body: JSON.stringify({ agentId }),
                     });
@@ -4378,7 +4358,7 @@ const scrollToBottom = useCallback(
                       )}
                       <MessageBubble
                         m={m}
-                        isAgent={m.sender_type === "AGENT"}
+                        isAgent={m.sender_type === "AGENT" || m.sender_type === "AI"}
                         mediaItems={mediaItems}
                         mediaIndex={mediaIndexById.get(m.id) ?? undefined}
                         showRemoteSenderInfo={currentChat ? isGroupChat(currentChat) : false}
@@ -4565,7 +4545,7 @@ const scrollToBottom = useCallback(
           <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
             <div className="mb-4 flex items-center gap-2">
               <button 
-                onClick={() => setMenuOpen(true)}
+                onClick={() => setMobileOpen(true)}
                 className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
               >
                 <FiMenu size={20} />
@@ -4582,7 +4562,7 @@ const scrollToBottom = useCallback(
           <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
             <div className="mb-4 flex items-center gap-2">
               <button 
-                onClick={() => setMenuOpen(true)}
+                onClick={() => setMobileOpen(true)}
                 className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
               >
                 <FiMenu size={20} />
@@ -4599,7 +4579,7 @@ const scrollToBottom = useCallback(
           <div className="flex-1 overflow-hidden p-6 h-full flex flex-col">
             <div className="mb-4 flex items-center gap-2">
               <button 
-                onClick={() => setMenuOpen(true)}
+                onClick={() => setMobileOpen(true)}
                 className="md:hidden p-2 hover:bg-accent rounded-xl border border-transparent hover:border-border transition-all text-muted-foreground hover:text-foreground"
               >
                 <FiMenu size={20} />
@@ -4645,7 +4625,6 @@ const scrollToBottom = useCallback(
         />
       )}
         </section>
-      </main>
     </div>
   );
 }

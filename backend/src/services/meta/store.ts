@@ -1720,6 +1720,7 @@ export async function insertOutboundMessage(args: {
   senderAvatarUrl?: string | null;
   messageId?: string | null;
   viewStatus?: string;
+  interactiveContent?: any | null;
 }): Promise<UpsertOutboundMessageResult | null> {
   try {
     const viewStatus = args.viewStatus ?? "Sent";
@@ -1741,9 +1742,10 @@ export async function insertOutboundMessage(args: {
                 sender_id = coalesce($6, sender_id),
                 sender_name = coalesce($7, sender_name),
                 sender_avatar_url = coalesce($8, sender_avatar_url),
+                interactive_content = coalesce($9, interactive_content),
                 updated_at = now()
           where id = $1
-          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
+          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
         [
           args.messageId,
           args.content,
@@ -1753,6 +1755,7 @@ export async function insertOutboundMessage(args: {
           senderId,
           senderName,
           senderAvatarUrl,
+          args.interactiveContent ?? null,
         ],
       );
       if (row) {
@@ -1764,8 +1767,8 @@ export async function insertOutboundMessage(args: {
       if (args.messageId) {
         row = await db.oneOrNone<InsertedOutboundMessage>(
           `insert into public.chat_messages
-             (id, chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status)
-           values ($1, $2, $3, $4, $5, false, $6, $7, $8, $9)
+             (id, chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status, interactive_content)
+           values ($1, $2, $3, $4, $5, false, $6, $7, $8, $9, $10)
            on conflict (chat_id, external_id) do update
              set view_status = excluded.view_status,
                  content = excluded.content,
@@ -1773,8 +1776,9 @@ export async function insertOutboundMessage(args: {
                  sender_id = excluded.sender_id,
                  sender_name = excluded.sender_name,
                  sender_avatar_url = excluded.sender_avatar_url,
+                 interactive_content = excluded.interactive_content,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
           [
             args.messageId,
             args.chatId,
@@ -1785,13 +1789,14 @@ export async function insertOutboundMessage(args: {
             args.content,
             type,
             viewStatus,
+            args.interactiveContent ?? null,
           ],
         );
       } else {
         row = await db.oneOrNone<InsertedOutboundMessage>(
           `insert into public.chat_messages
-             (chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status)
-           values ($1, $2, $3, $4, false, $5, $6, $7, $8)
+             (chat_id, sender_id, sender_name, sender_avatar_url, is_from_customer, external_id, content, type, view_status, interactive_content)
+           values ($1, $2, $3, $4, false, $5, $6, $7, $8, $9)
            on conflict (chat_id, external_id) do update
              set view_status = excluded.view_status,
                  content = excluded.content,
@@ -1799,8 +1804,9 @@ export async function insertOutboundMessage(args: {
                  sender_id = excluded.sender_id,
                  sender_name = excluded.sender_name,
                  sender_avatar_url = excluded.sender_avatar_url,
+                 interactive_content = excluded.interactive_content,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
           [
             args.chatId,
             senderId,
@@ -1810,6 +1816,7 @@ export async function insertOutboundMessage(args: {
             args.content,
             type,
             viewStatus,
+            args.interactiveContent ?? null,
           ],
         );
       }

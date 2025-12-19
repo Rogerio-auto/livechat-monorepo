@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
+import { getAccessToken } from "../../utils/api";
 
 type KanbanColumn = {
   id: string;
@@ -25,7 +26,12 @@ export default function FunnelStageSelector({ apiBase, selectedStages, onChange 
   useEffect(() => {
     (async () => {
       try {
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
         const boardRes = await fetch(`${apiBase}/kanban/my-board`, {
+          headers,
           credentials: "include",
         });
         if (!boardRes.ok) return;
@@ -34,6 +40,7 @@ export default function FunnelStageSelector({ apiBase, selectedStages, onChange 
         if (!board?.id) return;
 
         const colsRes = await fetch(`${apiBase}/kanban/boards/${board.id}/columns`, {
+          headers,
           credentials: "include",
         });
         if (!colsRes.ok) return;

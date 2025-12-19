@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { FiX } from "react-icons/fi";
+import { getAccessToken } from "../../utils/api";
 
 type Tag = {
   id: string;
@@ -25,7 +26,12 @@ export default function TagSelector({ apiBase, selectedTags, onChange }: Props) 
   useEffect(() => {
     (async () => {
       try {
+        const token = getAccessToken();
+        const headers = new Headers();
+        if (token) headers.set("Authorization", `Bearer ${token}`);
+
         const res = await fetch(`${apiBase}/livechat/tags`, {
+          headers,
           credentials: "include",
         });
         if (!res.ok) return;

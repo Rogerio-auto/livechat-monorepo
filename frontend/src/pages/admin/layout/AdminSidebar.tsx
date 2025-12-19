@@ -4,7 +4,8 @@ import { FiArrowLeft, FiCpu, FiLayers, FiMonitor, FiBox, FiActivity } from 'reac
 const NAV_ITEMS = [
   { label: 'Dashboard', to: '/admin/dashboard', icon: FiMonitor, exact: true },
   { label: 'Empresas', to: '/admin/companies', icon: FiLayers },
-  { label: 'Templates', to: '/admin/templates', icon: FiBox },
+  { label: 'Templates de Agentes', to: '/admin/templates', icon: FiBox },
+  { label: 'Templates de Projetos', to: '/admin/projects/templates', icon: FiLayers },
   { label: 'Ferramentas', to: '/admin/tools', icon: FiActivity },
   { label: 'Infraestrutura', to: '/admin/infrastructure', icon: FiCpu },
 ];

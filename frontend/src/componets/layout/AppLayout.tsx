@@ -148,26 +148,25 @@ export function AppLayout() {
   }, [location.pathname, location.search]); // Re-attach listener when location changes
 
   const isLiveChat = location.pathname.startsWith("/livechat");
-
-  if (isLiveChat || location.pathname === "/dashboard") {
-    return (
-      <div className="w-full min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-text)]">
-        <Outlet />
-      </div>
-    );
-  }
+  const isDashboard = location.pathname === "/dashboard";
+  const isProjects = location.pathname.startsWith("/projects");
+  const isFullWidthPage = isLiveChat || isDashboard || isProjects;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] text-[var(--color-text)]">
+    <div className={`h-screen flex overflow-hidden ${isFullWidthPage ? "bg-[color:var(--color-surface)]" : "bg-[var(--color-bg)]"} text-[var(--color-text)]`}>
       <Sidebar mobileOpen={mobileOpen} onRequestClose={() => setMobileOpen(false)} className="peer" />
-      <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
-      <div className="flex min-h-screen flex-col md:pl-[64px]">
-        {/* TopBar removido para dashboard */}
-        <main className="app-shell flex-1 py-6">
-          <div className="app-shell__inner space-y-6">
-            <Outlet />
-          </div>
+      
+      <div className="flex-1 flex flex-col min-w-0 relative md:pl-[64px] overflow-hidden">
+        <main className={`flex-1 overflow-y-auto custom-scrollbar ${!isFullWidthPage ? "py-6" : ""}`}>
+          {isFullWidthPage ? (
+            <Outlet context={{ setMobileOpen }} />
+          ) : (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+              <Outlet context={{ setMobileOpen }} />
+            </div>
+          )}
         </main>
+        <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
       </div>
     </div>
   );

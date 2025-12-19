@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Icon from "../../assets/icon.png";
 import { useNavigate } from "react-router-dom";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
+import { useSubscription } from "../../context/SubscriptionContext";
 
 const API =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -13,6 +14,7 @@ export function CLogin() {
   const [remember, setRemember] = useState(!!localStorage.getItem("remember_email"));
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
+  const { refreshSubscription } = useSubscription();
 
   useEffect(() => {
     // se já está logado, pula pro dashboard
@@ -21,12 +23,15 @@ export function CLogin() {
         const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
         const headers = devCompany && import.meta.env.DEV ? { "X-Company-Id": devCompany } : undefined;
         const res = await fetch(`${API}/auth/me`, { credentials: "include", headers });
-        if (res.ok) navigate("/dashboard");
+        if (res.ok) {
+          await refreshSubscription();
+          navigate("/dashboard");
+        }
       } catch {
         // silencioso
       }
     })();
-  }, [navigate]);
+  }, [navigate, refreshSubscription]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +60,8 @@ export function CLogin() {
       if (remember) localStorage.setItem("remember_email", email);
       else localStorage.removeItem("remember_email");
 
+      // Atualizar assinatura antes de ir para o dashboard
+      await refreshSubscription();
       navigate("/dashboard");
     } catch (err: any) {
       console.error("Erro no login:", err);

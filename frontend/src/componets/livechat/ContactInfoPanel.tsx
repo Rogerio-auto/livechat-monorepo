@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FiUser, FiMail, FiPhone, FiMapPin, FiCalendar, FiTag, FiX, FiImage, FiFileText, FiLink, FiInfo, FiGlobe, FiEdit2, FiCheck, FiXCircle } from "react-icons/fi";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getAccessToken } from "../../utils/api";
 import type { Chat, Message } from "./types";
 
 type Props = {
@@ -121,9 +122,20 @@ function MediaGallery({ chat, apiBase, type }: { chat: Chat; apiBase?: string; t
   useEffect(() => {
     if (!apiBase) return;
     setLoading(true);
+    
+    const headers = new Headers();
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+
     // Fetch messages (simplified - ideally should have a specific media endpoint)
-    fetch(`${apiBase}/livechat/chats/${chat.id}/messages?limit=100`)
-      .then(res => res.json())
+    fetch(`${apiBase}/livechat/chats/${chat.id}/messages?limit=100`, {
+      headers,
+      credentials: "include"
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(data => {
         const msgs = (Array.isArray(data) ? data : data.data || []) as Message[];
         const filtered = msgs.filter(m => {

@@ -14,6 +14,7 @@ import {
 	FiUsers,
 	FiHash,
 } from "react-icons/fi";
+import { getAccessToken } from "../../utils/api";
 import type { Chat, Tag } from "./types";
 
 type InboxAgent = {
@@ -203,8 +204,13 @@ export function ChatHeader({
 			setAgentsLoading(true);
 			setAgentsError(null);
 			try {
+				const headers = new Headers();
+				const token = getAccessToken();
+				if (token) headers.set("Authorization", `Bearer ${token}`);
+
 				const response = await fetch(`${apiBase}/livechat/inboxes/${effectiveInboxId}/agents`, {
 					credentials: "include",
+					headers
 				});
 				if (!response.ok) {
 					throw new Error(`Falha ao carregar agentes (${response.status})`);
@@ -265,9 +271,13 @@ export function ChatHeader({
 			setAIAgentsError(null);
 			try {
 				const url = `${apiBase}/api/agents?active=true`;
+				const headers = new Headers({ "Content-Type": "application/json" });
+				const token = getAccessToken();
+				if (token) headers.set("Authorization", `Bearer ${token}`);
+
 				const response = await fetch(url, {
 					method: "GET",
-					headers: { "Content-Type": "application/json" },
+					headers,
 					credentials: "include",
 				});
 				if (!response.ok) {

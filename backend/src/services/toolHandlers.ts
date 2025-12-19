@@ -6,6 +6,7 @@ import type { Tool, AgentTool } from "../repos/tools.repo";
 import { logToolExecution } from "../repos/tools.repo";
 import { getIO, hasIO } from "../lib/io";
 import { sendInteractiveButtons, sendInteractiveList } from "./meta/graph";
+import { publishApp } from "../queue/rabbit";
 
 export type ToolExecutionContext = {
   agentId: string;
@@ -929,13 +930,15 @@ async function handleSocket(
     }
 
     try {
+      let messageRow: any = null;
+
       if (event === "send:interactive_message") {
         // Validação básica de botões
         if (!params.message || !Array.isArray(params.buttons)) {
           throw new Error("Parâmetros inválidos para botões (message, buttons)");
         }
         
-        await sendInteractiveButtons({
+        const result = await sendInteractiveButtons({
           inboxId,
           chatId: context.chatId,
           customerPhone,
@@ -944,13 +947,14 @@ async function handleSocket(
           footer: params.footer,
           senderSupabaseId: context.userId,
         });
+        messageRow = result.message;
       } else if (event === "send:interactive_list") {
         // Validação básica de lista
         if (!params.message || !Array.isArray(params.sections)) {
           throw new Error("Parâmetros inválidos para lista (message, sections)");
         }
 
-        await sendInteractiveList({
+        const result = await sendInteractiveList({
           inboxId,
           chatId: context.chatId,
           customerPhone,
@@ -960,6 +964,22 @@ async function handleSocket(
           footer: params.footer,
           senderSupabaseId: context.userId,
         });
+        messageRow = result.message;
+      }
+
+      // 3. Notificar Frontend via RabbitMQ (Socket Relay)
+      // Isso garante que o operador veja os botões/listas que foram enviados
+      if (messageRow) {
+        await publishApp("socket.livechat.status", {
+          kind: "livechat.outbound.message",
+          chatId: context.chatId,
+          companyId: context.companyId,
+          message: {
+            ...messageRow,
+            body: messageRow.content,
+            sender_type: context.agentId ? "AI" : "AGENT",
+          }
+        });
       }
     } catch (error: any) {
       console.error(`[SOCKET] Failed to send interactive message via Meta API:`, error);
@@ -967,32 +987,11 @@ async function handleSocket(
     }
   }
 
-  // 3. Emitir Socket para Frontend (UI)
-  // Isso garante que o operador veja os botões/listas que foram enviados
-  const targetRoom = room || `chat:${context.chatId}`;
-  
-  if (hasIO()) {
-    const io = getIO();
-    const payload = {
-      chatId: context.chatId,
-      agentId: context.agentId,
-      contactId: context.contactId,
-      ...params,
-      timestamp: new Date().toISOString()
-    };
-
-    io.to(targetRoom).emit(event, payload);
-    console.log(`[SOCKET] Event '${event}' emitted to room '${targetRoom}'`);
-  } else {
-    console.warn(`[SOCKET] Socket.IO not available, event '${event}' not emitted to '${targetRoom}'`);
-  }
-
   return { 
     success: true, 
     data: { 
       message: `Mensagem interativa enviada com sucesso`,
       event,
-      room: targetRoom,
       provider: provider || "SOCKET_ONLY"
     } 
   };

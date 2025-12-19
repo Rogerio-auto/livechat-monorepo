@@ -186,12 +186,40 @@ function extractFirstUrlAndCaption(text: string): { url: string | null; caption:
 
 function parseAgentReplyToItems(raw: string): ParsedItem[] {
   const items: ParsedItem[] = [];
-  const trimmed = (raw || "").trim();
+  let trimmed = (raw || "").trim();
   if (!trimmed) return items;
+
+  // 1. Limpeza robusta para extrair JSON de blocos Markdown ou texto sujo
+  let jsonCandidate = trimmed;
+  
+  // Remove blocos de código markdown (```json ... ``` ou ``` ... ```)
+  const jsonBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (jsonBlockMatch) {
+    jsonCandidate = jsonBlockMatch[1].trim();
+  } else {
+    // Se não houver bloco, tenta encontrar o primeiro '{' e o último '}'
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonCandidate = trimmed.substring(firstBrace, lastBrace + 1).trim();
+    }
+  }
 
   // Try JSON of shape { message: ["..."] }
   try {
-    const obj = JSON.parse(trimmed);
+    let obj;
+    try {
+      obj = JSON.parse(jsonCandidate);
+    } catch (e) {
+      // Se falhar, tenta limpar quebras de linha literais dentro do JSON que quebram o parse
+      // e remove possíveis escapes excessivos de barras
+      const fixedJson = jsonCandidate
+        .replace(/\n/g, " ") // Substitui quebras de linha reais por espaço
+        .replace(/\r/g, "")  // Remove carriage returns
+        .replace(/\\{2,}/g, "\\"); // Transforma \\\\ em \\
+      obj = JSON.parse(fixedJson);
+    }
+
     const arr = Array.isArray(obj?.message) ? obj.message : null;
     if (arr && arr.length) {
       for (const entry of arr) {
@@ -207,8 +235,9 @@ function parseAgentReplyToItems(raw: string): ParsedItem[] {
       }
       return items;
     }
-  } catch {
-    // not JSON; continue fallback
+  } catch (err) {
+    // Se falhar o parse do JSON, continuamos para o fallback de texto puro
+    // console.log("[AGENT][PARSE] JSON parse failed, falling back to raw text", { error: err.message });
   }
 
   // Fallback: treat as a single text bubble or media if it's a plain URL
@@ -1020,8 +1049,15 @@ function extractContentAndType(m: any): { content: string; type: string; caption
     case "contacts":
       return { content: "[CONTACTS]", type: "CONTACTS", caption: null };
     case "interactive":
+      let interactiveText = "[INTERACTIVE]";
+      const interactive = m?.interactive;
+      if (interactive?.type === "button_reply") {
+        interactiveText = interactive.button_reply?.title || "[BUTTON REPLY]";
+      } else if (interactive?.type === "list_reply") {
+        interactiveText = interactive.list_reply?.title || "[LIST REPLY]";
+      }
       return {
-        content: "[INTERACTIVE]",
+        content: interactiveText,
         type: "INTERACTIVE",
         caption: null,
         interactiveContent: m?.interactive ?? null,
@@ -1142,6 +1178,7 @@ function deriveWahaMessageType(payload: any): string {
     if (mime.includes("application/pdf") || mime.includes("application/")) return "DOCUMENT";
   }
   const hinted = String(payload?.type || "").toUpperCase();
+  if (hinted === "BUTTON_REPLY" || hinted === "LIST_REPLY") return "INTERACTIVE";
   if (hinted) return hinted;
   return payload?.hasMedia ? "DOCUMENT" : "TEXT";
 }
@@ -2818,6 +2855,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       ? await findChatMessageIdByExternalId(chatId, quotedExternalId)
       : null;
 
+  // Extract interactive content for WAHA
+  const interactiveContent = msg?.interactive || msg?.button || msg?.list || msg?.template || null;
+
   // Extract caption from message (WAHA sends caption in body for media messages)
   const caption = hasMedia && body && body !== `[${messageType}]` ? body : null;
   
@@ -2858,6 +2898,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     remoteSenderAvatarUrl: remoteMeta?.avatarUrl ?? null,
     remoteSenderIsAdmin: remoteMeta?.isAdmin ?? null,
     repliedMessageId,
+    interactiveContent,
   });
 
   if (!upsertResult) return;

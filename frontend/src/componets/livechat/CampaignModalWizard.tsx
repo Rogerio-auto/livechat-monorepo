@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { FiX, FiSave, FiPlay, FiPause, FiUsers, FiCheckCircle, FiAlertCircle, FiClock, FiBarChart2, FiChevronRight, FiChevronLeft, FiSettings, FiTarget, FiUpload } from "react-icons/fi";
+import { getAccessToken } from "../../utils/api";
 import { Card } from "../../components/ui/Card";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -96,6 +97,17 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
   });
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
+  const fetchWithAuth = async (url: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers || {});
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return fetch(url, {
+      ...init,
+      headers,
+      credentials: "include"
+    });
+  };
+
   useEffect(() => {
     if (!open) return;
     
@@ -103,7 +115,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
     // Carregar steps para descobrir template selecionado
     let initialTemplateId = "";
     if (campaign?.id) {
-      fetch(`${apiBase}/livechat/campaigns/${campaign.id}/steps`, { credentials: "include" })
+      fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/steps`)
         .then(r => r.ok ? r.json() : [])
         .then((steps) => {
           if (Array.isArray(steps) && steps.length > 0) {
@@ -118,7 +130,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
 
     // Carregar segment ligado (preview legacy retorna segment)
     if (campaign?.id) {
-      fetch(`${apiBase}/livechat/campaigns/${campaign.id}/preview`, { credentials: "include" })
+      fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/preview`)
         .then(r => r.ok ? r.json() : null)
         .then((payload) => {
           if (payload?.segment?.definition) {
@@ -165,7 +177,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
     });
     
     // Carregar inboxes
-    fetch(`${apiBase}/livechat/inboxes`, { credentials: "include" })
+    fetchWithAuth(`${apiBase}/livechat/inboxes`)
       .then((r) => r.ok ? r.json() : Promise.reject(r.statusText))
       .then((data) => setInboxes(Array.isArray(data) ? data : []))
       .catch(() => setInboxes([]));
@@ -179,9 +191,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
   const loadStats = async () => {
     if (!campaign?.id) return;
     try {
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/stats`, { 
-        credentials: "include" 
-      });
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/stats`);
       if (res.ok) {
         const data = await res.json();
         setStats(data);
@@ -245,9 +255,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       // Preview simples: todos os contatos da inbox
       setPreviewLoading(true);
       try {
-        const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/preview`, {
-          credentials: "include",
-        });
+        const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/preview`);
         if (res.ok) {
           const data = await res.json();
           setPreviewCount(Array.isArray(data) ? data.length : 0);
@@ -275,9 +283,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       if (filters.created_after) payload.created_after = filters.created_after;
       if (filters.created_before) payload.created_before = filters.created_before;
 
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/preview`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/preview`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -305,9 +312,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       // Commit simples (legacy)
       setLoading(true);
       try {
-        await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/commit`, {
+        await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/commit`, {
           method: "POST",
-          credentials: "include",
         });
         setCommitInfo("✓ Audiência gerada com sucesso");
         loadStats();
@@ -335,9 +341,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       if (filters.created_after) payload.created_after = filters.created_after;
       if (filters.created_before) payload.created_before = filters.created_before;
 
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/commit`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/segmentation/commit`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filters: payload, limit: payload.limit, segment_name: form.name ? `Segmento - ${form.name}` : undefined }),
       });
@@ -393,9 +398,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
 
       if (!campaign) {
         // Não deveria acontecer mais, mas mantém fallback
-        const createRes = await fetch(`${apiBase}/livechat/campaigns`, {
+        const createRes = await fetchWithAuth(`${apiBase}/livechat/campaigns`, {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
@@ -408,9 +412,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
         updated = await createRes.json();
       } else {
         // Atualizar campanha existente (caso normal agora)
-        const updateRes = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}`, {
+        const updateRes = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
           method: "PATCH",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
@@ -430,9 +433,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
           template_id: form.template_id,
         });
 
-        const stepRes = await fetch(`${apiBase}/livechat/campaigns/${updated.id}/steps`, {
+        const stepRes = await fetchWithAuth(`${apiBase}/livechat/campaigns/${updated.id}/steps`, {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             position: 1,
@@ -475,9 +477,8 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
     const newStatus = campaign.status === "RUNNING" ? "PAUSED" : "RUNNING";
     setLoading(true);
     try {
-      const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}`, {
+      const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
         method: "PATCH",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
@@ -497,11 +498,10 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
     
     setLoading(true);
     try {
-      const response = await fetch(`/api/livechat/campaigns/${campaign.id}`, {
+      const response = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "RUNNING" }),
-        credentials: "include",
       });
 
       if (!response.ok) throw new Error("Falha ao ativar campanha");
@@ -528,14 +528,13 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
     setError(null);
     
     try {
-      const response = await fetch(`${apiBase}/api/campaigns/${campaign.id}/recipients/bulk-optin`, {
+      const response = await fetchWithAuth(`${apiBase}/api/campaigns/${campaign.id}/recipients/bulk-optin`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           opt_in_method: bulkOptInForm.method,
           opt_in_source: bulkOptInForm.source,
         }),
-        credentials: "include",
       });
 
       if (!response.ok) {
@@ -549,9 +548,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       
       // Recarregar validação
       if (validation) {
-        const valRes = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/validate`, {
-          credentials: "include",
-        });
+        const valRes = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/validate`);
         if (valRes.ok) {
           setValidation(await valRes.json());
         }
@@ -1193,9 +1190,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                       onClick={async () => {
                         setLoading(true);
                         try {
-                          const res = await fetch(`${apiBase}/livechat/campaigns/${campaign.id}/validate`, {
-                            credentials: "include",
-                          });
+                          const res = await fetchWithAuth(`${apiBase}/livechat/campaigns/${campaign.id}/validate`);
                           if (res.ok) {
                             const validationResult = await res.json();
                             setValidation(validationResult);

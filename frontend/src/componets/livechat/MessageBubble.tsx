@@ -377,7 +377,15 @@ export function MessageBubble({
       </div>
     );
   } else if (messageType === "INTERACTIVE") {
-    const interactive = m.interactive_content;
+    let interactive = m.interactive_content;
+    if (typeof interactive === "string") {
+      try {
+        interactive = JSON.parse(interactive);
+      } catch (e) {
+        console.error("[MessageBubble] Failed to parse interactive_content:", e);
+      }
+    }
+
     if (!interactive) {
       bubbleContent = (
         <div className="flex flex-col gap-1">
@@ -430,6 +438,25 @@ export function MessageBubble({
                  </div>
                ))}
              </div>
+          )}
+
+          {type === "button_reply" && (
+            <div className="flex items-center gap-2 py-1 px-2 bg-white/10 rounded border-l-4 border-white/30">
+              <FiCheck className="w-4 h-4 opacity-70" />
+              <span className="font-medium">{interactive.button_reply?.title || "Opção selecionada"}</span>
+            </div>
+          )}
+
+          {type === "list_reply" && (
+            <div className="flex flex-col gap-1 py-1 px-2 bg-white/10 rounded border-l-4 border-white/30">
+              <div className="flex items-center gap-2">
+                <FiCheck className="w-4 h-4 opacity-70" />
+                <span className="font-medium">{interactive.list_reply?.title || "Opção selecionada"}</span>
+              </div>
+              {interactive.list_reply?.description && (
+                <div className="text-xs opacity-70 ml-6">{interactive.list_reply.description}</div>
+              )}
+            </div>
           )}
         </div>
       );

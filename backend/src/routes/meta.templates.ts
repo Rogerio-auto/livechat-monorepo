@@ -403,7 +403,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
       }
 
       // Envia mensagem interativa
-      const result = await sendInteractiveButtons({
+      const { wamid } = await sendInteractiveButtons({
         inboxId: body.inboxId,
         chatId: body.chatId,
         customerPhone: body.customerPhone,
@@ -415,7 +415,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       return res.json({ 
         success: true, 
-        wamid: result.wamid,
+        wamid,
         message: "Botões interativos enviados com sucesso",
       });
     } catch (error) {

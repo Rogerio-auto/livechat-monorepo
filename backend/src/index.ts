@@ -116,15 +116,16 @@ const FRONTEND_ORIGINS = Array.from(
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir se não houver origin (ex: mobile, curl)
     if (!origin) return callback(null, true);
     
-    // Check if it's a 7sion.com domain or localhost
-    const is7sion = origin.endsWith(".7sion.com") || origin === "https://7sion.com";
-    const isLocal = origin.includes("localhost") || origin.includes("127.0.0.1");
-    const isExplicit = FRONTEND_ORIGINS.includes(origin);
+    const isAllowed = 
+      FRONTEND_ORIGINS.includes(origin) ||
+      origin.endsWith(".7sion.com") ||
+      origin === "https://7sion.com" ||
+      origin.startsWith("http://localhost:") ||
+      origin.startsWith("http://127.0.0.1:");
 
-    if (is7sion || isLocal || isExplicit) {
+    if (isAllowed) {
       callback(null, true);
     } else {
       console.warn(`[CORS] Origin ${origin} not allowed`);
@@ -133,23 +134,11 @@ app.use(cors({
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: ["*"], // Tentar permitir todos os headers
-  optionsSuccessStatus: 204
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "Cache-Control", "Pragma"],
 }));
 
-// Responder preflight para todas as rotas de forma agressiva
-app.options("*", (req, res) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Credentials", "true");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] || "*");
-    res.setHeader("Access-Control-Max-Age", "86400");
-    return res.sendStatus(204);
-  }
-  res.sendStatus(204);
-});
+// Garantir que preflight (OPTIONS) responda corretamente para todas as rotas
+app.options("*", cors());
 
 // ===== WEBHOOKS (RAW BODY) =====
 // Must be before express.json() to preserve signature

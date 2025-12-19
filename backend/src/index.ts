@@ -637,27 +637,8 @@ async function syncWahaAfterLogin(authUserId: string): Promise<void> {
 }
 
 // ===== Auth middleware =====
-async function requireAuth(req: any, res: any, next: any) {
-  // pega token do cookie httpOnly ou do header Authorization
-  const bearer = (req.headers.authorization ?? "") as string;
-  let token = bearer.startsWith("Bearer ") ? bearer.slice(7) : undefined;
-  if (!token) token = req.cookies[JWT_COOKIE_NAME];
-
-  if (!token) {
-    console.log("[requireAuth] No token found - cookie:", !!req.cookies[JWT_COOKIE_NAME], "bearer:", !!bearer);
-    return res.status(401).json({ error: "Not authenticated" });
-  }
-
-  // valida token com Supabase
-  const { data, error } = await supabaseAdmin.auth.getUser(token);
-  if (error || !data?.user) {
-    console.log("[requireAuth] Token validation failed:", error?.message);
-    return res.status(401).json({ error: "Invalid token" });
-  }
-
-  req.user = data.user;
-  next();
-}
+// Removido requireAuth local para usar o do middleware centralizado
+import { requireAuth } from "./middlewares/requireAuth.js";
 
 // ===== Rotas de Auth =====
 // NOTA: Rotas antigas comentadas - usando registerAuthRoutes() de ./routes/auth.ts
@@ -3767,6 +3748,7 @@ app.use("/api/checkout", checkoutRouter);
 
 // autenticados
 startLivechatSocketBridge();
+registerAuthRoutes(app); // ✅ Adicionado aqui
 registerLivechatContactsRoutes(app);
 registerLivechatInboxesRoutes(app);
 registerOpenAIIntegrationRoutes(app);

@@ -109,43 +109,47 @@ const FRONTEND_ORIGINS = Array.from(
     "http://127.0.0.1:3000",
     "http://localhost:3002",
     "http://127.0.0.1:3002",
+    "https://app.7sion.com",
+    "https://7sion.com",
   ]),
 );
 
-console.log("[CORS] Allowed origins:", FRONTEND_ORIGINS);
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir se não houver origin (ex: mobile, curl)
+    if (!origin) return callback(null, true);
+    
+    // Check if it's a 7sion.com domain or localhost
+    const is7sion = origin.endsWith(".7sion.com") || origin === "https://7sion.com";
+    const isLocal = origin.includes("localhost") || origin.includes("127.0.0.1");
+    const isExplicit = FRONTEND_ORIGINS.includes(origin);
 
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Permitir requisições sem origin (como apps mobile ou curl)
-      if (!origin) return callback(null, true);
-
-      // Verificar se está na lista explícita
-      if (FRONTEND_ORIGINS.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // Permitir qualquer subdomínio de 7sion.com
-      if (origin.endsWith(".7sion.com") || origin === "https://7sion.com") {
-        return callback(null, true);
-      }
-
-      // Fallback para localhost em desenvolvimento
-      if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
-        return callback(null, true);
-      }
-
-      console.warn(`[CORS] Origin ${origin} not allowed by configuration`);
+    if (is7sion || isLocal || isExplicit) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Origin ${origin} not allowed`);
       callback(null, false);
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-  }),
-);
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["*"], // Tentar permitir todos os headers
+  optionsSuccessStatus: 204
+}));
 
-// Garantir que preflight (OPTIONS) responda corretamente para todas as rotas
-app.options("*", cors());
+// Responder preflight para todas as rotas de forma agressiva
+app.options("*", (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] || "*");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    return res.sendStatus(204);
+  }
+  res.sendStatus(204);
+});
 
 // ===== WEBHOOKS (RAW BODY) =====
 // Must be before express.json() to preserve signature

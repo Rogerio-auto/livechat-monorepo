@@ -107,7 +107,7 @@ const FRONTEND_ORIGINS = Array.from(
       .filter(Boolean),
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://localhost:3002", // onboarding dev
+    "http://localhost:3002",
     "http://127.0.0.1:3002",
   ]),
 );
@@ -116,10 +116,36 @@ console.log("[CORS] Allowed origins:", FRONTEND_ORIGINS);
 
 app.use(
   cors({
-    origin: FRONTEND_ORIGINS,
+    origin: (origin, callback) => {
+      // Permitir requisições sem origin (como apps mobile ou curl)
+      if (!origin) return callback(null, true);
+
+      // Verificar se está na lista explícita
+      if (FRONTEND_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Permitir qualquer subdomínio de 7sion.com
+      if (origin.endsWith(".7sion.com") || origin === "https://7sion.com") {
+        return callback(null, true);
+      }
+
+      // Fallback para localhost em desenvolvimento
+      if (origin.startsWith("http://localhost:") || origin.startsWith("http://127.0.0.1:")) {
+        return callback(null, true);
+      }
+
+      console.warn(`[CORS] Origin ${origin} not allowed by configuration`);
+      callback(null, false);
+    },
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
   }),
 );
+
+// Garantir que preflight (OPTIONS) responda corretamente para todas as rotas
+app.options("*", cors());
 
 // ===== WEBHOOKS (RAW BODY) =====
 // Must be before express.json() to preserve signature

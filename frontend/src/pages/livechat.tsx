@@ -1755,8 +1755,7 @@ const scrollToBottom = useCallback(
           // Draft has id like "draft-wamid.HBg..." and external_id "wamid.HBg..."
           // Confirmed message has UUID id and same external_id
           if (normalizedExternalId && (item as any).external_id === normalizedExternalId) {
-            // If item is a draft (starts with "draft-"), replace it with confirmed
-            if (item.id?.startsWith('draft-')) return true;
+            return true;
           }
           
           return false;

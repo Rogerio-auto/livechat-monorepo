@@ -809,8 +809,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           }
 
           if (fetchTasks.length) {
-            // Soft-cap to avoid very long waits; still await to enrich current response
-            await Promise.allSettled(fetchTasks);
+            // OTIMIZAÇÃO: Não aguardar o fetch de avatares para não travar o carregamento da lista.
+            // Os avatares serão buscados em background e salvos no Redis para a próxima requisição.
+            // Isso faz a lista carregar instantaneamente, mesmo que na primeira vez alguns avatares não apareçam.
+            Promise.allSettled(fetchTasks).then((results) => {
+               const successCount = results.filter(r => r.status === 'fulfilled').length;
+               console.debug(`[AVATAR] Background fetch concluído: ${successCount}/${fetchTasks.length} salvos no cache.`);
+            }).catch(err => console.error("[AVATAR] Background fetch error:", err));
           }
         } catch (avatarResolveErr) {
           console.warn("[livechat/chats] avatar resolve pipeline failed", avatarResolveErr);
@@ -969,9 +974,26 @@ export function registerLivechatChatRoutes(app: express.Application) {
             ? chat.last_message_media_url.trim()
             : "";
         chat.last_message_media_url = mediaUrlRaw || null;
-        if (!chat.last_message && chat.last_message_media_url) {
-          const normalizedType = (chat.last_message_type || "MEDIA").toString().toUpperCase();
-          chat.last_message = `[${normalizedType}]`;
+        
+        // OTIMIZAÇÃO: Formatar last_message para tipos de mídia (substituir [IMAGE], [MEDIA] etc por ícones amigáveis)
+        const normalizedType = (chat.last_message_type || "MEDIA").toString().toUpperCase();
+        const isBracketStyle = chat.last_message && /^\[[A-Z]+\]$/.test(chat.last_message);
+        
+        if ((!chat.last_message && chat.last_message_media_url) || isBracketStyle || chat.last_message === "?? audio") {
+          switch (normalizedType) {
+            case "IMAGE": chat.last_message = "📷 Imagem"; break;
+            case "VIDEO": chat.last_message = "🎥 Vídeo"; break;
+            case "AUDIO": chat.last_message = "🎵 Áudio"; break;
+            case "PTT": chat.last_message = "🎤 Áudio"; break;
+            case "DOCUMENT": chat.last_message = "📄 Documento"; break;
+            case "STICKER": chat.last_message = "💟 Figurinha"; break;
+            case "LOCATION": chat.last_message = "📍 Localização"; break;
+            case "CONTACT": chat.last_message = "👤 Contato"; break;
+            default: chat.last_message = "📎 Mídia"; break;
+          }
+        } else if (chat.last_message && chat.last_message.includes("?? audio")) {
+           // Corrigir encoding incorreto de emoji de microfone
+           chat.last_message = chat.last_message.replace(/\?\? audio/gi, "🎤 Áudio");
         }
 
         const chatTypeUpper = typeof chat.chat_type === "string" ? chat.chat_type.toUpperCase() : null;
@@ -3606,8 +3628,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           // Invalidate cache
           try {
             const chatData = chat as any;
-            const statuses = ["ALL", chatData.status].filter(Boolean);
-            const kinds = ["ALL", chatData.kind].filter(Boolean);
+            // Always invalidate PENDING because marking as read affects PENDING view (unread > 0)
+            const statuses = Array.from(new Set(["ALL", chatData.status, "PENDING"])).filter(Boolean);
+            
+            // Normalize kind: null/undefined -> DIRECT
+            const normalizedKind = chatData.kind ? chatData.kind.toUpperCase() : "DIRECT";
+            const kinds = Array.from(new Set(["ALL", normalizedKind, "DIRECT", "GROUP"])).filter(Boolean);
+            
             const inboxes = [chatData.inbox_id, null];
             const departments = [chatData.department_id, null];
             
@@ -3759,8 +3786,13 @@ export function registerLivechatChatRoutes(app: express.Application) {
           // Invalidate cache
           try {
             const chatData = chat as any;
-            const statuses = ["ALL", chatData.status].filter(Boolean);
-            const kinds = ["ALL", chatData.kind].filter(Boolean);
+            // Always invalidate PENDING because marking as read affects PENDING view (unread > 0)
+            const statuses = Array.from(new Set(["ALL", chatData.status, "PENDING"])).filter(Boolean);
+            
+            // Normalize kind: null/undefined -> DIRECT
+            const normalizedKind = chatData.kind ? chatData.kind.toUpperCase() : "DIRECT";
+            const kinds = Array.from(new Set(["ALL", normalizedKind, "DIRECT", "GROUP"])).filter(Boolean);
+            
             const inboxes = [chatData.inbox_id, null];
             const departments = [chatData.department_id, null];
             

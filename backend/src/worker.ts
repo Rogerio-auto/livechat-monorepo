@@ -1745,7 +1745,20 @@ async function handleMetaInboundMessages(args: {
         },
         chatUpdate: {
           chatId,
-          last_message: content || "[MEDIA]",
+          last_message: content || (() => {
+            const t = (type || "").toUpperCase();
+            switch (t) {
+              case "IMAGE": return "📷 Imagem";
+              case "VIDEO": return "🎥 Vídeo";
+              case "AUDIO": return "🎵 Áudio";
+              case "PTT": return "🎤 Áudio";
+              case "DOCUMENT": return "📄 Documento";
+              case "STICKER": return "💟 Figurinha";
+              case "LOCATION": return "📍 Localização";
+              case "CONTACT": return "👤 Contato";
+              default: return "📎 Mídia";
+            }
+          })(),
           last_message_at: createdAt?.toISOString() || draftTimestamp,
           last_message_from: "CUSTOMER",
           last_message_type: type,
@@ -2791,11 +2804,31 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // });
   
   const messageType = deriveWahaMessageType(msg);
+  
+  // FIX: Friendly text for media types
+  const getFriendlyMediaText = (type: string) => {
+    switch (type) {
+      case "IMAGE": return "📷 Imagem";
+      case "VIDEO": return "🎥 Vídeo";
+      case "AUDIO": return "🎵 Áudio";
+      case "VOICE": return "🎤 Voz";
+      case "DOCUMENT": return "📄 Documento";
+      case "STICKER": return "💟 Figurinha";
+      case "LOCATION": return "📍 Localização";
+      case "CONTACT": return "👤 Contato";
+      default: return type === "TEXT" ? "" : `[${type}]`;
+    }
+  };
+
+  let rawBody = typeof msg?.body === "string" ? msg.body.trim() : "";
+  // Fix artifacts
+  if (rawBody.includes("?? audio") || rawBody.includes("?? Audio")) rawBody = "";
+
   const body =
-    typeof msg?.body === "string" && msg.body.trim()
-      ? msg.body
+    rawBody
+      ? rawBody
       : hasMedia
-        ? `[${messageType}]`
+        ? getFriendlyMediaText(messageType)
         : "";
   const createdAt =
     typeof msg?.timestamp === "number"
@@ -2859,7 +2892,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   const interactiveContent = msg?.interactive || msg?.button || msg?.list || msg?.template || null;
 
   // Extract caption from message (WAHA sends caption in body for media messages)
-  const caption = hasMedia && body && body !== `[${messageType}]` ? body : null;
+  const caption = hasMedia && body && body !== getFriendlyMediaText(messageType) ? body : null;
   
   // console.log('[WAHA][worker] 📝 Caption extraction:', {
   //   hasMedia,

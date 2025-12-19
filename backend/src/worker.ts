@@ -572,7 +572,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             ag.name as ai_agent_name,
             cust.name as customer_name,
             cust.phone as customer_phone,
-            cust.avatar_url as customer_avatar_url,
+            NULL as customer_avatar_url,
             cust.id as customer_id
        from public.chats ch
   left join public.inboxes ib on ib.id = ch.inbox_id

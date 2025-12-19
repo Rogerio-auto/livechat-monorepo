@@ -9,7 +9,7 @@ import { executeTool, type ToolExecutionContext } from "./toolHandlers.ts";
 import { getAgentContext, appendMultipleToContext } from "./agentContext.ts";
 import { db } from "../pg.ts";
 import { AgentMonitoringService } from "./agentMonitoring.ts";
-import { getIO } from "../lib/io.js";
+import { getIO, hasIO } from "../lib/io.ts";
 import { AgentMetricsRepository } from "../repos/agent_metrics.repo.ts";
 import { logOpenAIUsage, checkAIUsagePermission } from "./openai.usage.service.ts";
 
@@ -628,8 +628,8 @@ export async function runAgentReply(opts: {
     }).catch(err => console.error("Error updating metrics:", err));
 
     // Emitir evento via WebSocket
-    const io = getIO();
-    if (io) {
+    if (hasIO()) {
+      const io = getIO();
       io.to(`company:${opts.companyId}`).emit('agent:activity', {
         agentId: agent.id,
         agentName: agent.name,
@@ -663,8 +663,23 @@ export async function runAgentReply(opts: {
       }).catch(err => console.error("Error logging agent error:", err));
     }
 
+    let userFriendlyMessage = "Desculpe, ocorreu um erro interno ao processar sua solicitação.";
+    
+    // Tratamento de erros comuns para feedback melhor
+    if (error.message) {
+      if (error.message.includes("OPENAI_API_KEY") || error.message.includes("API key")) {
+        userFriendlyMessage = "Erro de configuração: Chave de API da IA não configurada ou inválida.";
+      } else if (error.status === 401) {
+        userFriendlyMessage = "Erro de autenticação com o provedor de IA (401). Verifique a API Key.";
+      } else if (error.status === 429) {
+        userFriendlyMessage = "O agente está sobrecarregado ou sem créditos (429). Tente novamente mais tarde.";
+      } else if (error.code === 'insufficient_quota') {
+        userFriendlyMessage = "A conta da OpenAI está sem créditos (Quota Exceeded).";
+      }
+    }
+
     return {
-      reply: "Desculpe, ocorreu um erro interno ao processar sua solicitação.",
+      reply: userFriendlyMessage,
       agentId: opts.agentId,
       reason: error.message
     };

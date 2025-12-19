@@ -138,7 +138,7 @@ app.use(cors({
 }));
 
 // Garantir que preflight (OPTIONS) responda corretamente para todas as rotas
-app.options("*", cors());
+app.options(/(.*)/, cors());
 
 // ===== WEBHOOKS (RAW BODY) =====
 // Must be before express.json() to preserve signature

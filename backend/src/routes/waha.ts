@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { requireAuth } from "../middlewares/requireAuth";
 import { publish, publishMeta, publishApp, EX_APP } from "../queue/rabbit";
 import { getIO } from "../lib/io";
-import { clearCompanyListCaches, rGet, rSet, k } from "../lib/redis";
+import { clearCompanyListCaches, rGet, rSet, k, rememberListCacheKey } from "../lib/redis";
 import { supabaseAdmin } from "../lib/supabase";
 import { getDecryptedCredsForInbox } from "../services/meta/store";
 import { WAHA_BASE_URL, WAHA_PROVIDER, wahaFetch, WahaHttpError } from "../services/waha/client";
@@ -1266,6 +1266,8 @@ export function registerWAHARoutes(app: Express) {
       };
 
       await rSet(cacheKey, payload, TTL_LIST);
+      const indexKey = k.listIndex(inbox.company_id, inbox.id, normalizedStatus, undefined);
+      await rememberListCacheKey(indexKey, cacheKey, TTL_LIST);
     }
 
     const wahaChats = payload.items.map((chat) => {

@@ -412,7 +412,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         normalizedStatus && normalizedStatus !== "ALL" ? normalizedStatus : undefined;
       const statusSegment = statusFilter ?? "ALL";
       const kindSegment = kindFilter ?? "ALL";
-      const deptSegment = departmentId ?? "ALL";
+      const deptSegment = departmentId || undefined;
 
       const actorResp = await traceSupabase(
         "users.company",

@@ -1777,6 +1777,8 @@ async function handleMetaInboundMessages(args: {
     const inserted = await insertInboundMessage({
       id: messageId, // ✅ Pass generated ID
       chatId,
+      inboxId,
+      companyId,
       externalId: wamid,
       content,
       type,

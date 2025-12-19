@@ -1463,6 +1463,8 @@ export async function insertInboundMessage(args: {
   id?: string | null;
   chatId: string;
   externalId: string;
+  inboxId?: string;
+  companyId?: string;
   content: string;
   type?: "TEXT" | string;
   caption?: string | null;
@@ -1507,6 +1509,13 @@ export async function insertInboundMessage(args: {
     lastMessageFrom: "CUSTOMER",
     lastMessageType: args.type ?? result.message.type ?? "TEXT",
     lastMessageMediaUrl: result.message.media_url ?? null,
+    listContext: {
+      companyId: args.companyId,
+      inboxId: args.inboxId,
+      kind: args.remoteParticipantId ? "GROUP" : "DIRECT", // Infer kind from participant presence
+      chatType: args.remoteParticipantId ? "GROUP" : "CONTACT",
+      remoteId: null, // We don't have remoteId here easily, but invalidateChatCaches might fetch it if missing
+    },
   });
 
   // 🔔 Notificar usuário sobre nova mensagem

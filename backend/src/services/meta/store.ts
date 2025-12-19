@@ -454,6 +454,7 @@ type UpsertOutboundMessageResult = {
 };
 
 type UpsertChatMessageArgs = {
+  id?: string | null;
   chatId: string;
   externalId: string;
   isFromCustomer: boolean;
@@ -1215,7 +1216,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
       const row = await db.oneOrNone<UpsertChatMessageRow>(
         `
           insert into public.chat_messages
-            (chat_id, sender_id, is_from_customer, external_id, content, type, view_status,
+            (id, chat_id, sender_id, is_from_customer, external_id, content, type, view_status,
              media_storage_path, media_public_url, media_source, is_media_sensitive,
              media_url, media_sha256,
                sent_from_device,
@@ -1223,7 +1224,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
              remote_sender_avatar_url, remote_sender_is_admin, replied_message_id, caption, interactive_content, created_at,
              company_id, inbox_id)
           values
-            ($1, $2, $3, $4, $5, $6, $7,
+            (coalesce($25, gen_random_uuid()), $1, $2, $3, $4, $5, $6, $7,
              $8, $9, $10, $11,
              $12, $13,
                $14,
@@ -1300,6 +1301,7 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.caption ?? null,
           createdAtIso,
           args.interactiveContent ?? null,
+          args.id ?? null,
         ],
       );
       if (!row) return null;
@@ -1458,6 +1460,7 @@ export async function touchChatAfterMessage(args: {
 }
 
 export async function insertInboundMessage(args: {
+  id?: string | null;
   chatId: string;
   externalId: string;
   content: string;
@@ -1475,6 +1478,7 @@ export async function insertInboundMessage(args: {
 }): Promise<InsertedInboundMessage | null> {
   console.log("[META][store] insertInboundMessage payload", args);
   const result = await upsertChatMessage({
+    id: args.id,
     chatId: args.chatId,
     externalId: args.externalId,
     isFromCustomer: true,

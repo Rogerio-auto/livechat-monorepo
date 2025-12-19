@@ -3,7 +3,7 @@ import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { encryptMediaUrl, decryptMediaUrl, decryptSecret } from "../src/lib/crypto.ts";
 import {
   publish,
@@ -1716,13 +1716,15 @@ async function handleMetaInboundMessages(args: {
     // ========== OPTIMIZATION: Emit draft message BEFORE database insert ==========
     // This provides instant UI feedback (~200-300ms faster perception)
     const draftTimestamp = new Date().toISOString();
+    const messageId = randomUUID(); // ✅ Generate ID upfront for consistency
+
     try {
       await emitSocketWithRetry("socket.livechat.inbound", {
         kind: "livechat.inbound.message",
         chatId,
         companyId,
         message: {
-          id: `draft-${wamid}`, // Temporary ID
+          id: messageId, // ✅ Use consistent ID
           chat_id: chatId,
           external_id: wamid,
           body: content,
@@ -1773,6 +1775,7 @@ async function handleMetaInboundMessages(args: {
 
     // Insert message
     const inserted = await insertInboundMessage({
+      id: messageId, // ✅ Pass generated ID
       chatId,
       externalId: wamid,
       content,
@@ -2902,8 +2905,77 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   //   messageId
   // });
 
+  // ========== OPTIMIZATION: Generate ID and Emit Socket BEFORE DB ==========
+  const internalMessageId = randomUUID();
+  const optimisticCreatedAt = createdAt || new Date();
+  
+  const optimisticMessage = {
+    id: internalMessageId,
+    chat_id: chatId,
+    body,
+    sender_type: isFromCustomer ? ("CUSTOMER" as const) : ("AGENT" as const),
+    sender_id: null,
+    created_at: optimisticCreatedAt.toISOString(),
+    view_status: ackStatus ?? "Pending",
+    type: messageType,
+    is_private: false,
+    media_url: null,
+    media_public_url: null,
+    media_storage_path: null,
+    caption: caption ?? null,
+    remote_sender_id: remoteMeta?.remoteId ?? null,
+    remote_sender_name: remoteMeta
+      ? remoteMeta.name ?? (isGroupChat ? remoteMeta.phone ?? null : name ?? phoneForLead ?? null)
+      : null,
+    remote_sender_phone: remoteMeta
+      ? remoteMeta.phone ?? (isGroupChat ? null : phoneForLead ?? null)
+      : null,
+    remote_sender_avatar_url: remoteMeta?.avatarUrl ?? null,
+    remote_sender_is_admin: remoteMeta?.isAdmin ?? null,
+    remote_participant_id: remoteParticipantId ?? null,
+    replied_message_id: repliedMessageId ?? null,
+    client_draft_id: job?.draftId ?? msg?.draftId ?? null,
+    external_id: messageId,
+  };
+
+  try {
+    const chatSummary = await fetchChatUpdateForSocket(chatId);
+    const chatUpdatePayload = chatSummary
+      ? {
+          ...chatSummary,
+          last_message_from: optimisticMessage.sender_type,
+          companyId: job.companyId,
+        }
+      : {
+          chatId,
+          inboxId: job.inboxId,
+          last_message: optimisticMessage.body,
+          last_message_at: optimisticMessage.created_at,
+          last_message_from: optimisticMessage.sender_type,
+          customer_name: isGroupChat ? null : name ?? null,
+          customer_phone: isGroupChat ? null : phoneForLead ?? null,
+          kind: isGroupChat ? "GROUP" : null,
+          group_name: isGroupChat ? groupMeta?.name ?? name ?? chatJid : null,
+          group_avatar_url: isGroupChat ? groupMeta?.avatarUrl ?? null : null,
+          remote_id: isGroupChat ? chatJid : normalizeWahaJid(chatJid),
+          companyId: job.companyId,
+        };
+
+    await emitSocketWithRetry("socket.livechat.inbound", {
+      kind: "livechat.inbound.message",
+      chatId,
+      companyId: job.companyId,
+      inboxId: job.inboxId,
+      message: optimisticMessage,
+      chatUpdate: chatUpdatePayload,
+    });
+  } catch (err) {
+    console.error("[WAHA][worker] Optimistic socket emission failed", err);
+  }
+
   // ========== STEP 1: INSERT MESSAGE WITHOUT MEDIA (FAST PATH) ==========
   const upsertResult = await upsertChatMessage({
+    id: internalMessageId, // ✅ Pass generated ID
     chatId,
     externalId: messageId || `${chatId}:${Date.now()}`,
     isFromCustomer,

@@ -8,7 +8,8 @@ export type Industry =
   | "construction"   // Construção Civil
   | "real_estate"    // Imobiliária
   | "events"         // Eventos
-  | "law";           // Advocacia
+  | "law"            // Advocacia
+  | "retail";        // Varejo / Comércio
 
 export type TeamSize = "1-5" | "6-15" | "16-50" | "50+";
 

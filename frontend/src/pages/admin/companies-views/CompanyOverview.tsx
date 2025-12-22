@@ -92,7 +92,7 @@ export function CompanyOverview() {
 
   if (isLoading && !analytics) {
     return (
-      <div className="flex min-h-[280px] items-center justify-center rounded-3xl border border-white/5 bg-slate-900/70">
+      <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-white/5 bg-slate-900/70">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/10 border-t-white" />
       </div>
     );
@@ -100,7 +100,7 @@ export function CompanyOverview() {
 
   if (!company) {
     return (
-      <div className="rounded-3xl border border-white/5 bg-slate-900/70 p-8 text-slate-200">
+      <div className="rounded-xl border border-white/5 bg-slate-900/70 p-8 text-slate-200">
         <p className="text-sm text-slate-400">Selecione uma empresa para visualizar os detalhes.</p>
       </div>
     );
@@ -129,7 +129,7 @@ export function CompanyOverview() {
   const financeStatus = analytics?.finance.isActive ? 'Operacional' : 'Suspensa';
 
   return (
-    <div className="space-y-6 rounded-3xl border border-white/5 bg-slate-900/70 p-8 text-slate-200">
+    <div className="space-y-6 rounded-xl border border-white/5 bg-slate-900/70 p-8 text-slate-200">
       <div>
         <h3 className="text-xl font-semibold text-white">Visão Geral</h3>
         <p className="mt-2 text-sm text-slate-400">Panorama consolidado de {company.name}.</p>
@@ -138,7 +138,7 @@ export function CompanyOverview() {
       {cards.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {cards.map((card) => (
-            <div key={card.label} className="rounded-2xl border border-white/5 bg-slate-950/40 p-4">
+            <div key={card.label} className="rounded-xl border border-white/5 bg-slate-950/40 p-4">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{card.label}</p>
               <p className="mt-3 text-2xl font-semibold text-white">{card.value}</p>
             </div>
@@ -147,7 +147,7 @@ export function CompanyOverview() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/5 bg-slate-950/40 p-5">
+        <div className="rounded-xl border border-white/5 bg-slate-950/40 p-5">
           <h4 className="text-sm font-semibold text-white">Assinatura</h4>
           <dl className="mt-4 space-y-3 text-sm text-slate-300">
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -251,7 +251,7 @@ export function CompanyOverview() {
           </dl>
         </div>
 
-        <div className="rounded-2xl border border-white/5 bg-slate-950/40 p-5">
+        <div className="rounded-xl border border-white/5 bg-slate-950/40 p-5">
           <h4 className="text-sm font-semibold text-white">Contato</h4>
           <dl className="mt-4 space-y-3 text-sm text-slate-300">
             {company.email && (
@@ -281,3 +281,4 @@ export function CompanyOverview() {
     </div>
   );
 }
+

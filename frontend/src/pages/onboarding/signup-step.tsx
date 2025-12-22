@@ -73,7 +73,7 @@ export function SignupStep({ onNext }: SignupStepProps) {
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] items-stretch">
-      <section className="relative overflow-hidden rounded-2xl px-8 py-10 shadow-xl config-card">
+      <section className="relative overflow-hidden rounded-xl px-8 py-10 shadow-xl config-card">
         <div
           className="pointer-events-none absolute inset-0 opacity-60"
           style={{
@@ -149,7 +149,7 @@ export function SignupStep({ onNext }: SignupStepProps) {
 
       <form
         onSubmit={handleSubmit}
-        className="config-card relative rounded-2xl px-8 py-10 shadow-xl"
+        className="config-card relative rounded-xl px-8 py-10 shadow-xl"
       >
         <div className="mb-8 space-y-2 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full"
@@ -302,3 +302,4 @@ export function SignupStep({ onNext }: SignupStepProps) {
     </div>
   );
 }
+

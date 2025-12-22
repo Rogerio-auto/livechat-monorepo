@@ -3898,7 +3898,7 @@ const scrollToBottom = useCallback(
         
         {/* Alert overlay */}
         <div className="relative z-10 flex items-center justify-center h-full px-4">
-          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-red-200 dark:border-red-900 p-8">
+          <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-xl shadow-md border border-red-200 dark:border-red-900 p-8">
             <div className="text-center">
               {/* Icon */}
               <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
@@ -4029,7 +4029,7 @@ const scrollToBottom = useCallback(
 
                     {filtersOpen && (
                       <div
-                        className="absolute right-0 z-40 mt-2 w-64 rounded-2xl border shadow-2xl"
+                        className="absolute right-0 z-40 mt-2 w-64 rounded-xl border shadow-md"
                         style={{
                           backgroundColor: "var(--color-surface)",
                           borderColor: "color-mix(in srgb, var(--color-surface-muted) 60%, transparent)",
@@ -4627,6 +4627,7 @@ const scrollToBottom = useCallback(
     </div>
   );
 }
+
 
 
 

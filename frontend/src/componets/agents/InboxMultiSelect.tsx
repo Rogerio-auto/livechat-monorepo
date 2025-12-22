@@ -94,31 +94,31 @@ export function InboxMultiSelect({ selectedIds, onChange }: InboxMultiSelectProp
           className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
             selectedIds.includes(inbox.id)
               ? "bg-green-600/20 border border-green-500/30 hover:bg-green-600/25"
-              : "bg-gray-900 border border-gray-700 hover:bg-gray-800 hover:border-gray-600"
+              : "bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-700"
           }`}
         >
           <input
             type="checkbox"
             checked={selectedIds.includes(inbox.id)}
             onChange={() => handleToggle(inbox.id)}
-            className="w-4 h-4 text-green-600 bg-gray-700 border-gray-600 rounded focus:ring-green-500 focus:ring-offset-gray-900"
+            className="w-4 h-4 text-green-600 rounded border-gray-300 dark:border-gray-700 focus:ring-green-500 dark:bg-gray-800"
           />
           <div className="flex-1 min-w-0">
-            <p className="text-white font-medium truncate">{inbox.name}</p>
-            <p className="text-xs text-gray-400 truncate">{inbox.phone_number}</p>
+            <p className="text-gray-900 dark:text-white font-medium truncate">{inbox.name}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{inbox.phone_number}</p>
           </div>
           <div className="flex items-center gap-2">
             <span
               className={`text-xs px-2 py-1 rounded font-medium ${
                 inbox.provider === "META"
-                  ? "bg-blue-600/20 text-blue-400"
-                  : "bg-green-600/20 text-green-400"
+                  ? "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                  : "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
               }`}
             >
               {inbox.provider}
             </span>
             {!inbox.is_active && (
-              <span className="text-xs px-2 py-1 rounded bg-gray-600/20 text-gray-400">
+              <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
                 Inativa
               </span>
             )}

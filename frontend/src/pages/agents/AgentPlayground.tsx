@@ -173,12 +173,12 @@ const AgentPlayground: React.FC = () => {
           {messages.map((msg, i) => (
             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`flex gap-3 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                   msg.role === 'user' ? 'bg-gray-200' : 'bg-blue-100'
                 }`}>
                   {msg.role === 'user' ? <User className="w-5 h-5 text-gray-600" /> : <Bot className="w-5 h-5 text-blue-600" />}
                 </div>
-                <div className={`p-4 rounded-2xl ${
+                <div className={`p-4 rounded-xl ${
                   msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-gray-100 text-gray-800 rounded-tl-none'
                 }`}>
                   <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
@@ -195,7 +195,7 @@ const AgentPlayground: React.FC = () => {
                 <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
                   <Bot className="w-5 h-5 text-blue-600" />
                 </div>
-                <div className="p-4 bg-gray-100 rounded-2xl rounded-tl-none">
+                <div className="p-4 bg-gray-100 rounded-xl rounded-tl-none">
                   <div className="flex gap-1">
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
@@ -231,3 +231,4 @@ const AgentPlayground: React.FC = () => {
 };
 
 export default AgentPlayground;
+

@@ -14,7 +14,7 @@ import * as db from "../pg.ts";
 const upload = multer({ 
   storage: multer.memoryStorage(), 
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: any, file: any, cb: any) => {
     const allowed = /\.(txt|csv|xlsx|xls)$/i;
     if (allowed.test(file.originalname)) {
       cb(null, true);
@@ -1591,7 +1591,7 @@ const insert = {
           console.log(`[campaigns] Contact ensured: chatId=${ensured.chatId}, customerId=${ensured.customerId}`);
           
           // Track if new entities were created
-          if (ensured.customerId && !ensured.existingCustomer) {
+          if (ensured.customerId && !(ensured as any).existingCustomer) {
             created_customers++;
           }
           
@@ -1665,11 +1665,11 @@ const insert = {
           .maybeSingle();
         
         const template = campaignWithTemplate?.campaign_steps?.[0]?.message_templates;
-        const payload = template?.payload as any;
-        const templateCategory = payload?.category || template?.kind;
+        const payload = (template as any)?.payload as any;
+        const templateCategory = payload?.category || (template as any)?.kind;
         
         if (templateCategory === "MARKETING") {
-          const { countRecipientsWithoutOptIn } = await import("../services/campaigns/optIn.js");
+          const { countRecipientsWithoutOptIn } = await import("../services/customers/optIn.ts");
           const withoutOptIn = await countRecipientsWithoutOptIn(campaignId);
           
           if (withoutOptIn > 0) {

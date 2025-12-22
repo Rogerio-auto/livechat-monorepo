@@ -51,7 +51,7 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl">
+      <div className="relative w-full max-w-md mx-4 bg-white dark:bg-gray-800 rounded-xl shadow-md">
         {/* Close button */}
         <button
           onClick={handleClose}
@@ -162,3 +162,4 @@ export function ForgotPasswordModal({ isOpen, onClose }: ForgotPasswordModalProp
     </div>
   );
 }
+

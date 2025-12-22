@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { API, fetchJson } from "../../utils/api";
 import type { AgentTemplate } from "../../types/types";
+import { ArrowLeft, Sparkles, Check, Loader2, Bot, Zap } from "lucide-react";
 
 type ToolCapability = {
   key: string;
@@ -41,7 +42,6 @@ export function AgentTemplateSelector({ onSelectTemplate, onBack }: Props) {
     try {
       const data = await fetchJson<AgentTemplate[]>(`${API}/api/agent-templates`);
       const templatesArray = Array.isArray(data) ? data : [];
-      console.log("📋 Templates carregados:", templatesArray);
       setTemplates(templatesArray);
 
       // Carregar ferramentas para cada template
@@ -49,7 +49,6 @@ export function AgentTemplateSelector({ onSelectTemplate, onBack }: Props) {
       for (const template of templatesArray) {
         try {
           const tools = await fetchJson<any[]>(`${API}/api/agent-templates/${template.id}/tools`);
-          console.log(`🔧 Ferramentas do template ${template.name}:`, tools);
           toolsMap[template.id] = tools.map((t) => ({
             key: t.key,
             name: t.name,
@@ -71,119 +70,87 @@ export function AgentTemplateSelector({ onSelectTemplate, onBack }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="inline-block w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-400">Carregando opções...</p>
-        </div>
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <p className="text-gray-500 animate-pulse">Carregando templates...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
+    <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-10">
         <button
           onClick={onBack}
-          className="text-gray-400 hover:text-white mb-4 flex items-center gap-2 transition"
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4 flex items-center gap-2 transition-colors group"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Voltar
+          <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+          Voltar para Agentes
         </button>
-        <h2 className="text-3xl font-bold text-white mb-2">Escolha o tipo de agente</h2>
-        <p className="text-gray-400">
-          Selecione o modelo que melhor se encaixa na sua necessidade
+        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Escolha o tipo de agente</h2>
+        <p className="text-gray-500 dark:text-gray-400 text-lg">
+          Selecione o modelo que melhor se encaixa na sua necessidade de atendimento.
         </p>
       </div>
 
-      {/* Templates Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {templates.map((template) => (
-          <TemplateCard
+          <div
             key={template.id}
-            template={template}
-            tools={templateTools[template.id] || []}
-            onSelect={() => onSelectTemplate(template)}
-          />
+            className="group relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 hover:border-blue-500 dark:hover:border-blue-400 hover:shadow-xl hover:shadow-blue-500/5 transition-all cursor-pointer flex flex-col h-full"
+            onClick={() => onSelectTemplate(template)}
+          >
+            <div className="flex items-start justify-between mb-6">
+              <div className="w-14 h-14 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                <Bot className="w-8 h-8 text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
+              </div>
+              <div className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Template
+              </div>
+            </div>
+
+            <div className="flex-grow">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                {template.name}
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm leading-relaxed mb-6">
+                {template.description}
+              </p>
+
+              {templateTools[template.id]?.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
+                    Capacidades inclusas:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {templateTools[template.id].map((tool) => (
+                      <div
+                        key={tool.key}
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-lg text-xs text-gray-600 dark:text-gray-400"
+                      >
+                        <Zap className="w-3 h-3 text-amber-500" />
+                        {tool.userFriendlyLabel}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <span className="text-sm font-semibold text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                Selecionar este modelo
+                <Check className="w-4 h-4" />
+              </span>
+              <div className="w-8 h-8 rounded-full bg-gray-50 dark:bg-gray-800 flex items-center justify-center group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+                <ArrowLeft className="w-4 h-4 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 dark:group-hover:text-blue-400 rotate-180 transition-all" />
+              </div>
+            </div>
+          </div>
         ))}
       </div>
-
-      {templates.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-400">Nenhum template disponível no momento.</p>
-          <p className="text-sm text-gray-500 mt-2">Entre em contato com o suporte.</p>
-        </div>
-      )}
     </div>
   );
 }
 
-function TemplateCard({
-  template,
-  tools,
-  onSelect,
-}: {
-  template: AgentTemplate;
-  tools: ToolCapability[];
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      onClick={onSelect}
-      className="group relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 text-left hover:from-blue-900 hover:to-indigo-900 transition-all duration-300 border-2 border-gray-700 hover:border-blue-500 hover:shadow-xl hover:scale-105"
-    >
-      {/* Category Badge */}
-      {template.category && (
-        <div className="px-3 py-1 bg-blue-600/20 text-blue-400 text-xs font-medium rounded-full border border-blue-500/30 mb-4 inline-block">
-          {template.category}
-        </div>
-      )}
-
-      {/* Title */}
-      <h3 className="text-xl font-bold text-white mb-2 group-hover:text-blue-300 transition">
-        {template.name}
-      </h3>
-
-      {/* Description */}
-      <p className="text-gray-400 text-sm mb-4 line-clamp-3">{template.description}</p>
-
-      {/* Capacidades do Agente */}
-      {tools.length > 0 && (
-        <div className="mb-4 space-y-2">
-          <p className="text-xs font-semibold text-gray-300 uppercase tracking-wide mb-2">
-            O que este agente pode fazer:
-          </p>
-          <ul className="space-y-1.5">
-            {tools.map((tool, idx) => (
-              <li key={`${tool.key}-${idx}`} className="flex items-start gap-2 text-sm text-gray-300">
-                <svg
-                  className="w-4 h-4 text-green-400 mt-0.5 shrink-0"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                <span>{tool.userFriendlyLabel}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Arrow */}
-      <div className="flex items-center text-blue-400 font-medium text-sm group-hover:translate-x-1 transition-transform">
-        Selecionar
-        <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-    </button>
-  );
-}

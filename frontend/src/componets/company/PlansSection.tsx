@@ -173,7 +173,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
     <div className="space-y-6">
       {/* Current Plan Status */}
       {subscription ? (
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-2xl p-6 border border-blue-200 dark:border-blue-800">
+        <div className="bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
@@ -211,9 +211,9 @@ export function PlansSection({ onClose }: PlansSectionProps) {
           </div>
         </div>
       ) : (
-        <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-6 border border-amber-200 dark:border-amber-800">
+        <div className="bg-linear-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl p-6 border border-amber-200 dark:border-amber-800">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                 Nenhum plano ativo
@@ -228,7 +228,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
 
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
           </div>
@@ -251,7 +251,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
           return (
             <div
               key={plan.id}
-              className={`relative bg-white dark:bg-gray-800 rounded-2xl p-6 border-2 transition-all ${
+              className={`relative bg-white dark:bg-gray-800 rounded-xl p-6 border-2 transition-all ${
                 isCurrent
                   ? "border-blue-500 shadow-lg shadow-blue-500/20"
                   : "border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600"
@@ -265,7 +265,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
 
               <div className="text-center mb-6">
                 <div
-                  className={`w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br ${gradientClass} flex items-center justify-center`}
+                  className={`w-16 h-16 mx-auto mb-4 rounded-xl bg-linear-to-br ${gradientClass} flex items-center justify-center`}
                 >
                   <Icon className="h-8 w-8 text-white" />
                 </div>
@@ -283,7 +283,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
               <ul className="space-y-3 mb-6">
                 {Object.entries(plan.limits).slice(0, 5).map(([key, value]) => (
                   <li key={key} className="flex items-start gap-2 text-sm">
-                    <Check className="h-4 w-4 text-green-500 flex-shrink-0 mt-0.5" />
+                    <Check className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
                     <span className="text-gray-700 dark:text-gray-300">
                       {usageLabels[key] || key}:{" "}
                       <span className="font-semibold">
@@ -307,7 +307,7 @@ export function PlansSection({ onClose }: PlansSectionProps) {
                   disabled={upgrading}
                   className={`w-full py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     gradientClass
-                      ? `bg-gradient-to-r ${gradientClass} hover:opacity-90 text-white`
+                      ? `bg-linear-to-r ${gradientClass} hover:opacity-90 text-white`
                       : "bg-blue-600 hover:bg-blue-700 text-white"
                   }`}
                 >
@@ -339,3 +339,4 @@ export function PlansSection({ onClose }: PlansSectionProps) {
     </div>
   );
 }
+

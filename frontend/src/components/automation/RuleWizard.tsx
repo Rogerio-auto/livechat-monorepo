@@ -132,7 +132,7 @@ export function RuleWizard({ onClose, onSuccess }: RuleWizardProps) {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-md">
         {/* Header */}
         <div className="relative bg-gradient-to-r from-blue-600 to-purple-600 p-8 text-white">
           <button
@@ -297,3 +297,4 @@ export function RuleWizard({ onClose, onSuccess }: RuleWizardProps) {
     </div>
   );
 }
+

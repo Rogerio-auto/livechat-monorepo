@@ -27,8 +27,8 @@ export default function LivechatMenu({ section, onChange, collapsed = false }: P
       {items.map(({ key, label, Icon }) => {
         const active = key === section;
         const buttonClass = active
-          ? "text-[var(--color-heading)] border"
-          : "text-[var(--color-text-muted)] border border-transparent hover:border-[color:var(--color-border)] hover:bg-[color:color-mix(in srgb,var(--color-bg) 65%,transparent)]";
+          ? "text-(--color-heading) border"
+          : "text-(--color-text-muted) border border-transparent hover:border-[color:var(--color-border)] hover:bg-[color:color-mix(in srgb,var(--color-bg) 65%,transparent)]";
         const style = active
           ? {
               backgroundColor: "color-mix(in srgb, var(--color-primary) 16%, transparent)",
@@ -43,7 +43,7 @@ export default function LivechatMenu({ section, onChange, collapsed = false }: P
             style={style}
             title={collapsed ? label : undefined}
           >
-            <Icon className={`${active ? "text-[var(--color-highlight)]" : "text-[var(--color-text-muted)]"} ${collapsed ? 'w-5 h-5' : ''}`} />
+            <Icon className={`${active ? "text-(--color-highlight)" : "text-(--color-text-muted)"} ${collapsed ? 'w-5 h-5' : ''}`} />
             {!collapsed && <span className="truncate">{label}</span>}
           </button>
         );

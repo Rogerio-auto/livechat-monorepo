@@ -120,7 +120,7 @@ export function startSocketRelay(io: Server) {
       
       console.log("[socket.relay] 📨 Received message from queue:", {
         kind: payload?.kind,
-        chatId: payload?.chatId,
+        chatId: (payload as any)?.chatId,
         companyId: (payload as any)?.companyId,
         hasMessage: !!(payload as any)?.message,
         hasChatUpdate: !!(payload as any)?.chatUpdate,
@@ -129,16 +129,16 @@ export function startSocketRelay(io: Server) {
       switch (payload?.kind) {
         case "livechat.inbound.message":
         case "livechat.outbound.message":
-          emitMessage(io, payload);
+          emitMessage(io, payload as any);
           break;
         case "livechat.message.status":
-          emitStatus(io, payload);
+          emitStatus(io, payload as any);
           break;
         case "notification":
-          emitNotification(io, payload);
+          emitNotification(io, payload as any);
           break;
         default:
-          console.log("[socket.relay] ⚠️ Unknown message kind:", payload?.kind);
+          console.log("[socket.relay] ⚠️ Unknown message kind:", (payload as any)?.kind);
           break;
       }
       ch.ack(msg);

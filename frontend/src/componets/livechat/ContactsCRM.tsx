@@ -218,28 +218,28 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 overflow-hidden shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] transition-colors duration-300">
+    <div className="rounded-xl border border-(--color-border) bg-(--color-surface)/95 overflow-hidden shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] transition-colors duration-300">
       {/* Header / Filters */}
-      <div className="sticky top-0 z-10 border-b border-[color:var(--color-border)] bg-[color:var(--color-surface)]/90 backdrop-blur px-4 pt-4 pb-3">
+      <div className="sticky top-0 z-10 border-b border-(--color-border) bg-(--color-surface)/90 backdrop-blur px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="font-semibold text-[var(--color-heading)]">Contatos</div>
-          <div className="text-sm text-[var(--color-text-muted)]">{total} no total</div>
+          <div className="font-semibold text-(--color-heading)">Contatos</div>
+          <div className="text-sm text-(--color-text-muted)">{total} no total</div>
         </div>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
           <input
-            className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+            className="rounded-lg border border-(--color-border) bg-(--color-bg)/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
             placeholder="Buscar por nome, telefone, email..."
             value={q}
             onChange={(e) => { setQ(e.target.value); setPage(1); }}
           />
           <input
-            className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+            className="rounded-lg border border-(--color-border) bg-(--color-bg)/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
             placeholder="Cidade"
             value={city}
             onChange={(e) => { setCity(e.target.value); setPage(1); }}
           />
           <input
-            className="bg-[color:var(--color-surface)]/95 border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm w-full sm:w-24 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="bg-(--color-surface)/95 border border-(--color-border) rounded-lg px-3 py-2 text-sm w-full sm:w-24 focus:outline-none focus:ring-2 focus:ring-emerald-500"
             placeholder="UF"
             value={uf}
             onChange={(e) => { setUf(e.target.value.toUpperCase()); setPage(1); }}
@@ -249,13 +249,13 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
         <div className="mt-2 flex items-center gap-2">
           <button
             onClick={() => { setQ(""); setCity(""); setUf(""); setPage(1); }}
-            className="rounded-lg border border-[color:var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55"
+            className="rounded-lg border border-(--color-border) px-3 py-1.5 text-xs text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55"
           >
             Limpar filtros
           </button>
           <button
             onClick={() => setShowNewModal(true)}
-            className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--color-on-primary)] transition-colors duration-150 hover:bg-[var(--color-primary-strong)]"
+            className="rounded-lg bg-(--color-primary) px-3 py-1.5 text-xs font-semibold text-(--color-on-primary) transition-colors duration-150 hover:bg-(--color-primary-strong)"
           >
             Adicionar contato
           </button>
@@ -267,38 +267,38 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
         {loadingList ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-28 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/55 animate-pulse" />
+              <div key={i} className="h-28 rounded-xl border border-(--color-border) bg-(--color-bg)/55 animate-pulse" />
             ))}
           </div>
         ) : items.length === 0 ? (
-          <div className="text-center py-20 text-[var(--color-text-muted)]">
+          <div className="text-center py-20 text-(--color-text-muted)">
             <div className="text-lg font-medium">Nenhum contato encontrado</div>
             <div className="text-sm">Ajuste os filtros ou crie um novo contato.</div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {items.map((c) => (
-              <div key={c.id} className="rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 shadow-[0_18px_40px_-35px_rgba(8,12,20,0.9)] transition-colors duration-300">
+              <div key={c.id} className="rounded-xl border border-(--color-border) bg-(--color-surface)/95 shadow-[0_18px_40px_-35px_rgba(8,12,20,0.9)] transition-colors duration-300">
                 <button
-                  className="w-full text-left flex items-center gap-3 p-4 transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55"
+                  className="w-full text-left flex items-center gap-3 p-4 transition-colors duration-150 hover:bg-(--color-bg)/55"
                   onClick={() => expand(c.id)}
                 >
-                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[color:color-mix(in srgb,var(--color-highlight) 22%,transparent)] text-[var(--color-heading)] text-sm font-bold">
+                  <div className="flex items-center justify-center h-10 w-10 rounded-full bg-[color:color-mix(in srgb,var(--color-highlight) 22%,transparent)] text-(--color-heading) text-sm font-bold">
                     {initials(c.name)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-[var(--color-heading)] truncate">{c.name}</div>
-                    <div className="text-xs text-[var(--color-text-muted)] truncate">{linkOrDash(c.phone) || linkOrDash(c.email)}</div>
+                    <div className="font-semibold text-(--color-heading) truncate">{c.name}</div>
+                    <div className="text-xs text-(--color-text-muted) truncate">{linkOrDash(c.phone) || linkOrDash(c.email)}</div>
                   </div>
-                  <span className="text-xs text-[var(--color-text-muted)] rounded bg-[color:var(--color-bg)]/55 px-2 py-0.5">
+                  <span className="text-xs text-(--color-text-muted) rounded bg-(--color-bg)/55 px-2 py-0.5">
                     {expanded === c.id ? "Fechar" : "Abrir"}
                   </span>
                 </button>
 
                 {expanded === c.id && (
-                  <div className="border-t border-[color:var(--color-border)] bg-[color:var(--color-bg)]/40 p-4">
+                  <div className="border-t border-(--color-border) bg-(--color-bg)/40 p-4">
                     {loadingOne ? (
-                      <div className="h-40 rounded-lg bg-[color:var(--color-bg)]/55 animate-pulse" />
+                      <div className="h-40 rounded-lg bg-(--color-bg)/55 animate-pulse" />
                     ) : (
                       <div className="flex flex-col gap-4">
                         {/* Quick info grid */}
@@ -314,9 +314,9 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                             ["website", "Website"],
                           ] as const).map(([k, label]) => (
                             <div key={k}>
-                              <label className="block text-xs text-[var(--color-text-muted)] mb-1">{label}</label>
+                              <label className="block text-xs text-(--color-text-muted) mb-1">{label}</label>
                               <input
-                                className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                                className="w-full rounded-lg border border-(--color-border) bg-(--color-bg)/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
                                 value={(form as any)[k] || ""}
                                 onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
                               />
@@ -325,9 +325,9 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                         </div>
 
                         <div>
-                          <label className="block text-xs text-[var(--color-text-muted)] mb-1">Observações</label>
+                          <label className="block text-xs text-(--color-text-muted) mb-1">Observações</label>
                           <textarea
-                            className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                            className="w-full rounded-lg border border-(--color-border) bg-(--color-bg)/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
                             rows={3}
                             value={form.notes || ""}
                             onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
@@ -338,9 +338,9 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                         <div className="flex items-end justify-between gap-3 flex-wrap">
                           <div className="flex items-end gap-3 flex-wrap">
                             <div>
-                              <label className="block text-xs text-[var(--color-text-muted)] mb-1">Inbox</label>
+                              <label className="block text-xs text-(--color-text-muted) mb-1">Inbox</label>
                               <select
-                                className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                                className="rounded-lg border border-(--color-border) bg-(--color-bg)/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
                                 value={inboxId}
                                 onChange={(e) => setInboxId(e.target.value)}
                               >
@@ -350,8 +350,8 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                                 ))}
                               </select>
                             </div>
-                            <div className="text-xs text-[var(--color-text-muted)] self-center">
-                              {dirty ? <span className="px-2 py-0.5 rounded bg-[color:color-mix(in srgb,var(--color-highlight) 20%,transparent)] text-[var(--color-highlight)]">Alterações não salvas</span> : <span className="px-2 py-0.5 rounded bg-[color:color-mix(in srgb,var(--color-primary) 18%,transparent)] text-[var(--color-heading)]">Tudo salvo</span>}
+                            <div className="text-xs text-(--color-text-muted) self-center">
+                              {dirty ? <span className="px-2 py-0.5 rounded bg-[color:color-mix(in srgb,var(--color-highlight) 20%,transparent)] text-(--color-highlight)">Alterações não salvas</span> : <span className="px-2 py-0.5 rounded bg-[color:color-mix(in srgb,var(--color-primary) 18%,transparent)] text-(--color-heading)">Tudo salvo</span>}
                             </div>
                           </div>
 
@@ -361,7 +361,7 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                               disabled={!dirty || saving}
                               className={cls(
                                 "px-3 py-2 rounded-lg text-sm border",
-                                dirty ? "bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] border-[color:color-mix(in srgb,var(--color-highlight) 45%,transparent)] hover:bg-[color:color-mix(in srgb,var(--color-highlight) 26%,transparent)]" : "bg-[color:var(--color-bg)]/55 border-[color:var(--color-border)] text-[var(--color-text-muted)] cursor-not-allowed"
+                                dirty ? "bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] border-[color:color-mix(in srgb,var(--color-highlight) 45%,transparent)] hover:bg-[color:color-mix(in srgb,var(--color-highlight) 26%,transparent)]" : "bg-(--color-bg)/55 border-(--color-border) text-(--color-text-muted) cursor-not-allowed"
                               )}
                             >
                               {saving ? "Salvando..." : "Salvar"}
@@ -370,8 +370,8 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                               onClick={startChat}
                               disabled={!inboxId || startingChat}
                               className={cls(
-                                "px-3 py-2 rounded-lg text-sm text-[var(--color-on-primary)] transition-colors duration-150",
-                                !inboxId || startingChat ? "bg-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]/60 cursor-not-allowed" : "bg-[var(--color-primary)] hover:bg-[var(--color-primary-strong)]"
+                                "px-3 py-2 rounded-lg text-sm text-(--color-on-primary) transition-colors duration-150",
+                                !inboxId || startingChat ? "bg-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]/60 cursor-not-allowed" : "bg-(--color-primary) hover:bg-(--color-primary-strong)"
                               )}
                             >
                               {startingChat ? "Abrindo..." : "Iniciar conversa"}
@@ -380,18 +380,18 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
                         </div>
 
                         {/* Quick links */}
-                        <div className="pt-2 border-t border-[color:var(--color-border)] flex flex-wrap gap-2 text-xs text-[var(--color-text)]">
+                        <div className="pt-2 border-t border-(--color-border) flex flex-wrap gap-2 text-xs text-(--color-text)">
                           {form.phone && (
-                            <a className="px-2 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55" href={`tel:${form.phone}`}>Ligar</a>
+                            <a className="px-2 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55" href={`tel:${form.phone}`}>Ligar</a>
                           )}
                           {form.phone && (
-                            <a className="px-2 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55" target="_blank" rel="noreferrer" href={`https://wa.me/${String(form.phone).replace(/\D/g, "")}`}>WhatsApp</a>
+                            <a className="px-2 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55" target="_blank" rel="noreferrer" href={`https://wa.me/${String(form.phone).replace(/\D/g, "")}`}>WhatsApp</a>
                           )}
                           {form.email && (
-                            <a className="px-2 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55" href={`mailto:${form.email}`}>E-mail</a>
+                            <a className="px-2 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55" href={`mailto:${form.email}`}>E-mail</a>
                           )}
                           {form.website && (
-                            <a className="px-2 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55" target="_blank" rel="noreferrer" href={String(form.website).startsWith("http") ? String(form.website) : `https://${form.website}`}>Site</a>
+                            <a className="px-2 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55" target="_blank" rel="noreferrer" href={String(form.website).startsWith("http") ? String(form.website) : `https://${form.website}`}>Site</a>
                           )}
                         </div>
                       </div>
@@ -404,13 +404,13 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
         )}
 
         {/* Pagination */}
-        <div className="mt-6 flex items-center justify-between text-sm text-[var(--color-text-muted)]">
+        <div className="mt-6 flex items-center justify-between text-sm text-(--color-text-muted)">
           <div>
             Mostrando {total === 0 ? 0 : (page - 1) * pageSize + 1}-{Math.min(total, page * pageSize)} de {total}
           </div>
           <div className="flex items-center gap-2">
             <button
-              className="px-3 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55 disabled:opacity-50"
+              className="px-3 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55 disabled:opacity-50"
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
@@ -420,7 +420,7 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
               {page}/{totalPages}
             </span>
             <button
-              className="px-3 py-1 rounded border border-[color:var(--color-border)] text-[var(--color-text)] transition-colors duration-150 hover:bg-[color:var(--color-bg)]/55 disabled:opacity-50"
+              className="px-3 py-1 rounded border border-(--color-border) text-(--color-text) transition-colors duration-150 hover:bg-(--color-bg)/55 disabled:opacity-50"
               disabled={page >= totalPages}
               onClick={() => setPage((p) => p + 1)}
             >
@@ -437,7 +437,7 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
           style={{ backgroundColor: "color-mix(in srgb, var(--color-overlay) 80%, transparent)" }}
         >
           <div
-            className="w-[min(720px,95vw)] rounded-2xl border p-4 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] transition-colors duration-300"
+            className="w-[min(720px,95vw)] rounded-xl border p-4 shadow-[0_32px_70px_-45px_rgba(8,12,20,0.95)] transition-colors duration-300"
             style={{
               borderColor: "var(--color-border)",
               backgroundColor: "color-mix(in srgb, var(--color-surface) 95%, transparent)",
@@ -536,3 +536,4 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
     </div>
   );
 }
+

@@ -17,13 +17,29 @@ export const formatCEP = (v: string) => {
 export const unformatCEP = onlyDigits;
 
 export const formatPhoneBR = (v: string) => {
-  const s = onlyDigits(v).slice(0, 11); // 10 fixo, 11 celular
-  if (s.length <= 2) return `(${s}`;
-  if (s.length <= 6) return `(${s.slice(0,2)}) ${s.slice(2)}`;
-  if (s.length <= 10) return `(${s.slice(0,2)}) ${s.slice(2,6)}-${s.slice(6)}`;
-  return `(${s.slice(0,2)}) ${s.slice(2,7)}-${s.slice(7,11)}`;
+  let s = onlyDigits(v);
+  // Se o usuário digitou 55 no início, removemos para formatar apenas o DDD + Número
+  if (s.startsWith("55") && s.length > 2) {
+    s = s.slice(2);
+  }
+  s = s.slice(0, 11);
+
+  if (s.length === 0) return "";
+  if (s.length <= 2) return `+55 (${s}`;
+  if (s.length <= 6) return `+55 (${s.slice(0, 2)}) ${s.slice(2)}`;
+  if (s.length <= 10) return `+55 (${s.slice(0, 2)}) ${s.slice(2, 6)}-${s.slice(6)}`;
+  return `+55 (${s.slice(0, 2)}) ${s.slice(2, 7)}-${s.slice(7, 11)}`;
 };
-export const unformatPhoneBR = onlyDigits;
+
+export const unformatPhoneBR = (v: string) => {
+  let s = onlyDigits(v);
+  if (!s) return "";
+  // Garante que tenha o 55 no início se não tiver
+  if (!s.startsWith("55")) {
+    s = "55" + s;
+  }
+  return s;
+};
 
 export const toISODate = (v: string) => {
   // vindo do <input type="date"> (YYYY-MM-DD)

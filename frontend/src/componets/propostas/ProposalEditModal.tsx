@@ -56,7 +56,7 @@ export default function ProposalEditModal({ proposal, onClose, onSaved }: Props)
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl">
+      <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-[#204A34]">Editar Proposta {proposal.number}</h3>
           <button className="text-zinc-500 hover:text-zinc-800" onClick={onClose} disabled={saving}><FaTimes /></button>
@@ -89,6 +89,7 @@ export default function ProposalEditModal({ proposal, onClose, onSaved }: Props)
     </div>
   );
 }
+
 
 
 

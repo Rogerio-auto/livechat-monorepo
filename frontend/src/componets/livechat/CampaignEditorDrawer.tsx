@@ -163,9 +163,9 @@ export default function CampaignEditorDrawer({
       <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       
       {/* Drawer */}
-      <div className="w-[540px] h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl flex flex-col">
+      <div className="w-[540px] h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-md flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">Editar Campanha</h2>
@@ -378,7 +378,7 @@ export default function CampaignEditorDrawer({
               {/* Dica */}
               {!previewData && !commitResult && (
                 <div className="text-center py-6">
-                  <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center">
+                  <div className="w-16 h-16 mx-auto mb-3 rounded-xl bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center">
                     <FiUsers className="w-8 h-8 text-gray-400" />
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -471,3 +471,4 @@ function ReadyBlock({ apiBase, campaignId }: { apiBase: string; campaignId: stri
     </div>
   );
 }
+

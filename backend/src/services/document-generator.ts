@@ -219,7 +219,7 @@ export async function generateDocumentFromTemplate(
       .from("document_templates")
       .select("*")
       .eq("id", templateId)
-      .eq("company_id", companyId)
+      .or(`company_id.eq.${companyId},company_id.is.null`)
       .eq("is_active", true)
       .maybeSingle();
 

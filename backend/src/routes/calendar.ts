@@ -202,9 +202,167 @@ export function registerCalendarRoutes(app: express.Application) {
         });
       }
 
+      // ==================== 2. PROJETOS ====================
+      const { data: projects } = await supabaseAdmin
+        .from("projects")
+        .select("id, title, start_date, estimated_end_date, status, priority, owner_user_id, assigned_users")
+        .eq("company_id", (req.user as any).company_id)
+        .eq("is_archived", false)
+        .or(`start_date.gte.${start},estimated_end_date.lte.${end}`);
+
+      if (projects) {
+        for (const project of projects) {
+          // Verificar se usuário está envolvido no projeto
+          const isInvolved = 
+            project.owner_user_id === authUserId ||
+            (project.assigned_users || []).includes(authUserId);
+
+          if (isInvolved) {
+            // Adicionar evento de início
+            if (project.start_date) {
+              items.push({
+                id: `project-start-${project.id}`,
+                title: `🚀 Início: ${project.title}`,
+                start: project.start_date,
+                end: project.start_date,
+                type: 'project-start',
+                color: getPriorityColor(project.priority),
+                allDay: true,
+                projectId: project.id,
+                url: `/projects/${project.id}`,
+              });
+            }
+
+            // Adicionar evento de prazo
+            if (project.estimated_end_date) {
+              const isOverdue = new Date(project.estimated_end_date) < new Date() && project.status === 'active';
+              
+              items.push({
+                id: `project-deadline-${project.id}`,
+                title: `${isOverdue ? '🚨' : '🏁'} Prazo: ${project.title}`,
+                start: project.estimated_end_date,
+                end: project.estimated_end_date,
+                type: 'project-deadline',
+                color: isOverdue ? '#EF4444' : getPriorityColor(project.priority),
+                allDay: true,
+                projectId: project.id,
+                url: `/projects/${project.id}`,
+                className: isOverdue ? 'event-overdue' : '',
+              });
+            }
+          }
+        }
+      }
+
+      // ==================== 3. TAREFAS ====================
+      const { data: tasks } = await supabaseAdmin
+        .from("project_tasks")
+        .select(`
+          id,
+          title,
+          due_date,
+          is_completed,
+          assigned_to,
+          project_id,
+          projects (
+            id,
+            title,
+            priority
+          )
+        `)
+        .eq("is_completed", false)
+        .eq("assigned_to", authUserId)
+        .gte("due_date", start)
+        .lte("due_date", end);
+
+      if (tasks) {
+        for (const task of tasks) {
+          const isOverdue = new Date(task.due_date) < new Date();
+          
+          items.push({
+            id: `task-${task.id}`,
+            title: `${isOverdue ? '🚨' : '✅'} ${task.title}`,
+            start: task.due_date,
+            end: task.due_date,
+            type: 'task',
+            color: isOverdue ? '#EF4444' : '#8B5CF6',
+            allDay: true,
+            taskId: task.id,
+            projectId: task.project_id,
+            url: `/projects/${task.project_id}?tab=tasks`,
+            className: isOverdue ? 'event-overdue' : '',
+            extendedProps: {
+              projectTitle: (task.projects as any)?.title,
+            },
+          });
+        }
+      }
+
       return res.json({ items });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "Events list error" });
+    }
+  });
+
+  /**
+   * GET /calendar/summary
+   * Resumo de eventos do dia/semana
+   */
+  app.get("/calendar/summary", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      const companyId = req.user?.company_id;
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+
+      // Projetos vencendo hoje
+      const { data: projectsDueToday } = await supabaseAdmin
+        .from("projects")
+        .select("id, title")
+        .eq("company_id", companyId)
+        .eq("status", "active")
+        .gte("estimated_end_date", today.toISOString().split('T')[0])
+        .lt("estimated_end_date", tomorrow.toISOString().split('T')[0])
+        .or(`owner_user_id.eq.${userId},assigned_users.cs.{${userId}}`);
+
+      // Tarefas vencendo hoje
+      const { data: tasksDueToday } = await supabaseAdmin
+        .from("project_tasks")
+        .select("id, title, project_id")
+        .eq("assigned_to", userId)
+        .eq("is_completed", false)
+        .gte("due_date", today.toISOString().split('T')[0])
+        .lt("due_date", tomorrow.toISOString().split('T')[0]);
+
+      // Projetos vencendo esta semana
+      const { data: projectsDueThisWeek } = await supabaseAdmin
+        .from("projects")
+        .select("id, title")
+        .eq("company_id", companyId)
+        .eq("status", "active")
+        .gte("estimated_end_date", today.toISOString().split('T')[0])
+        .lt("estimated_end_date", nextWeek.toISOString().split('T')[0])
+        .or(`owner_user_id.eq.${userId},assigned_users.cs.{${userId}}`);
+
+      return res.json({
+        today: {
+          projects: projectsDueToday || [],
+          tasks: tasksDueToday || [],
+        },
+        this_week: {
+          projects: projectsDueThisWeek || [],
+        },
+      });
+    } catch (error: any) {
+      console.error("[Calendar] Error fetching summary:", error);
+      return res.status(500).json({ error: error.message });
     }
   });
 
@@ -1415,4 +1573,13 @@ export function registerCalendarRoutes(app: express.Application) {
       return res.status(500).json({ error: e?.message || "Remove permission error" });
     }
   });
+}
+
+function getPriorityColor(priority: string): string {
+  switch (priority) {
+    case 'high': return '#EF4444';
+    case 'medium': return '#F59E0B';
+    case 'low': return '#10B981';
+    default: return '#3B82F6';
+  }
 }

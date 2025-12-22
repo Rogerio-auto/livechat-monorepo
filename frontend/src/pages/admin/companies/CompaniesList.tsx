@@ -98,7 +98,7 @@ export function CompaniesList() {
 
   if (error) {
     return (
-      <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
         {error}
       </div>
     );
@@ -117,7 +117,7 @@ export function CompaniesList() {
         <button
           type="button"
           onClick={loadCompanies}
-          className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
+          className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/10"
         >
           <FiRefreshCw className="text-base" />
           Atualizar
@@ -125,25 +125,25 @@ export function CompaniesList() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+        <div className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total de Empresas</p>
           <p className="mt-4 text-4xl font-semibold">{companies.length}</p>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+        <div className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Usuários</p>
           <div className="mt-4 flex items-center gap-3 text-3xl font-semibold">
             {counters.users}
             <FiUsers className="text-slate-400" />
           </div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+        <div className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Inboxes</p>
           <div className="mt-4 flex items-center gap-3 text-3xl font-semibold">
             {counters.inboxes}
             <FiActivity className="text-slate-400" />
           </div>
         </div>
-        <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+        <div className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Agentes</p>
           <div className="mt-4 flex items-center gap-3 text-3xl font-semibold">
             {counters.agents}
@@ -152,7 +152,7 @@ export function CompaniesList() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+      <div className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
         <div className="space-y-4">
           <div className="relative">
             <FiSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -161,7 +161,7 @@ export function CompaniesList() {
               placeholder="Buscar por nome ou email"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              className="w-full rounded-2xl border border-white/5 bg-slate-900/60 py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-white/20 focus:outline-none"
+              className="w-full rounded-xl border border-white/5 bg-slate-900/60 py-3 pl-12 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-white/20 focus:outline-none"
             />
           </div>
 
@@ -201,7 +201,7 @@ export function CompaniesList() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-white/5">
+      <div className="overflow-hidden rounded-xl border border-white/5">
         <div className="max-h-[70vh] overflow-auto">
           <table className="w-full text-sm">
             <thead className="bg-white/5 text-left text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -281,3 +281,4 @@ export function CompaniesList() {
     </section>
   );
 }
+

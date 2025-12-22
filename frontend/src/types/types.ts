@@ -67,6 +67,22 @@ channel: string;
 provider_config?: ProviderConfig | null;
 };
 
+export type InboxFormExtended = InboxForm & {
+  base_url?: string;
+  api_version?: string;
+  instance_id?: string;
+  phone_number_id?: string;
+  waba_id?: string;
+  webhook_verify_token?: string;
+};
+
+export type WahaSessionInfo = {
+  status?: string | null;
+  phone?: string | null;
+  number?: string | null;
+  connectedPhone?: string | null;
+  [key: string]: unknown;
+};
 
 export type Agent = { id: string; name: string; role?: string | null; email?: string };
 
@@ -193,9 +209,11 @@ export type AgentTemplateQuestion = {
   template_id: string;
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "number" | "boolean" | "multiselect";
+  type: "text" | "textarea" | "select" | "number" | "boolean" | "multiselect" | "string";
   required: boolean;
   help?: string | null;
+  description?: string | null;
+  placeholder?: string | null;
   options?: unknown[];
   order_index: number;
 };

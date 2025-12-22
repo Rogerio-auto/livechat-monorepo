@@ -4,7 +4,7 @@ import { format, isToday, isPast, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const PRIORITY_COLORS = {
-  LOW: "text-[var(--color-text-muted)] bg-[rgba(47,180,99,0.08)] dark:bg-[rgba(27,58,41,0.55)] dark:text-[var(--color-text-muted)]",
+  LOW: "text-(--color-text-muted) bg-[rgba(47,180,99,0.08)] dark:bg-[rgba(27,58,41,0.55)] dark:text-(--color-text-muted)",
   MEDIUM: "text-[#1f8b49] bg-[rgba(47,180,99,0.16)] dark:bg-[rgba(27,58,41,0.6)] dark:text-[#74e69e]",
   HIGH: "text-orange-600 bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400",
   URGENT: "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400",
@@ -36,9 +36,9 @@ export function TasksWidget() {
   };
 
   return (
-    <div className="livechat-card rounded-3xl p-5 shadow-xl transition-colors duration-300 flex flex-col max-h-[600px] overflow-hidden">
+    <div className="flex flex-col max-h-[600px] overflow-hidden">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between flex-shrink-0">
+      <div className="mb-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(47,180,99,0.16)]">
             <svg className="h-5 w-5 text-[#1f8b49] dark:text-[#74e69e]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -46,8 +46,8 @@ export function TasksWidget() {
             </svg>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-[var(--color-text)]">Tarefas</h3>
-            <p className="text-xs text-[var(--color-text-muted)]">Acompanhe suas atividades</p>
+            <h3 className="text-lg font-bold text-(--color-text)">Tarefas</h3>
+            <p className="text-xs text-(--color-text-muted)">Acompanhe suas atividades</p>
           </div>
         </div>
         <button
@@ -60,7 +60,7 @@ export function TasksWidget() {
 
       {/* Stats Grid */}
       {stats && (
-        <div className="mb-4 grid grid-cols-2 gap-3 flex-shrink-0">
+        <div className="mb-4 grid grid-cols-2 gap-3 shrink-0">
           {/* Pendentes */}
           <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -113,8 +113,8 @@ export function TasksWidget() {
         {stats && stats.total > 0 && (
           <div className="mb-4">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-[var(--color-text-muted)]">Taxa de Conclusão</span>
-              <span className="text-xs font-bold text-[var(--color-text)]">{completionRate}%</span>
+              <span className="text-xs font-medium text-(--color-text-muted)">Taxa de Conclusão</span>
+              <span className="text-xs font-bold text-(--color-text)">{completionRate}%</span>
             </div>
             <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)]">
               <div
@@ -142,7 +142,7 @@ export function TasksWidget() {
                 className="w-full rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10 p-3 text-left transition-all hover:bg-red-100 dark:hover:bg-red-900/20 hover:shadow-md"
               >
                 <div className="mb-1 flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-[var(--color-text)] line-clamp-1">{task.title}</p>
+                  <p className="text-sm font-medium text-(--color-text) line-clamp-1">{task.title}</p>
                   <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[task.priority]}`}>
                     {PRIORITY_LABELS[task.priority]}
                   </span>
@@ -175,7 +175,7 @@ export function TasksWidget() {
                 className="w-full rounded-xl border border-[rgba(47,180,99,0.28)] dark:border-[rgba(116,230,158,0.18)] bg-[rgba(47,180,99,0.12)] dark:bg-[rgba(27,58,41,0.6)] p-3 text-left transition-all hover:bg-[rgba(47,180,99,0.18)] dark:hover:bg-[rgba(27,58,41,0.72)] hover:shadow-md"
               >
                 <div className="mb-1 flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium text-[var(--color-text)] line-clamp-1">{task.title}</p>
+                  <p className="text-sm font-medium text-(--color-text) line-clamp-1">{task.title}</p>
                   <span className={`shrink-0 rounded-md px-2 py-0.5 text-xs font-medium ${PRIORITY_COLORS[task.priority]}`}>
                     {PRIORITY_LABELS[task.priority]}
                   </span>
@@ -197,8 +197,8 @@ export function TasksWidget() {
           <svg className="mb-3 h-12 w-12 text-[rgba(47,180,99,0.25)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-sm font-medium text-[var(--color-text)]">Tudo em dia!</p>
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">Nenhuma tarefa urgente no momento</p>
+          <p className="text-sm font-medium text-(--color-text)">Tudo em dia!</p>
+          <p className="mt-1 text-xs text-(--color-text-muted)">Nenhuma tarefa urgente no momento</p>
         </div>
       )}
       </div>

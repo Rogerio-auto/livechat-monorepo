@@ -62,7 +62,7 @@ export function EditIndustryModal({ company, onClose, onSuccess }: EditIndustryM
       onClick={onClose}
     >
       <div
-        className="config-modal rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        className="config-modal rounded-xl shadow-md max-w-2xl w-full max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -185,3 +185,4 @@ export function EditIndustryModal({ company, onClose, onSuccess }: EditIndustryM
     </div>
   );
 }
+

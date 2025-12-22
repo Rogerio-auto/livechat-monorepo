@@ -805,6 +805,7 @@ export function registerOnboardingRoutes(app: Application) {
       // Mapear plan_id para o ENUM do banco
       const planMap: Record<string, string> = {
         "starter": "STARTER",
+        "growth": "GROWTH",
         "professional": "PROFESSIONAL", 
         "business": "BUSINESS"
       };

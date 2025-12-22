@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type {
   Inbox,
   InboxForm,
+  InboxFormExtended,
   MetaProviderConfig,
   ProviderConfig,
+  WahaSessionInfo,
 } from "../../types/types";
 import MetaConfig from "../settings/inboxes/MetaConfig";
 import WahaConfig from "../settings/inboxes/WahaConfig";
@@ -11,26 +13,19 @@ import { Card, Input, Button } from "../../components/ui";
 
 // Estilos utilitários (para elementos que ainda não possuem componente no design system, como <select>)
 const selectBaseClasses =
-  "w-full rounded-xl px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60 transition-colors duration-200";
-
-type InboxFormExtended = InboxForm &
-  Pick<Inbox, "base_url" | "api_version" | "instance_id" | "phone_number_id"> & {
-  provider_config?: ProviderConfig;
-};
-
-type WahaSessionInfo = {
-  status?: string | null;
-  phone?: string | null;
-  number?: string | null;
-  connectedPhone?: string | null;
-};
+  "w-full rounded-md px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 transition-all duration-200 text-sm shadow-xs";
 
 // ====== UI helpers ======
-const Field = ({ label, children }: { label: string; children: ReactNode }) => (
-  <label className="block space-y-2">
-    <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</div>
-    {children}
-  </label>
+const Field = ({ label, children, description }: { label: string; children: ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-50 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <div className="text-sm font-medium text-gray-900 dark:text-white">{label}</div>
+      {description && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</div>}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
 );
 
 const DEFAULT_META: MetaProviderConfig = {
@@ -48,7 +43,7 @@ const WAHA_DISCONNECTED_STATUSES = new Set(["FAILED", "STOPPED", "CLOSED", "LOGG
 
 function normalizeProviderConfig(
   provider: string | undefined,
-  config?: ProviderConfig,
+  config?: ProviderConfig | null,
 ): ProviderConfig | undefined {
   const upper = (provider || "").toUpperCase();
   const next: ProviderConfig = { ...(config || {}) };
@@ -75,7 +70,6 @@ type InboxesPanelProps = {
   setForms: (updater: (prev: Record<string, InboxFormExtended>) => Record<string, InboxFormExtended>) => void;
   setBaseline: (updater: (prev: Record<string, InboxFormExtended>) => Record<string, InboxFormExtended>) => void;
   onSave: (id: string, data: InboxFormExtended) => Promise<void>;
-  onRequestCreate: () => void;
   onRequestDelete: (id: string) => void;
   metaWebhookUrl: string;
   disabled?: boolean;
@@ -91,7 +85,6 @@ export default function InboxesPanel({
   setForms,
   setBaseline,
   onSave,
-  onRequestCreate,
   onRequestDelete,
   metaWebhookUrl,
   disabled,
@@ -322,15 +315,12 @@ export default function InboxesPanel({
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <span className="px-3 py-1 rounded-lg text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+        <span className="px-3 py-1 rounded-lg text-sm text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
           Total: {totalInboxes}
         </span>
-        <Button onClick={onRequestCreate} disabled={disabled} variant="primary" size="sm">
-          + Nova caixa
-        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-6">
         {companyInboxes.map((inbox) => {
           const form = ensureSeed(inbox.id);
           const expanded = expandedId === inbox.id;
@@ -347,21 +337,34 @@ export default function InboxesPanel({
             "";
 
           return (
-            <Card key={inbox.id} padding="md">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-gray-900 dark:text-white">
-                    {form.name || inbox.name || `Inbox ${inbox.id.slice(0, 6)}`}
+            <div key={inbox.id} className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden transition-all duration-200 shadow-sm hover:shadow-md">
+              <div className={`p-6 flex items-center justify-between ${expanded ? 'border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20' : ''}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${form.is_active ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-600'}`}>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {form.phone_number || inbox.phone_number}
+                  <div>
+                    <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                      {form.name || inbox.name || `Inbox ${inbox.id.slice(0, 6)}`}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {form.phone_number || inbox.phone_number || 'Sem número'}
+                      </span>
+                      <span className="text-gray-300 dark:text-gray-700">•</span>
+                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                        {form.provider}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <span
-                    className={`px-2.5 py-1 rounded-md text-xs border ${form.is_active
-                      ? "bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700"
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium border ${form.is_active
+                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/50"
+                      : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border-gray-200 dark:border-gray-700"
                       }`}
                   >
                     {form.is_active ? "Ativa" : "Inativa"}
@@ -370,65 +373,83 @@ export default function InboxesPanel({
                     variant="ghost"
                     size="sm"
                     onClick={() => setExpandedId(expanded ? null : inbox.id)}
+                    className="text-gray-500 hover:text-gray-900 dark:hover:text-white"
                   >
-                    {expanded ? "Fechar" : "Configurar"}
+                    {expanded ? "Recolher" : "Gerenciar"}
                   </Button>
                 </div>
               </div>
 
               {expanded && (
-                <div className="mt-4 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-6 space-y-0">
+                  <Field 
+                    label="Nome da Caixa" 
+                    description="Como esta caixa será identificada internamente."
+                  >
                     <Input
-                      label="Nome"
-                      placeholder="Identificação da caixa"
+                      placeholder="Ex: WhatsApp Comercial"
                       value={form.name}
                       onChange={(e) => handleChange(inbox.id, "name", e.target.value)}
                       autoComplete="off"
                       disabled={disabled}
                     />
-                    {!isWaha && (
+                  </Field>
+
+                  {!isWaha && (
+                    <Field 
+                      label="Número de Telefone" 
+                      description="O número de telefone associado a esta caixa."
+                    >
                       <Input
-                        label="Telefone"
-                        placeholder="Número com DDD"
+                        placeholder="5511999999999"
                         value={form.phone_number}
                         onChange={(e) => handleChange(inbox.id, "phone_number", e.target.value)}
                         autoComplete="off"
                         inputMode="tel"
                         disabled={disabled}
                       />
-                    )}
-                  </div>
+                    </Field>
+                  )}
 
                   {!isWaha && (
-                    <Input
-                      label="Webhook URL"
-                      placeholder="https://..."
-                      value={webhookValue}
-                      onChange={(e) => handleChange(inbox.id, "webhook_url", e.target.value)}
-                      autoComplete="off"
-                      readOnly={isMeta}
-                      helperText={isMeta ? "Definido automaticamente para Meta Cloud" : undefined}
-                      disabled={disabled}
-                    />
+                    <Field 
+                      label="Webhook URL" 
+                      description="URL para onde as mensagens recebidas serão enviadas."
+                    >
+                      <Input
+                        placeholder="https://..."
+                        value={webhookValue}
+                        onChange={(e) => handleChange(inbox.id, "webhook_url", e.target.value)}
+                        autoComplete="off"
+                        readOnly={isMeta}
+                        helperText={isMeta ? "Configurado automaticamente para Meta Cloud" : undefined}
+                        disabled={disabled}
+                      />
+                    </Field>
                   )}
 
                   {!isWaha ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Field label="Provider">
+                    <>
+                      <Field 
+                        label="Provedor" 
+                        description="A tecnologia utilizada para conectar este canal."
+                      >
                         <select
                           className={selectBaseClasses}
                           value={form.provider}
                           onChange={(e) => handleChange(inbox.id, "provider", e.target.value)}
                           disabled={disabled}
                         >
-                          <option value="META_CLOUD">Meta Cloud</option>
-                          <option value="WAHA">WAHA</option>
+                          <option value="META_CLOUD">Meta Cloud (Oficial)</option>
+                          <option value="WAHA">WAHA (Não oficial)</option>
                           <option value="OTHER">Outro</option>
                         </select>
                       </Field>
 
-                      <Field label="Canal">
+                      <Field 
+                        label="Canal" 
+                        description="O tipo de canal de comunicação."
+                      >
                         <select
                           className={selectBaseClasses}
                           value={form.channel}
@@ -439,67 +460,94 @@ export default function InboxesPanel({
                           <option value="OTHER">Outro</option>
                         </select>
                       </Field>
-                    </div>
+                    </>
                   ) : (
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-3 text-sm text-gray-700 dark:text-gray-300 bg-white/60 dark:bg-gray-800/60">
-                      Conexão WAHA (não oficial)
+                    <div className="py-6 border-b border-gray-100 dark:border-gray-800">
+                      <div className="rounded-lg border border-amber-200 dark:border-amber-900/50 p-4 text-sm text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20">
+                        <div className="flex gap-3">
+                          <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <div>
+                            <p className="font-medium">Conexão WAHA</p>
+                            <p className="mt-1 opacity-90">Esta é uma conexão não oficial. Certifique-se de que sua instância WAHA está rodando corretamente.</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
 
                   {isMeta && (
-                    <MetaConfig
-                      value={meta}
-                      onChange={(next) => handleMetaChange(inbox.id, next)}
-                      disabled={disabled}
-                    />
+                    <div className="py-6 border-b border-gray-100 dark:border-gray-800">
+                      <MetaConfig
+                        value={meta}
+                        onChange={(next) => handleMetaChange(inbox.id, next)}
+                        disabled={disabled}
+                      />
+                    </div>
                   )}
+                  
                   {isWaha && (
-                    <WahaConfig
-                      key={instanceIdValue || inbox.id}
-                      sessionId={instanceIdValue}
-                      onStatusChange={(info) => handleWahaStatusChange(inbox.id, info)}
-                      disabled={disabled}
-                    />
+                    <div className="py-6 border-b border-gray-100 dark:border-gray-800">
+                      <WahaConfig
+                        key={instanceIdValue || inbox.id}
+                        sessionId={instanceIdValue}
+                        onStatusChange={(info) => handleWahaStatusChange(inbox.id, info)}
+                        disabled={disabled}
+                      />
+                    </div>
                   )}
-                  <label className="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={!!form.is_active}
-                      onChange={(e) => handleChange(inbox.id, "is_active", e.target.checked)}
-                      disabled={disabled}
-                    />
-                    Ativa
-                  </label>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => handleSave(inbox.id)}
-                      disabled={disabled || !isDirty(inbox.id)}
-                      variant="primary"
-                      size="sm"
-                    >
-                      Salvar
-                    </Button>
-                    <Button
-                      onClick={() => handleCancel(inbox.id)}
-                      disabled={disabled || !isDirty(inbox.id)}
-                      variant="ghost"
-                      size="sm"
-                    >
-                      Cancelar
-                    </Button>
+                  <Field 
+                    label="Status da Caixa" 
+                    description="Ative ou desative esta caixa de entrada."
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id={`active-${inbox.id}`}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-700"
+                        checked={!!form.is_active}
+                        onChange={(e) => handleChange(inbox.id, "is_active", e.target.checked)}
+                        disabled={disabled}
+                      />
+                      <label htmlFor={`active-${inbox.id}`} className="text-sm text-gray-700 dark:text-gray-300">
+                        Caixa Ativa
+                      </label>
+                    </div>
+                  </Field>
+
+                  <div className="py-6 flex items-center justify-between">
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => handleSave(inbox.id)}
+                        disabled={disabled || !isDirty(inbox.id)}
+                        variant="primary"
+                        size="sm"
+                      >
+                        Salvar Alterações
+                      </Button>
+                      <Button
+                        onClick={() => handleCancel(inbox.id)}
+                        disabled={disabled || !isDirty(inbox.id)}
+                        variant="ghost"
+                        size="sm"
+                      >
+                        Descartar
+                      </Button>
+                    </div>
                     <Button
                       onClick={() => onRequestDelete(inbox.id)}
                       disabled={disabled}
                       variant="danger"
                       size="sm"
                     >
-                      Excluir
+                      Excluir Caixa
                     </Button>
                   </div>
                 </div>
               )}
-            </Card>
+            </div>
           );
         })}
 

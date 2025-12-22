@@ -3,7 +3,6 @@ import type { JSX } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTasks, useTaskStats } from "../hooks/useTasks";
 import { TaskCard } from "../components/tasks/TaskCard";
-import { TaskModal } from "../components/tasks/TaskModal";
 import { TaskKanbanView } from "../components/tasks/TaskKanbanView";
 import type {
   Task,
@@ -93,9 +92,6 @@ export function TarefasPage() {
   const locationState = (location.state as LocationState | null) || null;
 
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
-  const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [modalPrefill, setModalPrefill] = useState<Partial<CreateTaskInput> | undefined>();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
@@ -145,10 +141,7 @@ export function TarefasPage() {
 
   useEffect(() => {
     if (locationState?.openTaskModal) {
-      setEditingTask(null);
-      setModalPrefill(locationState.prefilledTask);
-      setShowModal(true);
-      navigate(location.pathname, { replace: true, state: null });
+      navigate("/tarefas/nova", { state: { prefilledTask: locationState.prefilledTask } });
     }
   }, [location.pathname, locationState, navigate]);
 
@@ -279,9 +272,7 @@ export function TarefasPage() {
   };
 
   const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setModalPrefill(undefined);
-    setShowModal(true);
+    navigate(`/tarefas/${task.id}/editar`);
   };
 
   const handleDeleteTask = async (taskId: string) => {
@@ -296,48 +287,30 @@ export function TarefasPage() {
     await updateTask(taskId, { status: newStatus });
   };
 
-  const handleModalClose = () => {
-    setShowModal(false);
-    setEditingTask(null);
-    setModalPrefill(undefined);
-  };
-
-  const handleModalSubmit = async (input: CreateTaskInput | UpdateTaskInput) => {
-    if (editingTask) {
-      await updateTask(editingTask.id, input as UpdateTaskInput);
-    } else {
-      await createTask(input as CreateTaskInput);
-    }
-  };
-
   const openNewTaskModal = () => {
-    setEditingTask(null);
-    setModalPrefill(undefined);
-    setShowModal(true);
+    navigate("/tarefas/nova");
   };
 
   return (
-    <>
-      <div className="livechat-theme min-h-screen w-full pb-12 transition-colors duration-500">
-        <div className="mx-auto w-full max-w-[var(--page-max-width)] px-3 pb-10 pt-6 sm:px-6 lg:px-8">
-          <div className="livechat-card rounded-3xl p-6 shadow-xl md:p-8">
-            <div className="space-y-8">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <div className="flex-1 flex flex-col min-w-0">
+      <div className="mx-auto w-full max-w-[1920px] px-3 pb-10 pt-6 sm:px-6 lg:px-8">
+        <div className="space-y-8">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <h1 className="text-3xl font-bold text-[var(--color-text)]">Tarefas</h1>
-                  <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                  <h1 className="text-3xl font-bold text-(--color-text)">Tarefas</h1>
+                  <p className="mt-1 text-sm text-(--color-text-muted)">
                     Centralize o fluxo de trabalho e acompanhe o progresso da equipe
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] p-1 text-sm text-[var(--color-text-muted)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                  <div className="flex items-center rounded-xl bg-slate-100/50 dark:bg-slate-800/50 p-1 text-sm text-(--color-text-muted)">
                     <button
                       type="button"
                       onClick={() => setViewMode("list")}
                       className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${
                         viewMode === "list"
-                          ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[0_18px_40px_-24px_rgba(47,180,99,0.8)]"
-                          : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                          ? "bg-white dark:bg-slate-900 text-(--color-primary) shadow-sm"
+                          : "text-(--color-text-muted) hover:text-(--color-text)"
                       }`}
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -350,8 +323,8 @@ export function TarefasPage() {
                       onClick={() => setViewMode("kanban")}
                       className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${
                         viewMode === "kanban"
-                          ? "bg-[var(--color-surface)] text-[var(--color-primary)] shadow-[0_18px_40px_-24px_rgba(47,180,99,0.8)]"
-                          : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                          ? "bg-white dark:bg-slate-900 text-(--color-primary) shadow-sm"
+                          : "text-(--color-text-muted) hover:text-(--color-text)"
                       }`}
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -363,7 +336,7 @@ export function TarefasPage() {
                   <button
                     type="button"
                     onClick={openNewTaskModal}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+                    className="inline-flex items-center justify-center rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200  hover:bg-[#1f8b49]"
                   >
                     + Nova Tarefa
                   </button>
@@ -375,7 +348,7 @@ export function TarefasPage() {
                   {Array.from({ length: 6 }).map((_, index) => (
                     <div
                       key={index}
-                      className="h-28 animate-pulse rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
+                      className="h-28 animate-pulse rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
                     />
                   ))}
                 </div>
@@ -384,35 +357,35 @@ export function TarefasPage() {
                   <>
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                       {statHighlights.map((item) => (
-                        <div key={item.key} className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl">
+                        <div key={item.key} className="relative overflow-hidden p-5">
                           <div className={`pointer-events-none absolute -right-8 -top-10 h-24 w-24 rounded-full ${item.glowClass} blur-3xl`} />
                           <div className="relative">
                             <div className="mb-2 flex items-center justify-between">
-                              <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                              <span className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">
                                 {item.label}
                               </span>
                               {item.icon}
                             </div>
-                            <div className="text-2xl font-bold text-[var(--color-text)]">{item.value}</div>
+                            <div className="text-2xl font-bold text-(--color-text)">{item.value}</div>
                           </div>
                         </div>
                       ))}
                     </div>
 
                     {prioritySummary.length > 0 && (
-                      <div className="rounded-2xl livechat-panel p-5 shadow-xl">
+                      <div className="p-5">
                         <div className="mb-3 flex items-center justify-between">
-                          <h2 className="text-sm font-semibold text-[var(--color-text)]">Prioridades</h2>
-                          <span className="text-xs text-[var(--color-text-muted)]">Distribuição atual</span>
+                          <h2 className="text-sm font-semibold text-(--color-text)">Prioridades</h2>
+                          <span className="text-xs text-(--color-text-muted)">Distribuição atual</span>
                         </div>
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                           {prioritySummary.map((item) => (
                             <div
                               key={item.key}
-                              className="flex items-center justify-between rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2 text-sm"
+                              className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4 py-2 text-sm"
                             >
-                              <span className="text-[var(--color-text)]">{item.label}</span>
-                              <span className="font-semibold text-[var(--color-primary)]">{item.value}</span>
+                              <span className="text-(--color-text)">{item.label}</span>
+                              <span className="font-semibold text-(--color-primary)">{item.value}</span>
                             </div>
                           ))}
                         </div>
@@ -423,7 +396,7 @@ export function TarefasPage() {
               )}
 
               {(statsError || error) && (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                   <div className="font-semibold">Não foi possível carregar todas as informações.</div>
                   <div className="mt-1">{error || statsError}</div>
                   <button
@@ -439,7 +412,7 @@ export function TarefasPage() {
                 </div>
               )}
 
-              <div className="space-y-4">
+              <div className="space-y-4 py-6 border-b border-slate-100 dark:border-slate-800">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <div className="sm:col-span-2">
                     <input
@@ -447,13 +420,13 @@ export function TarefasPage() {
                       value={searchQuery}
                       onChange={(event) => setSearchQuery(event.target.value)}
                       placeholder="Buscar por título, responsável ou cliente..."
-                      className="w-full rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2.5 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
+                      className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2.5 text-sm text-(--color-text) placeholder-(--color-text-muted) focus:border-(--color-primary) focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                     />
                   </div>
                   <select
                     value={statusFilter}
                     onChange={(event) => setStatusFilter(event.target.value as TaskStatus | "all")}
-                    className="rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2.5 text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2.5 text-sm text-(--color-text) focus:border-(--color-primary) focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   >
                     {STATUS_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -464,7 +437,7 @@ export function TarefasPage() {
                   <select
                     value={priorityFilter}
                     onChange={(event) => setPriorityFilter(event.target.value as TaskPriority | "all")}
-                    className="rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2.5 text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2.5 text-sm text-(--color-text) focus:border-(--color-primary) focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   >
                     {PRIORITY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -475,7 +448,7 @@ export function TarefasPage() {
                   <select
                     value={typeFilter}
                     onChange={(event) => setTypeFilter(event.target.value as TaskType | "all")}
-                    className="rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2.5 text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2.5 text-sm text-(--color-text) focus:border-(--color-primary) focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                   >
                     {TYPE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -487,7 +460,7 @@ export function TarefasPage() {
                     <select
                       value={assignedFilter}
                       onChange={(event) => setAssignedFilter(event.target.value)}
-                      className="rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-4 py-2.5 text-sm text-[var(--color-text)] focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent px-4 py-2.5 text-sm text-(--color-text) focus:border-(--color-primary) focus:outline-none focus:ring-2 focus:ring-[rgba(47,180,99,0.25)]"
                     >
                       <option value="all">Todos os responsáveis</option>
                       {assigneeOptions.map((option) => (
@@ -506,7 +479,7 @@ export function TarefasPage() {
                     className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 ${
                       overdueFilter
                         ? "bg-red-500 text-white shadow"
-                        : "bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                        : "bg-slate-100 dark:bg-slate-800 text-(--color-text-muted) hover:text-(--color-text)"
                     }`}
                   >
                     <span>Atrasadas</span>
@@ -522,7 +495,7 @@ export function TarefasPage() {
                     className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold transition-all duration-200 ${
                       dueTodayFilter
                         ? "bg-blue-500 text-white shadow"
-                        : "bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                        : "bg-slate-100 dark:bg-slate-800 text-(--color-text-muted) hover:text-(--color-text)"
                     }`}
                   >
                     <span>Vencendo hoje</span>
@@ -535,7 +508,7 @@ export function TarefasPage() {
                   <button
                     type="button"
                     onClick={handleClearFilters}
-                    className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold text-[var(--color-text-muted)] transition-all hover:text-[var(--color-text)]"
+                    className="ml-auto inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold text-(--color-text-muted) transition-all hover:text-(--color-text)"
                   >
                     Limpar filtros
                   </button>
@@ -543,14 +516,14 @@ export function TarefasPage() {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-text-muted)]">
+                <span className="text-xs font-medium uppercase tracking-wide text-(--color-text-muted)">
                   Exibindo {loading ? "..." : tasks.length} tarefas
                 </span>
                 {!loading && (
                   <button
                     type="button"
                     onClick={() => refetchTasks()}
-                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-[var(--color-text-muted)] transition-all hover:text-[var(--color-text)]"
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold text-(--color-text-muted) transition-all hover:text-(--color-text)"
                   >
                     Atualizar lista
                   </button>
@@ -562,20 +535,20 @@ export function TarefasPage() {
                   {Array.from({ length: 4 }).map((_, index) => (
                     <div
                       key={index}
-                      className="h-40 animate-pulse rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
+                      className="h-40 animate-pulse rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
                     />
                   ))}
                 </div>
               ) : tasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 65%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-8 py-16 text-center text-[var(--color-text-muted)]">
-                  <svg className="h-12 w-12 text-[var(--color-text-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="flex flex-col items-center justify-center px-8 py-16 text-center text-(--color-text-muted)">
+                  <svg className="h-12 w-12 text-(--color-text-muted)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6a2 2 0 012-2h2a2 2 0 012 2v6m-6 4h6" />
                   </svg>
                   <p className="mt-4 text-sm">Nenhuma tarefa encontrada com os filtros atuais.</p>
                   <button
                     type="button"
                     onClick={openNewTaskModal}
-                    className="mt-6 rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+                    className="mt-6 rounded-full bg-(--color-primary) px-5 py-2 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all  hover:bg-[#1f8b49]"
                   >
                     Criar primeira tarefa
                   </button>
@@ -604,15 +577,6 @@ export function TarefasPage() {
             </div>
           </div>
         </div>
-      </div>
-
-      <TaskModal
-        isOpen={showModal}
-        onClose={handleModalClose}
-        onSubmit={handleModalSubmit}
-        initialData={editingTask}
-        prefilledData={modalPrefill}
-      />
-    </>
   );
 }
+

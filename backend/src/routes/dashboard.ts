@@ -553,11 +553,24 @@ export function registerDashboardRoutes(app: express.Application) {
 
       if (error) throw error;
 
-      // Get kanban columns
+      // Get the default board for the company
+      const { data: board } = await supabaseAdmin
+        .from("kanban_boards")
+        .select("id")
+        .eq("company_id", companyId)
+        .order("is_default", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!board) {
+        return res.json([]);
+      }
+
+      // Get kanban columns for this board
       const { data: columns } = await supabaseAdmin
         .from("kanban_columns")
         .select("id, name, position")
-        .eq("company_id", companyId)
+        .eq("kanban_board_id", board.id)
         .order("position", { ascending: true });
 
       // Count leads per column

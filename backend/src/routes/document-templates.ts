@@ -45,16 +45,15 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
       let query = supabaseAdmin
         .from("document_templates")
         .select("*")
-        .eq("company_id", urow.company_id)
         .order("created_at", { ascending: false });
+
+      // Filtro: Meus templates (independente do nicho) OU templates globais do meu nicho/genéricos
+      const filter = `company_id.eq.${urow.company_id},and(company_id.is.null,or(industry.eq.${companyIndustry},industry.eq.generic))`;
+      query = query.or(filter);
 
       if (docType) {
         query = query.eq("doc_type", docType.toUpperCase());
       }
-
-      // Filtrar por templates compatíveis com o nicho da empresa
-      // Mostra templates do nicho específico OU genéricos
-      query = query.or(`industry.eq.${companyIndustry},industry.eq.generic`);
 
       const { data, error } = await query;
 
@@ -195,6 +194,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
               is_active: true,
               is_default: isDefault,
               created_by: urow.id,
+              industry: companyIndustry,
             },
           ])
           .select()

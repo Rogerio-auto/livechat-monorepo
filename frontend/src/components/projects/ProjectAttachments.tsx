@@ -94,7 +94,7 @@ export default function ProjectAttachments({ projectId }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-[color:var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-2 border-(--color-primary) border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -109,18 +109,18 @@ export default function ProjectAttachments({ projectId }: Props) {
           disabled={uploading}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
         />
-        <div className="border-2 border-dashed border-[color:var(--color-border)] rounded-2xl p-8 text-center group-hover:border-[color:var(--color-primary)] group-hover:bg-[color:var(--color-primary)]/5 transition-all">
-          <div className="w-12 h-12 bg-[color:var(--color-primary)]/10 rounded-full flex items-center justify-center mx-auto mb-4 text-[color:var(--color-primary)]">
+        <div className="border-2 border-dashed border-(--color-border) rounded-xl p-8 text-center group-hover:border-(--color-primary) group-hover:bg-(--color-primary)/5 transition-all">
+          <div className="w-12 h-12 bg-(--color-primary)/10 rounded-full flex items-center justify-center mx-auto mb-4 text-(--color-primary)">
             {uploading ? (
-              <div className="w-6 h-6 border-2 border-[color:var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-6 h-6 border-2 border-(--color-primary) border-t-transparent rounded-full animate-spin"></div>
             ) : (
               <Upload size={24} />
             )}
           </div>
-          <h4 className="text-sm font-semibold text-[color:var(--color-text)] mb-1">
+          <h4 className="text-sm font-semibold text-(--color-text) mb-1">
             {uploading ? "Enviando arquivo..." : "Clique ou arraste para enviar"}
           </h4>
-          <p className="text-xs text-[color:var(--color-text-muted)]">
+          <p className="text-xs text-(--color-text-muted)">
             PDF, Imagens, Vídeos ou Documentos (Máx. 10MB)
           </p>
         </div>
@@ -129,25 +129,25 @@ export default function ProjectAttachments({ projectId }: Props) {
       {/* Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {attachments.length === 0 ? (
-          <div className="col-span-full text-center py-12 bg-[color:var(--color-surface-muted)] rounded-2xl border-2 border-dashed border-[color:var(--color-border)]">
-            <Paperclip size={40} className="mx-auto text-[color:var(--color-text-muted)] opacity-20 mb-3" />
-            <p className="text-[color:var(--color-text-muted)]">Nenhum arquivo anexado.</p>
+          <div className="col-span-full text-center py-12 bg-(--color-surface-muted) rounded-xl border-2 border-dashed border-(--color-border)">
+            <Paperclip size={40} className="mx-auto text-(--color-text-muted) opacity-20 mb-3" />
+            <p className="text-(--color-text-muted)">Nenhum arquivo anexado.</p>
           </div>
         ) : (
           attachments.map((file) => (
             <div
               key={file.id}
-              className="flex items-center gap-4 p-4 bg-[color:var(--color-surface-muted)] rounded-xl border border-transparent hover:border-[color:var(--color-border)] transition-all group"
+              className="flex items-center gap-4 p-4 bg-(--color-surface-muted) rounded-xl border border-transparent hover:border-(--color-border) transition-all group"
             >
-              <div className="w-12 h-12 bg-[color:var(--color-surface)] rounded-lg flex items-center justify-center text-[color:var(--color-primary)] shadow-sm">
+              <div className="w-12 h-12 bg-(--color-surface) rounded-lg flex items-center justify-center text-(--color-primary) shadow-sm">
                 {getFileIcon(file.file_type)}
               </div>
               
               <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-medium text-[color:var(--color-text)] truncate">
+                <h4 className="text-sm font-medium text-(--color-text) truncate">
                   {file.file_name}
                 </h4>
-                <p className="text-xs text-[color:var(--color-text-muted)]">
+                <p className="text-xs text-(--color-text-muted)">
                   {formatSize(file.file_size)} • {new Date(file.created_at).toLocaleDateString()}
                 </p>
               </div>
@@ -157,14 +157,14 @@ export default function ProjectAttachments({ projectId }: Props) {
                   href={file.file_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-2 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-surface)] rounded-lg transition-all"
+                  className="p-2 text-(--color-text-muted) hover:text-(--color-primary) hover:bg-(--color-surface) rounded-lg transition-all"
                   title="Visualizar"
                 >
                   <ExternalLink size={16} />
                 </a>
                 <button
                   onClick={() => handleDelete(file.id)}
-                  className="p-2 text-[color:var(--color-text-muted)] hover:text-red-500 hover:bg-[color:var(--color-surface)] rounded-lg transition-all"
+                  className="p-2 text-(--color-text-muted) hover:text-red-500 hover:bg-(--color-surface) rounded-lg transition-all"
                   title="Excluir"
                 >
                   <Trash2 size={16} />

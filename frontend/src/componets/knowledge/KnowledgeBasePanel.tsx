@@ -1,5 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
-import { FiBook, FiPlus, FiEdit2, FiTrash2, FiSearch, FiTag, FiEye, FiEyeOff, FiTrendingUp, FiCheckCircle } from "react-icons/fi";
+import { 
+  Book, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Search, 
+  Tag, 
+  Eye, 
+  EyeOff, 
+  TrendingUp, 
+  CheckCircle,
+  AlertCircle,
+  Filter,
+  X
+} from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { Modal } from "../../components/ui/Modal";
+import { Input } from "../../components/ui/Input";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -28,6 +45,24 @@ type KnowledgeBaseStats = {
   avg_helpful_rate: number;
 };
 
+const Field = ({ label, children, description }: { label: string; children: React.ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <label className="block text-sm font-semibold text-gray-900 dark:text-white">
+        {label}
+      </label>
+      {description && (
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+          {description}
+        </p>
+      )}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
+);
+
 export function KnowledgeBasePanel() {
   const [items, setItems] = useState<KnowledgeBaseItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -35,12 +70,10 @@ export function KnowledgeBasePanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Filtros
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   
-  // Modal
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<KnowledgeBaseItem | null>(null);
   const [formData, setFormData] = useState({
@@ -210,202 +243,181 @@ export function KnowledgeBasePanel() {
 
   if (loading && items.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-5xl mx-auto">
       {/* Header com estatísticas */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Total</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-              <FiBook className="text-3xl opacity-50" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Total</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</span>
+              <Book size={14} className="text-blue-500" />
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Ativos</p>
-                <p className="text-2xl font-bold">{stats.active}</p>
-              </div>
-              <FiCheckCircle className="text-3xl opacity-50" />
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Ativos</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900 dark:text-white">{stats.active}</span>
+              <CheckCircle size={14} className="text-green-500" />
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Consultas</p>
-                <p className="text-2xl font-bold">{stats.total_usage}</p>
-              </div>
-              <FiTrendingUp className="text-3xl opacity-50" />
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Consultas</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total_usage}</span>
+              <TrendingUp size={14} className="text-purple-500" />
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm opacity-90">Taxa Útil</p>
-                <p className="text-2xl font-bold">{(stats.avg_helpful_rate * 100).toFixed(0)}%</p>
-              </div>
-              <FiCheckCircle className="text-3xl opacity-50" />
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1">Taxa Útil</span>
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-bold text-gray-900 dark:text-white">{(stats.avg_helpful_rate * 100).toFixed(0)}%</span>
+              <CheckCircle size={14} className="text-orange-500" />
             </div>
           </div>
         </div>
       )}
 
       {/* Filtros e ações */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
-          <div className="flex flex-col md:flex-row gap-3 flex-1 w-full">
-            {/* Busca */}
-            <div className="relative flex-1">
-              <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <div className="pb-8 border-b border-gray-100 dark:border-gray-800 mb-8">
+        <div className="flex flex-col md:flex-row gap-6 items-start md:items-center justify-between">
+          <div className="flex flex-col md:flex-row gap-4 flex-1 w-full">
+            <div className="relative flex-1 group">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
               <input
                 type="text"
                 placeholder="Buscar por título, conteúdo ou tags..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-900/50 border-none rounded-xl text-gray-900 dark:text-white placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm"
               />
             </div>
             
-            {/* Filtro Categoria */}
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todas categorias</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-            
-            {/* Filtro Status */}
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos status</option>
-              <option value="ACTIVE">Ativo</option>
-              <option value="DRAFT">Rascunho</option>
-              <option value="ARCHIVED">Arquivado</option>
-            </select>
+            <div className="flex gap-3">
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="px-4 py-2.5 bg-gray-50 dark:bg-gray-900/50 border-none rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm"
+              >
+                <option value="">Todas categorias</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
           </div>
           
-          <button
-            onClick={handleCreate}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors whitespace-nowrap"
-          >
-            <FiPlus /> Novo FAQ
-          </button>
+          <Button variant="primary" onClick={handleCreate} className="flex items-center gap-2 shrink-0 px-6 py-2.5">
+            <Plus size={18} />
+            Novo Item
+          </Button>
         </div>
       </div>
 
-      {/* Lista de itens */}
+      {/* Lista de Itens */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-600 dark:text-red-400">
-          {error}
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="text-red-600 dark:text-red-400 shrink-0" size={20} />
+          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
         </div>
       )}
 
-      <div className="grid gap-4">
+      <div className="space-y-0">
         {items.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center border border-gray-200 dark:border-gray-700">
-            <FiBook className="mx-auto text-6xl text-gray-300 dark:text-gray-600 mb-4" />
-            <p className="text-gray-500 dark:text-gray-400 mb-4">
-              Nenhum FAQ encontrado. Comece criando o primeiro!
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Book size={32} className="text-gray-400" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">Nenhum item encontrado</h3>
+            <p className="text-gray-500 dark:text-gray-400 max-w-xs mx-auto text-sm">
+              Adicione informações à base de conhecimento para treinar seus agentes.
             </p>
-            <button
-              onClick={handleCreate}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors"
-            >
-              <FiPlus /> Criar primeiro FAQ
-            </button>
           </div>
         ) : (
-          items.map(item => (
+          items.map((item) => (
             <div
               key={item.id}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg transition-shadow"
+              className="group py-8 border-b border-gray-100 dark:border-gray-800 last:border-0 transition-all"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start justify-between gap-6">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white truncate">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white group-hover:text-blue-600 transition-colors">
                       {item.title}
-                    </h3>
+                    </h4>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      item.status === "ACTIVE" 
+                        ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
+                        : item.status === "DRAFT"
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400"
+                        : "bg-gray-50 text-gray-600 dark:bg-gray-900/20 dark:text-gray-400"
+                    }`}>
+                      {item.status}
+                    </span>
                     {!item.visible_to_agents && (
-                      <FiEyeOff className="text-gray-400" title="Não visível para IA" />
+                      <span className="flex items-center gap-1 px-2 py-0.5 bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                        <EyeOff size={10} />
+                        Privado
+                      </span>
                     )}
                   </div>
                   
-                  <p className="text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-4 leading-relaxed">
                     {item.content}
                   </p>
                   
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <div className="flex flex-wrap items-center gap-4">
                     {item.category && (
-                      <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-xs font-medium">
+                      <div className="flex items-center gap-1.5 text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg uppercase tracking-wider">
+                        <Tag size={12} />
                         {item.category}
-                      </span>
+                      </div>
                     )}
                     
-                    {item.tags.map(tag => (
-                      <span
-                        key={tag}
-                        className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg text-xs flex items-center gap-1"
-                      >
-                        <FiTag className="text-xs" /> {tag}
+                    <div className="flex items-center gap-3 text-xs text-gray-400 font-medium">
+                      <span className="flex items-center gap-1">
+                        <TrendingUp size={12} />
+                        {item.usage_count} usos
                       </span>
-                    ))}
+                      <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+                      <span className="flex items-center gap-1">
+                        <CheckCircle size={12} />
+                        {((item.helpful_count / (item.usage_count || 1)) * 100).toFixed(0)}% útil
+                      </span>
+                    </div>
                     
-                    <span
-                      className={`px-2 py-1 rounded-lg text-xs font-medium ${
-                        item.status === "ACTIVE"
-                          ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
-                          : item.status === "DRAFT"
-                          ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-                      }`}
-                    >
-                      {item.status === "ACTIVE" ? "Ativo" : item.status === "DRAFT" ? "Rascunho" : "Arquivado"}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                    <span>Prioridade: {item.priority}</span>
-                    <span>Consultas: {item.usage_count}</span>
-                    <span>Útil: {item.helpful_count} / Não útil: {item.unhelpful_count}</span>
+                    <div className="flex gap-1.5">
+                      {item.tags.map(tag => (
+                        <span key={tag} className="text-[10px] font-bold text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded-md border border-gray-100 dark:border-gray-800 uppercase tracking-tighter">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                    title="Editar"
-                  >
-                    <FiEdit2 />
-                  </button>
-                  <button
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0">
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(item)} className="hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-600">
+                    <Edit2 size={16} />
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
                     onClick={() => handleDelete(item.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                    title="Deletar"
+                    className="text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                   >
-                    <FiTrash2 />
-                  </button>
+                    <Trash2 size={16} />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -413,172 +425,130 @@ export function KnowledgeBasePanel() {
         )}
       </div>
 
-      {/* Modal de criar/editar */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <form onSubmit={handleSubmit}>
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {editingItem ? "Editar FAQ" : "Novo FAQ"}
-                </h2>
+      {/* Modal de Criar/Editar */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingItem ? "Editar Item" : "Novo Item de Conhecimento"}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="space-y-0">
+          <Field 
+            label="Título" 
+            description="Como este item será identificado na busca."
+          >
+            <Input
+              value={formData.title}
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              placeholder="Ex: Como configurar o Wi-Fi"
+              required
+            />
+          </Field>
+
+          <Field 
+            label="Conteúdo" 
+            description="A informação detalhada que o agente usará."
+          >
+            <textarea
+              value={formData.content}
+              onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+              rows={6}
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+              placeholder="Descreva a informação aqui..."
+              required
+            />
+          </Field>
+
+          <Field 
+            label="Classificação" 
+            description="Organize por categoria e tags para facilitar a busca."
+          >
+            <div className="space-y-4">
+              <Input
+                label="Categoria"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                placeholder="Ex: Suporte Técnico, Financeiro..."
+                list="categories-list"
+              />
+              <datalist id="categories-list">
+                {categories.map(cat => <option key={cat} value={cat} />)}
+              </datalist>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Tags</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {formData.tags.map(tag => (
+                    <span key={tag} className="flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400 text-xs font-medium rounded-lg border border-blue-100 dark:border-blue-800">
+                      {tag}
+                      <button type="button" onClick={() => removeTag(tag)} className="hover:text-blue-900">
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <Input
+                  placeholder="Pressione Enter para adicionar tags"
+                  onKeyDown={handleTagInput}
+                />
               </div>
-              
-              <div className="p-6 space-y-4">
-                {/* Título */}
+            </div>
+          </Field>
+
+          <Field 
+            label="Configurações" 
+            description="Controle a visibilidade e o status do item."
+          >
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Título / Pergunta *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    maxLength={200}
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    placeholder="Ex: Como funciona o cancelamento?"
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    className="w-full rounded-lg px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+                  >
+                    <option value="ACTIVE">Ativo</option>
+                    <option value="DRAFT">Rascunho</option>
+                    <option value="ARCHIVED">Arquivado</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Prioridade</label>
+                  <Input
+                    type="number"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
                   />
                 </div>
-                
-                {/* Conteúdo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Resposta / Conteúdo *
-                  </label>
-                  <textarea
-                    required
-                    maxLength={5000}
-                    rows={6}
-                    value={formData.content}
-                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    placeholder="Digite a resposta completa que a IA deve fornecer..."
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    {formData.content.length} / 5000 caracteres
-                  </p>
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Categoria */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Categoria
-                    </label>
-                    <input
-                      type="text"
-                      list="categories-list"
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                      placeholder="Ex: Vendas, Suporte, Produto"
-                    />
-                    <datalist id="categories-list">
-                      {categories.map(cat => <option key={cat} value={cat} />)}
-                    </datalist>
-                  </div>
-                  
-                  {/* Prioridade */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Prioridade (0-10)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={10}
-                      value={formData.priority}
-                      onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                {/* Tags */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tags (pressione Enter para adicionar)
-                  </label>
-                  <input
-                    type="text"
-                    onKeyDown={handleTagInput}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    placeholder="Digite e pressione Enter"
-                  />
-                  {formData.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {formData.tags.map(tag => (
-                        <span
-                          key={tag}
-                          className="px-3 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm flex items-center gap-2"
-                        >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => removeTag(tag)}
-                            className="hover:text-red-500"
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Status */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="ACTIVE">Ativo</option>
-                      <option value="DRAFT">Rascunho</option>
-                      <option value="ARCHIVED">Arquivado</option>
-                    </select>
-                  </div>
-                  
-                  {/* Visível para IA */}
-                  <div className="flex items-center gap-2 pt-7">
-                    <input
-                      type="checkbox"
-                      id="visible-agents"
-                      checked={formData.visible_to_agents}
-                      onChange={(e) => setFormData({ ...formData, visible_to_agents: e.target.checked })}
-                      className="w-4 h-4 text-blue-500 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <label htmlFor="visible-agents" className="text-sm text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <FiEye /> Visível para agentes de IA
-                    </label>
-                  </div>
-                </div>
               </div>
-              
-              <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3 justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors"
-                >
-                  {editingItem ? "Salvar" : "Criar"}
-                </button>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="visible_to_agents"
+                  checked={formData.visible_to_agents}
+                  onChange={(e) => setFormData({ ...formData, visible_to_agents: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-900 dark:border-gray-800"
+                />
+                <label htmlFor="visible_to_agents" className="text-sm text-gray-700 dark:text-gray-300">
+                  Visível para agentes de IA
+                </label>
               </div>
-            </form>
+            </div>
+          </Field>
+
+          <div className="flex justify-end gap-3 pt-8">
+            <Button variant="ghost" onClick={() => setShowModal(false)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" type="submit">
+              {editingItem ? "Salvar Alterações" : "Criar Item"}
+            </Button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 }
+

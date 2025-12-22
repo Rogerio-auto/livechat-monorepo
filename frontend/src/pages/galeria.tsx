@@ -281,135 +281,120 @@ export default function GaleriaPage() {
 
   return (
     <>
-      <div className="livechat-theme min-h-screen w-full pb-12 transition-colors duration-500">
-        <div className="mx-auto w-full max-w-(--page-max-width) px-3 pb-10 pt-6 sm:px-6 lg:px-8">
-          <div className="livechat-card rounded-3xl p-6 shadow-xl md:p-8">
-            <div className="space-y-8">
-              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-[rgba(47,180,99,0.16)] px-3 py-1 text-xs font-semibold text-(--color-primary)">
-                    Portal multimídia
-                  </div>
-                  <div>
-                    <h1 className="text-3xl font-bold text-(--color-text)">Galeria de Mídias</h1>
-                    <p className="mt-1 text-sm text-(--color-text-muted)">
-                      Centralize criativos, materiais de marketing e arquivos de apoio para toda equipe.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-(--color-text-muted)">
-                    <span className="inline-flex items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-3 py-1 font-semibold text-(--color-text)">
-                      Total: {media.length.toLocaleString("pt-BR")}
-                    </span>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-3 py-1 font-semibold text-(--color-text)">
-                      Ativos: {summary.active.toLocaleString("pt-BR")}
-                    </span>
-                    {summary.inactive > 0 && (
-                      <span className="inline-flex items-center gap-2 rounded-full bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-3 py-1 font-semibold text-(--color-text)">
-                        Inativos: {summary.inactive.toLocaleString("pt-BR")}
-                      </span>
-                    )}
-                  </div>
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="mx-auto w-full max-w-[1200px] px-3 pb-10 pt-6 sm:px-6 lg:px-8">
+          <div className="space-y-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-full bg-[rgba(47,180,99,0.16)] px-3 py-1 text-xs font-semibold text-(--color-primary)">
+                  Portal multimídia
                 </div>
-                <div className="flex flex-wrap items-center gap-3 md:justify-end">
-                  <button
-                    type="button"
-                    onClick={handleRefreshClick}
-                    className="inline-flex items-center gap-2 rounded-xl border border-transparent bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-4 py-2 text-sm font-semibold text-(--color-text) transition-all hover:border-[rgba(47,180,99,0.35)] hover:text-(--color-primary)"
-                  >
-                    <FiRefreshCcw className="h-4 w-4" />
-                    Atualizar lista
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowUploader(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
-                  >
-                    <FiUpload className="h-4 w-4" />
-                    Novo upload
-                  </button>
+                <div>
+                  <h1 className="text-3xl font-bold text-(--color-text)">Galeria de Mídias</h1>
+                  <p className="mt-1 text-sm text-(--color-text-muted)">
+                    Centralize criativos, materiais de marketing e arquivos de apoio para toda equipe.
+                  </p>
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                {summaryCards.map((card) => (
-                  <div
-                    key={card.key}
-                    className="relative overflow-hidden rounded-2xl livechat-panel p-5 shadow-xl transition-all duration-200"
-                  >
-                    <div
-                      className={`pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full ${card.accent} blur-3xl`}
-                    />
-                    <div className="relative flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
-                          {card.title}
-                        </p>
-                        <div className="mt-3 text-2xl font-bold text-(--color-text)">
-                          {card.value}
-                        </div>
-                        <p className="mt-1 text-xs text-(--color-text-muted)">{card.detail}</p>
-                      </div>
-                      <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] text-(--color-text)">
-                        {card.icon}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                <button
+                  type="button"
+                  onClick={handleRefreshClick}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-(--color-text) transition-all hover:border-(--color-primary) hover:text-(--color-primary)"
+                >
+                  <FiRefreshCcw className="h-4 w-4" />
+                  Atualizar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUploader(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#2fb463]/20 transition-all duration-200  hover:bg-[#1f8b49]"
+                >
+                  <FiUpload className="h-4 w-4" />
+                  Novo upload
+                </button>
               </div>
-
-              <MediaFilters filters={filters} onFilterChange={handleFilterChange} />
-
-              <div className="rounded-3xl livechat-panel p-5 shadow-xl">
-                <MediaGrid media={media} loading={loading} onRefresh={handleRefreshClick} />
-              </div>
-
-              {loading && media.length > 0 && (
-                <div className="text-xs text-(--color-text-muted)">Atualizando biblioteca...</div>
-              )}
-
-              {pagination.total > 0 && (
-                <div className="flex flex-col gap-4 rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs text-(--color-text-muted)">
-                    Mostrando {currentRangeStart.toLocaleString("pt-BR")}-
-                    {currentRangeEnd.toLocaleString("pt-BR")} de {pagination.total.toLocaleString("pt-BR")}
-                  </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-                    <select
-                      className="config-input rounded-xl border border-transparent bg-(--color-surface) px-3 py-2 text-sm text-(--color-text) shadow-sm focus:border-[rgba(47,180,99,0.35)] focus:outline-none"
-                      value={limit}
-                      onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-                    >
-                      {[24, 50, 100].map((size) => (
-                        <option key={size} value={size}>
-                          {size}/página
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="inline-flex items-center rounded-xl border border-transparent bg-(--color-surface) px-4 py-2 text-sm font-semibold text-(--color-text) transition disabled:opacity-50 hover:border-[rgba(47,180,99,0.35)] hover:text-(--color-primary)"
-                        disabled={!canGoPrev}
-                        onClick={() => handlePageChange("prev")}
-                      >
-                        Anterior
-                      </button>
-                      <span className="text-sm font-semibold text-(--color-text)">
-                        {currentPage} / {totalPages}
-                      </span>
-                      <button
-                        type="button"
-                        className="inline-flex items-center rounded-xl border border-transparent bg-(--color-surface) px-4 py-2 text-sm font-semibold text-(--color-text) transition disabled:opacity-50 hover:border-[rgba(47,180,99,0.35)] hover:text-(--color-primary)"
-                        disabled={!canGoNext}
-                        onClick={() => handlePageChange("next")}
-                      >
-                        Próxima
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {summaryCards.map((card) => (
+                <div
+                  key={card.key}
+                  className="relative overflow-hidden rounded-xl bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 transition-all duration-200"
+                >
+                  <div
+                    className={`pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full ${card.accent} blur-3xl opacity-50`}
+                  />
+                  <div className="relative flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
+                        {card.title}
+                      </p>
+                      <div className="mt-3 text-2xl font-bold text-(--color-text)">
+                        {card.value}
+                      </div>
+                      <p className="mt-1 text-xs text-(--color-text-muted)">{card.detail}</p>
+                    </div>
+                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800 text-(--color-text)">
+                      {card.icon}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <MediaFilters filters={filters} onFilterChange={handleFilterChange} />
+
+            <div className="">
+              <MediaGrid media={media} loading={loading} onRefresh={handleRefreshClick} />
+            </div>
+
+            {loading && media.length > 0 && (
+              <div className="text-xs text-(--color-text-muted)">Atualizando biblioteca...</div>
+            )}
+
+            {pagination.total > 0 && (
+              <div className="flex flex-col gap-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-(--color-text-muted)">
+                  Mostrando {currentRangeStart.toLocaleString("pt-BR")}-
+                  {currentRangeEnd.toLocaleString("pt-BR")} de {pagination.total.toLocaleString("pt-BR")}
+                </div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                  <select
+                    className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-(--color-text) shadow-sm focus:border-(--color-primary) focus:outline-none"
+                    value={limit}
+                    onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                  >
+                    {[24, 50, 100].map((size) => (
+                      <option key={size} value={size}>
+                        {size}/página
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-(--color-text) transition disabled:opacity-50 hover:border-(--color-primary) hover:text-(--color-primary)"
+                      disabled={!canGoPrev}
+                      onClick={() => handlePageChange("prev")}
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-sm font-semibold text-(--color-text)">
+                      {currentPage} / {totalPages}
+                    </span>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-semibold text-(--color-text) transition disabled:opacity-50 hover:border-(--color-primary) hover:text-(--color-primary)"
+                      disabled={!canGoNext}
+                      onClick={() => handlePageChange("next")}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -420,3 +405,4 @@ export default function GaleriaPage() {
     </>
   );
 }
+

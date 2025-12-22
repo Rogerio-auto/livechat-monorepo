@@ -962,6 +962,82 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
         }
     });
 
+    // DELETE excluir card do kanban
+    app.delete("/kanban/cards/:id", requireAuth, async (req: any, res) => {
+        try {
+            const { id } = req.params;
+            const userId = req.user.id;
+
+            // 1) Buscar o card e verificar se existe
+            const { data: card, error: errCard } = await supabaseAdmin
+                .from("kanban_cards")
+                .select("id, kanban_board_id, lead_id")
+                .eq("id", id)
+                .maybeSingle();
+
+            if (errCard) return res.status(500).json({ error: errCard.message });
+            if (!card) return res.status(404).json({ error: "Card não encontrado" });
+
+            // 2) Verificar permissão (mesma empresa)
+            const { data: userRow } = await supabaseAdmin
+                .from("users")
+                .select("company_id")
+                .eq("user_id", userId)
+                .maybeSingle();
+
+            const { data: board } = await supabaseAdmin
+                .from("kanban_boards")
+                .select("company_id")
+                .eq("id", card.kanban_board_id)
+                .maybeSingle();
+
+            if (!userRow?.company_id || userRow.company_id !== board?.company_id) {
+                return res.status(403).json({ error: "Sem permissão para deletar este card" });
+            }
+
+            // 3) Se estiver vinculado a um lead, limpar campos de kanban no lead
+            if (card.lead_id) {
+                await supabaseAdmin
+                    .from("leads")
+                    .update({
+                        kanban_board_id: null,
+                        kanban_column_id: null
+                    })
+                    .eq("id", card.lead_id);
+            }
+
+            // 4) Deletar fotos vinculadas
+            const { data: photos } = await supabaseAdmin
+                .from("lead_photos")
+                .select("storage_path")
+                .eq("card_id", id);
+
+            if (photos && photos.length > 0) {
+                const paths = photos.map(p => p.storage_path);
+                await supabaseAdmin.storage.from("chat-uploads").remove(paths);
+                await supabaseAdmin.from("lead_photos").delete().eq("card_id", id);
+            }
+
+            // 5) Deletar o card
+            const { error: errDel } = await supabaseAdmin
+                .from("kanban_cards")
+                .delete()
+                .eq("id", id);
+
+            if (errDel) return res.status(500).json({ error: errDel.message });
+
+            // 6) Notificar via socket
+            try {
+                io.emit("kanban:card:deleted", { id });
+            } catch { }
+
+            return res.json({ success: true });
+        } catch (e: any) {
+            console.error("DELETE /kanban/cards/:id error:", e);
+            return res.status(500).json({ error: e?.message || "Erro ao deletar card" });
+        }
+    });
+
     // Util: backfill sync from kanban_cards -> leads for current company
     app.post("/kanban/sync-leads", requireAuth, async (req: any, res) => {
         try {

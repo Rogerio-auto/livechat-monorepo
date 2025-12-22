@@ -22,8 +22,8 @@ export function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const containerBackground = theme === "dark"
-    ? "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100"
-    : "bg-gradient-to-br from-indigo-50 via-white to-blue-50 text-slate-900";
+    ? "bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100"
+    : "bg-linear-to-br from-indigo-50 via-white to-blue-50 text-slate-900";
 
   useEffect(() => {
     if (status) {
@@ -126,7 +126,7 @@ export function OnboardingPage() {
 
         {error && (
           <div
-            className="mb-6 rounded-2xl border px-4 py-3 text-sm"
+            className="mb-6 rounded-xl border px-4 py-3 text-sm"
             style={{
               borderColor: "color-mix(in srgb, #ef4444 32%, transparent)",
               backgroundColor: "color-mix(in srgb, #ef4444 18%, transparent)",
@@ -156,13 +156,13 @@ export function OnboardingPage() {
           {currentStep === 1 && <SignupStep onNext={handleSignup} />}
 
           {currentStep === 2 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <CompanyStep onNext={handleCompanyData} onBack={() => setCurrentStep(1)} />
             </div>
           )}
 
           {currentStep === 3 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <PricingStep
                 onNext={handlePlanSelection}
                 onBack={() => setCurrentStep(2)}
@@ -172,25 +172,25 @@ export function OnboardingPage() {
           )}
 
           {currentStep === 4 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <OnboardingStep1 onNext={() => setCurrentStep(5)} />
             </div>
           )}
 
           {currentStep === 5 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <OnboardingStep2 onNext={() => setCurrentStep(6)} onBack={() => setCurrentStep(4)} />
             </div>
           )}
 
           {currentStep === 6 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <OnboardingStep3 onNext={() => setCurrentStep(7)} onBack={() => setCurrentStep(5)} />
             </div>
           )}
 
           {currentStep === 7 && (
-            <div className="config-card rounded-2xl px-8 py-10 shadow-xl">
+            <div className="config-card rounded-xl px-8 py-10 shadow-xl">
               <OnboardingStep4 onBack={() => setCurrentStep(6)} />
             </div>
           )}
@@ -203,3 +203,4 @@ export function OnboardingPage() {
     </div>
   );
 }
+

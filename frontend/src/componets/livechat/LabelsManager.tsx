@@ -81,42 +81,42 @@ export function LabelsManager({ apiBase }: { apiBase: string }) {
   return (
     <div className="max-w-3xl">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-[var(--color-heading)]">Labels</h2>
-        <p className="text-sm text-[var(--color-text-muted)]">Crie labels e, se preferir, já provisiona a coluna no Kanban.</p>
+        <h2 className="text-lg font-semibold text-(--color-heading)">Labels</h2>
+        <p className="text-sm text-(--color-text-muted)">Crie labels e, se preferir, já provisiona a coluna no Kanban.</p>
       </div>
 
       <div className="mb-6 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 p-4 shadow-[0_18px_40px_-35px_rgba(8,12,20,0.9)] transition-colors duration-300">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
           <div className="md:col-span-2">
-            <label className="block text-xs text-[var(--color-text-muted)] mb-1">Nome</label>
+            <label className="block text-xs text-(--color-text-muted) mb-1">Nome</label>
             <input
-              className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+              className="w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex.: Qualificado"
             />
           </div>
           <div>
-            <label className="block text-xs text-[var(--color-text-muted)] mb-1">Cor</label>
+            <label className="block text-xs text-(--color-text-muted) mb-1">Cor</label>
             <div className="flex items-center gap-2">
               <input type="color" className="h-9 w-12 rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)]" value={color} onChange={(e) => setColor(e.target.value)} />
               <input
-                className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
+                className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-3 py-2 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
               />
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <input id="chk-col" type="checkbox" className="h-4 w-4 rounded border-[color:var(--color-border)] accent-[var(--color-primary)]" checked={createColumn} onChange={(e) => setCreateColumn(e.target.checked)} />
-            <label htmlFor="chk-col" className="text-sm text-[var(--color-text)]">Criar coluna no Kanban</label>
+            <input id="chk-col" type="checkbox" className="h-4 w-4 rounded border-[color:var(--color-border)] accent-(--color-primary)" checked={createColumn} onChange={(e) => setCreateColumn(e.target.checked)} />
+            <label htmlFor="chk-col" className="text-sm text-(--color-text)">Criar coluna no Kanban</label>
           </div>
         </div>
         <div className="mt-3">
           <button
             disabled={loading}
             onClick={create}
-            className="rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-[var(--color-on-primary)] transition-colors duration-150 hover:bg-[var(--color-primary-strong)] disabled:opacity-60"
+            className="rounded-lg bg-(--color-primary) px-4 py-2 text-sm font-semibold text-(--color-on-primary) transition-colors duration-150 hover:bg-(--color-primary-strong) disabled:opacity-60"
           >
             Criar label
           </button>
@@ -124,22 +124,22 @@ export function LabelsManager({ apiBase }: { apiBase: string }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-medium text-[var(--color-text)] mb-2">Labels existentes</h3>
+        <h3 className="text-sm font-medium text-(--color-text) mb-2">Labels existentes</h3>
         {loading ? (
-          <div className="text-sm text-[var(--color-text-muted)]">Carregando...</div>
+          <div className="text-sm text-(--color-text-muted)">Carregando...</div>
         ) : tags.length === 0 ? (
-          <div className="text-sm text-[var(--color-text-muted)]">Nenhuma label ainda</div>
+          <div className="text-sm text-(--color-text-muted)">Nenhuma label ainda</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {tags.map((t) => {
               const hasColumn = (columns || []).some((c) => (c.title || '').toLowerCase() === t.name.toLowerCase());
               return (
                 <div key={t.id} className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 px-3 py-2">
-                  <div className="flex items-center gap-2 min-w-0 text-[var(--color-text)]">
+                  <div className="flex items-center gap-2 min-w-0 text-(--color-text)">
                     <span className="inline-block h-3.5 w-3.5 rounded" style={{ backgroundColor: t.color || '#6B7280' }} />
-                    <span className="text-sm text-[var(--color-heading)] truncate">{t.name}</span>
+                    <span className="text-sm text-(--color-heading) truncate">{t.name}</span>
                   </div>
-                  <span className={`text-[11px] px-2 py-0.5 rounded ${hasColumn ? 'bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] text-[var(--color-highlight)]' : 'bg-[color:var(--color-bg)]/55 text-[var(--color-text-muted)]'}`}>
+                  <span className={`text-[11px] px-2 py-0.5 rounded ${hasColumn ? 'bg-[color:color-mix(in srgb,var(--color-highlight) 18%,transparent)] text-(--color-highlight)' : 'bg-[color:var(--color-bg)]/55 text-(--color-text-muted)'}`}>
                     {hasColumn ? 'coluna' : 'sem coluna'}
                   </span>
                 </div>
@@ -150,11 +150,11 @@ export function LabelsManager({ apiBase }: { apiBase: string }) {
       </div>
 
       <div className="mt-6">
-        <h3 className="text-sm font-medium text-[var(--color-text)] mb-2">Colunas do Kanban</h3>
+        <h3 className="text-sm font-medium text-(--color-text) mb-2">Colunas do Kanban</h3>
         {!boardId ? (
-          <div className="text-sm text-[var(--color-text-muted)]">Carregando board...</div>
+          <div className="text-sm text-(--color-text-muted)">Carregando board...</div>
         ) : (columns || []).length === 0 ? (
-          <div className="text-sm text-[var(--color-text-muted)]">Nenhuma coluna</div>
+          <div className="text-sm text-(--color-text-muted)">Nenhuma coluna</div>
         ) : (
           <div className="space-y-2">
             {(columns || []).map((col) => (
@@ -196,10 +196,10 @@ function EditableColumnRow({ apiBase, column, onSaved }: { apiBase: string; colu
 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)]/95 px-3 py-2">
-      <input className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-2 py-1 text-sm text-[var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <input className="flex-1 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-bg)]/60 px-2 py-1 text-sm text-(--color-text) focus:outline-none focus:ring-2 focus:ring-[color:color-mix(in srgb,var(--color-primary) 45%,transparent)]" value={title} onChange={(e) => setTitle(e.target.value)} />
       <input type="color" className="h-8 w-12 rounded border border-[color:var(--color-border)] bg-[color:var(--color-surface)]" value={color} onChange={(e) => setColor(e.target.value)} />
-      <button disabled={saving} onClick={save} className="px-3 py-1.5 rounded bg-[var(--color-primary)] text-sm font-medium text-[var(--color-on-primary)] transition-colors duration-150 hover:bg-[var(--color-primary-strong)] disabled:opacity-60">Salvar</button>
-      <span className="text-[10px] text-[var(--color-text-muted)] ml-1">pos {column.position}</span>
+      <button disabled={saving} onClick={save} className="px-3 py-1.5 rounded bg-(--color-primary) text-sm font-medium text-(--color-on-primary) transition-colors duration-150 hover:bg-(--color-primary-strong) disabled:opacity-60">Salvar</button>
+      <span className="text-[10px] text-(--color-text-muted) ml-1">pos {column.position}</span>
     </div>
   );
 }

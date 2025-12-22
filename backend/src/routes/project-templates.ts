@@ -37,7 +37,7 @@ const CreateStageSchema = z.object({
   icon: z.string().optional(),
   order_index: z.number().int().min(0),
   requires_approval: z.boolean().optional(),
-  automation_rules: z.record(z.any()).optional(),
+  automation_rules: z.record(z.string(), z.any()).optional(),
 });
 
 const UpdateStageSchema = CreateStageSchema.partial().omit({ order_index: true });
@@ -99,7 +99,7 @@ function handleError(error: unknown) {
       status: 400,
       payload: {
         error: "Validation failed",
-        details: error.errors.map((e: any) => ({
+        details: ((error as any).errors || (error as any).issues).map((e: any) => ({
           path: e.path.join("."),
           message: e.message,
         })),

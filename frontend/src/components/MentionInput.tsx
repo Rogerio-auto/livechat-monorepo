@@ -208,7 +208,7 @@ export function MentionInput({
                     <div className="theme-text-muted text-xs truncate">{user.email}</div>
                   )}
                 </div>
-                <FiAtSign className="h-4 w-4 theme-text-muted flex-shrink-0" />
+                <FiAtSign className="h-4 w-4 theme-text-muted shrink-0" />
               </button>
             ))}
           </div>

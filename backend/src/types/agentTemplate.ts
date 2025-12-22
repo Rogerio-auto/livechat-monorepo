@@ -93,17 +93,22 @@ export interface Tool {
 export interface TemplateTest {
   id: string;
   template_id: string;
-  tester_id: string;
-  test_name: string;
-  test_scenario: string;
-  test_messages: TestMessage[];
-  status: 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED';
+  version?: number;
+  status: 'PENDING' | 'RUNNING' | 'PASSED' | 'FAILED' | string;
+  results?: any;
+  metrics?: any;
+  duration_ms?: number;
+  created_by?: string | null;
+  tester_id?: string;
+  test_name?: string;
+  test_scenario?: string;
+  test_messages?: TestMessage[];
   agent_responses?: TestMessage[];
   execution_time_ms?: number;
   validations?: ValidationRule[];
   validation_results?: ValidationResult[];
-  total_tokens: number;
-  total_cost: number;
+  total_tokens?: number;
+  total_cost?: number;
   tools_called?: string[];
   manual_score?: number;
   manual_notes?: string;
@@ -119,15 +124,19 @@ export interface TestMessage {
 export interface TestScenario {
   id: string;
   name: string;
-  description?: string;
-  category: 'GREETING' | 'FAQ' | 'COMPLAINT' | 'COMPLEX_QUERY';
-  messages: TestMessage[];
-  expected_behavior: string;
-  validation_rules: ValidationRule[];
-  difficulty_level: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
-  is_public: boolean;
+  description?: string | null;
+  template_id?: string | null;
+  input_data?: any;
+  expected_output?: any;
+  category: 'GREETING' | 'FAQ' | 'COMPLAINT' | 'COMPLEX_QUERY' | string;
+  messages?: TestMessage[];
+  expected_behavior?: string;
+  validation_rules?: ValidationRule[];
+  difficulty_level?: 'EASY' | 'MEDIUM' | 'HARD' | 'EXPERT';
+  is_public?: boolean;
   company_id?: string;
   created_by?: string;
+  tags?: string[];
   created_at: Date;
   updated_at: Date;
 }
@@ -147,13 +156,19 @@ export interface ValidationResult {
 export interface TemplateValidation {
   id: string;
   template_id: string;
-  validation_type: 'PROMPT_QUALITY' | 'TOOL_COMPATIBILITY' | 'PERFORMANCE' | 'SAFETY';
-  status: 'PENDING' | 'PASSED' | 'FAILED' | 'WARNING';
+  version?: number;
+  validator_id?: string;
+  validation_type?: 'PROMPT_QUALITY' | 'TOOL_COMPATIBILITY' | 'PERFORMANCE' | 'SAFETY';
+  status: 'PENDING' | 'PASSED' | 'FAILED' | 'WARNING' | string;
   score?: number;
-  issues: ValidationIssue[];
-  suggestions: string[];
-  details: Record<string, any>;
-  validated_at: Date;
+  issues?: ValidationIssue[];
+  suggestions?: string[];
+  details?: Record<string, any>;
+  feedback?: string | null;
+  results?: any;
+  validated_by?: string | null;
+  validated_at?: Date;
+  created_at?: Date;
 }
 
 export interface ValidationIssue {

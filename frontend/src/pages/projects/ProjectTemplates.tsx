@@ -259,7 +259,7 @@ const ProjectTemplates: React.FC = () => {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-md animate-in zoom-in duration-200">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Novo Template</h2>
               <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -329,3 +329,4 @@ const ProjectTemplates: React.FC = () => {
 };
 
 export default ProjectTemplates;
+

@@ -19,11 +19,11 @@ export function SystemHealth() {
 
       <div className="grid gap-4 md:grid-cols-3">
         {ITEMS.map((item) => (
-          <div key={item.title} className="rounded-3xl border border-white/5 bg-slate-900/60 p-6">
+          <div key={item.title} className="rounded-xl border border-white/5 bg-slate-900/60 p-6">
             <item.icon className="text-2xl text-slate-200" />
             <h3 className="mt-4 text-lg font-semibold text-white">{item.title}</h3>
             <p className="text-sm text-slate-400">{item.description}</p>
-            <div className="mt-6 rounded-2xl border border-dashed border-white/10 p-4 text-center text-slate-500">
+            <div className="mt-6 rounded-xl border border-dashed border-white/10 p-4 text-center text-slate-500">
               Em construção
             </div>
           </div>
@@ -32,3 +32,4 @@ export function SystemHealth() {
     </section>
   );
 }
+

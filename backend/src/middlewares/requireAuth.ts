@@ -12,6 +12,8 @@ type UserCompanyRow = {
   company_id?: string | null;
   email?: string | null;
   role?: string | null;
+  name?: string | null;
+  avatar?: string | null;
 };
 
 function isIgnorableLookupError(error: PostgrestError | null, column: string): boolean {
@@ -35,7 +37,7 @@ function isMissingColumn(error: PostgrestError | null, column: string): boolean 
 }
 
 async function selectUserRow(column: string, userId: string, includeEmail: boolean) {
-  const selectColumns = includeEmail ? "company_id, email, role" : "company_id, role";
+  const selectColumns = includeEmail ? "company_id, email, role, name, avatar" : "company_id, role, name, avatar";
   return supabaseAdmin
     .from("users")
     .select(selectColumns)
@@ -75,6 +77,23 @@ async function resolveUserCompany(userId: string): Promise<{ row: UserCompanyRow
   return { row: null, error: null };
 }
 
+async function resolvePublicUser(userId: string) {
+  const lookupColumns = ["user_id", "id", "auth_user_id"];
+  for (const column of lookupColumns) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from("users")
+        .select("id, theme_preference, phone, name, avatar")
+        .eq(column, userId)
+        .maybeSingle();
+      if (data) return data;
+    } catch (e) {
+      // Ignora erro de coluna inexistente e tenta a próxima
+    }
+  }
+  return null;
+}
+
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
     // DEV backdoor opcional (usar DEV_COMPANY_ID ou header)
@@ -104,9 +123,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const cacheKey = `auth:token:${tokenHash}`;
     
     try {
-      const cached = await rGet(cacheKey);
+      const cached = await rGet<any>(cacheKey);
       if (cached) {
-        const authData = JSON.parse(cached);
+        const authData = cached;
         (req as any).user = authData.user;
         (req as any).profile = authData.profile;
         console.log("[requireAuth] 🚀 Cache HIT:", { userId: authData.user.id });
@@ -199,31 +218,34 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       return res.status(400).json({ error: "Missing company context" });
     }
 
-    // Buscar o ID da tabela public.users + theme_preference + phone
+    // Buscar o ID da tabela public.users + theme_preference + phone + name + avatar
     let publicUserId: string | null = null;
     let themePreference: string = "system";
     let phone: string | null = null;
+    let name: string | null = null;
+    let avatar: string | null = null;
     try {
-      const { data: publicUser, error: publicUserError } = await supabaseAdmin
-        .from("users")
-        .select("id, theme_preference, phone")
-        .eq("user_id", supaUser.id)
-        .maybeSingle();
-      
-      if (publicUserError) {
-        console.error("[requireAuth] Error fetching public user data:", publicUserError);
-      }
+      const publicUser = await resolvePublicUser(supaUser.id);
       
       if (publicUser?.id) {
         publicUserId = publicUser.id;
         themePreference = publicUser.theme_preference || "system";
         phone = publicUser.phone || null;
+        name = (typeof publicUser.name === 'string' && publicUser.name.trim()) ? publicUser.name : null;
+        avatar = (typeof publicUser.avatar === 'string' && publicUser.avatar.trim()) ? publicUser.avatar : null;
       } else {
         console.warn("[requireAuth] No public user found for auth user:", supaUser.id);
       }
     } catch (error) {
       console.error("[requireAuth] Exception fetching public user data:", error);
     }
+
+    const metaName = (typeof meta.name === "string" && meta.name.trim()) ? meta.name : 
+                    (typeof meta.full_name === "string" && meta.full_name.trim()) ? meta.full_name :
+                    (typeof meta.display_name === "string" && meta.display_name.trim()) ? meta.display_name : undefined;
+
+    const metaAvatar = (typeof meta.avatar_url === "string" && meta.avatar_url.trim()) ? meta.avatar_url :
+                      (typeof meta.picture === "string" && meta.picture.trim()) ? meta.picture : undefined;
 
     (req as any).user = {
       id: supaUser.id, // ID do Supabase Auth (mantido para compatibilidade)
@@ -235,6 +257,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
         supaUser.email,
       company_id: companyId ?? null,
       phone: phone, // ✅ Telefone do usuário
+      name: name || (typeof profile?.name === 'string' && profile.name.trim() ? profile.name : undefined) || metaName,
+      avatar: avatar || (typeof profile?.avatar === 'string' && profile.avatar.trim() ? profile.avatar : undefined) || metaAvatar,
     };
     
     // Adicionar profile com role para rotas admin
@@ -249,6 +273,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       role: profile?.role ?? "USER", // Default USER se não encontrar
       theme_preference: themePreference, // ✅ Incluir theme no profile
       phone: phone, // ✅ Telefone do usuário
+      name: name || (typeof profile?.name === 'string' && profile.name.trim() ? profile.name : undefined) || metaName,
+      avatar: avatar || (typeof profile?.avatar === 'string' && profile.avatar.trim() ? profile.avatar : undefined) || metaAvatar,
     };
     
     console.log("[requireAuth] 🔑 User authenticated:", {

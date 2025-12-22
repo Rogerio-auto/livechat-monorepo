@@ -102,7 +102,7 @@ export default function ProjectStats({ templateId }: { templateId?: string }) {
       </section>
 
       {/* Financial Summary */}
-      <section className="bg-linear-to-br from-indigo-600 via-indigo-700 to-purple-800 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden">
+      <section className="bg-linear-to-br from-indigo-600 via-indigo-700 to-purple-800 rounded-xl p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-3xl"></div>
         <div className="absolute bottom-0 left-0 -mb-4 -ml-4 w-32 h-32 bg-purple-500/20 rounded-full blur-3xl"></div>
         
@@ -205,3 +205,4 @@ function formatCurrency(value: number): string {
     currency: 'BRL',
   }).format(value);
 }
+

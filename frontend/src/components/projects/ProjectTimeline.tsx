@@ -23,14 +23,14 @@ export default function ProjectTimeline({ projectId }: Props) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-[color:var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-2 border-(--color-primary) border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   if (activities.length === 0) {
     return (
-      <div className="text-center py-12 text-[color:var(--color-text-muted)]">
+      <div className="text-center py-12 text-(--color-text-muted)">
         <div className="text-4xl mb-2">📅</div>
         <p>Nenhuma atividade registrada ainda</p>
       </div>
@@ -73,28 +73,28 @@ function ActivityItem({ activity, isLast }: { activity: ProjectActivity; isLast:
     <div className="flex gap-4">
       {/* Timeline Line */}
       <div className="flex flex-col items-center">
-        <div className="w-10 h-10 rounded-full bg-[color:var(--color-primary)]/10 flex items-center justify-center text-lg">
+        <div className="w-10 h-10 rounded-full bg-(--color-primary)/10 flex items-center justify-center text-lg">
           {icon}
         </div>
         {! isLast && (
-          <div className="w-0.5 flex-1 bg-[color:var(--color-border)] my-1"></div>
+          <div className="w-0.5 flex-1 bg-(--color-border) my-1"></div>
         )}
       </div>
 
       {/* Content */}
       <div className="flex-1 pb-6">
-        <div className="bg-[color:var(--color-surface-muted)] rounded-lg p-4">
+        <div className="bg-(--color-surface-muted) rounded-lg p-4">
           <div className="flex items-start justify-between mb-2">
-            <h4 className="font-semibold text-[color:var(--color-text)]">
+            <h4 className="font-semibold text-(--color-text)">
               {activity.title || formatActivityType(activity.activity_type)}
             </h4>
-            <span className="text-xs text-[color:var(--color-text-muted)]">
+            <span className="text-xs text-(--color-text-muted)">
               {formatDateTime(activity.created_at)}
             </span>
           </div>
           
           {activity.description && (
-            <p className="text-sm text-[color:var(--color-text-muted)] mb-2">
+            <p className="text-sm text-(--color-text-muted) mb-2">
               {activity.description}
             </p>
           )}

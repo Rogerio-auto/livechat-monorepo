@@ -148,7 +148,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-8 h-8 border-2 border-[color:var(--color-primary)] border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-2 border-(--color-primary) border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -156,40 +156,40 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-6">
       {/* Progress Summary */}
-      <div className="bg-[color:var(--color-surface-muted)] rounded-xl p-6 border border-[color:var(--color-border)]">
+      <div className="bg-(--color-surface-muted) rounded-xl p-6 border border-(--color-border)">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-[color:var(--color-text)]">
+          <h3 className="text-lg font-semibold text-(--color-text)">
             Progresso das Tarefas
           </h3>
-          <span className="text-2xl font-bold text-[color:var(--color-primary)]">
+          <span className="text-2xl font-bold text-(--color-primary)">
             {completedCount}/{tasks.length}
           </span>
         </div>
-        <div className="w-full bg-[color:var(--color-bg)] rounded-full h-3">
+        <div className="w-full bg-(--color-bg) rounded-full h-3">
           <div
-            className="bg-[color:var(--color-primary)] h-3 rounded-full transition-all duration-300"
+            className="bg-(--color-primary) h-3 rounded-full transition-all duration-300"
             style={{ width: `${progressPercentage}%` }}
           />
         </div>
-        <p className="text-sm text-[color:var(--color-text-muted)] mt-2">
+        <p className="text-sm text-(--color-text-muted) mt-2">
           {progressPercentage}% concluído
         </p>
       </div>
 
       {/* Add Task Form */}
-      <form onSubmit={handleAddTask} className="bg-[color:var(--color-surface)] p-4 rounded-xl border border-[color:var(--color-border)] space-y-3">
+      <form onSubmit={handleAddTask} className="bg-(--color-surface) p-4 rounded-xl border border-(--color-border) space-y-3">
         <div className="flex gap-2">
           <input
             type="text"
             value={newTask.title}
             onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             placeholder="Nova tarefa..."
-            className="flex-1 bg-[color:var(--color-bg)] border border-[color:var(--color-border)] rounded-lg px-4 py-2 text-sm text-[color:var(--color-text)] focus:ring-2 focus:ring-[color:var(--color-primary)] outline-none"
+            className="flex-1 bg-(--color-bg) border border-(--color-border) rounded-lg px-4 py-2 text-sm text-(--color-text) focus:ring-2 focus:ring-(--color-primary) outline-none"
           />
           <button 
             type="submit" 
             disabled={adding || !newTask.title.trim()}
-            className="px-4 py-2 bg-[color:var(--color-primary)] text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
+            className="px-4 py-2 bg-(--color-primary) text-white rounded-lg hover:opacity-90 disabled:opacity-50 transition-all"
           >
             {adding ? "..." : <Plus size={20} />}
           </button>
@@ -198,7 +198,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
           <select
             value={newTask.priority}
             onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as any })}
-            className="flex-1 bg-[color:var(--color-bg)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-xs text-[color:var(--color-text)] outline-none"
+            className="flex-1 bg-(--color-bg) border border-(--color-border) rounded-lg px-3 py-2 text-xs text-(--color-text) outline-none"
           >
             <option value="low">Baixa Prioridade</option>
             <option value="medium">Média Prioridade</option>
@@ -208,7 +208,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
           <select
             value={newTask.assigned_to}
             onChange={(e) => setNewTask({ ...newTask, assigned_to: e.target.value })}
-            className="flex-1 bg-[color:var(--color-bg)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-xs text-[color:var(--color-text)] outline-none"
+            className="flex-1 bg-(--color-bg) border border-(--color-border) rounded-lg px-3 py-2 text-xs text-(--color-text) outline-none"
           >
             <option value="">Sem responsável</option>
             {users.map(u => (
@@ -221,7 +221,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
       {/* Tasks List */}
       <div className="space-y-2">
         {tasks.length === 0 ? (
-          <div className="text-center py-12 text-[color:var(--color-text-muted)]">
+          <div className="text-center py-12 text-(--color-text-muted)">
             <div className="text-4xl mb-2">✅</div>
             <p>Nenhuma tarefa criada ainda</p>
           </div>
@@ -231,14 +231,14 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
               key={task.id}
               className={`group flex flex-col p-3 rounded-xl border transition-all ${
                 task.is_completed 
-                  ? 'bg-[color:var(--color-surface-muted)] border-transparent opacity-60' 
-                  : 'bg-[color:var(--color-surface)] border-[color:var(--color-border)] hover:border-[color:var(--color-primary)]'
+                  ? 'bg-(--color-surface-muted) border-transparent opacity-60' 
+                  : 'bg-(--color-surface) border-(--color-border) hover:border-(--color-primary)'
               }`}
             >
               <div className="flex items-center gap-3">
                 <button 
                   onClick={() => toggleTask(task)}
-                  className={`transition-colors ${task.is_completed ? 'text-green-500' : 'text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)]'}`}
+                  className={`transition-colors ${task.is_completed ? 'text-green-500' : 'text-(--color-text-muted) hover:text-(--color-primary)'}`}
                 >
                   {task.is_completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
                 </button>
@@ -250,10 +250,10 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                       type="text"
                       value={editForm.title}
                       onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                      className="w-full bg-transparent border-b border-[color:var(--color-primary)] outline-none text-sm font-medium py-0.5 text-[color:var(--color-text)]"
+                      className="w-full bg-transparent border-b border-(--color-primary) outline-none text-sm font-medium py-0.5 text-(--color-text)"
                     />
                   ) : (
-                    <p className={`text-sm font-medium truncate ${task.is_completed ? 'line-through text-[color:var(--color-text-muted)]' : 'text-[color:var(--color-text)]'}`}>
+                    <p className={`text-sm font-medium truncate ${task.is_completed ? 'line-through text-(--color-text-muted)' : 'text-(--color-text)'}`}>
                       {task.title}
                     </p>
                   )}
@@ -272,13 +272,13 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                       </span>
                       <button 
                         onClick={() => startEditing(task)}
-                        className="p-1.5 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-1.5 text-(--color-text-muted) hover:text-(--color-primary) opacity-0 group-hover:opacity-100 transition-all"
                       >
                         <Edit2 size={14} />
                       </button>
                       <button 
                         onClick={() => deleteTask(task.id)}
-                        className="p-1.5 text-[color:var(--color-text-muted)] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        className="p-1.5 text-(--color-text-muted) hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -294,7 +294,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                     <select
                       value={editForm.assigned_to}
                       onChange={(e) => setEditForm({ ...editForm, assigned_to: e.target.value })}
-                      className="text-[10px] bg-[color:var(--color-bg)] border border-[color:var(--color-border)] rounded px-1 py-0.5 outline-none text-[color:var(--color-text)]"
+                      className="text-[10px] bg-(--color-bg) border border-(--color-border) rounded px-1 py-0.5 outline-none text-(--color-text)"
                     >
                       <option value="">Sem responsável</option>
                       {users.map(u => (
@@ -302,10 +302,10 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                       ))}
                     </select>
                   ) : (
-                    <div className="flex items-center gap-1.5 text-[10px] text-[color:var(--color-text-muted)]">
+                    <div className="flex items-center gap-1.5 text-[10px] text-(--color-text-muted)">
                       {task.assigned_user ? (
                         <>
-                          <div className="w-4 h-4 rounded-full bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[color:var(--color-primary)] overflow-hidden">
+                          <div className="w-4 h-4 rounded-full bg-(--color-primary)/10 flex items-center justify-center text-(--color-primary) overflow-hidden">
                             {task.assigned_user.avatar ? (
                               <img src={task.assigned_user.avatar} alt="" className="w-full h-full object-cover" />
                             ) : (
@@ -321,7 +321,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                   )}
 
                   {task.due_date && (
-                    <div className="flex items-center gap-1 text-[10px] text-[color:var(--color-text-muted)]">
+                    <div className="flex items-center gap-1 text-[10px] text-(--color-text-muted)">
                       <Calendar size={10} />
                       {new Date(task.due_date).toLocaleDateString()}
                     </div>
@@ -332,7 +332,7 @@ export default function ProjectTasks({ projectId }: { projectId: string }) {
                   <select
                     value={editForm.priority}
                     onChange={(e) => setEditForm({ ...editForm, priority: e.target.value as any })}
-                    className="text-[10px] bg-[color:var(--color-bg)] border border-[color:var(--color-border)] rounded px-1 py-0.5 outline-none text-[color:var(--color-text)]"
+                    className="text-[10px] bg-(--color-bg) border border-(--color-border) rounded px-1 py-0.5 outline-none text-(--color-text)"
                   >
                     <option value="low">Baixa</option>
                     <option value="medium">Média</option>

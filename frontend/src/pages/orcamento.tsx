@@ -92,7 +92,7 @@ export function PropostaPage() {
       <Sidebar />
 
       <div className="ml-16 min-h-screen bg-[#EDEDED] p-8">
-        <div className="bg-white rounded-2xl shadow-lg p-6 max-w-4xl mx-auto space-y-6">
+        <div className="bg-white rounded-xl shadow-lg p-6 max-w-4xl mx-auto space-y-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-xl font-semibold text-[#204A34]">Criar Proposta</h2>
             <button
@@ -173,7 +173,7 @@ export function PropostaPage() {
                   <button
                     key={p.id}
                     onClick={() => setProduto(p.id)}
-                    className={`flex-none snap-start w-[300px] h-[140px] rounded-2xl p-4 ring-1 shadow-sm transition
+                    className={`flex-none snap-start w-[300px] h-[140px] rounded-xl p-4 ring-1 shadow-sm transition
           ${produto === p.id ? "bg-emerald-50 ring-emerald-300" : "bg-white ring-zinc-200 hover:bg-zinc-50"}`}
                   >
                     <div className="flex h-full flex-col">
@@ -193,14 +193,14 @@ export function PropostaPage() {
 
                       {(p.power || p.brand) && (
                         <div className="text-xs text-zinc-500 mt-1">
-                          {[p.power, p.brand].filter(Boolean).join(" • ")}
+                          {[p.power, p.brand].filter(Boolean).join(" ï¿½ ")}
                         </div>
                       )}
 
                       <div className="mt-auto text-sm font-semibold text-zinc-700">
                         {preco != null
                           ? preco.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-                          : "Sem preço"}
+                          : "Sem preï¿½o"}
                       </div>
                     </div>
                   </button>
@@ -234,7 +234,7 @@ export function PropostaPage() {
 
         {showLeadModal && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl">
+            <div className="w-full max-w-xl rounded-xl bg-white p-4 shadow-xl">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold text-zinc-800">{leadModeNew ? "Cadastrar novo cliente" : "Selecionar cliente"}</h3>
                 <button className="text-zinc-500 hover:text-zinc-800" onClick={() => { setShowLeadModal(false); setLeadModeNew(false); }}>
@@ -281,6 +281,7 @@ export function PropostaPage() {
     </>
   );
 }
+
 
 
 

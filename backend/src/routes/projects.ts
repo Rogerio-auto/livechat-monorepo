@@ -142,8 +142,7 @@ export function registerProjectRoutes(app: Application) {
       const projects = await listProjects(companyId, {
         status: status as any,
         template_id: template_id as string,
-        owner_id: owner_id as string,
-        contact_id: contact_id as string,
+        owner_user_id: owner_id as string,
       });
 
       return res.json(projects);

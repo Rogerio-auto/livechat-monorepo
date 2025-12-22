@@ -17,7 +17,7 @@ export function InfLogin() {
 
         {/* Features */}
         <div className="space-y-4 mt-8">
-          <div className="flex items-start gap-4 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10">
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
               <i className="fas fa-comments text-blue-600 dark:text-blue-400"></i>
             </div>
@@ -29,7 +29,7 @@ export function InfLogin() {
             </div>
           </div>
 
-          <div className="flex items-start gap-4 p-4 rounded-2xl bg-green-500/5 border border-green-500/10">
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-green-500/5 border border-green-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center">
               <i className="fas fa-users text-green-600 dark:text-green-400"></i>
             </div>
@@ -41,7 +41,7 @@ export function InfLogin() {
             </div>
           </div>
 
-          <div className="flex items-start gap-4 p-4 rounded-2xl bg-purple-500/5 border border-purple-500/10">
+          <div className="flex items-start gap-4 p-4 rounded-xl bg-purple-500/5 border border-purple-500/10">
             <div className="shrink-0 w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center">
               <i className="fas fa-rocket text-purple-600 dark:text-purple-400"></i>
             </div>
@@ -90,3 +90,4 @@ export function InfLogin() {
     </div>
   )
 }
+

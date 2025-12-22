@@ -874,7 +874,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
     const mappedAsc = rows
       .slice()
       .reverse()
-      .map((row) => ({
+      .map((row: any) => ({
         id: row.id,
         chat_id: row.chat_id,
         body: row.content,
@@ -3852,7 +3852,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   if (internalChatId) {
     // Resolve sender identity metadata (name/avatar) for human agents
     // Resolve dbChatId first before any DB queries
-    let dbChatId = internalChatId;
+    let dbChatId: string | null = internalChatId;
     const isUuid = (id: string | null) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || "");
 
     if (!isUuid(dbChatId)) {

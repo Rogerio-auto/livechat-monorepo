@@ -5,6 +5,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import ProjectForm from "../../components/projects/ProjectForm";
 import type { TemplateWithDetails, ProjectWithDetails } from "../../types/projects";
 import { useUserProfile } from "../../hooks/useUserProfile";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
+import { ArrowLeft } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -125,33 +127,90 @@ const ProjectCreate: React.FC = () => {
 
   if (loading || profileLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex-1 flex items-center justify-center min-h-screen bg-white dark:bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full">
-      {selectedTemplate ? (
-        <ProjectForm 
-          template={selectedTemplate} 
-          project={projectToEdit}
-          onClose={() => navigate(id ? `/projects/${id}` : "/projects")} 
-          onSuccess={() => navigate(id ? `/projects/${id}` : "/projects")} 
-          isModal={false}
+    <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 min-h-screen">
+      <div className="w-full max-w-[1200px] mx-auto px-4 py-12 sm:px-6 lg:px-8">
+        <Breadcrumbs 
+          items={[
+            { label: "Projetos", href: "/projects" },
+            { label: id ? "Editar Projeto" : "Novo Projeto", active: true }
+          ]} 
         />
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-gray-500">Nenhum template de projeto disponível.</p>
-          <button 
-            onClick={() => navigate("/projects")}
-            className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-          >
-            Voltar
-          </button>
+
+        <div className="mb-10">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-4xl font-bold text-(--color-text) tracking-tight">
+                {id ? "Editar Projeto" : "Novo Projeto"}
+              </h1>
+              <p className="mt-2 text-lg text-(--color-text-muted)">
+                {id ? "Altere as informações do seu projeto." : "Preencha os dados para iniciar um novo projeto."}
+              </p>
+            </div>
+            
+            <button
+              onClick={() => navigate(id ? `/projects/${id}` : "/projects")}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-(--color-text-muted) hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </button>
+          </div>
         </div>
-      )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2">
+            {selectedTemplate ? (
+              <ProjectForm 
+                template={selectedTemplate} 
+                project={projectToEdit || undefined}
+                onClose={() => navigate(id ? `/projects/${id}` : "/projects")} 
+                onSuccess={() => navigate(id ? `/projects/${id}` : "/projects")} 
+                isModal={false}
+              />
+            ) : (
+              <div className="p-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center">
+                <p className="text-slate-500">Nenhum template de projeto disponível.</p>
+                <button 
+                  onClick={() => navigate("/projects")}
+                  className="mt-6 text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
+                >
+                  Voltar para lista
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar Info Column */}
+          <div className="space-y-6">
+            <div className="p-6 border border-slate-100 dark:border-slate-800 rounded-xl">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-(--color-text-muted) mb-4 flex items-center gap-2">
+                Dicas Rápidas
+              </h3>
+              <ul className="space-y-4 text-sm text-(--color-text-muted)">
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-bold">1</span>
+                  <p>Escolha um título descritivo para facilitar a identificação.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-bold">2</span>
+                  <p>Vincule um cliente para centralizar todas as comunicações.</p>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xs font-bold">3</span>
+                  <p>Defina prazos realistas para manter a equipe alinhada.</p>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

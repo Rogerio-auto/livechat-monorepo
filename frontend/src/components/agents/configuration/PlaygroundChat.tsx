@@ -146,13 +146,13 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
                     {msg.role === 'user' ? <FiUser size={14} /> : <FiCpu size={14} />}
                   </div>
                   <div className="flex flex-col gap-1">
-                    <div className={`p-3 rounded-2xl text-sm ${
+                    <div className={`p-3 rounded-xl text-sm ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white rounded-tr-none'
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-tl-none'
                     }`}>
                       {msg.role === 'assistant' ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+                        <div className="prose prose-sm dark:prose-invert max-w-none wrap-break-word">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
                           </ReactMarkdown>
@@ -181,7 +181,7 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
                 <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                   <FiCpu size={14} className="text-gray-400" />
                 </div>
-                <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none flex gap-1">
+                <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-xl rounded-tl-none flex gap-1">
                   <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" />
                   <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
                   <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce [animation-delay:0.4s]" />
@@ -278,3 +278,4 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
     </div>
   );
 }
+

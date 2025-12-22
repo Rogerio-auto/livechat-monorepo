@@ -1,6 +1,15 @@
 // backend/src/repos/projects.repo.ts
 
 import { supabaseAdmin } from "../lib/supabase.ts";
+import {
+  notifyProjectCreated,
+  notifyProjectAssigned,
+  notifyProjectStageChanged,
+  notifyProjectCompleted,
+  notifyProjectCommented,
+  notifyTaskCompleted,
+  notifyTaskAssigned,
+} from '../services/notification-triggers.service.ts';
 
 // ==================== TYPES ====================
 
@@ -55,19 +64,19 @@ export type ProjectComment = {
 export type CreateProjectInput = {
   template_id: string;
   title: string;
-  description?: string;
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  customer_address?: string;
-  estimated_value?: number;
-  start_date?: string;
-  estimated_end_date?: string;
-  owner_user_id?: string;
-  assigned_users?: string[];
-  custom_fields?: Record<string, any>;
-  priority?: string;
-  tags?: string[];
+  description?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  estimated_value?: number | null;
+  start_date?: string | null;
+  estimated_end_date?: string | null;
+  owner_user_id?: string | null;
+  assigned_users?: string[] | null;
+  custom_fields?: Record<string, any> | null;
+  priority?: string | null;
+  tags?: string[] | null;
 };
 
 export type UpdateProjectInput = Partial<Omit<Project, "id" | "company_id" | "created_at" | "created_by" | "project_number">>;
@@ -101,6 +110,7 @@ export async function listProjects(
     .select(`
       *,
       template:project_templates(name),
+      stage:project_stages(name),
       owner:users!owner_user_id(name),
       tasks_count:project_tasks(count),
       comments_count:project_comments(count)
@@ -147,7 +157,9 @@ export async function listProjects(
   const projects = (data || []).map((p: any) => ({
     ...p,
     template_name: p.template?.name,
+    current_stage_name: p.stage?.name,
     owner_name: p.owner?.name,
+    end_date: p.estimated_end_date,
     tasks_count: p.tasks_count?.[0]?.count || 0,
     comments_count: p.comments_count?.[0]?.count || 0,
   }));
@@ -211,6 +223,18 @@ export async function createProject(
 
   if (error) throw new Error(error.message);
 
+  // 🆕 NOTIFICAR criação
+  await notifyProjectCreated(data.id, data.title, userId, companyId);
+
+  // 🆕 NOTIFICAR usuários atribuídos
+  if (input.assigned_users && input.assigned_users.length > 0) {
+    for (const assignedUserId of input.assigned_users) {
+      if (assignedUserId !== userId) {
+        await notifyProjectAssigned(data.id, data.title, assignedUserId, userId, companyId);
+      }
+    }
+  }
+
   await createProjectActivity(data.id, userId, "created", {
     title: "Projeto criado",
     description: `Projeto ${data.project_number} iniciado.`,
@@ -228,6 +252,9 @@ export async function updateProject(
   userId: string,
   input: UpdateProjectInput
 ): Promise<Project> {
+  const project = await getProject(companyId, projectId);
+  if (!project) throw new Error("Project not found");
+
   const { data, error } = await supabaseAdmin
     .from("projects")
     .update({
@@ -241,10 +268,40 @@ export async function updateProject(
 
   if (error) throw new Error(error.message);
 
-  await createProjectActivity(projectId, userId, "field_update", {
-    title: "Projeto atualizado",
-    metadata: input,
-  });
+  // 🆕 NOTIFICAR se projeto foi concluído
+  try {
+    if (input.status === 'completed' && project.status !== 'completed') {
+      await notifyProjectCompleted(
+        projectId,
+        data.title,
+        data.owner_user_id || userId,
+        data.assigned_users || [],
+        companyId
+      );
+    }
+
+    // 🆕 NOTIFICAR novos usuários atribuídos
+    if (input.assigned_users) {
+      const newUsers = input.assigned_users.filter(
+        (id: string) => !project.assigned_users.includes(id)
+      );
+      for (const assignedUserId of newUsers) {
+        await notifyProjectAssigned(projectId, data.title, assignedUserId, userId, companyId);
+      }
+    }
+  } catch (notifyError) {
+    console.error('[ProjectRepo] Error sending notifications:', notifyError);
+    // Não trava o update se a notificação falhar
+  }
+
+  try {
+    await createProjectActivity(projectId, userId, "field_update", {
+      title: "Projeto atualizado",
+      metadata: input,
+    });
+  } catch (activityError) {
+    console.error('[ProjectRepo] Error creating activity:', activityError);
+  }
 
   return data;
 }
@@ -292,6 +349,19 @@ export async function moveProjectStage(
   const project = await getProject(companyId, projectId);
   if (!project) throw new Error("Project not found");
 
+  // Fetch stage names
+  const { data: fromStage } = await supabaseAdmin
+    .from('project_stages')
+    .select('name')
+    .eq('id', project.current_stage_id)
+    .single();
+
+  const { data: toStage } = await supabaseAdmin
+    .from('project_stages')
+    .select('name')
+    .eq('id', newStageId)
+    .single();
+
   const { data, error } = await supabaseAdmin
     .from("projects")
     .update({ current_stage_id: newStageId })
@@ -301,6 +371,16 @@ export async function moveProjectStage(
     .single();
 
   if (error) throw new Error(error.message);
+
+  // 🆕 NOTIFICAR mudança de estágio
+  await notifyProjectStageChanged(
+    projectId,
+    data.title,
+    fromStage?.name || 'N/A',
+    toStage?.name || 'N/A',
+    data.owner_user_id || userId,
+    companyId
+  );
 
   // Registrar mudança de estágio
   try {
@@ -435,6 +515,21 @@ export async function addComment(
     .single();
 
   if (error) throw new Error(error.message);
+
+  // Buscar dados do projeto
+  const project = await getProject(companyId, projectId);
+  if (project) {
+    // 🆕 NOTIFICAR comentário
+    await notifyProjectCommented(
+      projectId,
+      project.title,
+      userId,
+      project.owner_user_id || userId,
+      project.assigned_users || [],
+      project.company_id,
+      input.content
+    );
+  }
 
   // Registrar atividade
   await createProjectActivity(projectId, userId, "comment", {
@@ -641,11 +736,31 @@ export async function addTask(
     })
     .select(`
       *,
-      assigned_user:users!assigned_to(id, name, avatar)
+      assigned_user:users!assigned_to(id, name, avatar),
+      projects (
+        id,
+        title,
+        owner_user_id,
+        company_id
+      )
     `)
     .single();
 
   if (error) throw new Error(error.message);
+
+  // 🆕 NOTIFICAR atribuição
+  if (data.assigned_to && data.assigned_to !== userId) {
+    const { notifyTaskAssigned } = await import('../services/notification-triggers.service.ts');
+    await notifyTaskAssigned(
+      data.id,
+      data.title,
+      data.projects.id,
+      data.projects.title,
+      data.assigned_to,
+      data.projects.company_id
+    );
+  }
+
   return data;
 }
 
@@ -673,11 +788,30 @@ export async function updateTask(
     .eq("id", taskId)
     .select(`
       *,
-      assigned_user:users!assigned_to(id, name, avatar)
+      assigned_user:users!assigned_to(id, name, avatar),
+      projects (
+        id,
+        title,
+        owner_user_id,
+        company_id
+      )
     `)
     .single();
 
   if (error) throw new Error(error.message);
+
+  // 🆕 NOTIFICAR conclusão de tarefa
+  if (payload.is_completed === true) {
+    await notifyTaskCompleted(
+      taskId,
+      data.title,
+      data.projects.id,
+      data.projects.title,
+      data.projects.owner_user_id,
+      data.projects.company_id
+    );
+  }
+
   return data;
 }
 

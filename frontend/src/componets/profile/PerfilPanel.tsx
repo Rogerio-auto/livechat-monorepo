@@ -1,6 +1,19 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { API, fetchJson, getAccessToken } from "../../utils/api";
-import { Input, Button } from "../../components/ui";
+
+const inputClasses = "w-full rounded-md px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 transition-all duration-200 text-sm shadow-xs";
+
+const Field = ({ label, children, description }: { label: string; children: ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-50 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <div className="text-sm font-medium text-gray-900 dark:text-white">{label}</div>
+      {description && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</div>}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
+);
 
 export type ProfileForm = {
   nome: string;
@@ -14,7 +27,7 @@ type PerfilPanelProps = {
   form: ProfileForm;
   baseline: Pick<ProfileForm, "nome" | "avatarUrl">;
   setForm: (updater: (prev: ProfileForm) => ProfileForm) => void;
-  onSaved: (next: Pick<ProfileForm, "nome" | "avatarUrl">) => void;
+  onSaved: (next: ProfileForm) => void;
   onNameAvatarSaved?: (name: string, avatarUrl: string) => void;
   disabled?: boolean;
 };
@@ -36,6 +49,8 @@ export default function PerfilPanel({
   );
 
   const [savingPw, setSavingPw] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
+  const [pwSuccess, setPwSuccess] = useState(false);
   const passwordsFilled = Boolean(form.novaSenha) || Boolean(form.confirmarSenha);
   const pwMismatch = passwordsFilled && form.novaSenha !== form.confirmarSenha;
 
@@ -91,12 +106,18 @@ export default function PerfilPanel({
   };
 
   const saveMain = async () => {
-    await fetchJson(`${API}/me/profile`, {
-      method: "PUT",
-      body: JSON.stringify({ name: form.nome, avatarUrl: form.avatarUrl }),
-    });
-    onSaved({ nome: form.nome, avatarUrl: form.avatarUrl });
-    onNameAvatarSaved?.(form.nome, form.avatarUrl);
+    try {
+      await fetchJson(`${API}/me/profile`, {
+        method: "PUT",
+        body: JSON.stringify({ name: form.nome, avatarUrl: form.avatarUrl }),
+      });
+      onSaved({ ...form, nome: form.nome, avatarUrl: form.avatarUrl });
+      onNameAvatarSaved?.(form.nome, form.avatarUrl);
+      alert("Perfil atualizado com sucesso!");
+    } catch (error: any) {
+      console.error('Erro ao salvar perfil:', error);
+      alert(error.message || "Erro ao salvar perfil");
+    }
   };
 
   const resetMain = () => {
@@ -110,6 +131,8 @@ export default function PerfilPanel({
   const savePassword = async () => {
     if (!form.novaSenha || form.novaSenha !== form.confirmarSenha || disabled) return;
     setSavingPw(true);
+    setPwError(null);
+    setPwSuccess(false);
     try {
       await fetchJson(`${API}/me/profile`, {
         method: "PUT",
@@ -120,138 +143,123 @@ export default function PerfilPanel({
         }),
       });
       setForm((prev) => ({ ...prev, senhaAtual: "", novaSenha: "", confirmarSenha: "" }));
+      setPwSuccess(true);
+      setTimeout(() => setPwSuccess(false), 3000);
+    } catch (error: any) {
+      console.error('Erro ao atualizar senha:', error);
+      setPwError(error.message || "Erro ao atualizar senha");
     } finally {
       setSavingPw(false);
     }
   };
 
   return (
-    <section className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Input
-          label="Nome"
-          placeholder="Seu nome"
-          value={form.nome}
-          onChange={(e) => setForm((prev) => ({ ...prev, nome: e.target.value }))}
-          autoComplete="name"
-          disabled={disabled}
-        />
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Avatar
-          </label>
-          <div className="flex items-center gap-3">
-            {form.avatarUrl && (
-              <img 
-                src={form.avatarUrl} 
-                alt="Avatar preview" 
-                className="w-16 h-16 rounded-full object-cover border-2 border-gray-300 dark:border-gray-700"
-              />
-            )}
-            <label className="flex-1">
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/jpg"
-                onChange={handleAvatarUpload}
-                disabled={disabled || uploading}
-                className="hidden"
-              />
-              <div className="cursor-pointer px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 transition text-sm flex items-center gap-2 justify-center">
-                {uploading ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Enviando...
-                  </>
-                ) : form.avatarUrl ? (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Atualizar avatar
-                  </>
+    <section className="space-y-0">
+      <div className="divide-y divide-gray-50 dark:divide-gray-800">
+        <Field label="Nome completo" description="Como você será identificado no sistema.">
+          <input
+            className={inputClasses}
+            value={form.nome}
+            onChange={(e) => setForm((prev) => ({ ...prev, nome: e.target.value }))}
+            autoComplete="name"
+            disabled={disabled}
+            placeholder="Seu nome"
+          />
+        </Field>
+
+        <Field label="Foto de perfil" description="PNG ou JPG de até 2MB.">
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <div className="w-16 h-16 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex items-center justify-center overflow-hidden">
+                {form.avatarUrl ? (
+                  <img src={form.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
                 ) : (
-                  <>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                    Escolher avatar
-                  </>
+                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 )}
               </div>
-            </label>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="cursor-pointer inline-flex items-center px-3 py-1.5 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                <input type="file" accept="image/png,image/jpeg,image/jpg" onChange={handleAvatarUpload} disabled={disabled || uploading} className="hidden" />
+                {uploading ? "Enviando..." : "Alterar foto"}
+              </label>
+              {uploadError && <p className="text-[10px] text-red-500">{uploadError}</p>}
+            </div>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            PNG, JPG ou JPEG, máx 2MB
-          </p>
-          {uploadError && (
-            <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-              {uploadError}
-            </p>
-          )}
+        </Field>
+
+        <div className="flex items-center justify-end gap-3 py-6">
+          <button
+            onClick={resetMain}
+            disabled={!dirtyMain || disabled}
+            className="px-4 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={saveMain}
+            disabled={!dirtyMain || disabled}
+            className="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-50 disabled:bg-gray-400 transition-all"
+          >
+            Salvar perfil
+          </button>
         </div>
 
-        <Input
-          label="Senha atual"
-          type="password"
-          placeholder="••••••••"
-          value={form.senhaAtual}
-          onChange={(e) => setForm((prev) => ({ ...prev, senhaAtual: e.target.value }))}
-          autoComplete="current-password"
-          disabled={disabled}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Nova senha"
-            type="password"
-            placeholder="Nova senha"
-            value={form.novaSenha}
-            onChange={(e) => setForm((prev) => ({ ...prev, novaSenha: e.target.value }))}
-            autoComplete="new-password"
-            disabled={disabled}
-            error={pwMismatch ? "As senhas não conferem" : undefined}
-          />
-          <Input
-            label="Confirmar senha"
-            type="password"
-            placeholder="Repita a senha"
-            value={form.confirmarSenha}
-            onChange={(e) => setForm((prev) => ({ ...prev, confirmarSenha: e.target.value }))}
-            autoComplete="new-password"
-            disabled={disabled}
-            error={pwMismatch ? "As senhas não conferem" : undefined}
-          />
+        <div className="pt-10 pb-6">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Segurança</h3>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Atualize sua senha para manter sua conta segura.</p>
         </div>
-      </div>
 
-      <div className="flex gap-3 pt-2">
-        <Button
-          variant="gradient"
-          onClick={saveMain}
-          disabled={!dirtyMain || disabled}
-        >
-          Salvar alterações
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={resetMain}
-          disabled={!dirtyMain || disabled}
-        >
-          Cancelar
-        </Button>
-      </div>
+        <Field label="Senha atual">
+          <input
+            type="password"
+            className={inputClasses}
+            value={form.senhaAtual}
+            onChange={(e) => setForm((prev) => ({ ...prev, senhaAtual: e.target.value }))}
+            autoComplete="current-password"
+            disabled={disabled}
+            placeholder="••••••••"
+          />
+        </Field>
 
-      <div className="flex gap-3">
-        <Button
-          variant="primary"
-          onClick={savePassword}
-          disabled={disabled || savingPw || !form.novaSenha || form.novaSenha !== form.confirmarSenha}
-        >
-          {savingPw ? "Salvando..." : "Atualizar senha"}
-        </Button>
+        <Field label="Nova senha" description="Mínimo de 8 caracteres.">
+          <div className="space-y-3">
+            <input
+              type="password"
+              className={inputClasses}
+              value={form.novaSenha}
+              onChange={(e) => setForm((prev) => ({ ...prev, novaSenha: e.target.value }))}
+              autoComplete="new-password"
+              disabled={disabled}
+              placeholder="Nova senha"
+            />
+            <input
+              type="password"
+              className={inputClasses}
+              value={form.confirmarSenha}
+              onChange={(e) => setForm((prev) => ({ ...prev, confirmarSenha: e.target.value }))}
+              autoComplete="new-password"
+              disabled={disabled}
+              placeholder="Confirme a nova senha"
+            />
+            {pwMismatch && <p className="text-[10px] text-red-500">As senhas não conferem</p>}
+          </div>
+        </Field>
+
+        <div className="flex items-center justify-end gap-3 py-6">
+          {pwError && <p className="text-xs text-red-500 mr-auto">{pwError}</p>}
+          {pwSuccess && <p className="text-xs text-green-500 mr-auto">Senha atualizada com sucesso!</p>}
+          <button
+            onClick={savePassword}
+            disabled={!passwordsFilled || pwMismatch || savingPw || disabled}
+            className="px-4 py-2 rounded-md text-sm font-semibold bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-100 shadow-sm disabled:opacity-50 transition-all"
+          >
+            {savingPw ? "Atualizando..." : "Atualizar senha"}
+          </button>
+        </div>
       </div>
     </section>
   );

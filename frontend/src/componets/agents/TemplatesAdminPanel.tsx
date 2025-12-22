@@ -3,7 +3,7 @@ import { API, fetchJson } from "../../utils/api";
 import type { AgentTemplate, AgentTemplateQuestion } from "../../types/types";
 import { TemplateToolsManager } from "./TemplateToolsManager";
 
-const CARD = "rounded-2xl shadow-sm p-6 bg-(--color-surface) text-(--color-text) border border-(--color-border)";
+const CARD = "rounded-xl shadow-sm p-6 bg-(--color-surface) text-(--color-text) border border-(--color-border)";
 const INPUT = "w-full rounded-xl px-3 py-2 disabled:opacity-70 border border-(--color-border) bg-(--color-surface-muted) text-(--color-text)";
 const TEXTAREA = "w-full min-h-[140px] rounded-xl px-3 py-2 disabled:opacity-70 border border-(--color-border) bg-(--color-surface-muted) text-(--color-text)";
 const BTN = "px-3 py-2 rounded-lg disabled:opacity-60 bg-(--color-surface-muted) text-(--color-text) border border-(--color-border) hover:bg-(--color-surface)";
@@ -217,7 +217,7 @@ export default function TemplatesAdminPanel() {
 
       <div className="mt-6 grid gap-6 md:grid-cols-3">
         <div className="md:col-span-1 space-y-4">
-          <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-muted) p-4">
+          <div className="rounded-xl border border-(--color-border) bg-(--color-surface-muted) p-4">
             <h3 className="text-sm font-semibold text-(--color-heading) mb-2">Da empresa</h3>
             <ul className="space-y-1 text-sm">
               {companyTemplates.length === 0 && (
@@ -236,7 +236,7 @@ export default function TemplatesAdminPanel() {
               ))}
             </ul>
           </div>
-          <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-muted) p-4">
+          <div className="rounded-xl border border-(--color-border) bg-(--color-surface-muted) p-4">
             <h3 className="text-sm font-semibold text-(--color-heading) mb-2">Globais (somente leitura)</h3>
             <ul className="space-y-1 text-sm">
               {globalTemplates.map((t) => (
@@ -255,7 +255,7 @@ export default function TemplatesAdminPanel() {
         </div>
 
         <div className="md:col-span-2 space-y-4">
-          <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-muted) p-4">
+          <div className="rounded-xl border border-(--color-border) bg-(--color-surface-muted) p-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <label className={LABEL}>Chave</label>
@@ -310,7 +310,7 @@ export default function TemplatesAdminPanel() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-(--color-border) bg-(--color-surface-muted) p-4">
+          <div className="rounded-xl border border-(--color-border) bg-(--color-surface-muted) p-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-white">Perguntas</h3>
               <button
@@ -395,3 +395,4 @@ export default function TemplatesAdminPanel() {
     </section>
   );
 }
+

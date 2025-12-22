@@ -426,7 +426,7 @@ export function ChatHeader({
 											className={`rounded-full px-3 py-1 text-xs font-medium transition ${
 												active
 													? "text-white shadow" 
-													: "border border-[color:var(--color-border)] text-[color:var(--color-text-muted)]"
+													: "border border-(--color-border) text-(--color-text-muted)"
 											}`}
 											style={
 												active
@@ -514,11 +514,11 @@ export function ChatHeader({
 						)}
 
 						<div className="flex flex-col gap-2">
-							<label className="text-xs font-medium text-[color:var(--color-text-muted)]">
+							<label className="text-xs font-medium text-(--color-text-muted)">
 								Observações
 							</label>
 							<textarea
-								className="min-h-[96px] w-full rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-3 py-2 text-sm"
+								className="min-h-24 w-full rounded-lg border border-(--color-border) bg-(--color-surface) px-3 py-2 text-sm"
 								placeholder="Adicionar nota sobre o cliente"
 								value={noteDraft}
 								onChange={(event) => setNoteDraft(event.target.value)}
@@ -545,7 +545,7 @@ export function ChatHeader({
 							</button>
 							<button
 								type="button"
-								className="flex items-center gap-2 rounded-lg bg-[color:var(--color-primary)] px-4 py-2 text-sm font-semibold text-[color:var(--color-on-primary,#ffffff)] shadow disabled:opacity-70"
+								className="flex items-center gap-2 rounded-lg bg-(--color-primary) px-4 py-2 text-sm font-semibold text-(--color-on-primary,#ffffff) shadow disabled:opacity-70"
 								onClick={handleSaveStage}
 								disabled={savingStage}
 							>
@@ -568,8 +568,8 @@ export function ChatHeader({
 											type="button"
 											className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
 												active
-													? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]"
-													: "border-[color:var(--color-border)] text-[color:var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+													? "border-(--color-primary) bg-(--color-primary)/10 text-(--color-primary)"
+													: "border-(--color-border) text-(--color-text) hover:bg-(--color-surface-muted)/60"
 											}`}
 											onClick={() => handleStatusChange(option.value)}
 										>
@@ -669,8 +669,8 @@ export function ChatHeader({
 										type="button"
 										className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm transition ${
 											active
-												? "border-[color:var(--color-primary)] bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]"
-												: "border-[color:var(--color-border)] text-[color:var(--color-text)] hover:bg-[color:var(--color-surface-muted)]/60"
+												? "border-(--color-primary) bg-(--color-primary)/10 text-(--color-primary)"
+												: "border-(--color-border) text-(--color-text) hover:bg-(--color-surface-muted)/60"
 										}`}
 										onClick={() => handleDepartmentChange(department.id)}
 										disabled={isDepartmentChanging}
@@ -843,7 +843,7 @@ function IconButton({ icon, label, active, disabled, onClick }: { icon: ReactNod
 
 function PanelCard({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<div className="w-full rounded-2xl border border-(--color-border) bg-(--color-surface) p-4 shadow-2xl">
+		<div className="w-full rounded-xl border border-(--color-border) bg-(--color-surface) p-4 shadow-md">
 			<div className="mb-3 text-sm font-semibold text-(--color-heading)">{title}</div>
 			<div className="flex flex-col gap-3 text-sm text-(--color-text)">{children}</div>
 		</div>
@@ -902,4 +902,5 @@ function AgentButton({
 		</button>
 	);
 }
+
 

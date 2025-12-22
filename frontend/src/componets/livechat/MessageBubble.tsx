@@ -54,7 +54,7 @@ export function MessageBubble({
   });
   const wrap = isAgent ? "w-full flex justify-end" : "w-full flex justify-start";
   const bubbleBase =
-    "relative inline-block w-auto max-w-[85%] sm:max-w-[75%] md:max-w-[65%] px-3 py-2 rounded-2xl shadow-md leading-snug whitespace-pre-wrap break-words text-[13px] transition-colors duration-200 backdrop-blur-[2px]";
+    "relative inline-block w-auto max-w-[85%] sm:max-w-[75%] md:max-w-[65%] px-3 py-2 rounded-xl shadow-md leading-snug whitespace-pre-wrap break-words text-[13px] transition-colors duration-200 backdrop-blur-[2px]";
   const isPrivate = !!m.is_private || m.type === "PRIVATE";
   const bubbleSideClass = isPrivate ? "" : isAgent ? "rounded-br-none" : "rounded-bl-none";
   const bubbleStyle: CSSProperties = useMemo(() => {
@@ -202,7 +202,7 @@ export function MessageBubble({
   } else if (mediaUrl && messageType === "IMAGE") {
     bubbleContent = (
       <div
-        className="overflow-hidden rounded-2xl p-2 shadow-inner"
+        className="overflow-hidden rounded-xl p-2 shadow-inner"
         style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 40%, transparent)" }}
       >
         {m.is_media_sensitive && (
@@ -216,13 +216,13 @@ export function MessageBubble({
           className="max-h-72 w-full rounded-xl object-contain cursor-pointer"
           onClick={openLightbox}
         />
-        {caption && <p className="mt-2 text-xs opacity-90 whitespace-pre-wrap break-words">{caption}</p>}
+        {caption && <p className="mt-2 text-xs opacity-90 whitespace-pre-wrap wrap-break-word">{caption}</p>}
       </div>
     );
   } else if (mediaUrl && messageType === "VIDEO") {
     bubbleContent = (
       <div
-        className="relative overflow-hidden rounded-2xl p-2 shadow-inner"
+        className="relative overflow-hidden rounded-xl p-2 shadow-inner"
         style={{ backgroundColor: "color-mix(in srgb, var(--color-surface) 90%, transparent)" }}
       >
         {m.is_media_sensitive && (
@@ -246,7 +246,7 @@ export function MessageBubble({
     );
   } else if (mediaUrl && messageType === "STICKER") {
     bubbleContent = (
-      <div className="overflow-hidden rounded-2xl p-1">
+      <div className="overflow-hidden rounded-xl p-1">
         <img
           src={mediaUrl}
           alt="Sticker"
@@ -267,7 +267,7 @@ export function MessageBubble({
     
     bubbleContent = (
       <div
-        className="flex flex-col gap-2 rounded-2xl p-3 shadow-inner"
+        className="flex flex-col gap-2 rounded-xl p-3 shadow-inner"
         style={{ backgroundColor: "color-mix(in srgb, var(--color-surface-muted) 40%, transparent)" }}
       >
         <div className="flex items-center gap-2">
@@ -295,7 +295,7 @@ export function MessageBubble({
   } else if (mediaUrl && (messageType === "DOCUMENT" || messageType === "FILE")) {
     bubbleContent = (
       <div
-        className="flex flex-col gap-2 rounded-2xl px-4 py-3 shadow-inner"
+        className="flex flex-col gap-2 rounded-xl px-4 py-3 shadow-inner"
         style={{ background: "color-mix(in srgb, var(--color-surface) 45%, var(--color-bg))" }}
       >
         {m.is_media_sensitive && (
@@ -404,7 +404,7 @@ export function MessageBubble({
         <div className="flex flex-col gap-2 min-w-[200px]">
           {header?.type === "text" && <div className="font-bold text-sm">{header.text}</div>}
           
-          {body?.text && <div className="whitespace-pre-wrap break-words">{body.text}</div>}
+          {body?.text && <div className="whitespace-pre-wrap wrap-break-word">{body.text}</div>}
           
           {footer?.text && <div className="text-xs opacity-70 border-t border-white/10 pt-1 mt-1">{footer.text}</div>}
 
@@ -779,3 +779,4 @@ export function MessageBubble({
     </>
   );
 }
+

@@ -80,6 +80,8 @@ import { webhookRouter } from "./routes/webhooks.js";
 import { checkoutRouter } from "./routes/checkout.js";
 import { registerProjectTemplateRoutes } from "./routes/project-templates.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerNotificationRoutes } from "./routes/notifications.js";
+import { startScheduler } from "./jobs/scheduler.js";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -700,10 +702,6 @@ app.get("/auth/me", requireAuth, (req: any, res) => {
 
 // ✅ Register auth routes from modular file (VERSION 2.0 with role support)
 registerAuthRoutes(app);
-
-// ===== Notification routes =====
-import { registerNotificationRoutes } from "./routes/notifications.js";
-registerNotificationRoutes(app);
 
 // ===== Queue test/example routes =====
 // Enfileira abertura de chat (worker processa)
@@ -1538,134 +1536,6 @@ io.on("connection", async (socket) => {
       return ack?.({ ok: false, error: e?.message || "private send error" });
     }
   });
-});
-
-// Perfil do Usuário autenticado + dados b?sicos da empresa
-app.get("/me/profile", requireAuth, async (req: any, res) => {
-  const userId = req.user.id;
-  // Tenta obter linha em public.users
-  const { data: urow, error: uerr } = await supabaseAdmin
-    .from("users")
-    .select("user_id, name, role, avatar, company_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (uerr) return res.status(500).json({ error: uerr.message });
-
-  let companyName: string | null = null;
-  // Opcional: tenta buscar nome da empresa, ignora se a tabela n?o existir
-  try {
-    if (urow?.company_id) {
-      const { data: comp, error: cerr } = await supabaseAdmin
-        .from("companies")
-        .select("id, name, avatar")
-        .eq("id", urow.company_id)
-        .maybeSingle();
-      if (!cerr) companyName = (comp as any)?.name ?? null;
-    }
-  } catch (_) {
-    // ignora
-  }
-
-  return res.json({
-    id: req.user.id,
-    email: req.user.email,
-    name: urow?.name || req.user.email,
-    role: urow?.role || null,
-    avatarUrl: urow?.avatar || null,
-    companyId: urow?.company_id || null,
-    companyName,
-  });
-});
-
-// Update authenticated user's profile (name/avatar/password)
-app.put("/me/profile", requireAuth, async (req: any, res) => {
-  try {
-    const authUserId = req.user.id as string;
-    const authEmail = req.user.email as string;
-    const schema = z
-      .object({
-        name: z.string().min(1).optional(),
-        avatarUrl: z.string().url().optional(),
-        currentPassword: z.string().optional(),
-        newPassword: z.string().optional(),
-        confirmPassword: z.string().optional(),
-      })
-      .passthrough();
-    const parsed = schema.safeParse(req.body || {});
-    if (!parsed.success)
-      return res
-        .status(400)
-        .json({ error: "Dados inv?lidos", details: parsed.error.format() });
-    const body = parsed.data as any;
-
-    const nowIso = new Date().toISOString();
-    let updatedRow: any = null;
-    const toUpdate: Record<string, any> = {};
-    if (typeof body.name === "string") toUpdate.name = body.name;
-    if (typeof body.avatarUrl === "string") toUpdate.avatar = body.avatarUrl;
-    if (Object.keys(toUpdate).length > 0) {
-      toUpdate.updated_at = nowIso;
-      const { data, error } = await supabaseAdmin
-        .from("users")
-        .update(toUpdate)
-        .eq("user_id", authUserId)
-        .select("user_id, name, role, avatar, company_id")
-        .maybeSingle();
-      if (error) return res.status(500).json({ error: error.message });
-      updatedRow = data;
-    }
-
-    let passwordChanged = false;
-    const hasPwChange =
-      typeof body.newPassword === "string" && body.newPassword.length > 0;
-    if (hasPwChange) {
-      if (!body.currentPassword)
-        return res.status(400).json({ error: "Senha atual ? obrigat?ria" });
-      if (body.newPassword !== body.confirmPassword)
-        return res
-          .status(400)
-          .json({ error: "Confirma??o de senha n?o confere" });
-      // Validate current password by trying to sign in
-      const { data: login, error: loginErr } =
-        await supabaseAnon.auth.signInWithPassword({
-          email: authEmail,
-          password: String(body.currentPassword),
-        });
-      if (loginErr || !login?.session)
-        return res.status(400).json({ error: "Senha atual inv?lida" });
-      // Update password using admin
-      const { error: upwErr } = await (
-        supabaseAdmin as any
-      ).auth.admin.updateUserById(authUserId, {
-        password: String(body.newPassword),
-      });
-      if (upwErr) return res.status(500).json({ error: upwErr.message });
-      passwordChanged = true;
-    }
-
-    const resp = {
-      id: authUserId,
-      email: authEmail,
-      name: updatedRow?.name ?? req.user.email,
-      role: updatedRow?.role ?? null,
-      avatarUrl: updatedRow?.avatar ?? null,
-      companyId: updatedRow?.company_id ?? null,
-      passwordChanged,
-    };
-
-    try {
-      io.emit("profile:updated", {
-        userId: authUserId,
-        changes: { name: toUpdate.name, avatarUrl: toUpdate.avatar },
-        profile: resp,
-      });
-    } catch { }
-    return res.json(resp);
-  } catch (e: any) {
-    return res
-      .status(500)
-      .json({ error: e?.message || "profile update error" });
-  }
 });
 
 // ===== Rotas de Leads (exemplo CRUD) =====
@@ -3057,14 +2927,22 @@ app.get("/livechat/chats/:id/kanban", requireAuth, async (req: any, res) => {
     if (!customer) return res.status(404).json({ error: "Cliente não encontrado" });
 
     let boardId: string | null = null;
+    let currentColumnId: string | null = null;
+    let currentColumnName: string | null = null;
+
     if (customer.lead_id) {
       const { data: lead, error: errLead } = await supabaseAdmin
         .from("leads")
-        .select("id, kanban_board_id")
+        .select("id, kanban_board_id, kanban_column_id, kanban_column:kanban_columns(id, name)")
         .eq("id", customer.lead_id)
         .maybeSingle();
       if (errLead) return res.status(500).json({ error: errLead.message });
-      boardId = (lead as any)?.kanban_board_id || null;
+      
+      if (lead) {
+        boardId = (lead as any).kanban_board_id || null;
+        currentColumnId = (lead as any).kanban_column_id || null;
+        currentColumnName = (lead as any).kanban_column?.name || null;
+      }
     }
 
     if (!boardId) {
@@ -3079,23 +2957,25 @@ app.get("/livechat/chats/:id/kanban", requireAuth, async (req: any, res) => {
       .order("position", { ascending: true });
     if (errCols) return res.status(500).json({ error: errCols.message });
 
-    // 4) Coluna atual (via chat_tags, mais recente)
-    let currentColumnId: string | null = null;
-    try {
-      const { data: tagsRows } = await supabaseAdmin
-        .from("chat_tags")
-        .select("*")
-        .eq("chat_id", chatId)
-        .order("updated_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(1);
-      currentColumnId = getColIdFromTagRow((tagsRows || [])[0]);
-    } catch (e) {
-      // ignora
+    // Se ainda n?o temos a coluna atual, tentamos buscar pelo boardId e lead_id no kanban_cards
+    if (!currentColumnId && customer.lead_id && boardId) {
+      const { data: card } = await supabaseAdmin
+        .from("kanban_cards")
+        .select("kanban_column_id, kanban_column:kanban_columns(id, name)")
+        .eq("lead_id", customer.lead_id)
+        .eq("kanban_board_id", boardId)
+        .maybeSingle();
+      if (card) {
+        currentColumnId = (card as any).kanban_column_id;
+        currentColumnName = (card as any).kanban_column?.name;
+      }
     }
 
     return res.json({
       ok: true,
+      stage_id: currentColumnId,
+      stage_name: currentColumnName,
+      note: null,
       board: { id: boardId },
       columns: columns || [],
       current: { column_id: currentColumnId },
@@ -3771,6 +3651,7 @@ registerDocumentRoutes(app);
 registerDocumentTemplateRoutes(app);
 registerProjectTemplateRoutes(app);
 registerProjectRoutes(app);
+registerNotificationRoutes(app);
 // ATENÇÃO: Esses routers aplicam requireAuth globalmente em /api/*
 // Por isso o onboarding precisa estar registrado ANTES
 app.use("/api", templateToolsRouter);
@@ -3822,6 +3703,13 @@ void (async () => {
     await registerCampaignWorker();
   } catch (error: any) {
     console.error("[campaign.worker] failed to start", error?.message || error);
+  }
+
+  try {
+    startScheduler();
+    console.log("[Scheduler] Started");
+  } catch (error: any) {
+    console.error("[Scheduler] Failed to start", error?.message || error);
   }
 
   server.listen(PORT, () => {

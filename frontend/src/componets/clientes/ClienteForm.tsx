@@ -5,6 +5,7 @@ import {
   formatPhoneBR, unformatPhoneBR,
   toISODate, normUF, normNumero
 } from "../../utils/format";
+import { showToast } from "../../hooks/useToast";
 
 type ClienteFormProps = {
   initialData?: any;
@@ -147,6 +148,34 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
     }
   };
 
+  const handlePhoneBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name !== "celular") return;
+
+    const phoneDigits = unformatPhoneBR(value);
+    if (phoneDigits.length < 10) return;
+
+    // Se estiver editando e o número for o mesmo do original, não valida
+    if (initialData?.celular && unformatPhoneBR(initialData.celular) === phoneDigits) {
+      return;
+    }
+
+    try {
+      const API_URL = (import.meta as any).env?.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
+      const res = await fetch(`${API_URL}/leads/check-phone/${phoneDigits}`, { credentials: 'include' });
+      const data = await res.json();
+
+      if (data.exists) {
+        showToast(
+          `Atenção: Já existe um ${data.type === 'lead' ? 'lead' : 'cliente'} (${data.name}) com este número.`,
+          "warning"
+        );
+      }
+    } catch (err) {
+      console.error("Erro ao validar telefone:", err);
+    }
+  };
+
   const sanitize = (d: any) => {
     const payload: any = {
       nome: d.nome?.trim() || "",
@@ -188,30 +217,44 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
     e.preventDefault();
     
     if (!form.nome?.trim()) {
-      alert("Nome é obrigatório");
+      showToast("Nome é obrigatório", "warning");
+      return;
+    }
+
+    if (!form.celular?.trim()) {
+      showToast("Celular é obrigatório", "warning");
       return;
     }
 
     setLoading(true);
     try {
       await onSubmit(sanitize(form));
+    } catch (err: any) {
+      showToast(err.message || "Erro ao salvar cliente", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClass = "w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all";
-  const labelClass = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5";
+  const inputClass = "w-full px-4 py-2.5 rounded-xl border-none bg-slate-50 dark:bg-slate-900/50 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2fb463]/30 transition-all";
+  const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-8">
       {/* Seção: Informações Básicas */}
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-          Informações Básicas
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2fb463]/10 text-[#2fb463]">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+          </div>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+            Informações Básicas
+          </h4>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>Nome Completo *</label>
             <input
@@ -238,7 +281,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className={labelClass}>RG</label>
             <input
@@ -274,7 +317,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>Status</label>
             <select
@@ -298,7 +341,9 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
             >
               <option value="">Selecione uma etapa</option>
               {columns.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
             </select>
           </div>
@@ -306,12 +351,19 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
       </div>
 
       {/* Seção: Filiação */}
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-          Filiação
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-500">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </div>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+            Filiação e Pessoal
+          </h4>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>Nome da Mãe</label>
             <input
@@ -335,7 +387,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label className={labelClass}>Sexo</label>
             <select
@@ -395,21 +447,22 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
       </div>
 
       {/* Seção: Endereço */}
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-          Endereço
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-500">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </div>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+            Endereço
+          </h4>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
-            <label className={labelClass}>
-              CEP
-              {cepLoading && (
-                <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">
-                  Buscando...
-                </span>
-              )}
-            </label>
+            <label className={labelClass}>CEP</label>
             <div className="relative">
               <input
                 name="cep"
@@ -422,7 +475,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
               />
               {cepLoading && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <svg className="animate-spin h-5 w-5 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-5 w-5 text-[#2fb463]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
@@ -456,7 +509,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>Complemento</label>
             <input
@@ -481,7 +534,7 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
             <label className={labelClass}>UF</label>
             <input
@@ -509,22 +562,31 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
       </div>
 
       {/* Seção: Contatos */}
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-          Contatos
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#1f6feb]/10 text-[#1f6feb]">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+            Contatos e Digital
+          </h4>
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <label className={labelClass}>Celular Principal</label>
+            <label className={labelClass}>Celular Principal *</label>
             <input
               name="celular"
               inputMode="numeric"
               value={form.celular || ""}
               onChange={handleChange}
-              placeholder="(00) 00000-0000"
+              onBlur={handlePhoneBlur}
+              placeholder="+55 (00) 00000-0000"
               className={inputClass}
-              maxLength={15}
+              maxLength={20}
+              required
             />
           </div>
 
@@ -535,14 +597,14 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
               inputMode="numeric"
               value={form.celularAlternativo || ""}
               onChange={handleChange}
-              placeholder="(00) 00000-0000"
+              placeholder="+55 (00) 00000-0000"
               className={inputClass}
-              maxLength={15}
+              maxLength={20}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>Telefone</label>
             <input
@@ -550,9 +612,9 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
               inputMode="numeric"
               value={form.telefone || ""}
               onChange={handleChange}
-              placeholder="(00) 0000-0000"
+              placeholder="+55 (00) 0000-0000"
               className={inputClass}
-              maxLength={15}
+              maxLength={20}
             />
           </div>
 
@@ -563,14 +625,14 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
               inputMode="numeric"
               value={form.telefoneAlternativo || ""}
               onChange={handleChange}
-              placeholder="(00) 0000-0000"
+              placeholder="+55 (00) 0000-0000"
               className={inputClass}
-              maxLength={15}
+              maxLength={20}
             />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className={labelClass}>E-mail</label>
             <input
@@ -598,10 +660,17 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
       </div>
 
       {/* Seção: Observações */}
-      <div className="space-y-4">
-        <h4 className="text-lg font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">
-          Observações
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-500/10 text-slate-500">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </div>
+          <h4 className="text-lg font-bold text-slate-900 dark:text-white">
+            Observações
+          </h4>
+        </div>
         
         <div>
           <label className={labelClass}>Anotações Gerais</label>
@@ -610,18 +679,18 @@ export function ClienteForm({ initialData, onSubmit }: ClienteFormProps) {
             value={form.observacoes || ""}
             onChange={handleChange}
             placeholder="Informações adicionais sobre o cliente..."
-            className={`${inputClass} min-h-[100px] resize-y`}
+            className={`${inputClass} min-h-[120px] resize-y`}
             rows={4}
           />
         </div>
       </div>
 
       {/* Botões de Ação */}
-      <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex items-center justify-end gap-4 pt-8 border-t border-slate-100 dark:border-slate-800">
         <button
           type="submit"
           disabled={loading}
-          className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center justify-center rounded-xl bg-[#2fb463] px-8 py-3 text-sm font-bold text-white shadow-lg shadow-[#2fb463]/20 transition-all  hover:bg-[#1f8b49] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (
             <span className="flex items-center gap-2">

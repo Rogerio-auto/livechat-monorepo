@@ -233,7 +233,7 @@ export default function TemplatesPage() {
       style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
     >
       <div
-        className="mt-8 rounded-2xl border p-4 sm:p-6 shadow-lg theme-surface"
+        className="mt-8 rounded-xl border p-4 sm:p-6 shadow-lg theme-surface"
         style={{
           borderColor: "var(--color-border)",
           boxShadow: "0 32px 48px -32px var(--color-card-shadow)",
@@ -302,7 +302,7 @@ export default function TemplatesPage() {
             {filteredTemplates.map((template) => (
               <div
                 key={template.id}
-                className="rounded-2xl border p-4 theme-surface-muted relative"
+                className="rounded-xl border p-4 theme-surface-muted relative"
                 style={{ borderColor: "var(--color-border)" }}
               >
                 {/* Header */}
@@ -381,7 +381,7 @@ export default function TemplatesPage() {
           style={{ backgroundColor: "var(--color-overlay)" }}
         >
           <div
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-6 shadow-xl theme-surface"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border p-6 shadow-xl theme-surface"
             style={{
               borderColor: "var(--color-border)",
               boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
@@ -399,7 +399,7 @@ export default function TemplatesPage() {
 
             {/* Drag & Drop Area */}
             <div
-              className={`border-2 border-dashed rounded-2xl p-8 mb-4 text-center transition ${
+              className={`border-2 border-dashed rounded-xl p-8 mb-4 text-center transition ${
                 dragActive ? "border-blue-500 bg-blue-50 dark:bg-blue-500/10" : "border-slate-300 dark:border-slate-700"
               }`}
               onDragEnter={handleDrag}
@@ -530,7 +530,7 @@ export default function TemplatesPage() {
           style={{ backgroundColor: "var(--color-overlay)" }}
         >
           <div
-            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border p-6 shadow-xl theme-surface"
+            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl border p-6 shadow-xl theme-surface"
             style={{
               borderColor: "var(--color-border)",
               boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
@@ -576,3 +576,4 @@ export default function TemplatesPage() {
     </div>
   );
 }
+

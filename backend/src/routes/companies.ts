@@ -169,11 +169,11 @@ export function registerCompanyRoutes(app: express.Application) {
         .maybeSingle();
 
       const normalizedStatus =
-        (rawCompany as any)?.status ?? (rawCompany.is_active === false ? "inactive" : "active");
+        (rawCompany as any)?.status ?? ((rawCompany as any).is_active === false ? "inactive" : "active");
 
       return res.json({
         company: {
-          ...rawCompany,
+          ...(rawCompany as any),
           status: normalizedStatus,
         },
         analytics: {
@@ -190,7 +190,7 @@ export function registerCompanyRoutes(app: express.Application) {
             tokens_used: 0, // TODO: Implement real token usage tracking
           },
           finance: {
-            plan: rawCompany.plan ?? null,
+            plan: (rawCompany as any).plan ?? null,
             status: normalizedStatus,
             isActive: normalizedStatus !== "inactive",
           },

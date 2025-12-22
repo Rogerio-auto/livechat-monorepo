@@ -11,7 +11,7 @@ export function LoadingOverlay({
 }: Props) {
   const containerClass = fullscreen
     ? "fixed inset-0 z-50 flex items-center justify-center px-6"
-    : "absolute inset-0 z-40 flex items-center justify-center px-4 rounded-3xl overflow-hidden";
+    : "absolute inset-0 z-40 flex items-center justify-center px-4 rounded-xl overflow-hidden";
 
   const containerStyle = fullscreen
     ? {
@@ -26,7 +26,7 @@ export function LoadingOverlay({
   return (
     <div className={containerClass} style={containerStyle}>
       <div
-        className="relative flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border px-8 py-6 text-center shadow-[0_28px_80px_-32px_rgba(15,23,42,0.45)]"
+        className="relative flex w-full max-w-sm flex-col items-center gap-4 rounded-xl border px-8 py-6 text-center shadow-[0_28px_80px_-32px_rgba(15,23,42,0.45)]"
         style={{
           background:
             "linear-gradient(145deg, color-mix(in srgb, var(--color-surface) 82%, transparent) 0%, color-mix(in srgb, var(--color-surface) 70%, transparent) 60%, color-mix(in srgb, var(--color-surface) 62%, transparent) 100%)",

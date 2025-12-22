@@ -120,7 +120,7 @@ export const buttonStyles = {
  */
 export const cardStyles = {
   base: [
-    'rounded-3xl border shadow-2xl',
+    'rounded-xl border shadow-md',
     'transition-all duration-300',
   ].join(' '),
   

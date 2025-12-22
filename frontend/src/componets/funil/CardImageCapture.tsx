@@ -160,7 +160,7 @@ export function CardImageCapture({ cardId, onClose, onPhotoUploaded }: CardImage
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-white shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-3xl rounded-xl bg-white shadow-md overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4">
           <h3 className="text-lg font-semibold text-zinc-800 flex items-center gap-2">
@@ -259,7 +259,7 @@ export function CardImageCapture({ cardId, onClose, onPhotoUploaded }: CardImage
                 <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-2 flex-1">
-                      <FaMapMarkerAlt className="text-blue-600 mt-0.5 flex-shrink-0" />
+                      <FaMapMarkerAlt className="text-blue-600 mt-0.5 shrink-0" />
                       <div className="text-sm">
                         <div className="font-semibold text-blue-900 mb-1">Adicionar localização GPS?</div>
                         <div className="text-blue-700">
@@ -362,3 +362,4 @@ export function CardImageCapture({ cardId, onClose, onPhotoUploaded }: CardImage
     </div>
   );
 }
+

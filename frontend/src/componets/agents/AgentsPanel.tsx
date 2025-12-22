@@ -12,7 +12,7 @@ import type {
 } from "../../types/types";
 import { OPENAI_MODEL_OPTIONS } from "../integrations/OpenAIIntegrationForm";
 
-const CARD_CLASS = "config-card rounded-2xl shadow-sm p-6 config-text-muted";
+const CARD_CLASS = "config-card rounded-xl shadow-sm p-6 config-text-muted";
 const TITLE_CLASS = "text-xl font-semibold config-heading";
 const PRIMARY_BTN =
   "config-btn-primary px-3 py-2 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition";
@@ -392,7 +392,7 @@ function AgentFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-[#0F172A] text-[#94A3B8] shadow-lg">
+      <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-[#0F172A] text-[#94A3B8] shadow-lg">
         <div className="flex items-start justify-between gap-4 border-b border-white/5 p-6">
           <div>
             <h2 className="text-xl font-semibold text-white">
@@ -955,12 +955,12 @@ export default function AgentsPanel() {
 
       <div className="mt-6 space-y-4">
         {agentsLoading && sortedAgents.length === 0 && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-[#94A3B8]">
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-6 text-center text-sm text-[#94A3B8]">
             Carregando agentes...
           </div>
         )}
         {!agentsLoading && sortedAgents.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 px-4 py-6 text-center text-sm text-[#94A3B8]">
+          <div className="rounded-xl border border-dashed border-white/20 bg-white/5 px-4 py-6 text-center text-sm text-[#94A3B8]">
             Nenhum agente configurado ainda. Clique em "Novo agente" para comecar.
           </div>
         )}
@@ -971,7 +971,7 @@ export default function AgentsPanel() {
           return (
             <div
               key={agent.id}
-              className="rounded-2xl border border-white/10 bg-white/5 p-5 text-[#94A3B8]"
+              className="rounded-xl border border-white/10 bg-white/5 p-5 text-[#94A3B8]"
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
@@ -1049,7 +1049,7 @@ export default function AgentsPanel() {
 
       {deleteTarget && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70 px-4">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0F172A] p-6 text-[#94A3B8]">
+          <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#0F172A] p-6 text-[#94A3B8]">
             <h3 className="text-lg font-semibold text-white mb-2">Excluir agente</h3>
             <p className="text-sm mb-4">
               Deseja remover o agente {deleteTarget.name}? Essa acao nao pode ser desfeita.
@@ -1291,7 +1291,7 @@ function AgentWizardModal({ open, integrations, onClose, onCreated }: WizardProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
-      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#0F172A] text-[#94A3B8] shadow-lg">
+      <div className="w-full max-w-4xl rounded-xl border border-white/10 bg-[#0F172A] text-[#94A3B8] shadow-lg">
         <div className="flex items-start justify-between gap-4 border-b border-white/5 p-6">
           <div>
             <h2 className="text-xl font-semibold text-white">Novo agente (assistido)</h2>
@@ -1395,3 +1395,4 @@ function AgentWizardModal({ open, integrations, onClose, onCreated }: WizardProp
     </div>
   );
 }
+

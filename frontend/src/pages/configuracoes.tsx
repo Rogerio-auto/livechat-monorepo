@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaCalendar, FaPlus, FaTrash, FaEdit, FaLock, FaUsers, FaEye, FaCog, FaBan, FaCheck, FaMoneyBillWave } from "react-icons/fa";
 import Sidebar from "../componets/Sidbars/sidebar";
@@ -14,9 +14,11 @@ import AgentesPanel from "../componets/users/AgentesPanel";
 import { DepartmentsManager } from "../componets/admin/DepartmentsManager";
 import { TeamsManager } from "../componets/admin/TeamsManager";
 import { API, fetchJson } from "../utils/api";
+import { showToast } from "../hooks/useToast";
 import type {
   Inbox,
   InboxForm,
+  InboxFormExtended,
   MetaProviderConfig,
   ProviderConfig,
   WahaProviderConfig,
@@ -59,11 +61,6 @@ type FetchCompanyResponse = {
 
 
 // Extendemos o InboxForm so no front, sem quebrar tipagem existente
-type InboxFormExtended = InboxForm &
-  Pick<Inbox, "base_url" | "api_version" | "instance_id" | "phone_number_id"> & {
-    provider_config?: ProviderConfig;
-  };
-
 const DEFAULT_META: MetaProviderConfig = {
   access_token: "",
   refresh_token: "",
@@ -133,7 +130,7 @@ const buildWahaPayload = (waha?: WahaProviderConfig | null) => {
 
 const INPUT_BASE = "config-input w-full rounded-xl px-3 py-2 disabled:opacity-60";
 const LABEL = "block text-sm config-text-muted mb-1";
-const CARD = "config-card rounded-2xl shadow-sm p-6";
+const CARD = "config-card rounded-xl shadow-sm p-6";
 const SOFT_BTN = "config-btn px-3 py-2 rounded-lg";
 const PRIMARY_BTN = "config-btn-primary px-3 py-2 rounded-lg";
 
@@ -504,7 +501,7 @@ export default function ConfiguracoesPage() {
       );
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Falha ao salvar inbox";
-      alert(message);
+      showToast(message, "error");
       setInboxForms((prev) => ({ ...prev, [id]: { ...(inboxBaseline[id] || data) } }));
     }
   };
@@ -532,11 +529,11 @@ export default function ConfiguracoesPage() {
   const submitCreateInbox = async () => {
     const trimmedName = createInboxForm.name.trim();
     if (!trimmedName) {
-      alert("Informe um nome para a conexao");
+      showToast("Informe um nome para a conexao", "warning");
       return;
     }
     if (isMeta && !createInboxForm.phone_number.trim()) {
-      alert("Preencha nome e telefone");
+      showToast("Preencha nome e telefone", "warning");
       return;
     }
     if (isMeta) {
@@ -547,7 +544,7 @@ export default function ConfiguracoesPage() {
           !(m.waba_id?.trim()) ||
           !(m.webhook_verify_token?.trim())
       ) {
-        alert("Preencha todos os campos da Meta (access token, phone_number_id, waba_id e verify token).");
+        showToast("Preencha todos os campos da Meta (access token, phone_number_id, waba_id e verify token).", "warning");
         return;
       }
     }
@@ -601,7 +598,7 @@ export default function ConfiguracoesPage() {
       setProviderPickerOpen(false);
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Falha ao criar inbox";
-      alert(message);
+      showToast(message, "error");
     } finally {
       setCreateSaving(false);
     }
@@ -648,7 +645,7 @@ export default function ConfiguracoesPage() {
       setDeleteTarget(null);
     } catch (error: any) {
       const message = typeof error?.message === "string" ? error.message : "Falha ao excluir inbox";
-      alert(message);
+      showToast(message, "error");
     } finally {
       setDeleteSaving(false);
     }
@@ -666,7 +663,7 @@ export default function ConfiguracoesPage() {
 
   const handleCreateCalendar = async () => {
     if (!newCalendar.name.trim()) {
-      alert("Digite um nome para o calendário");
+      showToast("Digite um nome para o calendário", "warning");
       return;
     }
     try {
@@ -681,9 +678,10 @@ export default function ConfiguracoesPage() {
       });
       setNewCalendar({ name: "", type: "PERSONAL", color: "#3B82F6", description: "" });
       await loadCalendars();
+      showToast("Calendário criado com sucesso!", "success");
     } catch (e: any) {
       console.error("Erro ao criar calendário:", e);
-      alert(e.message || "Erro ao criar calendário");
+      showToast(e.message || "Erro ao criar calendário", "error");
     }
   };
 
@@ -692,9 +690,10 @@ export default function ConfiguracoesPage() {
     try {
       await fetchJson(`${API}/calendar/calendars/${calendarId}`, { method: "DELETE" });
       await loadCalendars();
+      showToast("Calendário deletado com sucesso!", "success");
     } catch (e: any) {
       console.error("Erro ao deletar calendário:", e);
-      alert(e.message || "Erro ao deletar calendário");
+      showToast(e.message || "Erro ao deletar calendário", "error");
     }
   };
 
@@ -724,7 +723,7 @@ export default function ConfiguracoesPage() {
 
   const handleGrantAccess = async () => {
     if (!selectedCalendarForPermissions || !newPermission.user_id) {
-      alert("Selecione um calendário e um usuário");
+      showToast("Selecione um calendário e um usuário", "warning");
       return;
     }
     try {
@@ -740,9 +739,10 @@ export default function ConfiguracoesPage() {
         can_manage: false,
       });
       await loadPermissions(selectedCalendarForPermissions);
+      showToast("Acesso concedido com sucesso!", "success");
     } catch (e: any) {
       console.error("Erro ao conceder acesso:", e);
-      alert(e.message || "Erro ao conceder acesso");
+      showToast(e.message || "Erro ao conceder acesso", "error");
     }
   };
 
@@ -753,9 +753,10 @@ export default function ConfiguracoesPage() {
         method: "DELETE",
       });
       await loadPermissions(selectedCalendarForPermissions);
+      showToast("Acesso revogado com sucesso!", "success");
     } catch (e: any) {
       console.error("Erro ao revogar acesso:", e);
-      alert(e.message || "Erro ao revogar acesso");
+      showToast(e.message || "Erro ao revogar acesso", "error");
     }
   };
 
@@ -786,7 +787,7 @@ export default function ConfiguracoesPage() {
         <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
           {/* Sidebar de navegação */}
           <div className="col-span-12 md:col-span-2">
-            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-2xl p-4 border border-gray-200 dark:border-gray-700 shadow-xl sticky top-6 transition-colors duration-300">
+            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-xl sticky top-6 transition-colors duration-300">
               <SettingsNav sections={[...sections]} current={tab} onChange={(id) => goTab(id as TabId)} />
             </div>
           </div>
@@ -794,7 +795,7 @@ export default function ConfiguracoesPage() {
           {/* Conteúdo principal */}
           <div className="col-span-12 md:col-span-10 overflow-y-auto pr-1 space-y-6">
             {tab === "empresa" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-600/20 flex items-center justify-center transition-colors duration-300">
@@ -821,7 +822,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "perfil" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
@@ -847,7 +848,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "inboxes" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
@@ -867,7 +868,6 @@ export default function ConfiguracoesPage() {
                   setForms={setInboxForms}
                   setBaseline={setInboxBaseline}
                   onSave={handleSaveInbox}
-                  onRequestCreate={openProviderPicker}
                   onRequestDelete={requestDeleteInbox}
                   metaWebhookUrl={META_WEBHOOK_URL}
                   disabled={loading}
@@ -882,7 +882,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "integracoes" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-600/20 flex items-center justify-center transition-colors duration-300">
@@ -899,7 +899,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "billing" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
@@ -918,7 +918,7 @@ export default function ConfiguracoesPage() {
               const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
               if (!allowed) {
                 return (
-                  <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+                  <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                     <div className="text-gray-900 dark:text-white">Você não tem permissão para configurar agentes.</div>
                   </div>
                 );
@@ -934,7 +934,7 @@ export default function ConfiguracoesPage() {
             })()}
             
             {tab === "colaborador" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-600/20 flex items-center justify-center transition-colors duration-300">
@@ -951,20 +951,20 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "departamentos" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <DepartmentsManager />
               </div>
             )}
 
             {tab === "times" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <TeamsManager />
               </div>
             )}
 
             {/* TAB: CALENDÁRIOS */}
             {tab === "calendarios" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
@@ -1000,7 +1000,7 @@ export default function ConfiguracoesPage() {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => alert("Função de editar calendário ainda não implementada")}
+                            onClick={() => showToast("Função de editar calendário ainda não implementada", "info")}
                             className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-all flex items-center gap-1"
                           >
                             <FaEdit /> Editar
@@ -1078,7 +1078,7 @@ export default function ConfiguracoesPage() {
 
             {/* TAB: PERMISSÕES DE CALENDÁRIO */}
             {tab === "permissoes-calendario" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-600/20 flex items-center justify-center transition-colors duration-300">
@@ -1273,7 +1273,7 @@ export default function ConfiguracoesPage() {
       {/* MODAL ESCOLHER TIPO DE CONEXÃO */}
       {providerPickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-8 shadow-2xl space-y-6 animate-fade-in transition-colors duration-300">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 p-8 shadow-md space-y-6 animate-fade-in transition-colors duration-300">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Qual serviço você quer usar?</h3>
@@ -1300,7 +1300,7 @@ export default function ConfiguracoesPage() {
               <button
                 type="button"
                 onClick={() => openCreateModalForProvider("META_CLOUD")}
-                className="group rounded-2xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-6 text-left transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+                className="group rounded-xl border-2 border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 p-6 text-left transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
               >
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-12 w-12 rounded-full bg-blue-200 dark:bg-blue-600/20 flex items-center justify-center text-sm font-bold text-blue-700 dark:text-blue-400 ring-2 ring-blue-300 dark:ring-blue-500/30">
@@ -1320,7 +1320,7 @@ export default function ConfiguracoesPage() {
               <button
                 type="button"
                 onClick={() => openCreateModalForProvider("WAHA")}
-                className="group rounded-2xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-6 text-left transition-all hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
+                className="group rounded-xl border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-6 text-left transition-all hover:border-emerald-500 hover:shadow-xl hover:shadow-emerald-500/20 hover:scale-105 focus-visible:outline-offset-2 focus-visible:outline-emerald-500"
               >
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-12 w-12 rounded-full bg-emerald-200 dark:bg-emerald-600/20 flex items-center justify-center text-sm font-bold text-emerald-700 dark:text-emerald-400 ring-2 ring-emerald-300 dark:ring-emerald-500/30">
@@ -1343,7 +1343,7 @@ export default function ConfiguracoesPage() {
       {/* MODAL CRIAR INBOX (com Meta) */}
       {createModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-2xl rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl my-8 transition-colors duration-300">
+          <div className="w-full max-w-2xl rounded-xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-md my-8 transition-colors duration-300">
             <div className="p-8">
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
@@ -1595,7 +1595,7 @@ export default function ConfiguracoesPage() {
       {/* MODAL EXCLUIR */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl transition-colors duration-300">
+          <div className="w-full max-w-md rounded-xl border border-gray-300 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-md transition-colors duration-300">
             <div className="p-8">
               <div className="mb-6">
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
@@ -1633,6 +1633,7 @@ export default function ConfiguracoesPage() {
     </div>
   );
 }
+
 
 
 

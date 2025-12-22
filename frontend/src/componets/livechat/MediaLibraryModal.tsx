@@ -214,10 +214,10 @@ export default function MediaLibraryModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-3xl shadow-2xl border overflow-hidden"
+        className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-xl shadow-md border overflow-hidden"
         style={{ borderColor: "var(--color-border)" }}
       >
-  <Card gradient className="h-full w-full rounded-3xl shadow-none p-0">
+  <Card gradient className="h-full w-full rounded-xl shadow-none p-0">
           {/* Header */}
           <div
             className="px-6 py-4 border-b flex items-center justify-between bg-linear-to-br from-white to-gray-50 dark:from-[#141414] dark:to-[#0f0f0f]"
@@ -344,7 +344,7 @@ export default function MediaLibraryModal({
             ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div
-                  className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 border"
+                  className="w-16 h-16 rounded-xl flex items-center justify-center mb-3 border"
                   style={{
                     backgroundColor: "var(--color-bg)",
                     borderColor: "var(--color-border)",
@@ -513,3 +513,4 @@ export default function MediaLibraryModal({
     </div>
   );
 }
+

@@ -32,7 +32,7 @@ export const LimitModal: React.FC<LimitModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all scale-100">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md max-w-md w-full overflow-hidden transform transition-all scale-100">
         {/* Header */}
         <div className="bg-linear-to-r from-amber-500 to-orange-600 p-6 text-white relative">
           <button 
@@ -88,3 +88,4 @@ export const LimitModal: React.FC<LimitModalProps> = ({
     </div>
   );
 };
+

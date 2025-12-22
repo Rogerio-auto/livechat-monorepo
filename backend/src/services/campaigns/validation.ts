@@ -166,9 +166,9 @@ export async function validateCampaignSafety(campaignId: string): Promise<Valida
   // Template status é opcional (nem todos os templates têm esse campo)
   result.stats.template_status = "UNKNOWN";
   console.log("[Campaign Validation] ✅ Template encontrado:", {
-    template_id: template.id,
-    kind: template.kind,
-    payload_preview: JSON.stringify(template.payload || {}).substring(0, 100),
+    template_id: (template as any).id,
+    kind: (template as any).kind,
+    payload_preview: JSON.stringify((template as any).payload || {}).substring(0, 100),
   });
 
   // Nota: Validação do status do template Meta foi removida
@@ -177,8 +177,8 @@ export async function validateCampaignSafety(campaignId: string): Promise<Valida
 
 
   // 6. Verificar opt-in (se template é MARKETING)
-  const payload = template.payload as any;
-  const templateCategory = payload?.category || template.kind;
+  const payload = (template as any).payload as any;
+  const templateCategory = payload?.category || (template as any).kind;
   result.stats.template_category = templateCategory;
 
   const isMarketingTemplate = templateCategory === "MARKETING";

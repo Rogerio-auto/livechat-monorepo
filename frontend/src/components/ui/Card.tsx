@@ -18,18 +18,17 @@ export function Card({
 }: CardProps) {
   
   const baseClasses = 
-    "rounded-3xl border " +
-    "shadow-2xl " +
+    "rounded-xl border " +
     "transition-all duration-300";
 
   const gradientClasses = gradient
-    ? "bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 " +
-      "border-gray-200 dark:border-gray-700"
-    : "bg-white dark:bg-gray-800 " +
-      "border-gray-300 dark:border-gray-600";
+    ? "bg-white dark:bg-[#151b23] " +
+      "border-slate-200 dark:border-slate-800"
+    : "bg-white dark:bg-[#151b23] " +
+      "border-slate-200 dark:border-slate-800";
 
   const hoverClasses = hover
-    ? "hover:shadow-3xl hover:scale-[1.02]"
+    ? "hover:shadow-sm hover:border-[#2fb463]/30"
     : "";
 
   const paddingClasses = {
@@ -72,28 +71,28 @@ export function CardHeader({
 }: CardHeaderProps) {
   
   const iconColorClasses = {
-    blue: "bg-blue-100 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400",
-    purple: "bg-purple-100 dark:bg-purple-600/20 text-purple-600 dark:text-purple-400",
-    green: "bg-green-100 dark:bg-green-600/20 text-green-600 dark:text-green-400",
-    indigo: "bg-indigo-100 dark:bg-indigo-600/20 text-indigo-600 dark:text-indigo-400",
-    orange: "bg-orange-100 dark:bg-orange-600/20 text-orange-600 dark:text-orange-400",
-    red: "bg-red-100 dark:bg-red-600/20 text-red-600 dark:text-red-400",
+    blue: "bg-[#1f6feb]/10 text-[#1f6feb] dark:text-[#388bfd]",
+    purple: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    green: "bg-[#2fb463]/10 text-[#2fb463] dark:text-[#74e69e]",
+    indigo: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400",
+    orange: "bg-orange-500/10 text-orange-600 dark:text-orange-400",
+    red: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   };
 
   return (
     <div className="mb-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
             {icon && (
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${iconColorClasses[iconColor]}`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors duration-300 ${iconColorClasses[iconColor]}`}>
                 {icon}
               </div>
             )}
             {title}
           </h2>
           {subtitle && (
-            <p className="text-gray-600 dark:text-gray-400 mt-1">{subtitle}</p>
+            <p className="text-sm text-slate-500 mt-1">{subtitle}</p>
           )}
         </div>
         {actions && <div>{actions}</div>}
@@ -137,7 +136,7 @@ export function InfoCard({
   };
 
   return (
-  <div className={`p-6 rounded-2xl bg-gradient-to-br border transition-colors duration-300 ${colorClasses[color]}`}>
+  <div className={`p-6 rounded-xl bg-linear-to-br border transition-colors duration-300 ${colorClasses[color]}`}>
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
@@ -157,3 +156,4 @@ export function InfoCard({
     </div>
   );
 }
+

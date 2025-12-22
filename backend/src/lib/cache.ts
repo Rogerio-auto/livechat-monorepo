@@ -1,4 +1,5 @@
 import { getRedis } from "./redis.ts";
+// @ts-ignore
 import Redlock from "redlock";
 
 /** Redlock p/ single-flight (evita stampede quando muitos pedem o mesmo) */

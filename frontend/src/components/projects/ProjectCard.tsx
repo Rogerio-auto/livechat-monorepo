@@ -23,7 +23,7 @@ export default function ProjectCard({ project, template, isDragging = false }: P
   const priorityColors = {
     urgent: 'bg-red-500/10 text-red-500',
     high: 'bg-orange-500/10 text-orange-500',
-    medium: 'bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)]',
+    medium: 'bg-(--color-primary)/10 text-(--color-primary)',
     low: 'bg-gray-500/10 text-gray-500',
   };
 
@@ -40,17 +40,17 @@ export default function ProjectCard({ project, template, isDragging = false }: P
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-[color:var(--color-surface)] rounded-lg border border-[color:var(--color-border)] p-4 cursor-pointer hover:shadow-lg transition-shadow ${
+      className={`bg-(--color-surface) rounded-lg border border-(--color-border) p-4 cursor-pointer hover:shadow-md transition-shadow ${
         isDragging ? 'opacity-50' : ''
       }`}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
-          <h4 className="font-semibold text-[color:var(--color-text)] mb-1 line-clamp-2">
+          <h4 className="font-semibold text-(--color-text) mb-1 line-clamp-2">
             {project.title}
           </h4>
-          <p className="text-xs text-[color:var(--color-text-muted)]">
+          <p className="text-xs text-(--color-text-muted)">
             {project.project_number}
           </p>
         </div>
@@ -62,7 +62,7 @@ export default function ProjectCard({ project, template, isDragging = false }: P
 
       {/* Customer */}
       {project.customer_name && (
-        <div className="flex items-center gap-2 text-sm text-[color:var(--color-text-muted)] mb-2">
+        <div className="flex items-center gap-2 text-sm text-(--color-text-muted) mb-2">
           <span>👤</span>
           <span className="truncate">{project.customer_name}</span>
         </div>
@@ -73,7 +73,7 @@ export default function ProjectCard({ project, template, isDragging = false }: P
         .filter((field) => field.show_in_card && project.custom_fields[field.field_key])
         .slice(0, 2)
         .map((field) => (
-          <div key={field.id} className="text-sm text-[color:var(--color-text-muted)] mb-1">
+          <div key={field.id} className="text-sm text-(--color-text-muted) mb-1">
             <span className="font-medium">{field.field_label}:</span>{' '}
             {formatFieldValue(project.custom_fields[field.field_key], field.field_type)}
           </div>
@@ -81,13 +81,13 @@ export default function ProjectCard({ project, template, isDragging = false }: P
 
       {/* Value */}
       {project.estimated_value && (
-        <div className="text-lg font-bold text-[color:var(--color-primary)] mb-2">
+        <div className="text-lg font-bold text-(--color-primary) mb-2">
           {formatCurrency(project.estimated_value, project.currency)}
         </div>
       )}
 
       {/* Footer */}
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-[color:var(--color-border)]">
+      <div className="flex items-center justify-between mt-3 pt-3 border-t border-(--color-border)">
         <div className="flex items-center gap-2">
           {/* Priority Badge */}
           <span className={`text-xs px-2 py-1 rounded-full font-medium ${priorityColors[project.priority]}`}>

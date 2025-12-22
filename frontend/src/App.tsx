@@ -3,17 +3,42 @@ import { Login } from './pages/login'
 import { Dash } from './pages/dashboard'
 import { SalesFunnel } from './pages/funil-vendas'
 import { ClientesPage } from './pages/clientes'
+import ClienteCreate from './pages/clientes/ClienteCreate'
+import ClienteEdit from './pages/clientes/ClienteEdit'
+import ClienteTaskCreate from './pages/clientes/ClienteTaskCreate'
 import { PropostaPage } from './pages/orcamento'
 import DocumentosPage from './pages/documentos'
 import TemplatesPage from './pages/templates'
 import { CalendarioPage } from './pages/calendar'
+import EventCreate from './pages/calendar/EventCreate'
+import EventEdit from './pages/calendar/EventEdit'
+import EventView from './pages/calendar/EventView'
 import LiveChatPage from './pages/livechat'
 import ProdutosPage from './pages/produtos'
+import ProductCreate from './pages/produtos/ProductCreate'
+import ProductEdit from './pages/produtos/ProductEdit'
+import ProductView from './pages/produtos/ProductView'
 import ConfiguracoesPage from './pages/configuracoes'
+import SettingsLayout from './pages/configuracoes/SettingsLayout'
+import EmpresaPage from './pages/configuracoes/EmpresaPage'
+import PerfilPageSettings from './pages/configuracoes/PerfilPage'
+import InboxesPage from './pages/configuracoes/InboxesPage'
+import IntegracoesPage from './pages/configuracoes/IntegracoesPage'
+import BillingPage from './pages/configuracoes/BillingPage'
+import IAPage from './pages/configuracoes/IAPage'
+import AgentEditPage from './pages/configuracoes/AgentEditPage'
+import KnowledgeBasePage from './pages/configuracoes/KnowledgeBasePage'
+import ColaboradoresPage from './pages/configuracoes/ColaboradoresPage'
+import DepartamentosPage from './pages/configuracoes/DepartamentosPage'
+import TimesPage from './pages/configuracoes/TimesPage'
+import CalendariosPage from './pages/configuracoes/CalendariosPage'
+import PermissoesCalendarioPage from './pages/configuracoes/PermissoesCalendarioPage'
 import GaleriaPage from './pages/galeria'
 import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
 import { TarefasPage } from './pages/tarefas'
+import TaskCreate from './pages/tarefas/TaskCreate'
+import TaskEdit from './pages/tarefas/TaskEdit'
 import { AutomationRulesPage } from './pages/AutomationRulesPage'
 import PerfilPage from './pages/perfil'
 import AgentDetails from './pages/agents/AgentDetails'
@@ -44,6 +69,8 @@ import ProjectDetails from './pages/projects/ProjectDetails'
 import ProjectCreate from './pages/projects/ProjectCreate'
 import ProjectTemplates from './pages/projects/ProjectTemplates'
 import ProjectTemplateEditor from './pages/projects/ProjectTemplateEditor'
+import NotificationsPage from './components/notifications/NotificationsPage'
+import NotificationPreferencesPage from './components/notifications/NotificationPreferences'
 
 
 function App() {
@@ -66,10 +93,23 @@ function App() {
             <Route path='/dashboard' element={<Dash/>}/>
             <Route path="/funil" element={<SalesFunnel />} />
             <Route path='/clientes' element={<ClientesPage />}/>
+            <Route path='/clientes/novo' element={<ClienteCreate />}/>
+            <Route path='/clientes/:id/editar' element={<ClienteEdit />}/>
+            <Route path='/clientes/:id/tarefas/nova' element={<ClienteTaskCreate />}/>
             
             <Route path='/tarefas' element={
               <FeatureGuard feature="tasks_module">
                 <TarefasPage />
+              </FeatureGuard>
+            }/>
+            <Route path='/tarefas/nova' element={
+              <FeatureGuard feature="tasks_module">
+                <TaskCreate />
+              </FeatureGuard>
+            }/>
+            <Route path='/tarefas/:id/editar' element={
+              <FeatureGuard feature="tasks_module">
+                <TaskEdit />
               </FeatureGuard>
             }/>
             
@@ -97,16 +137,30 @@ function App() {
                 <CalendarioPage/>
               </FeatureGuard>
             }/>
+            <Route path='/calendario/novo' element={
+              <FeatureGuard feature="calendar_module">
+                <EventCreate/>
+              </FeatureGuard>
+            }/>
+            <Route path='/calendario/:id' element={
+              <FeatureGuard feature="calendar_module">
+                <EventView/>
+              </FeatureGuard>
+            }/>
+            <Route path='/calendario/:id/editar' element={
+              <FeatureGuard feature="calendar_module">
+                <EventEdit/>
+              </FeatureGuard>
+            }/>
             
             <Route path='/livechat' element={<LiveChatPage/>}/>
             <Route path='/livechat/:chatId' element={<LiveChatPage/>}/>
             <Route path='/produtos' element={<ProdutosPage/>}/>
+            <Route path='/produtos/novo' element={<ProductCreate/>}/>
+            <Route path='/produtos/:id' element={<ProductView/>}/>
+            <Route path='/produtos/:id/editar' element={<ProductEdit/>}/>
             
-            <Route path='/galeria' element={
-              <FeatureGuard feature="media_library">
-                <GaleriaPage/>
-              </FeatureGuard>
-            }/>
+            <Route path='/galeria' element={<GaleriaPage/>}/>
 
             {/* Gestão de Projetos */}
             <Route path='/projects' element={<ProjectsList/>}/>
@@ -115,9 +169,29 @@ function App() {
             <Route path='/projects/kanban' element={<ProjectKanban/>}/>
             <Route path='/projects/:id' element={<ProjectDetails/>}/>
             
-            <Route path='/configuracoes' element={<ConfiguracoesPage/>}/>
+            <Route path='/configuracoes' element={<SettingsLayout />}>
+              <Route index element={<Navigate to="empresa" replace />} />
+              <Route path="empresa" element={<EmpresaPage />} />
+              <Route path="perfil" element={<PerfilPageSettings />} />
+              <Route path="canais" element={<InboxesPage />} />
+              <Route path="integracoes" element={<IntegracoesPage />} />
+              <Route path="faturamento" element={<BillingPage />} />
+              <Route path="ia" element={<IAPage />} />
+              <Route path="ia/novo" element={<AgentEditPage />} />
+              <Route path="ia/:agentId" element={<AgentEditPage />} />
+              <Route path="base-conhecimento" element={<KnowledgeBasePage />} />
+              <Route path="colaboradores" element={<ColaboradoresPage />} />
+              <Route path="departamentos" element={<DepartamentosPage />} />
+              <Route path="times" element={<TimesPage />} />
+              <Route path="calendarios" element={<CalendariosPage />} />
+              <Route path="permissoes-calendario" element={<PermissoesCalendarioPage />} />
+              <Route path="notificacoes" element={<NotificationPreferencesPage />} />
+            </Route>
             <Route path='/subscription' element={<SubscriptionPage/>}/>
             
+            {/* Notificações */}
+            <Route path='/notifications' element={<NotificationsPage />} />
+
             {/* Monitoramento de Agentes */}
             <Route path='/agents-monitoring' element={<Navigate to="/dashboard?tab=ai-agents" replace />} />
             <Route path='/agents/:agentId' element={<AgentDetails/>}/>

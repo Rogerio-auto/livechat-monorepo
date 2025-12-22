@@ -92,7 +92,7 @@ export function AgentCreationWizard({ template, questions, onComplete, onBack }:
           </div>
           <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
             <div
-              className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full transition-all duration-500 ease-out"
+              className="bg-linear-to-r from-blue-500 to-indigo-500 h-full transition-all duration-500 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -112,7 +112,7 @@ export function AgentCreationWizard({ template, questions, onComplete, onBack }:
                   onClick={() => canNavigate && setCurrentStep(idx)}
                   disabled={!canNavigate}
                   className={`
-                    flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
+                    shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all
                     ${isCurrent 
                       ? "bg-blue-600 text-white ring-2 ring-blue-400 ring-offset-2 ring-offset-gray-900" 
                       : isAnswered 
@@ -140,7 +140,7 @@ export function AgentCreationWizard({ template, questions, onComplete, onBack }:
             {sortedQuestions.every((q) => answers[q.key] !== undefined && answers[q.key] !== "") && (
               <button
                 onClick={() => setShowReview(true)}
-                className="flex-shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 transition-all ml-2"
+                className="shrink-0 flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium bg-linear-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700 transition-all ml-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -164,13 +164,13 @@ export function AgentCreationWizard({ template, questions, onComplete, onBack }:
       </div>
 
       {/* Question Card */}
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 shadow-2xl border border-gray-700 animate-fade-in">
+      <div className="bg-linear-to-br from-gray-800 to-gray-900 rounded-xl p-8 shadow-md border border-gray-700 animate-fade-in">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-white mb-3">{currentQuestion.label}</h2>
           {currentQuestion.help && (
             <p className="text-gray-400 text-sm flex items-start gap-2">
               <svg
-                className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5"
+                className="w-5 h-5 text-blue-400 shrink-0 mt-0.5"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -358,7 +358,7 @@ function ReviewScreen({
         <p className="text-gray-400">Revise as informações antes de criar seu agente</p>
       </div>
 
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-3xl p-8 shadow-2xl border border-gray-700 mb-6">
+      <div className="bg-linear-to-br from-gray-800 to-gray-900 rounded-xl p-8 shadow-md border border-gray-700 mb-6">
         <div className="flex items-center gap-4 mb-6 pb-6 border-b border-gray-700">
           <div>
             <h3 className="text-xl font-bold text-white">{template.name}</h3>
@@ -401,7 +401,7 @@ function ReviewScreen({
 
       <button
         onClick={onConfirm}
-        className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 px-6 rounded-xl transition shadow-lg hover:shadow-xl flex items-center justify-center gap-3 text-lg"
+        className="w-full bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold py-4 px-6 rounded-xl transition shadow-lg hover:shadow-xl flex items-center justify-center gap-3 text-lg"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />

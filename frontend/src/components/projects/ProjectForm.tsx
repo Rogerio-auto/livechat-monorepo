@@ -131,102 +131,111 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
     switch (priority) {
       case "urgent": return "bg-red-500";
       case "high": return "bg-orange-500";
-      case "medium": return "bg-[color:var(--color-primary)]";
-      default: return "bg-[color:var(--color-text-muted)]";
+      case "medium": return "bg-emerald-500";
+      default: return "bg-slate-400";
     }
   };
 
   const formContent = (
-    <div className={`${isModal ? 'p-6' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12'}`}>
+    <div className={`${isModal ? 'p-8' : 'w-full'}`}>
       {/* Header */}
       {!isModal && (
         <div className="mb-10">
-          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-            <span>Projetos</span>
-            <span>/</span>
-            <span className="text-gray-900 font-medium">{project ? 'Editar Projeto' : 'Novo Projeto'}</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">{project ? 'Editar Projeto' : 'Configuração do Projeto'}</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">{project ? 'Editar Projeto' : 'Configuração do Projeto'}</h1>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
             {project 
-              ? <>Edite as informações do projeto baseado no template <span className="font-semibold text-indigo-600">{template.name}</span>.</>
-              : <>Preencha as informações abaixo para iniciar um novo projeto baseado no template <span className="font-semibold text-indigo-600">{template.name}</span>.</>
+              ? <>Edite as informações do projeto baseado no template <span className="font-bold text-emerald-600 dark:text-emerald-400">{template.name}</span>.</>
+              : <>Preencha as informações abaixo para iniciar um novo projeto baseado no template <span className="font-bold text-emerald-600 dark:text-emerald-400">{template.name}</span>.</>
             }
           </p>
         </div>
       )}
 
-      <div className={`grid grid-cols-1 ${!isModal ? 'lg:grid-cols-3 gap-12' : 'gap-6'}`}>
-        {/* Left Column - Form */}
-        <div className={`${!isModal ? 'lg:col-span-2' : ''} space-y-10`}>
+      <div className={`grid grid-cols-1 ${!isModal ? 'gap-12' : 'gap-8'}`}>
+        {/* Form */}
+        <div className="space-y-10">
           <form id="project-form" onSubmit={handleSubmit}>
             {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700">
+              <div className="mb-8 p-4 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl flex items-center gap-3 text-red-700 dark:text-red-400">
                 <AlertCircle className="w-5 h-5" />
-                <span>{error}</span>
+                <span className="font-medium">{error}</span>
               </div>
             )}
 
             {/* Section: Basic Info */}
-            <div className="border-b border-gray-200 pb-10">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Informações Principais</h2>
-              <p className="text-sm text-gray-500 mb-6">Dados essenciais para identificação do projeto.</p>
+            <div className="border-b border-slate-100 dark:border-slate-800 pb-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                  <Layout className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Informações Principais</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Dados essenciais para identificação do projeto.</p>
+                </div>
+              </div>
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Título do Projeto
                   </label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => updateField('title', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                     placeholder="Ex: Instalação Solar - Residência Silva"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Descrição
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => updateField('description', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                     rows={4}
                     placeholder="Descreva os detalhes e objetivos deste projeto..."
                   />
-                  <p className="mt-1 text-xs text-gray-500">Breve resumo do escopo do projeto.</p>
+                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">Breve resumo do escopo do projeto.</p>
                 </div>
               </div>
             </div>
 
             {/* Section: Client */}
-            <div className="border-b border-gray-200 py-10">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Cliente</h2>
-              <p className="text-sm text-gray-500 mb-6">Vincule este projeto a um cliente ou lead existente.</p>
+            <div className="border-b border-slate-100 dark:border-slate-800 py-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Search className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Cliente</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Vincule este projeto a um cliente ou lead existente.</p>
+                </div>
+              </div>
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Buscar Cliente
                   </label>
                   
                   {selectedLead ? (
-                    <div className="flex items-center justify-between p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                    <div className="flex items-center justify-between p-5 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/50 rounded-xl">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-black text-lg">
                           {selectedLead.name.charAt(0)}
                         </div>
                         <div>
-                          <div className="font-bold text-gray-900">{selectedLead.name}</div>
-                          <div className="text-sm text-gray-500 flex items-center gap-2">
+                          <div className="font-bold text-slate-900 dark:text-white">{selectedLead.name}</div>
+                          <div className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
                             <span>{formData.customer_phone}</span>
                             {formData.customer_email && (
                               <>
-                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                <span className="w-1 h-1 rounded-full bg-slate-300 dark:bg-slate-600"></span>
                                 <span>{formData.customer_email}</span>
                               </>
                             )}
@@ -236,10 +245,10 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
                       <button
                         type="button"
                         onClick={handleClearLead}
-                        className="text-gray-400 hover:text-red-500 transition-colors p-2"
+                        className="text-slate-400 hover:text-red-500 transition-colors p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl"
                         title="Remover cliente"
                       >
-                        ✕
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
                   ) : (
@@ -254,15 +263,15 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
                           }}
                           onFocus={() => setShowLeadSuggestions(true)}
                           onBlur={() => setTimeout(() => setShowLeadSuggestions(false), 200)}
-                          className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                          className="w-full pl-12 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                           placeholder="Digite o nome do cliente..."
                           autoComplete="off"
                         />
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                       </div>
                       
                       {showLeadSuggestions && formData.customer_name && (
-                        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                        <div className="absolute z-50 w-full mt-2 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl shadow-md max-h-64 overflow-y-auto py-2 animate-in fade-in slide-in-from-top-2 duration-200">
                           {filteredLeads.length > 0 ? (
                             filteredLeads.map(lead => (
                               <button
@@ -272,14 +281,14 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
                                   e.preventDefault();
                                   handleSelectLead(lead);
                                 }}
-                                className="w-full text-left px-4 py-3 hover:bg-gray-50 text-sm border-b border-gray-100 last:border-0 transition-colors"
+                                className="w-full text-left px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                               >
-                                <div className="font-medium text-gray-900">{lead.name}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">{lead.phone} {lead.email ? `• ${lead.email}` : ''}</div>
+                                <div className="font-bold text-slate-900 dark:text-white">{lead.name}</div>
+                                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{lead.phone} {lead.email ? `• ${lead.email}` : ''}</div>
                               </button>
                             ))
                           ) : (
-                            <div className="px-4 py-3 text-sm text-gray-500">Nenhum cliente encontrado</div>
+                            <div className="px-5 py-4 text-sm text-slate-500 dark:text-slate-400 italic text-center">Nenhum cliente encontrado</div>
                           )}
                         </div>
                       )}
@@ -290,13 +299,20 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
             </div>
 
             {/* Section: Details */}
-            <div className="border-b border-gray-200 py-10">
-              <h2 className="text-lg font-semibold text-gray-900 mb-1">Detalhes Operacionais</h2>
-              <p className="text-sm text-gray-500 mb-6">Defina prazos, valores e prioridade.</p>
+            <div className="border-b border-slate-100 dark:border-slate-800 py-10">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Detalhes Operacionais</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Defina prazos, valores e prioridade.</p>
+                </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Valor Estimado (R$)
                   </label>
                   <input
@@ -304,19 +320,19 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
                     step="0.01"
                     value={formData.estimated_value}
                     onChange={(e) => updateField('estimated_value', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                     placeholder="0,00"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Prioridade
                   </label>
                   <select
                     value={formData.priority}
                     onChange={(e) => updateField('priority', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all bg-white"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-bold appearance-none cursor-pointer"
                   >
                     <option value="low">Baixa</option>
                     <option value="medium">Média</option>
@@ -326,26 +342,26 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Data de Início
                   </label>
                   <input
                     type="date"
                     value={formData.start_date}
                     onChange={(e) => updateField('start_date', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
                     Previsão de Término
                   </label>
                   <input
                     type="date"
                     value={formData.estimated_end_date}
                     onChange={(e) => updateField('estimated_end_date', e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
                   />
                 </div>
               </div>
@@ -354,8 +370,15 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
             {/* Section: Custom Fields */}
             {template.custom_fields?.length > 0 && (
               <div className="py-10">
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Informações Específicas</h2>
-                <p className="text-sm text-gray-500 mb-6">Campos personalizados do template {template.name}.</p>
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">Informações Específicas</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Campos personalizados do template {template.name}.</p>
+                  </div>
+                </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {template.custom_fields.map((field) => (
@@ -370,18 +393,18 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-4 pt-6">
+            <div className="flex items-center justify-end gap-4 pt-10">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+                className="px-8 py-3 text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="px-8 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-100 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
+                className="px-10 py-3 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 focus:ring-4 focus:ring-emerald-100 dark:focus:ring-emerald-900/20 transition-all shadow-md shadow-emerald-200 dark:shadow-none disabled:opacity-70 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 {loading ? (
                   <>
@@ -398,89 +421,19 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
             </div>
           </form>
         </div>
-
-        {/* Right Column - Preview */}
-        <div className={`hidden ${!isModal ? 'lg:block' : ''}`}>
-          <div className="sticky top-8 space-y-8">
-            
-            {/* Template Info Card */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Template Selecionado</h3>
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
-                  <Layout className="w-6 h-6" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-gray-900">{template.name}</h4>
-                  <p className="text-sm text-gray-500 mt-1 leading-relaxed">{template.description}</p>
-                </div>
-              </div>
-              <div className="mt-6 flex items-center gap-3 text-xs font-medium text-gray-500">
-                <span className="bg-gray-100 px-2.5 py-1 rounded-md">{template.stages_count || 0} Estágios</span>
-                <span className="bg-gray-100 px-2.5 py-1 rounded-md">{template.fields_count || 0} Campos</span>
-              </div>
-            </div>
-
-            {/* Preview Card */}
-            <div>
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Pré-visualização
-              </h3>
-              <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-lg transform scale-100 transition-all">
-                <div className="flex items-start justify-between mb-3">
-                  <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-white ${getPriorityColor(formData.priority)}`}>
-                    {formData.priority}
-                  </div>
-                </div>
-
-                <h4 className="font-bold text-gray-900 mb-2 line-clamp-2">
-                  {formData.title || "Título do Projeto"}
-                </h4>
-                
-                <p className="text-sm text-gray-500 line-clamp-2 mb-4 min-h-[2.5rem]">
-                  {formData.description || "A descrição do projeto aparecerá aqui..."}
-                </p>
-
-                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <Calendar className="w-4 h-4" />
-                    <span className="text-xs font-medium">
-                      {formData.estimated_end_date 
-                        ? format(new Date(formData.estimated_end_date), "dd MMM", { locale: ptBR }) 
-                        : "Prazo"}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    {selectedLead && (
-                      <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600" title={selectedLead.name}>
-                        {selectedLead.name.charAt(0)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-center text-gray-400 mt-3">
-                É assim que o projeto aparecerá no quadro Kanban.
-              </p>
-            </div>
-
-          </div>
-        </div>
       </div>
     </div>
   );
 
   if (isModal) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl overflow-y-auto relative">
+      <div className="fixed inset-0 z-60 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-xl shadow-md overflow-y-auto relative border border-slate-100 dark:border-slate-800">
            <button 
              onClick={onClose} 
-             className="absolute top-4 right-4 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors z-10"
+             className="absolute top-6 right-6 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors z-10"
            >
-             <X className="w-5 h-5" />
+             <X className="w-6 h-6" />
            </button>
            {formContent}
         </div>
@@ -489,7 +442,7 @@ export default function ProjectForm({ template, project, onClose, onSuccess, isM
   }
 
   return (
-    <div className="w-full min-h-screen bg-white">
+    <div className="w-full">
       {formContent}
     </div>
   );
@@ -504,7 +457,7 @@ type CustomFieldInputProps = {
 };
 
 function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
-  const baseClass = "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all";
+  const baseClass = "w-full px-5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white placeholder-slate-400 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium";
 
   const renderInput = () => {
     switch (field.field_type) {
@@ -585,9 +538,9 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
               placeholder={field.field_placeholder || 'Selecione ou digite...'}
               required={field.is_required}
             />
-            {field.options && field.options.length > 0 && (
+            {field.field_options && field.field_options.length > 0 && (
               <datalist id={`list-${field.id}`}>
-                {field.options.map((opt) => (
+                {field.field_options.map((opt) => (
                   <option key={opt} value={opt} />
                 ))}
               </datalist>
@@ -595,16 +548,16 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
           </>
         );
 
-      case 'checkbox':
+      case 'boolean':
         return (
-          <div className="flex items-center gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
+          <div className="flex items-center gap-3 p-4 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
             <input
               type="checkbox"
               checked={!!value}
               onChange={(e) => onChange(e.target.checked)}
-              className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
+              className="w-6 h-6 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
             />
-            <span className="text-sm text-gray-700 font-medium">
+            <span className="text-sm text-slate-700 dark:text-slate-300 font-bold">
               {field.field_placeholder || 'Sim'}
             </span>
           </div>
@@ -625,10 +578,11 @@ function CustomFieldInput({ field, value, onChange }: CustomFieldInputProps) {
 
   return (
     <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
+      <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">
         {field.field_label} {field.is_required && <span className="text-red-500">*</span>}
       </label>
       {renderInput()}
     </div>
   );
 }
+

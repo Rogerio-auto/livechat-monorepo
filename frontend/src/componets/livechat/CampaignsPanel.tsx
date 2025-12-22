@@ -726,9 +726,9 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
 
         {/* quando não houver templates: mostrar CTA central */}
         {templates.length === 0 ? (
-          <div className="min-h-32 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-2xl flex items-center justify-center bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50">
+          <div className="min-h-32 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl flex items-center justify-center bg-linear-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900/50">
             <div className="text-center p-8">
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center shadow-lg">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-xl bg-linear-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 border-2 border-blue-200 dark:border-blue-800 flex items-center justify-center shadow-lg">
                 <FiMessageSquare className="w-10 h-10 text-blue-600 dark:text-blue-400" />
               </div>
               <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
@@ -740,7 +740,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
               {canManageTemplates ? (
                 <button
                   onClick={openNewTemplateWizard}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium shadow-lg shadow-blue-500/30 transition-all hover:scale-105"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-medium shadow-lg shadow-blue-500/30 transition-all hover:scale-105"
                 >
                   <FiPlus className="w-4 h-4" />
                   Criar primeiro template
@@ -826,7 +826,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
           {error && <div className="p-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl mb-3">Erro: {error}</div>}
           {items.length === 0 && !loading && !error && (
             <div className="p-8 text-center bg-white dark:bg-gray-800 rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-700">
-              <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center">
+              <div className="w-16 h-16 mx-auto mb-3 rounded-xl bg-gray-100 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 flex items-center justify-center">
                 <FiMessageSquare className="w-8 h-8 text-gray-400" />
               </div>
               <p
@@ -858,7 +858,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
             {items.map((c) => (
             <div 
               key={c.id} 
-              className="p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+              className="p-4 bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-xl  transition-all duration-300 group"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -1102,3 +1102,4 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
     </div>
   );
 }
+

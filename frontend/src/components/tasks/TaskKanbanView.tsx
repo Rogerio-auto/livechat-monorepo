@@ -87,7 +87,7 @@ export function TaskKanbanView({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {COLUMNS.map((column) => {
+      {COLUMNS.map((column, index) => {
         const columnTasks = getTasksByStatus(column.id);
         const isOver = dragOverColumn === column.id;
         const canDrop = draggedTask && draggedTask.status !== column.id;
@@ -95,8 +95,8 @@ export function TaskKanbanView({
         return (
           <div
             key={column.id}
-            className={`flex flex-col rounded-2xl border-2 ${column.borderColor} ${column.bgColor} p-4 transition-all duration-200 ${
-              isOver && canDrop ? "ring-4 ring-blue-400 ring-opacity-50 scale-105" : ""
+            className={`flex flex-col ${index !== COLUMNS.length - 1 ? 'border-r border-slate-100 dark:border-slate-800' : ''} p-4 transition-all duration-200 ${
+              isOver && canDrop ? "bg-slate-50 dark:bg-slate-800/50" : ""
             }`}
             onDragOver={(e) => handleDragOver(e, column.id)}
             onDragLeave={handleDragLeave}
@@ -109,7 +109,7 @@ export function TaskKanbanView({
                   {column.title}
                 </h3>
                 <span
-                  className={`flex h-6 w-6 items-center justify-center rounded-full ${column.bgColor} text-sm font-semibold ${column.color}`}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 text-sm font-semibold ${column.color}`}
                 >
                   {columnTasks.length}
                 </span>
@@ -119,8 +119,8 @@ export function TaskKanbanView({
             {/* Tasks List */}
             <div className="flex-1 space-y-3 overflow-y-auto">
               {columnTasks.length === 0 ? (
-                <div className="flex h-32 items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600">
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                <div className="flex h-32 items-center justify-center">
+                  <p className="text-sm text-gray-500 dark:text-gray-400 italic">
                     Nenhuma tarefa
                   </p>
                 </div>

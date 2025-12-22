@@ -737,7 +737,7 @@ T${pad(date.getHours())}
   );
   const assignedSelectValue = currentAssigneeUserId ?? "";
   return (
-  <div className="bg-(--color-surface) rounded-2xl shadow p-3 flex flex-col gap-1">
+  <div className="bg-(--color-surface) rounded-xl shadow p-3 flex flex-col gap-1">
       {" "}
       {chat ? (
         <div className="flex items-center gap-3 p-3 bg-emerald-50 border-b border-emerald-100">
@@ -1498,6 +1498,7 @@ T${pad(date.getHours())}
     </div>
   );
 }
+
 
 
 

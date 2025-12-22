@@ -147,7 +147,7 @@ export function useNotifications() {
   const fetchUnreadCount = useCallback(async () => {
     try {
       const token = getAccessToken();
-      const res = await fetch(`${API}/api/notifications/unread/count`, {
+      const res = await fetch(`${API}/api/notifications/unread-count`, {
         credentials: 'include',
         headers: {
           'Authorization': token ? `Bearer ${token}` : '',

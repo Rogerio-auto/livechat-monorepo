@@ -107,9 +107,9 @@ export function TemplateToolsManager({ templateId, templateName, onClose }: Prop
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
+      <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-md">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+        <div className="bg-linear-to-r from-blue-600 to-indigo-600 text-white p-6">
           <div className="flex justify-between items-start">
             <div>
               <h2 className="text-2xl font-bold mb-1">Gerenciar Ferramentas</h2>
@@ -151,7 +151,7 @@ export function TemplateToolsManager({ templateId, templateName, onClose }: Prop
         <div className="bg-blue-50 border-l-4 border-blue-500 p-4 m-6">
           <div className="flex items-start gap-3">
             <svg
-              className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0"
+              className="w-5 h-5 text-blue-600 mt-0.5 shrink-0"
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -291,7 +291,7 @@ function ToolCard({
         {/* Toggle Switch */}
         <button
           onClick={onToggle}
-          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-1 ${
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mt-1 ${
             isAttached ? "bg-blue-600" : "bg-gray-200"
           }`}
         >
@@ -347,7 +347,7 @@ function ToolCard({
 
         {/* Status Badge */}
         {isAttached && (
-          <div className="flex-shrink-0">
+          <div className="shrink-0">
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-full">
               <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                 <path

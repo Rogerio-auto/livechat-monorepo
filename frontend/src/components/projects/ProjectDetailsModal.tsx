@@ -122,7 +122,7 @@ export default function ProjectDetailsModal({ project:  initialProject, template
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
           {/* Header */}
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div className="flex items-start justify-between">
@@ -237,7 +237,7 @@ export default function ProjectDetailsModal({ project:  initialProject, template
 
       {/* Delete Confirmation */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
               Confirmar Exclusão
@@ -340,12 +340,12 @@ function OverviewTab({ project, template, onStageChange, onProgressChange, loadi
 
       {/* Basic Info */}
       <section>
-        <h3 className="text-lg font-semibold text-gray-900 dark: text-white mb-4">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Informações Gerais
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {project.description && (
-            <div className="md:col-span-2 bg-gray-50 dark: bg-gray-900/50 rounded-lg p-4">
+            <div className="md:col-span-2 bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
               <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Descrição</label>
               <p className="text-gray-900 dark:text-white mt-1">{project.description}</p>
             </div>
@@ -379,10 +379,10 @@ function OverviewTab({ project, template, onStageChange, onProgressChange, loadi
       {/* Custom Fields */}
       {template.custom_fields.length > 0 && (
         <section>
-          <h3 className="text-lg font-semibold text-gray-900 dark: text-white mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Informações Específicas
           </h3>
-          <div className="grid grid-cols-1 md: grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {template.custom_fields.map((field) => {
               const value = project.custom_fields[field.field_key];
               if (! value && value !== 0 && value !== false) return null;
@@ -402,7 +402,7 @@ function OverviewTab({ project, template, onStageChange, onProgressChange, loadi
       {/* Tags */}
       {project.tags.length > 0 && (
         <section>
-          <h3 className="text-lg font-semibold text-gray-900 dark: text-white mb-4">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Tags
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -428,7 +428,7 @@ function InfoCard({ label, value, icon }: { label: string; value:  string; icon?
     <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-1">
         {icon && <span className="text-lg">{icon}</span>}
-        <label className="text-sm font-medium text-gray-600 dark: text-gray-400">{label}</label>
+        <label className="text-sm font-medium text-gray-600 dark:text-gray-400">{label}</label>
       </div>
       <p className="text-gray-900 dark:text-white font-semibold">{value}</p>
     </div>

@@ -630,6 +630,11 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       const linkIds = toUuidArray(items.map((c: any) => c.assignee_agent));
       const customerIds = toUuidArray(items.map((c: any) => c.customer_id));
+      
+      // Coletar telefones para busca de leads por telefone também (evita erro de duplicidade)
+      const chatPhones = items
+        .map((c: any) => c.customer_phone || c.remote_id?.split('@')[0] || c.external_id?.split('@')[0])
+        .filter((p): p is string => typeof p === 'string' && p.length > 5);
 
       const [linksResp, customersResp, leadsResp] = await Promise.all([
         linkIds.length
@@ -656,16 +661,28 @@ export function registerLivechatChatRoutes(app: express.Application) {
                   .in("id", customerIds),
             )
           : Promise.resolve({ data: [], error: null, count: null } as const),
-        customerIds.length
+        (customerIds.length || chatPhones.length)
           ? traceSupabase(
               "leads.display",
               "leads",
               queryLog,
-              async () =>
-                await supabaseAdmin
+              async () => {
+                let query = supabaseAdmin
                   .from("leads")
-                  .select("id, name, phone, kanban_column_id")
-                  .in("id", customerIds),
+                  .select("id, name, phone, kanban_column_id, customer_id")
+                  .eq("company_id", companyId);
+                
+                const filters = [];
+                if (customerIds.length) {
+                  filters.push(`customer_id.in.(${customerIds.join(",")})`);
+                  filters.push(`id.in.(${customerIds.join(",")})`);
+                }
+                if (chatPhones.length) {
+                  filters.push(`phone.in.(${chatPhones.map(p => `"${p}"`).join(",")})`);
+                }
+                
+                return await query.or(filters.join(","));
+              }
             )
           : Promise.resolve({ data: [], error: null, count: null } as const),
       ]);
@@ -881,7 +898,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         };
       }
       for (const row of (((leadsResp as any).data || []) as any[])) {
-        const id = String(row.id);
+        const id = String(row.customer_id || row.id);
         if (!customerDisplay[id]) {
           customerDisplay[id] = {
             name: row?.name || null,
@@ -899,13 +916,20 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
       // Mapear stage_id e stage_name dos leads
       const leadStages: Record<string, { stage_id: string | null; stage_name: string | null }> = {};
+      const leadByPhone: Record<string, { stage_id: string | null; stage_name: string | null }> = {};
+      
       for (const row of (((leadsResp as any).data || []) as any[])) {
-        const id = String(row.id);
+        const id = String(row.customer_id || row.id);
+        const phone = row.phone;
         const columnId = row.kanban_column_id;
-        leadStages[id] = {
+        
+        const leadInfo = {
           stage_id: columnId || null,
           stage_name: columnId ? kanbanColumnNames[columnId] || null : null,
         };
+        
+        leadStages[id] = leadInfo;
+        if (phone) leadByPhone[phone] = leadInfo;
       }
 
       for (const chat of items as any[]) {
@@ -913,10 +937,18 @@ export function registerLivechatChatRoutes(app: express.Application) {
         chat.customer_name = display?.name || null;
         chat.customer_phone = display?.phone || null;
 
-        // Adicionar stage_id e stage_name do lead
-        const leadStage = leadStages[String(chat.customer_id)] || null;
+        // Adicionar stage_id e stage_name do lead (por ID ou por Telefone)
+        const phoneKey = chat.customer_phone || 
+                         chat.remote_id?.split('@')[0] || 
+                         chat.external_id?.split('@')[0];
+                         
+        const leadStage = leadStages[String(chat.customer_id)] || 
+                          (phoneKey ? leadByPhone[phoneKey] : null) || 
+                          null;
+                          
         chat.stage_id = leadStage?.stage_id || null;
         chat.stage_name = leadStage?.stage_name || null;
+        chat.is_lead = !!leadStage;
 
         const remoteKey =
           (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
@@ -1746,12 +1778,14 @@ export function registerLivechatChatRoutes(app: express.Application) {
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: "Chat não encontrado" });
     
+    const flattened = flattenChatRow(data);
+
     // Validar que a inbox pertence à empresa
-    if ((data as any).inbox_id) {
+    if (flattened.inbox_id) {
       const { data: inboxData } = await supabaseAdmin
         .from("inboxes")
         .select("company_id")
-        .eq("id", (data as any).inbox_id)
+        .eq("id", flattened.inbox_id)
         .eq("company_id", companyId)
         .maybeSingle();
       
@@ -1760,25 +1794,20 @@ export function registerLivechatChatRoutes(app: express.Application) {
       }
     }
 
-    // Flatten AI agent relationship and fallback to active company agent if missing
+    // Fallback to active company agent if missing
     try {
-      if ((data as any)?.ai_agent) {
-        (data as any).ai_agent_id = (data as any).ai_agent?.id ?? null;
-        (data as any).ai_agent_name = (data as any).ai_agent?.name ?? null;
-        delete (data as any).ai_agent;
-      }
-      const companyId = (data as any)?.company_id ?? null;
-      if (companyId && !(data as any).ai_agent_id) {
+      const companyId = flattened.company_id ?? null;
+      if (companyId && !flattened.ai_agent_id) {
         const activeAgent = await getRuntimeAgent(companyId, null);
-        (data as any).ai_agent_id = activeAgent?.id ?? null;
-        (data as any).ai_agent_name = activeAgent?.name ?? null;
+        flattened.ai_agent_id = activeAgent?.id ?? null;
+        flattened.ai_agent_name = activeAgent?.name ?? null;
       }
     } catch (err) {
       console.warn("[livechat/chat] enrich ai agent failed", err instanceof Error ? err.message : err);
     }
 
-    await rSet(cacheKey, data, TTL_CHAT);
-    return res.json(data);
+    await rSet(cacheKey, flattened, TTL_CHAT);
+    return res.json(flattened);
   });
 
   // Atualizar status (invalida chat + listas)

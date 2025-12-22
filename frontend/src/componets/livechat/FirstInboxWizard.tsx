@@ -307,7 +307,7 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
                    hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all group text-left"
         >
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0 
+            <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center shrink-0 
                           group-hover:scale-110 transition-transform">
               <SiMeta className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             </div>
@@ -338,7 +338,7 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
                    hover:bg-green-50 dark:hover:bg-green-900/20 transition-all group text-left"
         >
           <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center flex-shrink-0 
+            <div className="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center shrink-0 
                           group-hover:scale-110 transition-transform">
               <FaServer className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
@@ -709,7 +709,7 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" 
       style={{ zIndex: 9999 }}
     >
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header com Progress */}
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
@@ -772,3 +772,4 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
 
   return createPortal(modalContent, document.body);
 }
+

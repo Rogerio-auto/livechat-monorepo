@@ -408,7 +408,7 @@ router.delete("/agents/:agentId/tools/:toolId", async (req: any, res: any) => {
 
 // ===================== ADMIN COMPANY MANAGEMENT =====================
 
-router.get("/admin/companies/:companyId/tools", async (req: AuthRequest, res) => {
+router.get("/admin/companies/:companyId/tools", (async (req: AuthRequest, res: any) => {
   try {
     const { companyId } = req.params as { companyId?: string };
     if (!companyId) {
@@ -430,9 +430,9 @@ router.get("/admin/companies/:companyId/tools", async (req: AuthRequest, res) =>
     console.error("[tools.admin] GET /admin/companies/:companyId/tools error", err);
     res.status(500).json({ error: err.message });
   }
-});
+}) as any);
 
-router.get("/admin/companies/:companyId/agents/:agentId/tools", async (req: AuthRequest, res) => {
+router.get("/admin/companies/:companyId/agents/:agentId/tools", (async (req: AuthRequest, res: any) => {
   try {
     const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
     if (!companyId || !agentId) {
@@ -455,9 +455,9 @@ router.get("/admin/companies/:companyId/agents/:agentId/tools", async (req: Auth
     console.error("[tools.admin] GET /admin/companies/:companyId/agents/:agentId/tools error", err);
     res.status(500).json({ error: err.message });
   }
-});
+}) as any);
 
-router.post("/admin/companies/:companyId/agents/:agentId/tools", async (req: AuthRequest, res) => {
+router.post("/admin/companies/:companyId/agents/:agentId/tools", (async (req: AuthRequest, res: any) => {
   try {
     const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
     if (!companyId || !agentId) {
@@ -492,9 +492,9 @@ router.post("/admin/companies/:companyId/agents/:agentId/tools", async (req: Aut
     console.error("[tools.admin] POST /admin/companies/:companyId/agents/:agentId/tools error", err);
     res.status(500).json({ error: err.message });
   }
-});
+}) as any);
 
-router.put("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async (req: AuthRequest, res) => {
+router.put("/admin/companies/:companyId/agents/:agentId/tools/:toolId", (async (req: AuthRequest, res: any) => {
   try {
     const { companyId, agentId, toolId } = req.params as { companyId?: string; agentId?: string; toolId?: string };
     if (!companyId || !agentId || !toolId) {
@@ -517,9 +517,9 @@ router.put("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async (r
     console.error("[tools.admin] PUT /admin/companies/:companyId/agents/:agentId/tools/:toolId error", err);
     res.status(500).json({ error: err.message });
   }
-});
+}) as any);
 
-router.delete("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async (req: AuthRequest, res) => {
+router.delete("/admin/companies/:companyId/agents/:agentId/tools/:toolId", (async (req: AuthRequest, res: any) => {
   try {
     const { companyId, agentId, toolId } = req.params as { companyId?: string; agentId?: string; toolId?: string };
     if (!companyId || !agentId || !toolId) {
@@ -537,7 +537,7 @@ router.delete("/admin/companies/:companyId/agents/:agentId/tools/:toolId", async
     console.error("[tools.admin] DELETE /admin/companies/:companyId/agents/:agentId/tools/:toolId error", err);
     res.status(500).json({ error: err.message });
   }
-});
+}) as any);
 
 async function ensureAgentCompany(agentId: string, companyId: string) {
   try {

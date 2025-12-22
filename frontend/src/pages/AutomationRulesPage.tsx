@@ -72,7 +72,7 @@ export function AutomationRulesPage() {
     <>
       <div className="livechat-theme min-h-screen w-full pb-12 transition-colors duration-500">
         <div className="mx-auto w-full max-w-(--page-max-width) px-3 pb-10 pt-6 sm:px-6 lg:px-8">
-          <div className="livechat-card rounded-3xl p-6 shadow-xl md:p-8">
+          <div className="livechat-card rounded-xl p-6 shadow-md md:p-8">
             <div className="space-y-8">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="space-y-2">
@@ -114,7 +114,7 @@ export function AutomationRulesPage() {
                   <button
                     type="button"
                     onClick={() => setShowWizard(true)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200  hover:bg-[#1f8b49]"
                   >
                     <Plus className="h-4 w-4" /> Nova automação
                   </button>
@@ -122,7 +122,7 @@ export function AutomationRulesPage() {
               </div>
 
               {rules.length === 0 && !loading && (
-                <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[rgba(47,180,99,0.12)] via-[rgba(21,63,41,0.12)] to-[rgba(47,180,99,0.05)] p-8 text-(--color-text) shadow-xl">
+                <div className="relative overflow-hidden rounded-xl bg-linear-to-br from-[rgba(47,180,99,0.12)] via-[rgba(21,63,41,0.12)] to-[rgba(47,180,99,0.05)] p-8 text-(--color-text) shadow-md">
                   <div className="pointer-events-none absolute -right-14 -top-14 h-44 w-44 rounded-full bg-[rgba(47,180,99,0.22)] blur-3xl" />
                   <div className="pointer-events-none absolute -left-12 bottom-4 h-40 w-40 rounded-full bg-[rgba(116,230,158,0.2)] blur-3xl" />
                   <div className="relative flex flex-col gap-8 lg:flex-row">
@@ -135,12 +135,12 @@ export function AutomationRulesPage() {
                         Defina gatilhos, condições e ações para garantir que cada lead receba o tratamento ideal. Alinhe follow-ups, notificações e atualizações sem depender da memória da equipe.
                       </p>
                       <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-                        <div className="rounded-2xl bg-white/70 p-4 backdrop-blur-sm shadow-sm">
+                        <div className="rounded-xl bg-white/70 p-4 backdrop-blur-sm shadow-sm">
                           <p className="text-xs font-semibold text-[#2fb463]">Tempo de resposta</p>
                           <p className="mt-1 text-lg font-bold text-(--color-text)">30 minutos</p>
                           <p className="mt-1 text-xs text-(--color-text-muted)">Mantenha leads quentes com respostas automáticas.</p>
                         </div>
-                        <div className="rounded-2xl bg-white/70 p-4 backdrop-blur-sm shadow-sm">
+                        <div className="rounded-xl bg-white/70 p-4 backdrop-blur-sm shadow-sm">
                           <p className="text-xs font-semibold text-[#2fb463]">Conversões</p>
                           <p className="mt-1 text-lg font-bold text-(--color-text)">+40%</p>
                           <p className="mt-1 text-xs text-(--color-text-muted)">Acompanhe cada oportunidade até o fechamento.</p>
@@ -150,7 +150,7 @@ export function AutomationRulesPage() {
                         <button
                           type="button"
                           onClick={() => setShowWizard(true)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200  hover:bg-[#1f8b49]"
                         >
                           <Sparkles className="h-4 w-4" /> Criar primeira automação
                         </button>
@@ -164,25 +164,25 @@ export function AutomationRulesPage() {
                       </div>
                     </div>
                     <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2">
-                      <div className="rounded-2xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
+                      <div className="rounded-xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
                         <p className="text-xs font-semibold text-(--color-primary)">Gatilhos inteligentes</p>
                         <p className="mt-2 text-sm text-(--color-text-muted)">
                           Dispare fluxos com base em status do funil, interações ou tempo sem contato.
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
+                      <div className="rounded-xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
                         <p className="text-xs font-semibold text-(--color-primary)">Ações encadeadas</p>
                         <p className="mt-2 text-sm text-(--color-text-muted)">
                           Combine mensagens, tarefas, labels e integrações externas em poucos cliques.
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
+                      <div className="rounded-xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
                         <p className="text-xs font-semibold text-(--color-primary)">Logs completos</p>
                         <p className="mt-2 text-sm text-(--color-text-muted)">
                           Monitore cada execução e ajuste rapidamente quando precisar.
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
+                      <div className="rounded-xl bg-white/80 p-4 backdrop-blur-sm shadow-sm">
                         <p className="text-xs font-semibold text-(--color-primary)">Sem código</p>
                         <p className="mt-2 text-sm text-(--color-text-muted)">
                           Construa fluxos poderosos com interface visual pronta para o time comercial.
@@ -194,7 +194,7 @@ export function AutomationRulesPage() {
               )}
 
               {rules.length > 0 && (
-                <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-4 py-3 text-sm text-(--color-text) shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-4 py-3 text-sm text-(--color-text) shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
                     <Filter className="h-4 w-4" /> Filtrar por status
                   </div>
@@ -239,12 +239,12 @@ export function AutomationRulesPage() {
                   {Array.from({ length: 4 }).map((_, index) => (
                     <div
                       key={index}
-                      className="h-40 animate-pulse rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
+                      className="h-40 animate-pulse rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
                     />
                   ))}
                 </div>
               ) : error ? (
-                <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-600">
+                <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-600">
                   <div className="font-semibold">Não foi possível carregar suas automações.</div>
                   <div className="mt-1">{error}</div>
                   <button
@@ -256,7 +256,7 @@ export function AutomationRulesPage() {
                   </button>
                 </div>
               ) : filteredRules.length === 0 ? (
-                <div className="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 65%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-8 py-16 text-center text-(--color-text-muted)">
+                <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 65%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] px-8 py-16 text-center text-(--color-text-muted)">
                   <Settings className="h-12 w-12 text-(--color-text-muted)" />
                   <p className="mt-4 text-sm">
                     {filterActive === "active"
@@ -269,7 +269,7 @@ export function AutomationRulesPage() {
                     <button
                       type="button"
                       onClick={() => setShowWizard(true)}
-                      className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#1f8b49]"
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#2fb463] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_18px_46px_-24px_rgba(47,180,99,0.65)] transition-all duration-200  hover:bg-[#1f8b49]"
                     >
                       <Sparkles className="h-4 w-4" /> Criar automação
                     </button>
@@ -362,7 +362,7 @@ function AutomationRuleCard({ rule, onViewLogs, onEdit, onToggle, onDelete }: Au
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl livechat-panel p-6 shadow-xl transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl ${
+      className={`relative overflow-hidden rounded-xl livechat-panel p-6 shadow-md transition-all duration-200  hover:shadow-md ${
         isActive ? "ring-1 ring-[rgba(47,180,99,0.35)]" : "border border-[color-mix(in_srgb,var(--color-muted) 65%,transparent)]"
       }`}
     >
@@ -397,7 +397,7 @@ function AutomationRuleCard({ rule, onViewLogs, onEdit, onToggle, onDelete }: Au
           )}
 
           <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
-            <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
+            <div className="rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
               <p className="font-semibold text-(--color-text)">Execuções</p>
               <p className="mt-1 text-(--color-text-muted)">
                 {executionCount === 0
@@ -405,7 +405,7 @@ function AutomationRuleCard({ rule, onViewLogs, onEdit, onToggle, onDelete }: Au
                   : `Executada ${executionCount} ${executionCount === 1 ? "vez" : "vezes"}`}
               </p>
             </div>
-            <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
+            <div className="rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
               <p className="font-semibold text-(--color-text)">Última execução</p>
               <p className="mt-1 text-(--color-text-muted)">
                 {rule.last_executed_at
@@ -418,13 +418,13 @@ function AutomationRuleCard({ rule, onViewLogs, onEdit, onToggle, onDelete }: Au
                   : "Ainda não executada"}
               </p>
             </div>
-            <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
+            <div className="rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
               <p className="font-semibold text-(--color-text)">Condições</p>
               <p className="mt-1 text-(--color-text-muted)">
                 {conditionsCount} {conditionsCount === 1 ? "condição" : "condições"}
               </p>
             </div>
-            <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
+            <div className="rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)] px-3 py-2">
               <p className="font-semibold text-(--color-text)">Proteção</p>
               <p className="mt-1 text-(--color-text-muted)">{duplicateLabel}</p>
               <p className="mt-0.5 text-(--color-text-muted)">{duplicateDescription}</p>
@@ -476,3 +476,4 @@ function AutomationRuleCard({ rule, onViewLogs, onEdit, onToggle, onDelete }: Au
     </div>
   );
 }
+

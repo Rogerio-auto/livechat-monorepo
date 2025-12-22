@@ -5,7 +5,7 @@ import { supabaseAnon, supabaseAdmin } from "../lib/supabase.js";
 import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.js";
 import { getIO } from "../lib/io.js";
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
-import { randomUUID } from "crypto";
+import crypto, { randomUUID } from "crypto";
 import { redis } from "../lib/redis.js";
 
 export function registerAuthRoutes(app: express.Application) {
@@ -84,7 +84,8 @@ export function registerAuthRoutes(app: express.Application) {
       role: profile.role || "USER",
       company_id: companyId,
       industry: industry, // ✅ Adicionado nicho da empresa
-      name: profile.name || user.name || user.email,
+      name: user.name || profile.name || "", // ✅ Removido fallback para email para não confundir o usuário
+      avatarUrl: user.avatar || profile.avatar || null,
       phone: profile.phone || user.phone || null,
       theme_preference: profile.theme_preference || "system", // ✅ Já vem do cache do requireAuth
       requires_phone_setup: !profile.phone && !user.phone, // ✅ Flag indicando se precisa configurar telefone
@@ -234,9 +235,9 @@ export function registerAuthRoutes(app: express.Application) {
     return res.json({
       id: req.user.id,
       email: req.user.email,
-      name: urow?.name || req.user.email,
+      name: urow?.name || req.user.name || "",
       role: urow?.role || null,
-      avatarUrl: urow?.avatar || null,
+      avatarUrl: urow?.avatar || req.user.avatar || null,
       companyId: urow?.company_id || null,
       companyName,
     });
@@ -246,62 +247,107 @@ export function registerAuthRoutes(app: express.Application) {
   app.put("/me/profile", requireAuth, async (req: any, res) => {
     try {
       const authUserId = req.user.id as string;
-      const authEmail = req.user.email as string;
+      const authEmail = (req.user.email || req.profile?.email) as string;
+      
+      console.log(`[PUT /me/profile] Request from user: ${authUserId} (${authEmail})`);
+
       const schema = z
         .object({
           name: z.string().min(1).optional(),
-          avatarUrl: z.string().url().optional(),
+          avatarUrl: z.string().optional(), // Removido .url() para permitir strings vazias ou caminhos relativos
           currentPassword: z.string().optional(),
           newPassword: z.string().optional(),
           confirmPassword: z.string().optional(),
         })
         .passthrough();
+      
       const parsed = schema.safeParse(req.body || {});
-      if (!parsed.success)
+      if (!parsed.success) {
+        console.warn("[PUT /me/profile] Validation failed:", parsed.error.format());
         return res.status(400).json({ error: "Dados inválidos", details: parsed.error.format() });
+      }
+      
       const body = parsed.data as any;
-
       const nowIso = new Date().toISOString();
       let updatedRow: any = null;
       const toUpdate: Record<string, any> = {};
+      
       if (typeof body.name === "string") toUpdate.name = body.name;
       if (typeof body.avatarUrl === "string") toUpdate.avatar = body.avatarUrl;
+      
       if (Object.keys(toUpdate).length > 0) {
         toUpdate.updated_at = nowIso;
+        console.log("[PUT /me/profile] Updating users table:", toUpdate);
+        
+        // Tenta atualizar usando as mesmas colunas de busca do requireAuth
         const { data, error } = await supabaseAdmin
           .from("users")
           .update(toUpdate)
-          .eq("user_id", authUserId)
+          .or(`user_id.eq.${authUserId},id.eq.${authUserId},auth_user_id.eq.${authUserId}`)
           .select("user_id, name, role, avatar, company_id")
           .maybeSingle();
-        if (error) return res.status(500).json({ error: error.message });
+          
+        if (error) {
+          console.error("[PUT /me/profile] DB Update Error:", error);
+          return res.status(500).json({ error: error.message });
+        }
         updatedRow = data;
+        console.log("[PUT /me/profile] DB Update Success:", updatedRow?.user_id);
       }
 
       let passwordChanged = false;
       const hasPwChange = typeof body.newPassword === "string" && body.newPassword.length > 0;
+      
       if (hasPwChange) {
-        if (!body.currentPassword) return res.status(400).json({ error: "Senha atual é obrigatória" });
-        if (body.newPassword !== body.confirmPassword)
-          return res.status(400).json({ error: "Confirmação de senha não confere" });
+        console.log(`[PUT /me/profile] 🔐 Password change requested`);
+        
+        if (!authEmail) {
+          console.error(`[PUT /me/profile] ❌ Cannot change password: User email is missing`);
+          return res.status(400).json({ error: "E-mail do usuário não encontrado. Não é possível validar a senha atual." });
+        }
+
+        if (!body.currentPassword) {
+          return res.status(400).json({ error: "Senha atual é obrigatória para definir uma nova senha." });
+        }
+        
+        if (body.newPassword !== body.confirmPassword) {
+          return res.status(400).json({ error: "A nova senha e a confirmação não coincidem." });
+        }
+        
+        // Validate current password by trying to sign in
+        console.log(`[PUT /me/profile] Validating current password for ${authEmail}...`);
         const { data: login, error: loginErr } = await supabaseAnon.auth.signInWithPassword({
           email: authEmail,
           password: String(body.currentPassword),
         });
-        if (loginErr || !login?.session) return res.status(400).json({ error: "Senha atual inválida" });
-        const { error: upwErr } = await (supabaseAdmin as any).auth.admin.updateUserById(authUserId, {
+        
+        if (loginErr || !login?.session) {
+          console.warn(`[PUT /me/profile] ❌ Current password validation failed:`, loginErr?.message);
+          return res.status(400).json({ error: "Senha atual incorreta." });
+        }
+        
+        console.log(`[PUT /me/profile] ✅ Current password validated.`);
+
+        // Update password using admin
+        const { error: upwErr } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
           password: String(body.newPassword),
         });
-        if (upwErr) return res.status(500).json({ error: upwErr.message });
+        
+        if (upwErr) {
+          console.error(`[PUT /me/profile] ❌ Admin API Error:`, upwErr.message);
+          return res.status(500).json({ error: "Erro ao atualizar senha no Supabase: " + upwErr.message });
+        }
+        
+        console.log(`[PUT /me/profile] ✨ Password updated successfully.`);
         passwordChanged = true;
       }
 
       const resp = {
         id: authUserId,
         email: authEmail,
-        name: updatedRow?.name ?? req.user.email,
+        name: updatedRow?.name ?? req.user.name ?? "",
         role: updatedRow?.role ?? null,
-        avatarUrl: updatedRow?.avatar ?? null,
+        avatarUrl: updatedRow?.avatar ?? req.user.avatar ?? null,
         companyId: updatedRow?.company_id ?? null,
         passwordChanged,
       };
@@ -313,6 +359,27 @@ export function registerAuthRoutes(app: express.Application) {
           profile: resp,
         });
       } catch {}
+
+      // ✅ Invalidar cache de autenticação para forçar refresh do nome/avatar no middleware
+      try {
+        let token: string | undefined;
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith("Bearer ")) {
+          token = authHeader.slice(7);
+        }
+        if (!token) {
+          token = (req as any).cookies?.jwt;
+        }
+        if (token && token !== "undefined") {
+          const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+          const cacheKey = `auth:token:${tokenHash}`;
+          await redis.del(cacheKey);
+          console.log('[PUT /me/profile] ✅ Cache invalidated:', cacheKey);
+        }
+      } catch (cacheError) {
+        console.warn('[PUT /me/profile] Failed to invalidate cache:', cacheError);
+      }
+
       return res.json(resp);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "profile update error" });

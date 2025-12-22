@@ -23,7 +23,7 @@ export class DistributedLock {
   async acquire(): Promise<boolean> {
     try {
       // ioredis usa: SET key value NX EX seconds
-      const result = await redis.set(
+      const result = await (redis as any).set(
         this.lockKey,
         this.lockValue,
         "NX", // SET if Not eXists

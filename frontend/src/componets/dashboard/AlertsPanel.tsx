@@ -17,7 +17,7 @@ export function AlertsPanel({ alerts, loading = false, onDismiss }: AlertsPanelP
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="h-16 rounded-lg bg-[var(--color-surface-muted)] animate-pulse"
+            className="h-16 rounded-lg bg-(--color-surface-muted) animate-pulse"
           />
         ))}
       </div>
@@ -27,8 +27,8 @@ export function AlertsPanel({ alerts, loading = false, onDismiss }: AlertsPanelP
   if (alerts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
-        <FiInfo className="w-12 h-12 text-[var(--color-text-muted)] mb-3" />
-        <p className="text-sm text-[var(--color-text-muted)]">
+        <FiInfo className="w-12 h-12 text-(--color-text-muted) mb-3" />
+        <p className="text-sm text-(--color-text-muted)">
           Nenhum alerta no momento
         </p>
       </div>

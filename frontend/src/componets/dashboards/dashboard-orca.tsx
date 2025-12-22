@@ -51,47 +51,47 @@ const infoFeed = [
 ];
 
 const cardBase =
-  "rounded-2xl border border-[color:var(--color-border)] bg-[var(--color-surface)] shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] transition-colors duration-300";
+  "rounded-xl border border-[color:var(--color-border)] bg-(--color-surface) shadow-[0_28px_60px_-45px_rgba(8,12,20,0.9)] transition-colors duration-300";
 
 export function DashOrca() {
   return (
     <>
       <Sidebar />
       <div className="ml-16 transition-all duration-300 ease-in-out">
-        <main className="grid grid-cols-12 gap-6 p-6 text-[var(--color-text)]">
+        <main className="grid grid-cols-12 gap-6 p-6 text-(--color-text)">
           <section
             className={`${cardBase} col-span-12 flex flex-col items-center gap-3 p-6 text-center lg:col-span-3`}
           >
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[var(--color-highlight)]/20 text-[var(--color-highlight)]">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-(--color-highlight)/20 text-(--color-highlight)">
               <i className="fas fa-user text-3xl" aria-hidden />
             </div>
-            <h2 className="text-lg font-semibold text-[var(--color-heading)]">
+            <h2 className="text-lg font-semibold text-(--color-heading)">
               Rogerio
             </h2>
-            <p className="text-sm text-[var(--color-text-muted)]">
+            <p className="text-sm text-(--color-text-muted)">
               Orcamentos do mes:{" "}
-              <span className="font-semibold text-[var(--color-heading)]">
+              <span className="font-semibold text-(--color-heading)">
                 1.190.607,66
               </span>
             </p>
-            <p className="text-sm text-[var(--color-text-muted)]">
+            <p className="text-sm text-(--color-text-muted)">
               Vendas do mes:{" "}
-              <span className="font-semibold text-[var(--color-heading)]">
+              <span className="font-semibold text-(--color-heading)">
                 105.903,00
               </span>
             </p>
             <button
               type="button"
-              className="rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-[var(--color-on-primary)] shadow-sm transition-colors duration-200 hover:bg-[var(--color-primary-strong)]"
+              className="rounded-md bg-(--color-primary) px-4 py-2 text-sm font-medium text-(--color-on-primary) shadow-sm transition-colors duration-200 hover:bg-(--color-primary-strong)"
             >
               Funcionario: Todos
             </button>
           </section>
 
           <section
-            className={`${cardBase} col-span-12 p-6 lg:col-span-3 text-[var(--color-text)]`}
+            className={`${cardBase} col-span-12 p-6 lg:col-span-3 text-(--color-text)`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Conversao
             </h3>
             <div className="flex justify-between gap-4">
@@ -103,7 +103,7 @@ export function DashOrca() {
                 return (
                   <div
                     key={item.name}
-                    className="flex flex-1 flex-col items-center gap-2 rounded-xl bg-[var(--color-surface-muted)] p-3"
+                    className="flex flex-1 flex-col items-center gap-2 rounded-xl bg-(--color-surface-muted) p-3"
                   >
                     <PieChart width={90} height={90}>
                       <Pie
@@ -120,10 +120,10 @@ export function DashOrca() {
                         <Cell fill="rgba(148,163,184,0.15)" />
                       </Pie>
                     </PieChart>
-                    <p className="text-sm font-semibold text-[var(--color-heading)]">
+                    <p className="text-sm font-semibold text-(--color-heading)">
                       {item.value}%
                     </p>
-                    <span className="text-xs text-[var(--color-text-muted)]">
+                    <span className="text-xs text-(--color-text-muted)">
                       {item.name}
                     </span>
                   </div>
@@ -135,10 +135,10 @@ export function DashOrca() {
           <section
             className={`${cardBase} col-span-12 p-6 lg:col-span-6`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Ultimos orcamentos e vendas
             </h3>
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-[color:var(--color-border)] bg-[var(--color-surface-muted)]/40 p-2">
+            <div className="max-h-72 overflow-y-auto rounded-xl border border-[color:var(--color-border)] bg-(--color-surface-muted)/40 p-2">
               <DataTable />
             </div>
           </section>
@@ -146,7 +146,7 @@ export function DashOrca() {
           <section
             className={`${cardBase} col-span-12 p-6 lg:col-span-6`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Quantidades de orcamentos e vendas
             </h3>
             <ResponsiveContainer width="100%" height={220}>
@@ -169,19 +169,19 @@ export function DashOrca() {
           <section
             className={`${cardBase} col-span-12 p-6 lg:col-span-3`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Pendencias
             </h3>
             <ul className="space-y-2 text-sm">
               {pendingSummary.map((item) => (
                 <li
                   key={item.label}
-                  className="flex items-center justify-between rounded-lg bg-[var(--color-surface-muted)] px-3 py-2"
+                  className="flex items-center justify-between rounded-lg bg-(--color-surface-muted) px-3 py-2"
                 >
-                  <span className="text-[var(--color-heading)]">
+                  <span className="text-(--color-heading)">
                     {item.label}
                   </span>
-                  <span className="rounded-full bg-[var(--color-primary)] px-2 py-0.5 text-xs font-semibold text-[var(--color-on-primary)] shadow-sm">
+                  <span className="rounded-full bg-(--color-primary) px-2 py-0.5 text-xs font-semibold text-(--color-on-primary) shadow-sm">
                     {item.count}
                   </span>
                 </li>
@@ -192,22 +192,22 @@ export function DashOrca() {
           <section
             className={`${cardBase} col-span-12 p-6 lg:col-span-3`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Atualizacoes recentes
             </h3>
             <ul className="space-y-3 text-sm">
               {infoFeed.map((info) => (
                 <li
                   key={info.title}
-                  className="rounded-xl border border-[color:var(--color-border)] bg-[var(--color-surface-muted)]/50 p-3"
+                  className="rounded-xl border border-[color:var(--color-border)] bg-(--color-surface-muted)/50 p-3"
                 >
-                  <p className="font-medium text-[var(--color-heading)]">
+                  <p className="font-medium text-(--color-heading)">
                     {info.title}
                   </p>
-                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  <p className="mt-1 text-xs text-(--color-text-muted)">
                     {info.description}
                   </p>
-                  <span className="mt-2 inline-block text-[11px] uppercase tracking-wide text-[var(--color-text-muted)]">
+                  <span className="mt-2 inline-block text-[11px] uppercase tracking-wide text-(--color-text-muted)">
                     {info.date}
                   </span>
                 </li>
@@ -218,7 +218,7 @@ export function DashOrca() {
           <section
             className={`${cardBase} col-span-12 p-6 lg:col-span-6`}
           >
-            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+            <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-(--color-text-muted)">
               Valores de vendas
             </h3>
             <ResponsiveContainer width="100%" height={220}>
@@ -241,3 +241,4 @@ export function DashOrca() {
     </>
   );
 }
+

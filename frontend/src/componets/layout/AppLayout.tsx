@@ -150,13 +150,15 @@ export function AppLayout() {
   const isLiveChat = location.pathname.startsWith("/livechat");
   const isDashboard = location.pathname === "/dashboard";
   const isProjects = location.pathname.startsWith("/projects");
-  const isFullWidthPage = isLiveChat || isDashboard || isProjects;
+  const isCalendar = location.pathname.startsWith("/calendario");
+  const isFunil = location.pathname.startsWith("/funil");
+  const isFullWidthPage = isLiveChat || isDashboard || isProjects || isCalendar || isFunil;
 
   return (
-    <div className={`h-screen flex overflow-hidden ${isFullWidthPage ? "bg-[color:var(--color-surface)]" : "bg-[var(--color-bg)]"} text-[var(--color-text)]`}>
+    <div className="h-screen flex overflow-hidden bg-(--color-bg) text-(--color-text)">
       <Sidebar mobileOpen={mobileOpen} onRequestClose={() => setMobileOpen(false)} className="peer" />
       
-      <div className="flex-1 flex flex-col min-w-0 relative md:pl-[64px] overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 relative md:pl-16 overflow-hidden">
         <main className={`flex-1 overflow-y-auto custom-scrollbar ${!isFullWidthPage ? "py-6" : ""}`}>
           {isFullWidthPage ? (
             <Outlet context={{ setMobileOpen }} />
@@ -166,7 +168,7 @@ export function AppLayout() {
             </div>
           )}
         </main>
-        <FloatingNotificationBell className="left-20 peer-hover:left-[19rem]" />
+        <FloatingNotificationBell className="left-20 peer-hover:left-76" />
       </div>
     </div>
   );

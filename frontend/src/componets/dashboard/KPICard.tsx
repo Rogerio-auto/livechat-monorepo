@@ -24,12 +24,12 @@ interface KPICardProps {
 const ACCENT_STYLES: Record<AccentTone, { iconBg: string; iconColor: string; glow: string }> = {
   blue: {
     iconBg: "bg-blue-500/10",
-    iconColor: "text-blue-600 dark:text-blue-400",
+    iconColor: "text-[#1f6feb] dark:text-[#388bfd]",
     glow: "bg-blue-500/5",
   },
   green: {
     iconBg: "bg-green-500/10",
-    iconColor: "text-green-600 dark:text-green-400",
+    iconColor: "text-[#2fb463] dark:text-[#2ea043]",
     glow: "bg-green-500/5",
   },
   purple: {
@@ -85,33 +85,33 @@ export function KPICard({
 
   if (loading) {
     return (
-      <div className="relative overflow-hidden rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 animate-pulse">
-        {/* ... shimmer blocks ... */}
-        <div className="mb-4 h-4 w-24 rounded bg-[color:var(--color-surface-muted)]" />
-        <div className="mb-2 h-8 w-32 rounded bg-[color:var(--color-surface-muted)]" />
-        <div className="h-3 w-20 rounded bg-[color:var(--color-surface-muted)]" />
+      <div className="flex flex-col gap-4 p-6 animate-pulse">
+        <div className="flex items-center justify-between">
+          <div className="h-4 w-24 rounded bg-(--color-surface-muted)" />
+          <div className="h-11 w-11 rounded-xl bg-(--color-surface-muted)" />
+        </div>
+        <div className="h-10 w-32 rounded bg-(--color-surface-muted)" />
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-6 transition-all duration-200 hover:border-[color:var(--color-primary)]">
-      {/* ...existing code... */}
-      <div className="mb-4 flex items-start justify-between">
-        <div className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)]">
+    <div className="flex flex-col gap-4 p-6 transition-all border border-slate-100 dark:border-slate-800 rounded-xl">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
           {title}
         </div>
-        <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-[color:var(--color-surface)] border border-[color:var(--color-border)] ${accent.iconColor}`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accent.iconBg} ${accent.iconColor}`}>
           {icon}
         </div>
       </div>
 
       <div className="flex items-baseline gap-2">
-        <div className="text-3xl font-bold text-[color:var(--color-heading)]">
+        <div className="text-3xl font-bold text-(--color-heading)">
           {value}
         </div>
         {suffix && (
-          <span className="text-sm text-[color:var(--color-text-muted)]">{suffix}</span>
+          <span className="text-sm text-(--color-text-muted)">{suffix}</span>
         )}
       </div>
 
@@ -125,12 +125,12 @@ export function KPICard({
                 ? "text-[#2fb463]"
                 : isNegative
                 ? "text-red-500"
-                : "text-[var(--color-text-muted)]"
+                : "text-(--color-text-muted)"
             }`}
           >
             {change > 0 ? "+" : ""}{change}%
           </span>
-          <span className="text-xs text-[var(--color-text-muted)]">vs anterior</span>
+          <span className="text-xs text-(--color-text-muted)">vs anterior</span>
         </div>
       )}
     </div>
@@ -151,3 +151,4 @@ export function formatTime(seconds: number): string {
     return `${hours}h ${minutes}m`;
   }
 }
+

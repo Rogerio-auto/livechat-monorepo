@@ -80,7 +80,7 @@ export function CLogin() {
   return (
     <div className="w-full">
       {/* Card principal com gradiente */}
-      <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-3xl p-8 border border-gray-200 dark:border-gray-700 shadow-2xl transition-colors duration-300">
+      <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
         
         {/* Logo */}
         <div className="flex justify-center mb-8">

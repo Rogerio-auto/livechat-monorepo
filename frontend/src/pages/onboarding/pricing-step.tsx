@@ -41,6 +41,23 @@ const PLANS: Plan[] = [
     ],
   },
   {
+    id: "growth",
+    name: "Growth",
+    price: 197,
+    period: "mês",
+    description: "Para empresas em expansão",
+    features: [
+      "Até 3 usuários",
+      "2 agentes de IA",
+      "2.000 mensagens/mês",
+      "Catálogo de produtos",
+      "Templates personalizados",
+      "Campanhas básicas",
+      "Suporte prioritário",
+    ],
+    highlight: true,
+  },
+  {
     id: "professional",
     name: "Professional",
     price: 247,

@@ -91,7 +91,7 @@ export function AudioPlayerWhatsApp({ src, caption }: AudioPlayerProps) {
 
   return (
     <div className="flex w-full flex-col gap-2 text-(--color-text)">
-      <div className="flex items-center gap-3 rounded-2xl bg-(--color-surface) px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-3 rounded-xl bg-(--color-surface) px-3 py-2 shadow-sm">
         <button
           type="button"
           onClick={togglePlayback}
@@ -130,3 +130,4 @@ export function AudioPlayerWhatsApp({ src, caption }: AudioPlayerProps) {
 }
 
 export default AudioPlayerWhatsApp;
+

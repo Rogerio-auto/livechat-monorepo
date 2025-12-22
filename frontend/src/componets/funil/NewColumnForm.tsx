@@ -39,49 +39,54 @@ export function NewColumnForm({ apiBase, boardId, onCreated, onCancel }: Props) 
   }
 
   return (
-    <form onSubmit={handleCreate} className="rounded-2xl bg-white/80 p-4 ring-1 ring-black/5 shadow-sm w-200px">
-      <h3 className="font-semibold text-zinc-800 mb-3">Nova coluna</h3>
-      <div className="space-y-3">
+    <form onSubmit={handleCreate} className="rounded-xl bg-white dark:bg-slate-900 p-5 border border-slate-200 dark:border-slate-800 shadow-md">
+      <h3 className="font-black text-slate-900 dark:text-slate-100 mb-4 uppercase tracking-widest text-[10px]">Nova coluna</h3>
+      <div className="space-y-4">
         <div>
-          <label className="block text-xs text-zinc-600 mb-1">Nome</label>
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Nome</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
+            className="w-full rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
             placeholder="Ex.: Qualificação"
           />
         </div>
         <div>
-          <label className="block text-xs text-zinc-600 mb-1">Cor</label>
-          <div className="flex items-center gap-2">
+          <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Cor</label>
+          <div className="flex items-center gap-3">
             <input
               type="color"
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className="h-8 w-12 rounded border border-zinc-300"
+              className="h-10 w-14 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 cursor-pointer"
               title="Cor da coluna"
             />
             <input
               value={color}
               onChange={(e) => setColor(e.target.value)}
-              className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
+              className="flex-1 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all font-medium"
               placeholder="#6B7280"
             />
           </div>
         </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onCancel} className="px-3 py-1.5 text-sm rounded-lg bg-zinc-100 hover:bg-zinc-200">
+        <div className="flex justify-end gap-3 pt-2">
+          <button 
+            type="button" 
+            onClick={onCancel} 
+            className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+          >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={loading || !name.trim()}
-            className="px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 shadow-lg shadow-emerald-200 dark:shadow-none transition-all"
           >
-            {loading ? "Criando..." : "Criar"}
+            {loading ? "Criando..." : "Criar Coluna"}
           </button>
         </div>
       </div>
     </form>
   );
 }
+

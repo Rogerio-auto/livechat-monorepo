@@ -30,7 +30,7 @@ export function AgentTraining({ agent }: { agent: Agent }) {
             Você pode editá-las na aba de Configurações.
           </p>
           <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-100 dark:border-gray-800 max-h-[400px] overflow-y-auto">
-            <div className="prose prose-sm dark:prose-invert max-w-none break-words">
+            <div className="prose prose-sm dark:prose-invert max-w-none wrap-break-word">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {agent.description || 'Nenhuma instrução definida.'}
               </ReactMarkdown>

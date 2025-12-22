@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Bell, Check, Trash2, X } from 'lucide-react';
 import { useNotifications, type Notification } from '../../hooks/useNotifications';
 import { formatDistanceToNow } from 'date-fns';
@@ -24,9 +25,10 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 interface NotificationBellProps {
   placement?: 'top' | 'bottom';
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
-export function NotificationBell({ placement = 'bottom' }: NotificationBellProps) {
+export function NotificationBell({ placement = 'bottom', onOpenChange }: NotificationBellProps) {
   const {
     notifications,
     unreadCount,
@@ -41,6 +43,11 @@ export function NotificationBell({ placement = 'bottom' }: NotificationBellProps
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'chat' | 'system'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Notificar pai sobre mudança de estado
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
 
   // Fechar dropdown ao clicar fora
   useEffect(() => {
@@ -113,7 +120,7 @@ export function NotificationBell({ placement = 'bottom' }: NotificationBellProps
       {/* Dropdown */}
       {isOpen && (
         <div 
-          className={`absolute left-0 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-2xl border border-gray-200 dark:border-gray-700 z-[9999] max-h-[600px] flex flex-col
+          className={`absolute left-0 w-96 bg-white dark:bg-gray-800 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 z-9999 max-h-[600px] flex flex-col
             ${placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'}
           `}
         >
@@ -204,6 +211,17 @@ export function NotificationBell({ placement = 'bottom' }: NotificationBellProps
               </div>
             )}
           </div>
+
+          {/* Footer */}
+          <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-lg">
+            <Link
+              to="/notifications"
+              onClick={() => setIsOpen(false)}
+              className="block w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium py-1"
+            >
+              Ver todas as notificações
+            </Link>
+          </div>
         </div>
       )}
     </div>
@@ -229,7 +247,7 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
     >
       <div className="flex gap-3">
         {/* Ícone da categoria */}
-        <div className="text-2xl flex-shrink-0">{icon}</div>
+        <div className="text-2xl shrink-0">{icon}</div>
 
         {/* Conteúdo */}
         <div className="flex-1 min-w-0">
@@ -240,7 +258,7 @@ function NotificationItem({ notification, onClick, onDelete }: NotificationItemP
             
             {/* Indicador de prioridade */}
             {notification.priority !== "NORMAL" && (
-              <span className={`${priorityColor} text-white text-xs px-2 py-0.5 rounded-full flex-shrink-0`}>
+              <span className={`${priorityColor} text-white text-xs px-2 py-0.5 rounded-full shrink-0`}>
                 {notification.priority}
               </span>
             )}

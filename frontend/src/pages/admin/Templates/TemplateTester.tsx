@@ -241,7 +241,7 @@ export default function TemplateTester() {
               <FiInfo className="text-indigo-400" /> System Prompt
             </h2>
             <div className="p-4 bg-slate-950 rounded-lg border border-white/5 max-h-[300px] overflow-y-auto">
-              <div className="prose prose-invert prose-sm max-w-none break-words">
+              <div className="prose prose-invert prose-sm max-w-none wrap-break-word">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {template.system_prompt || 'Nenhuma instrução definida.'}
                 </ReactMarkdown>
@@ -323,7 +323,7 @@ export default function TemplateTester() {
                       {msg.role === 'user' ? <FiUser size={16} className="text-white" /> : <FiCpu size={16} className="text-indigo-400" />}
                     </div>
                     <div className={`space-y-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`p-4 rounded-2xl text-sm leading-relaxed ${
+                      <div className={`p-4 rounded-xl text-sm leading-relaxed ${
                         msg.role === 'user' 
                           ? 'bg-indigo-600 text-white rounded-tr-none' 
                           : 'bg-slate-900 border border-white/10 text-slate-200 rounded-tl-none'
@@ -346,7 +346,7 @@ export default function TemplateTester() {
                     <div className="w-8 h-8 rounded-lg bg-slate-800 border border-white/10 flex items-center justify-center">
                       <FiCpu size={16} className="text-indigo-400 animate-pulse" />
                     </div>
-                    <div className="bg-slate-900 border border-white/10 p-4 rounded-2xl rounded-tl-none">
+                    <div className="bg-slate-900 border border-white/10 p-4 rounded-xl rounded-tl-none">
                       <div className="flex gap-1">
                         <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                         <div className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -392,3 +392,4 @@ export default function TemplateTester() {
     </div>
   );
 }
+

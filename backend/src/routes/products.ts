@@ -82,6 +82,27 @@ export function registerProductRoutes(app: Application) {
     }
   });
 
+  app.get("/api/products/:id", requireAuth, async (req: any, res) => {
+    try {
+      const companyId = await resolveProductsCompanyId(req);
+      const { id } = req.params as { id: string };
+
+      const { data, error } = await supabaseAdmin
+        .from(PRODUCTS_TABLE)
+        .select("*")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .maybeSingle();
+
+      if (error) return respondWithProductsError(res, error, "Get product error");
+      if (!data) return res.status(404).json({ error: "Produto não encontrado" });
+
+      return res.json(data);
+    } catch (error) {
+      return respondWithProductsError(res, error, "Get product error");
+    }
+  });
+
   app.post("/api/products", requireAuth, async (req: any, res) => {
     try {
       const companyId = await resolveProductsCompanyId(req);

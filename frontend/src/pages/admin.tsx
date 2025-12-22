@@ -89,7 +89,7 @@ export default function AdminPage() {
       <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
         {/* Sidebar de navegação */}
         <div className="col-span-12 md:col-span-2">
-          <div className="rounded-2xl p-4 border shadow-xl sticky top-6 transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+          <div className="rounded-xl p-4 border shadow-xl sticky top-6 transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
             <div className="flex items-center gap-2 mb-4 px-2">
               <FiShield className="text-(--color-highlight) text-xl" />
               <h1 className="text-lg font-bold text-(--color-heading)">Admin</h1>
@@ -106,7 +106,7 @@ export default function AdminPage() {
         <div className="col-span-12 md:col-span-10 overflow-auto">
           <div className="space-y-6">
             {tab === "tools" && (
-              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+              <div className="rounded-xl p-8 border shadow-md transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
                     <FiTool className="text-(--color-primary)" />
@@ -121,7 +121,7 @@ export default function AdminPage() {
             )}
 
             {tab === "templates" && (
-              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+              <div className="rounded-xl p-8 border shadow-md transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
                     <FiCpu className="text-(--color-highlight)" />
@@ -136,7 +136,7 @@ export default function AdminPage() {
             )}
 
             {tab === "agent-tools" && (
-              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+              <div className="rounded-xl p-8 border shadow-md transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
                     <FiSettings className="text-(--color-highlight)" />
@@ -151,7 +151,7 @@ export default function AdminPage() {
             )}
 
             {tab === "companies" && (
-              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+              <div className="rounded-xl p-8 border shadow-md transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
                     <FiUsers className="text-(--color-highlight)" />
@@ -166,7 +166,7 @@ export default function AdminPage() {
             )}
 
             {tab === "agents" && (
-              <div className="rounded-3xl p-8 border shadow-2xl transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
+              <div className="rounded-xl p-8 border shadow-md transition-colors duration-300 bg-(--color-surface) text-(--color-text) border-(--color-border)">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-(--color-heading) flex items-center gap-3">
                     <FiCrosshair className="text-(--color-highlight)" />
@@ -185,3 +185,4 @@ export default function AdminPage() {
     </div>
   );
 }
+

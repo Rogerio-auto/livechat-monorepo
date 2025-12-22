@@ -110,38 +110,38 @@
   --page-max-width: 1600px;
   --page-padding-inline: clamp(1rem, 4vw, 2.75rem);
   
-  /* Cores de fundo */
-  --color-bg: #f5f7ff;
+  /* Cores de fundo (Livechat White) */
+  --color-bg: #ffffff;
   --color-surface: #ffffff;
-  --color-surface-muted: #eef2ff;
+  --color-surface-muted: #f9fafb;
   
-  /* Cores de sidebar */
-  --color-sidebar-bg: #1d4ed8;
-  --color-sidebar-border: rgba(15, 23, 42, 0.08);
-  --color-sidebar-text: #f8fafc;
-  --color-sidebar-text-muted: rgba(248, 250, 252, 0.8);
-  --color-sidebar-hover: rgba(15, 23, 42, 0.15);
-  --color-sidebar-active: rgba(56, 189, 248, 0.25);
-  --color-sidebar-icon: #38bdf8;
+  /* Cores de sidebar (Livechat White) */
+  --color-sidebar-bg: #ffffff;
+  --color-sidebar-border: rgba(31, 84, 57, 0.12);
+  --color-sidebar-text: #0f2418;
+  --color-sidebar-text-muted: rgba(15, 36, 24, 0.6);
+  --color-sidebar-hover: rgba(47, 180, 99, 0.08);
+  --color-sidebar-active: #2fb463;
+  --color-sidebar-icon: #2fb463;
   
   /* Cores de borda e divisores */
-  --color-border: rgba(15, 23, 42, 0.08);
+  --color-border: rgba(31, 84, 57, 0.18);
   
   /* Cores de texto */
-  --color-text: #0f172a;
-  --color-text-muted: #475569;
-  --color-heading: #0b1220;
+  --color-text: #0f2418;
+  --color-text-muted: rgba(15, 36, 24, 0.7);
+  --color-heading: #0f2418;
   
-  /* Cores primárias e de destaque */
-  --color-primary: #1d4ed8;
-  --color-primary-strong: #1e3a8a;
+  /* Cores primárias e de destaque (Livechat Green) */
+  --color-primary: #2fb463;
+  --color-primary-strong: #1f8b49;
   --color-on-primary: #ffffff;
-  --color-highlight: #38bdf8;
-  --color-highlight-strong: #0ea5e9;
+  --color-highlight: #74e69e;
+  --color-highlight-strong: #52d67d;
   
   /* Overlays e sombras */
-  --color-overlay: rgba(15, 23, 42, 0.5);
-  --color-card-shadow: rgba(15, 23, 42, 0.12);
+  --color-overlay: rgba(11, 31, 22, 0.58);
+  --color-card-shadow: rgba(10, 32, 21, 0.25);
 }
 
 /* ========================================
@@ -150,38 +150,38 @@
 .dark {
   color-scheme: dark;
   
-  /* Cores de fundo */
-  --color-bg: #0a0f1c;
-  --color-surface: #0f172a;
-  --color-surface-muted: #111c2e;
+  /* Cores de fundo (Livechat Dark) */
+  --color-bg: #0b1015;
+  --color-surface: #151b23;
+  --color-surface-muted: #1c242e;
   
   /* Cores de sidebar */
-  --color-sidebar-bg: #0f172a;
-  --color-sidebar-border: rgba(148, 163, 184, 0.18);
-  --color-sidebar-text: #f8fafc;
-  --color-sidebar-text-muted: rgba(226, 232, 240, 0.72);
-  --color-sidebar-hover: rgba(56, 189, 248, 0.12);
-  --color-sidebar-active: rgba(56, 189, 248, 0.25);
-  --color-sidebar-icon: #38bdf8;
+  --color-sidebar-bg: #0b1015;
+  --color-sidebar-border: rgba(255, 255, 255, 0.04);
+  --color-sidebar-text: #e6edf3;
+  --color-sidebar-text-muted: #848d97;
+  --color-sidebar-hover: rgba(31, 111, 235, 0.12);
+  --color-sidebar-active: #1f6feb;
+  --color-sidebar-icon: #388bfd;
   
   /* Cores de borda e divisores */
-  --color-border: rgba(148, 163, 184, 0.18);
+  --color-border: rgba(255, 255, 255, 0.04);
   
   /* Cores de texto */
-  --color-text: #e2e8f0;
-  --color-text-muted: #94a3b8;
-  --color-heading: #f8fafc;
+  --color-text: #e6edf3;
+  --color-text-muted: #848d97;
+  --color-heading: #ffffff;
   
   /* Cores primárias e de destaque */
-  --color-primary: #1d4ed8;
-  --color-primary-strong: #2563eb;
-  --color-on-primary: #f8fafc;
-  --color-highlight: #38bdf8;
-  --color-highlight-strong: #0ea5e9;
+  --color-primary: #238636;
+  --color-primary-strong: #2ea043;
+  --color-on-primary: #ffffff;
+  --color-highlight: #1f6feb;
+  --color-highlight-strong: #388bfd;
   
   /* Overlays e sombras */
-  --color-overlay: rgba(10, 15, 28, 0.7);
-  --color-card-shadow: rgba(2, 6, 23, 0.45);
+  --color-overlay: rgba(11, 16, 21, 0.8);
+  --color-card-shadow: rgba(0, 0, 0, 0.5);
 }
 
 /* Compatibilidade com sistema antigo de atributo data-theme */

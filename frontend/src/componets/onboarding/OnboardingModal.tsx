@@ -315,7 +315,7 @@ export function OnboardingModal({ isOpen, onComplete }: OnboardingModalProps) {
 
 	return (
 		<div className="fixed inset-0 z-999 flex items-center justify-center bg-black/70 px-4 backdrop-blur">
-			<div className="relative w-full max-w-4xl overflow-hidden rounded-3xl bg-(--color-surface) shadow-2xl">
+			<div className="relative w-full max-w-4xl overflow-hidden rounded-xl bg-(--color-surface) shadow-md">
 				<div ref={containerRef} className="max-h-[90vh] overflow-y-auto p-6 md:p-8">
 					<div className="mb-4 flex items-center justify-between">
 						<div>
@@ -356,7 +356,7 @@ function PreferenceCard({ title, description, icon, active, onToggle, highlight 
 		<button
 			type="button"
 			onClick={onToggle}
-			className="group flex h-full flex-col rounded-2xl border-2 p-5 text-left transition-all"
+			className="group flex h-full flex-col rounded-xl border-2 p-5 text-left transition-all"
 			style={{
 				borderColor: active
 					? "color-mix(in srgb, var(--color-primary) 55%, transparent)"
@@ -398,3 +398,4 @@ function PreferenceCard({ title, description, icon, active, onToggle, highlight 
 		</button>
 	);
 }
+

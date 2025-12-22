@@ -47,6 +47,9 @@ export interface CatalogConfig {
     specs: string;
     unit: string;
   };
+  
+  // Overrides de labels de campos (opcional)
+  fieldLabels?: Partial<Record<CatalogFieldKey, string>>;
 }
 
 export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
@@ -80,6 +83,11 @@ export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
       description: 'Descrição detalhada do equipamento',
       specs: 'Tensão, corrente, eficiência, dimensões',
       unit: 'unidade, kit, conjunto'
+    },
+    fieldLabels: {
+      power: 'Potência (Wp)',
+      size: 'Dimensões/Área',
+      grouping: 'Categoria de Equipamento'
     }
   },
   
@@ -315,6 +323,39 @@ export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
       specs: 'Etapas do processo, documentos necessários, prazos',
       unit: 'processo, hora, consulta'
     }
+  },
+  
+  retail: {
+    visibleFields: [
+      'name', 'item_type', 'brand', 'unit', 'sku', 
+      'cost_price', 'sale_price', 'grouping', 'status', 'specs'
+    ],
+    requiredFields: ['name', 'item_type', 'sale_price'],
+    tableColumns: ['name', 'brand', 'sku', 'sale_price', 'status'],
+    itemTypeOptions: [
+      { value: 'PRODUCT', label: 'Produto' }
+    ],
+    features: {
+      xlsxImport: true,
+      technicalSpecs: false,
+      costPrice: true,
+      supplierManagement: true,
+      durationTracking: false,
+      billingConfig: false
+    },
+    labels: {
+      pageTitle: 'Produtos',
+      pageDescription: 'Gerencie seu estoque de produtos e mercadorias',
+      addButton: '+ Novo Produto',
+      itemName: 'Produto',
+      itemNamePlural: 'Produtos'
+    },
+    placeholders: {
+      name: 'Ex: Camiseta Algodão G',
+      description: 'Descrição do produto',
+      specs: 'Cor, material, dimensões, peso',
+      unit: 'unidade, peça, par'
+    }
   }
 };
 
@@ -338,7 +379,16 @@ export function isFieldRequired(field: CatalogFieldKey, industry?: Industry): bo
   return config.requiredFields.includes(field);
 }
 
-// Labels de campos traduzidos
+// Helper para obter o label de um campo (com override por nicho)
+export function getFieldLabel(field: CatalogFieldKey, industry?: Industry): string {
+  const config = getCatalogConfig(industry);
+  if (config.fieldLabels && config.fieldLabels[field]) {
+    return config.fieldLabels[field]!;
+  }
+  return FIELD_LABELS[field];
+}
+
+// Labels de campos traduzidos (padrão)
 export const FIELD_LABELS: Record<CatalogFieldKey, string> = {
   name: 'Nome',
   description: 'Descrição',

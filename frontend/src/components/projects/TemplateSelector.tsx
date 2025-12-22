@@ -56,7 +56,7 @@ export default function TemplateSelector({ onSelect }: Props) {
           placeholder="Buscar modelos (ex: Solar, Imobiliária, Advocacia...)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+          className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
         />
       </div>
 
@@ -65,7 +65,7 @@ export default function TemplateSelector({ onSelect }: Props) {
           <button
             key={template.id}
             onClick={() => onSelect(template)}
-            className="group flex items-start gap-4 p-5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-xl transition-all text-left"
+            className="group flex items-start gap-4 p-5 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl hover:border-indigo-500 dark:hover:border-indigo-500 hover:shadow-xl transition-all text-left"
           >
             <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl text-2xl group-hover:scale-110 transition-transform">
               {template.icon || '📋'}
@@ -101,3 +101,4 @@ export default function TemplateSelector({ onSelect }: Props) {
     </div>
   );
 }
+

@@ -551,7 +551,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                           key={inbox.id}
                           onClick={() => !editTemplateId && setSelectedInboxId(inbox.id)}
                           disabled={!!editTemplateId}
-                          className={`relative text-left p-5 rounded-2xl border-2 transition-all ${
+                          className={`relative text-left p-5 rounded-xl border-2 transition-all ${
                             isSelected
                               ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 shadow-lg"
                               : "border-gray-300 dark:border-gray-700 hover:border-blue-400 hover:shadow-md"
@@ -564,7 +564,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                           )}
                           <div className="space-y-3">
                             <div className="flex items-start gap-3">
-                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
+                              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shrink-0">
                                 {inbox.name?.[0]?.toUpperCase() || "I"}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -618,7 +618,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                           <button
                             key={category}
                             onClick={() => setContent({ ...content, metaCategory: category })}
-                            className={`group relative text-left p-4 rounded-2xl border-2 transition-all ${
+                            className={`group relative text-left p-4 rounded-xl border-2 transition-all ${
                               isSelected
                                 ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 shadow-lg"
                                 : "border-gray-300 dark:border-gray-700 hover:border-blue-400 hover:shadow-md"
@@ -660,7 +660,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                           <button
                             key={type.key}
                             onClick={() => setKind(type.key as any)}
-                            className={`group relative text-left p-4 rounded-2xl border-2 transition-all ${
+                            className={`group relative text-left p-4 rounded-xl border-2 transition-all ${
                               isSelected
                                 ? "border-blue-600 bg-blue-50 dark:bg-blue-900/20 shadow-lg"
                                 : "border-gray-300 dark:border-gray-700 hover:border-blue-400 hover:shadow-md"
@@ -821,7 +821,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                     )}
                     {previewData && (
                       <div className="space-y-3">
-                        <Card gradient={false} className="p-6 border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 rounded-2xl">
+                        <Card gradient={false} className="p-6 border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 rounded-xl">
                           <div className="flex items-start gap-4">
                             <div className="mt-1 text-blue-600 dark:text-blue-400">
                               {kind === "TEXT" && <FiMessageSquare className="w-6 h-6" />}
@@ -881,7 +881,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
                 ) : (
                   // WAHA: Resumo
                   <div className="space-y-4">
-                    <Card gradient={false} className="p-5 bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 rounded-2xl">
+                    <Card gradient={false} className="p-5 bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 rounded-xl">
                       <div className="grid sm:grid-cols-2 gap-4 text-sm">
                         <div className="space-y-1">
                           <p className="text-gray-500">Nome</p>
@@ -949,7 +949,7 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
             {/* STEP 7: Meta = Resumo | WAHA = não existe */}
             {step === 7 && isOfficialAPI && (
               <div className="space-y-4">
-                <Card gradient={false} className="p-5 bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 rounded-2xl">
+                <Card gradient={false} className="p-5 bg-gray-50 dark:bg-gray-800/40 border-gray-200 dark:border-gray-700 rounded-xl">
                   <div className="grid sm:grid-cols-2 gap-4 text-sm">
                     <div className="space-y-1">
                       <p className="text-gray-500">Nome</p>
@@ -1034,3 +1034,4 @@ export default function TemplateWizardModal({ apiBase, open, editTemplateId, onC
     </div>
   );
 }
+

@@ -134,7 +134,7 @@ export function NotificationTestPage() {
           {/* Seção: Download dos Sons */}
           <div className="mb-8 p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
             <div className="flex items-start gap-4">
-              <Download className="text-blue-600 dark:text-blue-400 flex-shrink-0 mt-1" size={24} />
+              <Download className="text-blue-600 dark:text-blue-400 shrink-0 mt-1" size={24} />
               <div className="flex-1">
                 <h2 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">
                   📥 Baixar Arquivos de Som

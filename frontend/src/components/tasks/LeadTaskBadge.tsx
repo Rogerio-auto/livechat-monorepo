@@ -78,11 +78,7 @@ export function LeadTaskBadge({ leadId, onCreateTask }: TaskBadgeProps) {
         <div className="flex items-center gap-1.5">
           {taskCount.overdue > 0 && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-              style={{
-                backgroundColor: "color-mix(in srgb, #ef4444 15%, transparent)",
-                color: "#ef4444",
-              }}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-red-50 text-red-600 border border-red-100"
               title={`${taskCount.overdue} tarefa(s) atrasada(s)`}
             >
               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -94,28 +90,20 @@ export function LeadTaskBadge({ leadId, onCreateTask }: TaskBadgeProps) {
           
           {taskCount.pending > 0 && taskCount.overdue === 0 && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-              style={{
-                backgroundColor: "color-mix(in srgb, #f59e0b 15%, transparent)",
-                color: "#f59e0b",
-              }}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-100"
               title={`${taskCount.pending} tarefa(s) pendente(s)`}
             >
-              <FaCheckCircle className="h-3 w-3" />
+              <FaCheckCircle className="h-2.5 w-2.5" />
               {taskCount.pending}
             </span>
           )}
           
           {taskCount.pending === 0 && taskCount.overdue === 0 && taskCount.total > 0 && (
             <span
-              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-              style={{
-                backgroundColor: "color-mix(in srgb, #10b981 15%, transparent)",
-                color: "#10b981",
-              }}
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-100"
               title="Todas as tarefas concluídas"
             >
-              <FaCheckCircle className="h-3 w-3" />
+              <FaCheckCircle className="h-2.5 w-2.5" />
               {taskCount.total}
             </span>
           )}
@@ -129,11 +117,7 @@ export function LeadTaskBadge({ leadId, onCreateTask }: TaskBadgeProps) {
             e.stopPropagation();
             onCreateTask();
           }}
-          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium transition-all hover:scale-105"
-          style={{
-            backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, transparent)",
-            color: "var(--color-primary)",
-          }}
+          className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 transition-all hover:bg-emerald-500 hover:text-white hover:border-emerald-600 active:scale-95"
           title="Criar tarefa para este lead"
         >
           <FaPlus className="h-2.5 w-2.5" />

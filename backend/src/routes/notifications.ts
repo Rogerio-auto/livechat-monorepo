@@ -1,127 +1,284 @@
-import express from "express";
+// backend/src/routes/notifications.ts
+
+import type { Application } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
-import { NotificationService } from "../services/NotificationService.ts";
+import { supabaseAdmin } from "../lib/supabase.ts";
+import { markAsRead } from "../services/notification.service.ts";
 
-export function registerNotificationRoutes(app: express.Application) {
-  console.log("[NOTIFICATION ROUTES] 🔔 Registering notification routes");
+// ==================== HELPERS ====================
 
-  // Buscar notificações não lidas
-  app.get("/api/notifications/unread", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const companyId = req.user.company_id;
-      console.log(`[API] GET /notifications/unread - User: ${userId}`);
+function getUserId(req: any): string {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw Object.assign(new Error("User ID not found"), { status: 401 });
+  }
+  return userId;
+}
 
-      const notifications = await NotificationService.getUnread(userId, companyId);
-      return res.json(notifications);
-    } catch (error: any) {
-      console.error("[GET /api/notifications/unread] Error:", error);
-      return res.status(500).json({ error: "Erro ao buscar notificações não lidas" });
-    }
-  });
+function handleError(error: unknown) {
+  console.error("[Notifications] Error:", error);
 
-  // Contar notificações não lidas
-  app.get("/api/notifications/unread/count", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const companyId = req.user.company_id;
+  if (error instanceof z.ZodError) {
+    return {
+      status: 400,
+      payload: {
+        error: "Validation failed",
+        details: (error as any).errors || (error as any).issues,
+      },
+    };
+  }
 
-      const count = await NotificationService.countUnread(userId, companyId);
-      return res.json({ count });
-    } catch (error: any) {
-      console.error("[GET /api/notifications/unread/count] Error:", error);
-      return res.status(500).json({ error: "Erro ao contar notificações não lidas" });
-    }
-  });
+  const status = (error as any)?.status || 500;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+      ? error
+      : "Internal server error";
 
-  // Buscar todas as notificações (com paginação)
+  return { status, payload: { error: message } };
+}
+
+// ==================== ROUTES ====================
+
+export function registerNotificationRoutes(app: Application) {
+  
+  /**
+   * GET /api/notifications
+   * Lista notificações do usuário
+   * Query params: status, type, limit, offset
+   */
   app.get("/api/notifications", requireAuth, async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const companyId = req.user.company_id;
-      const limit = parseInt((req.query.limit as string) || "50");
-      const offset = parseInt((req.query.offset as string) || "0");
+      const userId = getUserId(req);
+      const { status, type, limit = 50, offset = 0 } = req.query;
 
-      const notifications = await NotificationService.getAll(userId, companyId, limit, offset);
-      return res.json(notifications);
-    } catch (error: any) {
-      console.error("[GET /api/notifications] Error:", error);
-      return res.status(500).json({ error: "Erro ao buscar notificações" });
-    }
-  });
+      let query = supabaseAdmin
+        .from("notifications")
+        .select("*", { count: "exact" })
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(parseInt(offset as string), parseInt(offset as string) + parseInt(limit as string) - 1);
 
-  // Marcar notificação como lida
-  app.patch("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
-    try {
-      const notificationId = req.params.id;
-      const userId = req.user.id;
-
-      await NotificationService.markAsRead(notificationId, userId);
-      return res.json({ ok: true });
-    } catch (error: any) {
-      console.error("[PATCH /api/notifications/:id/read] Error:", error);
-      return res.status(500).json({ error: "Erro ao marcar notificação como lida" });
-    }
-  });
-
-  // Marcar todas como lidas
-  app.post("/api/notifications/read-all", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const companyId = req.user.company_id;
-
-      await NotificationService.markAllAsRead(userId, companyId);
-      return res.json({ ok: true });
-    } catch (error: any) {
-      console.error("[POST /api/notifications/read-all] Error:", error);
-      return res.status(500).json({ error: "Erro ao marcar todas como lidas" });
-    }
-  });
-
-  // Deletar notificação
-  app.delete("/api/notifications/:id", requireAuth, async (req: any, res) => {
-    try {
-      const notificationId = req.params.id;
-      const userId = req.user.id;
-
-      await NotificationService.delete(notificationId, userId);
-      return res.json({ ok: true });
-    } catch (error: any) {
-      console.error("[DELETE /api/notifications/:id] Error:", error);
-      return res.status(500).json({ error: "Erro ao deletar notificação" });
-    }
-  });
-
-  // Criar notificação (admin/debug)
-  app.post("/api/notifications", requireAuth, async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const companyId = req.user.company_id;
-      const { title, message, type, priority, data, soundType, actionUrl, category } = req.body;
-
-      console.log(`[API] POST /notifications - User: ${userId}`, { title, type });
-
-      if (!title || !message || !type) {
-        return res.status(400).json({ error: "title, message e type são obrigatórios" });
+      if (status) {
+        query = query.eq("status", status);
       }
 
-      const notification = await NotificationService.create({
-        title,
-        message,
-        type,
-        priority,
-        userId,
-        companyId,
-        data,
-        soundType,
-        actionUrl,
-        category,
+      if (type) {
+        query = query.eq("notification_type", type);
+      }
+
+      const { data, error, count } = await query;
+
+      if (error) throw error;
+
+      return res.json({
+        notifications: data || [],
+        total: count || 0,
+      });
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * GET /api/notifications/unread-count
+   * Conta notificações não lidas
+   */
+  app.get("/api/notifications/unread-count", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const { count, error } = await supabaseAdmin
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .is("read_at", null)
+        .eq("status", "SENT");
+
+      if (error) throw error;
+
+      return res.json({ count: count || 0 });
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * PUT /api/notifications/:id/read
+   * Marca notificação como lida
+   */
+  app.put("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+
+      // Verificar se notificação pertence ao usuário
+      const { data: notification } = await supabaseAdmin
+        .from("notifications")
+        .select("user_id")
+        .eq("id", id)
+        .single();
+
+      if (!notification || notification.user_id !== userId) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+
+      await markAsRead(id);
+
+      return res.json({ success: true });
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * PUT /api/notifications/read-all
+   * Marca todas as notificações como lidas
+   */
+  app.put("/api/notifications/read-all", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const { error } = await supabaseAdmin
+        .from("notifications")
+        .update({
+          status: "READ",
+          read_at: new Date().toISOString(),
+        })
+        .eq("user_id", userId)
+        .is("read_at", null);
+
+      if (error) throw error;
+
+      return res.json({ success: true });
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * DELETE /api/notifications/:id
+   * Deleta uma notificação
+   */
+  app.delete("/api/notifications/:id", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const { id } = req.params;
+
+      const { error } = await supabaseAdmin
+        .from("notifications")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      return res.json({ success: true });
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * GET /api/notifications/preferences
+   * Busca preferências de notificação do usuário
+   */
+  app.get("/api/notifications/preferences", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const { data, error } = await supabaseAdmin
+        .from("notification_preferences")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+
+      // Se não existir, retornar padrão
+      if (!data) {
+        return res.json({
+          whatsapp_enabled: true,
+          email_enabled: false,
+          quiet_hours_enabled: false,
+          quiet_hours_start: "22:00",
+          quiet_hours_end: "08:00",
+          preferences: {},
+        });
+      }
+
+      return res.json(data);
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * PUT /api/notifications/preferences
+   * Atualiza preferências de notificação
+   */
+  app.put("/api/notifications/preferences", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      const companyId = req.user?.company_id;
+
+      const schema = z.object({
+        whatsapp_enabled: z.boolean().optional(),
+        email_enabled: z.boolean().optional(),
+        quiet_hours_enabled: z.boolean().optional(),
+        quiet_hours_start: z.string().optional(),
+        quiet_hours_end: z.string().optional(),
+        preferences: z.record(z.string(), z.any()).optional(),
       });
 
-      return res.json(notification);
-    } catch (error: any) {
-      console.error("[POST /api/notifications] Error:", error);
-      return res.status(500).json({ error: "Erro ao criar notificação" });
+      const validated = schema.parse(req.body || {});
+
+      const { data, error } = await supabaseAdmin
+        .from("notification_preferences")
+        .upsert({
+          user_id: userId,
+          company_id: companyId,
+          ...validated,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return res.json(data);
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
+    }
+  });
+
+  /**
+   * GET /api/notifications/stats
+   * Estatísticas de notificações
+   */
+  app.get("/api/notifications/stats", requireAuth, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+
+      const { data, error } = await supabaseAdmin
+        .from("v_notification_stats")
+        .select("*")
+        .eq("user_id", userId);
+
+      if (error) throw error;
+
+      return res.json(data || []);
+    } catch (error) {
+      const { status, payload } = handleError(error);
+      return res.status(status).json(payload);
     }
   });
 }

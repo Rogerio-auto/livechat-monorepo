@@ -14,6 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export interface PythonGeneratorData {
+  // Dados do projeto/proposta
+  title?: string;
+
   // Dados do cliente
   nome?: string;
   doc?: string;
@@ -31,6 +34,8 @@ export interface PythonGeneratorData {
   // Dados do vendedor
   vendedor?: string;
   vendedor_telefone?: string;
+  NOME_VENDEDOR?: string;
+  CELULAR_VENDEDOR?: string;
   
   // Dados do sistema solar
   valor_investimento?: number;
@@ -42,6 +47,12 @@ export interface PythonGeneratorData {
   payback_anos?: string;
   economia_mensal?: string;
   economia_anual?: string;
+  valor_economia_mensal?: number;
+  valor_conta_atual?: number;
+  valor_conta_solar?: number;
+  valor_entrada?: number;
+  ESPECIFICACAO_KIT?: string;
+  area?: string;
   
   // Dados de financiamento (simulações)
   simulacoes?: Array<{

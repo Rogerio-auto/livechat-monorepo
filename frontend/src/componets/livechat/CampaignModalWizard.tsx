@@ -594,9 +594,9 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
       role="dialog"
       aria-modal="true"
     >
-      <div className="w-[900px] max-w-[95vw] max-h-[90vh] bg-white dark:bg-gray-900 rounded-3xl shadow-2xl border-2 border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
+      <div className="w-[900px] max-w-[95vw] max-h-[90vh] bg-white dark:bg-gray-900 rounded-xl shadow-md border-2 border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-linear-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -1041,7 +1041,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
             <div className="space-y-4">
               {/* Métricas da Campanha (se já estiver rodando) */}
               {campaign?.id && (campaign.status === "RUNNING" || campaign.status === "COMPLETED" || campaign.status === "PAUSED") && (
-                <Card gradient={false} className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
+                <Card gradient={false} className="p-4 bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-800">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                     <FiBarChart2 className="w-4 h-4" /> Métricas em Tempo Real
                   </h3>
@@ -1105,7 +1105,7 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
               )}
 
               {/* Resumo */}
-              <Card gradient={false} className="p-4 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border-gray-200 dark:border-gray-700">
+              <Card gradient={false} className="p-4 bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border-gray-200 dark:border-gray-700">
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                   <FiSettings className="w-4 h-4" />
                   Resumo da Configuração
@@ -1224,9 +1224,9 @@ export default function CampaignModalWizard({ apiBase, campaign, templates, open
                 >
                   <div className="flex items-start gap-3 mb-3">
                     {validation?.stats?.recipients_without_opt_in > 0 ? (
-                      <FiAlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <FiAlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
                     ) : (
-                      <FiCheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <FiCheckCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                     )}
                     <div className="flex-1">
                       <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">

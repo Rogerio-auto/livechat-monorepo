@@ -163,7 +163,7 @@ export default function MediaUploader({ onClose, onSuccess }: MediaUploaderProps
       style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
     >
       <div
-        className="theme-surface rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="theme-surface rounded-xl shadow-md w-full max-w-3xl max-h-[90vh] overflow-y-auto"
         style={{ border: "1px solid var(--color-border)" }}
       >
         {/* Header */}
@@ -453,3 +453,4 @@ export default function MediaUploader({ onClose, onSuccess }: MediaUploaderProps
     </div>
   );
 }
+

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { NotificationService } from "../services/NotificationService.ts";
+import { getBoardIdForCompany } from "../services/meta/store.ts";
 
 type LeadForm = {
   tipoPessoa?: string; cpf?: string; nome?: string; rg?: string; orgao?: string;
@@ -11,6 +12,7 @@ type LeadForm = {
   complemento?: string; bairro?: string; uf?: string; cidade?: string; celular?: string;
   celularAlternativo?: string; telefone?: string; telefoneAlternativo?: string; email?: string;
   site?: string; observacoes?: string; status?: string; etapa?: string; kanban_column_id?: string;
+  customer_id?: string; chat_id?: string; kanban_board_id?: string;
 };
 
 export function mapLead(form: LeadForm) {
@@ -42,20 +44,64 @@ export function mapLead(form: LeadForm) {
     notes: form.observacoes ?? null,
     statusClient: form.status ?? "Ativo",
     kanban_column_id: (form.kanban_column_id || form.etapa) ?? null,
+    customer_id: form.customer_id ?? null,
+    kanban_board_id: form.kanban_board_id ?? null,
   };
   
   // personType e phone são obrigatórios apenas no CREATE, não no UPDATE
   if (form.tipoPessoa !== undefined) {
     mapped.personType = form.tipoPessoa ?? null;
   }
-  if (form.telefone !== undefined) {
-    mapped.phone = form.telefone ?? null;
+  
+  // Garantir que 'phone' seja preenchido (é NOT NULL no banco)
+  // Prioridade: telefone > celular
+  const phoneValue = form.telefone || form.celular;
+  if (phoneValue !== undefined) {
+    mapped.phone = phoneValue;
+    mapped.msisdn = phoneValue; // Sincronizar msisdn também
   }
   
   return mapped;
 }
 
 export function registerLeadRoutes(app: express.Application) {
+  // Check phone existence
+  app.get("/leads/check-phone/:phone", requireAuth, async (req: any, res) => {
+    try {
+      const { phone } = req.params;
+      const companyId = req.user?.company_id;
+      if (!companyId) return res.status(400).json({ error: "Missing company context" });
+
+      // 1. Verificar na tabela leads
+      const { data: lead } = await supabaseAdmin
+        .from("leads")
+        .select("id, name")
+        .eq("company_id", companyId)
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (lead) {
+        return res.json({ exists: true, type: 'lead', name: lead.name });
+      }
+
+      // 2. Verificar na tabela customers
+      const { data: customer } = await supabaseAdmin
+        .from("customers")
+        .select("id, name")
+        .eq("company_id", companyId)
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (customer) {
+        return res.json({ exists: true, type: 'customer', name: customer.name });
+      }
+
+      return res.json({ exists: false });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   // List
   app.get("/leads", requireAuth, async (req: any, res) => {
     const companyId = req.user?.company_id;
@@ -308,8 +354,49 @@ export function registerLeadRoutes(app: express.Application) {
     // Garantir que o lead pertence à empresa do usuário
     payload.company_id = companyId;
     
+    // Garantir que o lead tenha um kanban_board_id (NOT NULL no banco)
+    if (!payload.kanban_board_id) {
+      try {
+        payload.kanban_board_id = await getBoardIdForCompany(companyId);
+      } catch (boardErr) {
+        console.error("[POST /leads] Failed to get default board:", boardErr);
+      }
+    }
+
+    // Verificar duplicidade antes de inserir
+    if (payload.phone) {
+      // 1. Verificar na tabela leads
+      const { data: leadExists } = await supabaseAdmin
+        .from("leads")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("phone", payload.phone)
+        .maybeSingle();
+
+      if (leadExists) {
+        return res.status(400).json({ error: "Já existe um lead cadastrado com este número de telefone." });
+      }
+
+      // 2. Verificar na tabela customers
+      const { data: customerExists } = await supabaseAdmin
+        .from("customers")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("phone", payload.phone)
+        .maybeSingle();
+
+      if (customerExists) {
+        return res.status(400).json({ error: "Já existe um cliente cadastrado com este número de telefone." });
+      }
+    }
+    
+    // Tentar inserir o lead
     const { data, error } = await supabaseAdmin.from("leads").insert([payload]).select("*").single();
-    if (error) return res.status(500).json({ error: error.message });
+    
+    if (error) {
+      console.error("[POST /leads] Insert error:", error);
+      return res.status(500).json({ error: error.message });
+    }
 
     // 🔔 Enviar notificação de novo lead
     try {

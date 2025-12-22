@@ -81,7 +81,7 @@ export default function PerfilPage() {
         {requiresPhone && (
           <div className="mb-6 p-4 livechat-muted-surface rounded-xl backdrop-blur-sm">
             <div className="flex items-start gap-3">
-              <FiAlertCircle className="text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" size={20} />
+              <FiAlertCircle className="text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" size={20} />
               <div>
                 <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
                   Configuração obrigatória

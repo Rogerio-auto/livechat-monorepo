@@ -12,24 +12,24 @@ interface ChartContainerProps {
 export function ChartContainer({ title, loading = false, children, action }: ChartContainerProps) {
   if (loading) {
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
-        <div className="absolute inset-0 bg-white/0 backdrop-blur-sm" />
-        <div className="relative mb-4 h-4 w-48 animate-pulse rounded bg-[color:var(--color-surface-muted)]" />
-        <div className="relative h-64 animate-pulse rounded bg-[color:var(--color-surface-muted)]" />
+      <div className="relative overflow-hidden p-6">
+        <div className="relative mb-4 h-4 w-48 animate-pulse rounded bg-(--color-surface-muted)" />
+        <div className="relative h-64 animate-pulse rounded bg-(--color-surface-muted)" />
       </div>
     );
   }
 
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] p-6 shadow-sm">
-      <div className="pointer-events-none absolute inset-x-0 -top-10 h-32 bg-gradient-to-b from-[color:var(--color-primary)]/5 via-transparent to-transparent" />
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+    <div className="relative overflow-hidden p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-(--color-heading)">
           {title}
         </h3>
         {action}
       </div>
-      {children}
+      <div className="h-[300px] w-full">
+        {children}
+      </div>
     </div>
   );
 }

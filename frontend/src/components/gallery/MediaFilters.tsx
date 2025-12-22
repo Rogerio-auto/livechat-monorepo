@@ -31,7 +31,7 @@ export default function MediaFilters({ filters, onFilterChange }: MediaFiltersPr
   };
 
   return (
-    <div className="rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <div className="rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-(--color-text-muted)">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-(--color-surface) text-(--color-primary)">
@@ -99,3 +99,4 @@ export default function MediaFilters({ filters, onFilterChange }: MediaFiltersPr
     </div>
   );
 }
+

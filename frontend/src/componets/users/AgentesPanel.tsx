@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { API, fetchJson } from "../../utils/api";
-import { Input, Button } from "../../components/ui";
+import { Input } from "../../components/ui/Input";
+import { Button } from "../../components/ui/Button";
+import { Modal } from "../../components/ui/Modal";
 import { toast } from "../../hooks/useToast";
+import { 
+  UserPlus, 
+  Users, 
+  Mail, 
+  Trash2, 
+  Eye, 
+  Send,
+  CheckCircle2,
+  XCircle
+} from "lucide-react";
+
 type AgentRow = {
   id: string;
   name: string;
@@ -22,7 +35,41 @@ type Inbox = {
   phone_number?: string | null;
 };
 
-const selectClasses = "w-full rounded-xl px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60 transition-colors duration-200";
+const selectClasses = "w-full rounded-lg px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all disabled:opacity-50";
+
+const Field = ({ label, children, description }: { label: string; children: React.ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <label className="block text-sm font-semibold text-gray-900 dark:text-white">
+        {label}
+      </label>
+      {description && (
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+          {description}
+        </p>
+      )}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
+);
+
+const RoleBadge = ({ role }: { role: string }) => {
+  const colors: Record<string, string> = {
+    ADMIN: "bg-purple-50 text-purple-700 border-purple-100 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800",
+    MANAGER: "bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+    SUPERVISOR: "bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/20 dark:text-indigo-400 dark:border-indigo-800",
+    AGENT: "bg-gray-50 text-gray-700 border-gray-100 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800",
+    TECHNICIAN: "bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-800",
+  };
+
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${colors[role] || colors.AGENT}`}>
+      {role}
+    </span>
+  );
+};
 
 export default function AgentesPanel() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -39,7 +86,6 @@ export default function AgentesPanel() {
     setLoading(true);
     try {
       const list = await fetchJson<AgentRow[]>(`${API}/settings/users`);
-      // For each agent, load their inbox associations
       const agentsWithInboxes = await Promise.all(
         (Array.isArray(list) ? list : []).map(async (agent) => {
           try {
@@ -94,6 +140,7 @@ export default function AgentesPanel() {
   };
 
   const removeAgent = async (id: string) => {
+    if (!confirm("Tem certeza que deseja remover este colaborador?")) return;
     try {
       await fetchJson(`${API}/settings/users/${id}`, { method: "DELETE" });
       setAgents((prev) => prev.filter((agent) => agent.id !== id));
@@ -105,7 +152,7 @@ export default function AgentesPanel() {
 
   const createAgent = async () => {
     if (!newAgent.name || !newAgent.email) {
-      toast.error("Erro");
+      toast.error("Preencha o nome e email");
       return;
     }
     
@@ -119,10 +166,9 @@ export default function AgentesPanel() {
       setNewAgent({ name: "", email: "", role: "AGENT" });
       toast.success("Colaborador criado com sucesso! Email de convite enviado.");
     } catch (e: any) {
-      // Verificar se é erro de limite atingido
       const errorData = e?.data || {};
       if (errorData.code === "LIMIT_REACHED") {
-        toast.error("Erro");
+        toast.error("Limite de usuários atingido para seu plano.");
       } else {
         toast.error(e?.message || "Erro ao criar colaborador");
       }
@@ -134,7 +180,7 @@ export default function AgentesPanel() {
       await fetchJson(`${API}/settings/users/${userId}/resend-invite`, {
         method: "POST",
       });
-      toast.success(`Convite reenviado para ${userEmail} com sucesso!`);
+      toast.success(`Convite reenviado para ${userEmail}`);
     } catch (e: any) {
       toast.error(e?.message || "Erro ao reenviar convite");
     }
@@ -143,7 +189,6 @@ export default function AgentesPanel() {
   const toggleInboxAccess = async (userId: string, inboxId: string, currentlyHasAccess: boolean) => {
     try {
       if (currentlyHasAccess) {
-        // Remove access
         await fetchJson(`${API}/settings/users/${userId}/inboxes/${inboxId}`, {
           method: "DELETE",
         });
@@ -154,9 +199,7 @@ export default function AgentesPanel() {
               : agent
           )
         );
-        toast.success("Acesso à caixa de entrada removido");
       } else {
-        // Add access
         await fetchJson(`${API}/settings/users/${userId}/inboxes`, {
           method: "POST",
           body: JSON.stringify({ inbox_id: inboxId }),
@@ -168,7 +211,6 @@ export default function AgentesPanel() {
               : agent
           )
         );
-        toast.success("Acesso à caixa de entrada concedido");
       }
     } catch (e: any) {
       toast.error(e?.message || "Erro ao atualizar acesso");
@@ -176,195 +218,203 @@ export default function AgentesPanel() {
   };
 
   return (
-    <section className="space-y-6">
-      <div className="p-6 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300">
-        <div className="flex items-start justify-between flex-wrap gap-4">
-          <div>
-            <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
-              <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-3-3h-2m-2.5-4a3 3 0 11-6 0 3 3 0 016 0zm-6 4a5 5 0 015 5H2a5 5 0 015-5h8z" />
-              </svg>
-              Adicionar Colaborador
-            </div>
-            <div className="text-sm text-gray-700 dark:text-gray-300">
-              Novos usuários receberão um email do Supabase para criar a senha.
-            </div>
+    <div className="space-y-12">
+      {/* Add Collaborator Section */}
+      <section>
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Adicionar Colaborador</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Convide novos membros para sua equipe. Eles receberão um email para configurar o acesso.
+          </p>
+        </div>
+
+        <div className="overflow-hidden">
+          <div className="">
+            <Field label="Nome Completo" description="Como o colaborador será identificado no sistema.">
+              <Input
+                placeholder="Ex: João Silva"
+                value={newAgent.name}
+                onChange={(e) => setNewAgent((prev) => ({ ...prev, name: e.target.value }))}
+              />
+            </Field>
+
+            <Field label="Email Corporativo" description="Onde o convite de acesso será enviado.">
+              <Input
+                type="email"
+                placeholder="joao@empresa.com"
+                value={newAgent.email}
+                onChange={(e) => setNewAgent((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </Field>
+
+            <Field label="Função" description="Define o nível de permissão do usuário.">
+              <select
+                className={selectClasses}
+                value={newAgent.role}
+                onChange={(e) => setNewAgent((prev) => ({ ...prev, role: e.target.value }))}
+              >
+                <option value="AGENT">Agente</option>
+                <option value="SUPERVISOR">Supervisor</option>
+                <option value="TECHNICIAN">Técnico</option>
+                <option value="MANAGER">Gestor</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="py-4 flex justify-end">
+            <Button
+              variant="primary"
+              onClick={createAgent}
+              disabled={loading || !newAgent.name || !newAgent.email}
+            >
+              Enviar Convite
+            </Button>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-lg transition-colors duration-300">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <Input
-            placeholder="Nome completo"
-            value={newAgent.name}
-            onChange={(e) => setNewAgent((prev) => ({ ...prev, name: e.target.value }))}
-          />
-          <Input
-            type="email"
-            placeholder="Email corporativo"
-            value={newAgent.email}
-            onChange={(e) => setNewAgent((prev) => ({ ...prev, email: e.target.value }))}
-          />
-          <select
-            className={selectClasses}
-            value={newAgent.role}
-            onChange={(e) => setNewAgent((prev) => ({ ...prev, role: e.target.value }))}
-          >
-            <option value="AGENT">Agente</option>
-            <option value="SUPERVISOR">Supervisor</option>
-            <option value="TECHNICIAN">Técnico</option>
-            <option value="MANAGER">Gestor</option>
-          </select>
+      {/* Collaborators List Section */}
+      <section>
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Equipe</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Lista de todos os colaboradores ativos e suas permissões.
+          </p>
         </div>
-        <div className="flex justify-end">
-          <Button
-            variant="primary"
-            onClick={createAgent}
-            disabled={loading || !newAgent.name || !newAgent.email}
-          >
-            Adicionar usuário
-          </Button>
-        </div>
-      </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-colors duration-300">
-        <div className="bg-gray-50 dark:bg-gray-900/50 px-6 py-3 grid grid-cols-12 gap-4 text-xs uppercase tracking-wide text-gray-600 dark:text-gray-400 font-semibold">
-          <div className="col-span-2">Nome</div>
-          <div className="col-span-3">Email</div>
-          <div className="col-span-2">Função</div>
-          <div className="col-span-2">Caixas de Entrada</div>
-          <div className="col-span-3 text-right">Ações</div>
-        </div>
-        {loading && <div className="px-6 py-8 text-center text-gray-600 dark:text-gray-400">Carregando...</div>}
-        {!loading && agents.length === 0 && (
-          <div className="px-6 py-8 text-center text-gray-600 dark:text-gray-400">Nenhum usuário cadastrado.</div>
-        )}
-        {!loading && agents.map((agent) => (
-          <div key={agent.id} className="border-t border-gray-200 dark:border-gray-700">
-            <div className="px-6 py-4 grid grid-cols-12 gap-4 items-center hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
-              <div className="col-span-2">
-                <Input
-                  value={agent.name}
-                  onChange={(e) => saveAgent(agent.id, { name: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="col-span-3">
-                <Input
-                  type="email"
-                  value={agent.email}
-                  onChange={(e) => saveAgent(agent.id, { email: e.target.value })}
-                  autoComplete="off"
-                />
-              </div>
-              <div className="col-span-2">
-                <select
-                  className={selectClasses}
-                  value={agent.role}
-                  onChange={(e) => saveAgent(agent.id, { role: e.target.value })}
-                >
-                  <option value="AGENT">Agente</option>
-                  <option value="SUPERVISOR">Supervisor</option>
-                  <option value="TECHNICIAN">Técnico</option>
-                  <option value="MANAGER">Gestor</option>
-                </select>
-              </div>
-              <div className="col-span-2">
-                <button
-                  onClick={() => setExpandedAgentId(expandedAgentId === agent.id ? null : agent.id)}
-                  className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {(agent.inbox_ids || []).length} de {inboxes.length}
-                </button>
-              </div>
-              <div className="col-span-3 text-right flex gap-2 justify-end">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => resendInvite(agent.id, agent.email)}
-                  title="Reenviar email de convite"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  Reenviar Convite
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => removeAgent(agent.id)}
-                >
-                  Remover
-                </Button>
-              </div>
-            </div>
-            
-            {/* Expandable inbox access panel */}
-            {expandedAgentId === agent.id && (
-              <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/20 border-t border-gray-200 dark:border-gray-700">
-                <div className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                  Gerenciar Acesso às Caixas de Entrada
-                </div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mb-3">
-                  Selecione quais caixas de entrada {agent.name} pode acessar no livechat
-                </div>
-                
-                {inboxesLoading ? (
-                  <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
-                    Carregando caixas de entrada...
-                  </div>
-                ) : inboxes.length === 0 ? (
-                  <div className="text-center py-4 text-sm text-gray-600 dark:text-gray-400">
-                    Nenhuma caixa de entrada configurada
-                  </div>
+        <div className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-800">
+                  <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Colaborador</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Função</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Acesso</th>
+                  <th className="px-6 py-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                      Carregando colaboradores...
+                    </td>
+                  </tr>
+                ) : agents.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-sm text-gray-500 dark:text-gray-400">
+                      Nenhum colaborador encontrado.
+                    </td>
+                  </tr>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {inboxes.map((inbox) => {
-                      const hasAccess = (agent.inbox_ids || []).includes(inbox.id);
-                      return (
-                        <label
-                          key={inbox.id}
-                          className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors hover:bg-white dark:hover:bg-gray-800"
-                          style={{
-                            borderColor: hasAccess
-                              ? "rgba(59, 130, 246, 0.5)"
-                              : "rgba(156, 163, 175, 0.3)",
-                            backgroundColor: hasAccess
-                              ? "rgba(59, 130, 246, 0.05)"
-                              : "transparent",
-                          }}
+                  agents.map((agent) => (
+                    <tr key={agent.id} className="group hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">{agent.name}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{agent.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <RoleBadge role={agent.role} />
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => setExpandedAgentId(agent.id)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
                         >
-                          <input
-                            type="checkbox"
-                            checked={hasAccess}
-                            onChange={() => toggleInboxAccess(agent.id, inbox.id, hasAccess)}
-                            className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                              {inbox.name}
-                            </div>
-                            {inbox.phone_number && (
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {inbox.phone_number}
-                              </div>
-                            )}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                          <Eye size={14} />
+                          {(agent.inbox_ids || []).length} caixas
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => resendInvite(agent.id, agent.email)}
+                            title="Reenviar convite"
+                          >
+                            <Send size={16} />
+                          </Button>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => removeAgent(agent.id)}
+                            title="Remover colaborador"
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
                 )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* Expanded Inbox Access Panel */}
+      <Modal
+        isOpen={!!expandedAgentId}
+        onClose={() => setExpandedAgentId(null)}
+        title="Acesso às Caixas de Entrada"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Defina quais canais <span className="font-semibold text-gray-900 dark:text-white">{agents.find(a => a.id === expandedAgentId)?.name}</span> pode visualizar.
+          </p>
+
+          <div className="max-h-[60vh] overflow-y-auto pr-2">
+            {inboxesLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+              </div>
+            ) : inboxes.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">Nenhuma caixa de entrada encontrada.</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {inboxes.map((inbox) => {
+                  const agent = agents.find(a => a.id === expandedAgentId);
+                  const hasAccess = (agent?.inbox_ids || []).includes(inbox.id);
+                  return (
+                    <label
+                      key={inbox.id}
+                      className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                        hasAccess 
+                          ? 'bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800' 
+                          : 'bg-white border-gray-100 hover:border-gray-200 dark:bg-gray-900 dark:border-gray-800 dark:hover:border-gray-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={hasAccess}
+                        onChange={() => toggleInboxAccess(expandedAgentId!, inbox.id, hasAccess)}
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{inbox.name}</div>
+                        {inbox.phone_number && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{inbox.phone_number}</div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
-        ))}
-      </div>
-      
-    </section>
+
+          <div className="flex justify-end mt-6">
+            <Button variant="primary" onClick={() => setExpandedAgentId(null)}>
+              Concluído
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
   );
 }
+

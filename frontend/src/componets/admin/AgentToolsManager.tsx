@@ -223,7 +223,7 @@ export function AgentToolsManager() {
                       )}
                     </div>
                     <span
-                      className={`px-2 py-1 text-xs rounded-full flex-shrink-0 ${
+                      className={`px-2 py-1 text-xs rounded-full shrink-0 ${
                         agent.status === "ACTIVE"
                           ? "bg-green-100 text-green-800"
                           : "bg-(--color-surface-muted) text-(--color-text-muted)"
@@ -320,7 +320,7 @@ export function AgentToolsManager() {
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
                           {/* Toggle Enable/Disable */}
                           <button
                             onClick={() => handleToggleTool(at.tool_id, at.is_enabled)}
@@ -359,7 +359,7 @@ export function AgentToolsManager() {
       {/* Modal: Adicionar Ferramenta */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden bg-(--color-surface) border border-(--color-border)">
+          <div className="rounded-xl shadow-md max-w-2xl w-full max-h-[80vh] overflow-hidden bg-(--color-surface) border border-(--color-border)">
             <div className="bg-(--color-primary) p-6 flex items-center justify-between">
               <h3 className="text-xl font-semibold text-(--color-on-primary)">Adicionar Ferramenta</h3>
               <button
@@ -418,3 +418,4 @@ export function AgentToolsManager() {
     </div>
   );
 }
+

@@ -1,7 +1,7 @@
 // Tipos e constantes para gerenciamento de Industry no Admin
 
 import { Industry } from "../types/onboarding";
-import { FaSolarPanel, FaHardHat, FaHome, FaGraduationCap, FaCalculator, FaStethoscope, FaGlassCheers, FaBalanceScale } from "react-icons/fa";
+import { FaSolarPanel, FaHardHat, FaHome, FaGraduationCap, FaCalculator, FaStethoscope, FaGlassCheers, FaBalanceScale, FaStore } from "react-icons/fa";
 import { IconType } from "react-icons";
 
 export interface IndustryConfig {
@@ -104,6 +104,17 @@ export const INDUSTRY_CONFIGS: Record<Industry, IndustryConfig> = {
       border: "border-gray-300 dark:border-gray-600",
     },
     description: "Escritórios de advocacia e serviços jurídicos",
+  },
+  retail: {
+    value: "retail",
+    label: "Varejo / Comércio",
+    icon: FaStore,
+    color: {
+      bg: "bg-pink-100 dark:bg-pink-900/30",
+      text: "text-pink-800 dark:text-pink-200",
+      border: "border-pink-300 dark:border-pink-700",
+    },
+    description: "Lojas, comércios e venda de produtos em geral",
   },
 };
 

@@ -358,7 +358,7 @@ function AgentEditorModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-(--color-surface) text-(--color-text) rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+      <div className="bg-(--color-surface) text-(--color-text) rounded-xl shadow-md w-full max-w-4xl max-h-[90vh] overflow-y-auto">
       <div className="sticky top-0 bg-(--color-surface) border-b border-(--color-border) p-6 flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-(--color-heading)">Editar Agente: {agent.name}</h2>
@@ -594,3 +594,4 @@ function AgentEditorModal({
     </div>
   );
 }
+

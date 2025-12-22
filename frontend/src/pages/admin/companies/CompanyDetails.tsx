@@ -229,7 +229,7 @@ export function CompanyDetails() {
           <FiArrowLeft />
           Voltar para a lista de empresas
         </button>
-        <div className="rounded-3xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-red-200">
           {error ?? 'Empresa não encontrada'}
         </div>
       </div>
@@ -247,11 +247,11 @@ export function CompanyDetails() {
         Voltar para Empresas
       </button>
 
-      <div className="rounded-3xl border border-white/5 bg-slate-900/70 p-8">
+      <div className="rounded-xl border border-white/5 bg-slate-900/70 p-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-3">
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-2xl font-semibold">
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/10 text-2xl font-semibold">
                 {company.name.charAt(0).toUpperCase()}
               </div>
               <div>
@@ -274,7 +274,7 @@ export function CompanyDetails() {
               type="button"
               onClick={handleImpersonate}
               disabled={!!actionLoading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10 disabled:opacity-50"
             >
               {actionLoading === 'impersonate' ? <FiRefreshCw className="animate-spin" /> : <FiPlayCircle />}
               Logar como Empresa
@@ -283,7 +283,7 @@ export function CompanyDetails() {
               type="button"
               onClick={handleToggleStatus}
               disabled={!!actionLoading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-orange-400/40 px-4 py-2 text-sm text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-orange-400/40 px-4 py-2 text-sm text-orange-200 transition hover:bg-orange-500/10 disabled:opacity-50"
             >
               {actionLoading === 'status' ? <FiRefreshCw className="animate-spin" /> : <FiPauseCircle />}
               {company.status === 'inactive' ? 'Ativar' : 'Suspender'}
@@ -292,7 +292,7 @@ export function CompanyDetails() {
               type="button"
               onClick={handleResetCache}
               disabled={!!actionLoading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 transition hover:bg-emerald-500/10 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 px-4 py-2 text-sm text-emerald-200 transition hover:bg-emerald-500/10 disabled:opacity-50"
             >
               <FiRefreshCw className={actionLoading === 'cache' ? 'animate-spin' : ''} />
               Resetar Cache
@@ -302,7 +302,7 @@ export function CompanyDetails() {
       </div>
 
         {error && (
-          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100">
             {error}
           </div>
         )}
@@ -310,7 +310,7 @@ export function CompanyDetails() {
         {analytics && summaryCards.length > 0 && (
           <div className="grid gap-4 md:grid-cols-4">
             {summaryCards.map((card) => (
-              <div key={card.label} className="rounded-3xl border border-white/5 bg-slate-900/70 p-5">
+              <div key={card.label} className="rounded-xl border border-white/5 bg-slate-900/70 p-5">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{card.label}</p>
                 <p className={`mt-3 text-3xl font-semibold ${card.tone}`}>{card.value}</p>
               </div>
@@ -319,7 +319,7 @@ export function CompanyDetails() {
         )}
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="rounded-2xl border border-white/5 bg-slate-900/70 p-2">
+          <div className="rounded-xl border border-white/5 bg-slate-900/70 p-2">
             <nav className="flex flex-wrap gap-2">
               {TABS.map((tab) => (
                 <NavLink
@@ -327,7 +327,7 @@ export function CompanyDetails() {
                   to={tab.to}
                   className={({ isActive }) =>
                     [
-                      'rounded-2xl px-4 py-2 text-sm font-medium transition',
+                      'rounded-xl px-4 py-2 text-sm font-medium transition',
                       isActive ? 'bg-white text-slate-900' : 'text-slate-400 hover:text-white',
                     ].join(' ')
                   }
@@ -342,7 +342,7 @@ export function CompanyDetails() {
             type="button"
             onClick={refresh}
             disabled={refreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiRotateCcw className={refreshing ? 'animate-spin' : ''} />
             {refreshing ? 'Atualizando...' : 'Atualizar dados'}
@@ -382,3 +382,4 @@ async function extractErrorMessage(response: Response) {
     return response.statusText || null;
   }
 }
+

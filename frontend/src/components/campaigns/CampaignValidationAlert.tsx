@@ -69,7 +69,7 @@ export function CampaignValidationAlert({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl max-h-[80vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-2xl max-h-[80vh] bg-white dark:bg-gray-900 rounded-xl shadow-md overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
           <div className="flex items-start justify-between">
@@ -238,3 +238,4 @@ export function CampaignValidationAlert({
     </div>
   );
 }
+

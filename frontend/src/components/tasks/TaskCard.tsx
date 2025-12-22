@@ -90,7 +90,7 @@ export function TaskCard({ task, onEdit, onDelete, onComplete }: TaskCardProps) 
   };
 
   return (
-    <div className="group relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 transition-all duration-200 hover:shadow-lg hover:border-blue-500/50">
+    <div className="group relative overflow-hidden border-b border-slate-100 dark:border-slate-800 p-5 transition-all duration-200 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
       {/* Overdue or Due Today Indicator */}
       {isOverdue && (
         <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-red-500 to-orange-500" />

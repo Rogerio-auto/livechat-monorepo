@@ -216,7 +216,7 @@ export function CompaniesManager() {
     <div className="space-y-6">
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="config-card rounded-2xl p-6">
+        <div className="config-card rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm config-text-muted">Total de Empresas</p>
@@ -226,7 +226,7 @@ export function CompaniesManager() {
           </div>
         </div>
 
-        <div className="config-card rounded-2xl p-6">
+        <div className="config-card rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm config-text-muted">Total de Usuários</p>
@@ -238,7 +238,7 @@ export function CompaniesManager() {
           </div>
         </div>
 
-        <div className="config-card rounded-2xl p-6">
+        <div className="config-card rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm config-text-muted">Total de Inboxes</p>
@@ -250,7 +250,7 @@ export function CompaniesManager() {
           </div>
         </div>
 
-        <div className="config-card rounded-2xl p-6">
+        <div className="config-card rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm config-text-muted">Total de Agentes IA</p>
@@ -264,7 +264,7 @@ export function CompaniesManager() {
       </div>
 
       {/* Filtros e Busca */}
-      <div className="config-card rounded-2xl p-6">
+      <div className="config-card rounded-xl p-6">
         <div className="space-y-4">
           {/* Busca */}
           <div className="relative">
@@ -343,7 +343,7 @@ export function CompaniesManager() {
       </div>
 
       {/* Lista de Empresas */}
-      <div className="config-card rounded-2xl overflow-hidden">
+      <div className="config-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="text-xs uppercase tracking-wide config-text-muted border-b config-divider">
@@ -468,7 +468,7 @@ export function CompaniesManager() {
       {/* Detalhes da Empresa (Modal) */}
       {selectedCompany && (
   <div className="fixed inset-0 bg-(--color-overlay) flex items-center justify-center z-50 p-4">
-          <div className="config-modal rounded-2xl shadow-lg max-w-2xl w-full">
+          <div className="config-modal rounded-xl shadow-lg max-w-2xl w-full">
             <div className="flex items-start justify-between gap-4 border-b config-divider p-6">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold" style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-heading)" }}>
@@ -649,7 +649,7 @@ export function CompaniesManager() {
       {/* Modal de Confirmação de Deleção */}
       {deleteModalOpen && selectedCompany && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-60 p-4">
-          <div className="config-modal rounded-2xl shadow-2xl max-w-md w-full border-2 border-red-500/30">
+          <div className="config-modal rounded-xl shadow-md max-w-md w-full border-2 border-red-500/30">
             <div className="flex items-center justify-center gap-3 bg-red-600 text-white p-6 rounded-t-2xl">
               <FiAlertTriangle className="text-3xl" />
               <h3 className="text-xl font-bold">ATENÇÃO: Ação Irreversível</h3>
@@ -743,3 +743,4 @@ export function CompaniesManager() {
     </div>
   );
 }
+

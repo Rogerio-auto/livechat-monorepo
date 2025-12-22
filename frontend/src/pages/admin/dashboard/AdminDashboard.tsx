@@ -73,7 +73,7 @@ export function AdminDashboard() {
         {CARDS.map((card) => (
           <div
             key={card.title}
-            className="rounded-3xl border border-white/5 bg-slate-900/60 p-6 shadow-xl shadow-black/20"
+            className="rounded-xl border border-white/5 bg-slate-900/60 p-6 shadow-md shadow-black/20"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -89,7 +89,7 @@ export function AdminDashboard() {
         ))}
       </div>
 
-      <div className="rounded-3xl border border-white/5 bg-slate-900/60 p-8 text-slate-300">
+      <div className="rounded-xl border border-white/5 bg-slate-900/60 p-8 text-slate-300">
         <h3 className="mb-4 text-lg font-medium text-white">Status dos Serviços</h3>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stats && Object.entries(stats.infra).map(([service, status]) => (

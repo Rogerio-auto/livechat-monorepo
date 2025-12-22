@@ -3,14 +3,15 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Save,
-  X,
   AlertCircle,
   Building2,
   Users,
   MessageSquare,
 } from "lucide-react";
 import { API, fetchJson } from "../../utils/api";
+import { Modal } from "../../components/ui/Modal";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
 
 interface Department {
   id: string;
@@ -54,6 +55,24 @@ const COLOR_PRESETS = [
   "#84CC16", // lime
 ];
 
+const Field = ({ label, children, description }: { label: string; children: React.ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-100 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <label className="block text-sm font-semibold text-gray-900 dark:text-white">
+        {label}
+      </label>
+      {description && (
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">
+          {description}
+        </p>
+      )}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
+);
+
 export function DepartmentsManager() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +89,6 @@ export function DepartmentsManager() {
     is_active: true,
   });
 
-  // Carregar departamentos
   const loadDepartments = async () => {
     try {
       setLoading(true);
@@ -88,7 +106,6 @@ export function DepartmentsManager() {
     loadDepartments();
   }, []);
 
-  // Abrir modal para criar/editar
   const openModal = (department?: Department) => {
     if (department) {
       setEditingId(department.id);
@@ -112,13 +129,11 @@ export function DepartmentsManager() {
     setShowModal(true);
   };
 
-  // Fechar modal
   const closeModal = () => {
     setShowModal(false);
     setEditingId(null);
   };
 
-  // Salvar departamento
   const handleSave = async () => {
     try {
       const url = editingId
@@ -137,7 +152,6 @@ export function DepartmentsManager() {
     }
   };
 
-  // Deletar departamento
   const handleDelete = async (id: string) => {
     try {
       await fetchJson(`${API}/api/departments/${id}`, {
@@ -160,50 +174,51 @@ export function DepartmentsManager() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Departamentos
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+            Lista de Departamentos
           </h2>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Organize seus times e agentes em departamentos customizáveis
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {departments.length} departamentos configurados
           </p>
         </div>
-        <button
+        <Button
+          variant="primary"
           onClick={() => openModal()}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-2"
         >
-          <Plus size={20} />
+          <Plus size={18} />
           Novo Departamento
-        </button>
+        </Button>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0" size={20} />
-          <p className="text-red-800 dark:text-red-200">{error}</p>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="text-red-600 dark:text-red-400 shrink-0" size={20} />
+          <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
         </div>
       )}
 
       {/* Lista de Departamentos */}
       {departments.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
-          <Building2 size={48} className="mx-auto text-gray-400 mb-4" />
-          <p className="text-gray-600 dark:text-gray-400 mb-4">
-            Nenhum departamento criado ainda
+        <div className="text-center py-16 border border-gray-200 dark:border-gray-800 rounded-2xl">
+          <div className="w-16 h-16 bg-gray-50 dark:bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Building2 size={32} className="text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">Nenhum departamento</h3>
+          <p className="text-gray-500 dark:text-gray-400 mb-6 max-w-xs mx-auto">
+            Comece criando um departamento para organizar seus atendimentos.
           </p>
-          <button
-            onClick={() => openModal()}
-            className="text-blue-600 hover:text-blue-700 font-medium"
-          >
+          <Button variant="primary" onClick={() => openModal()}>
             Criar primeiro departamento
-          </button>
+          </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {departments.map((dept) => {
             const membersCount = dept.members?.[0]?.count || 0;
             const chatsCount = dept.active_chats?.[0]?.count || 0;
@@ -211,91 +226,94 @@ export function DepartmentsManager() {
             return (
               <div
                 key={dept.id}
-                className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-lg transition-shadow"
+                className="group rounded-2xl border border-gray-200 dark:border-gray-800 p-6 hover:border-blue-500/50 transition-all shadow-sm hover:shadow-md"
               >
-                {/* Header do Card */}
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-start justify-between mb-6">
+                  <div className="flex items-center gap-4">
                     <div
-                      className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl"
+                      className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl shadow-sm"
                       style={{
-                        backgroundColor: `${dept.color}20`,
+                        backgroundColor: `${dept.color}15`,
                         color: dept.color,
+                        border: `1px solid ${dept.color}30`
                       }}
                     >
                       {ICON_OPTIONS.find((i) => i.value === dept.icon)?.icon || "🏢"}
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-900 dark:text-white">
+                      <h3 className="font-bold text-gray-900 dark:text-white text-lg">
                         {dept.name}
                       </h3>
-                      <span
-                        className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                          dept.is_active
-                            ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                            : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
-                        }`}
-                      >
-                        {dept.is_active ? "Ativo" : "Inativo"}
-                      </span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span
+                          className={`w-2 h-2 rounded-full ${dept.is_active ? 'bg-green-500' : 'bg-gray-400'}`}
+                        />
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                          {dept.is_active ? "Ativo" : "Inativo"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => openModal(dept)}
-                      className="p-2 text-gray-600 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
                       title="Editar"
                     >
                       <Edit2 size={16} />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => setDeleteConfirm(dept.id)}
-                      className="p-2 text-gray-600 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 transition-colors"
+                      className="text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                       title="Deletar"
                     >
                       <Trash2 size={16} />
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
-                {/* Descrição */}
                 {dept.description && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 line-clamp-2 leading-relaxed">
                     {dept.description}
                   </p>
                 )}
 
-                {/* Estatísticas */}
-                <div className="flex gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <Users size={16} />
-                    <span>{membersCount} membros</span>
+                <div className="flex items-center gap-6 pt-6 border-t border-gray-50 dark:border-gray-900">
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <Users size={16} className="text-gray-400" />
+                    <span className="text-sm font-medium">{membersCount} membros</span>
                   </div>
-                  <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <MessageSquare size={16} />
-                    <span>{chatsCount} chats</span>
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                    <MessageSquare size={16} className="text-gray-400" />
+                    <span className="text-sm font-medium">{chatsCount} chats</span>
                   </div>
                 </div>
 
-                {/* Confirmação de Delete */}
                 {deleteConfirm === dept.id && (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
-                      Tem certeza que deseja deletar este departamento?
+                  <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800 animate-in fade-in slide-in-from-top-2">
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-3">
+                      Excluir este departamento? Esta ação não pode ser desfeita.
                     </p>
                     <div className="flex gap-2">
-                      <button
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        className="flex-1"
                         onClick={() => handleDelete(dept.id)}
-                        className="flex-1 px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
                       >
                         Confirmar
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 bg-white dark:bg-gray-800"
                         onClick={() => setDeleteConfirm(null)}
-                        className="flex-1 px-3 py-1.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 text-sm font-medium"
                       >
                         Cancelar
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -306,141 +324,124 @@ export function DepartmentsManager() {
       )}
 
       {/* Modal de Criar/Editar */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            {/* Header do Modal */}
-            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {editingId ? "Editar Departamento" : "Novo Departamento"}
-              </h3>
-              <button
-                onClick={closeModal}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <X size={24} />
-              </button>
-            </div>
+      <Modal
+        isOpen={showModal}
+        onClose={closeModal}
+        title={editingId ? "Editar Departamento" : "Novo Departamento"}
+        size="lg"
+      >
+        <div className="space-y-0">
+          <Field 
+            label="Nome do Departamento" 
+            description="Como o departamento será exibido para os agentes e clientes."
+          >
+            <Input
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Ex: Vendas, Suporte, Financeiro..."
+            />
+          </Field>
 
-            {/* Form */}
-            <div className="p-6 space-y-6">
-              {/* Nome */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Nome do Departamento *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Ex: Vendas, Suporte, Financeiro..."
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+          <Field 
+            label="Descrição" 
+            description="Breve resumo das responsabilidades deste departamento."
+          >
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Descreva as responsabilidades..."
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+            />
+          </Field>
 
-              {/* Descrição */}
+          <Field 
+            label="Identidade Visual" 
+            description="Escolha uma cor e ícone para facilitar a identificação."
+          >
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Descrição
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Descreva as responsabilidades deste departamento..."
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
-              {/* Cor */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Cor do Departamento
-                </label>
-                <div className="flex gap-3 flex-wrap">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Cor</p>
+                <div className="flex gap-2.5 flex-wrap">
                   {COLOR_PRESETS.map((color) => (
                     <button
                       key={color}
                       onClick={() => setFormData({ ...formData, color })}
-                      className={`w-10 h-10 rounded-lg border-2 transition-all ${
+                      className={`w-8 h-8 rounded-full border-2 transition-all ${
                         formData.color === color
-                          ? "border-gray-900 dark:border-white scale-110"
-                          : "border-gray-200 dark:border-gray-600 hover:scale-105"
+                          ? "border-gray-900 dark:border-white scale-110 shadow-md"
+                          : "border-transparent hover:scale-110"
                       }`}
                       style={{ backgroundColor: color }}
-                      title={color}
                     />
                   ))}
-                  <input
-                    type="color"
-                    value={formData.color}
-                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    className="w-10 h-10 rounded-lg border-2 border-gray-200 dark:border-gray-600 cursor-pointer"
-                    title="Escolher cor personalizada"
-                  />
+                  <div className="relative w-8 h-8 rounded-full border border-gray-200 dark:border-gray-800 overflow-hidden">
+                    <input
+                      type="color"
+                      value={formData.color}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      className="absolute inset-0 w-[200%] h-[200%] -translate-x-1/4 -translate-y-1/4 cursor-pointer"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Ícone */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ícone
-                </label>
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Ícone</p>
                 <div className="grid grid-cols-4 gap-2">
                   {ICON_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       onClick={() => setFormData({ ...formData, icon: option.value })}
-                      className={`p-3 rounded-lg border-2 text-center transition-all ${
+                      className={`p-3 rounded-xl border transition-all text-center ${
                         formData.icon === option.value
-                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                          : "border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500"
+                          ? "border-blue-500 bg-blue-50/50 dark:bg-blue-900/20 shadow-sm"
+                          : "border-gray-100 dark:border-gray-800 hover:border-gray-200 dark:hover:border-gray-700"
                       }`}
                     >
-                      <div className="text-2xl mb-1">{option.icon}</div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                      <div className="text-xl mb-1">{option.icon}</div>
+                      <div className="text-[10px] font-medium text-gray-500 dark:text-gray-400 uppercase tracking-tight">
                         {option.label}
                       </div>
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Status */}
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <label htmlFor="is_active" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Departamento ativo
-                </label>
-              </div>
             </div>
+          </Field>
 
-            {/* Footer do Modal */}
-            <div className="sticky bottom-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-end gap-3">
-              <button
-                onClick={closeModal}
-                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!formData.name.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                <Save size={20} />
-                {editingId ? "Salvar Alterações" : "Criar Departamento"}
-              </button>
+          <Field 
+            label="Status" 
+            description="Departamentos inativos não podem receber novos atendimentos."
+          >
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={formData.is_active}
+                onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:bg-gray-900 dark:border-gray-800"
+              />
+              <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">
+                Departamento Ativo
+              </label>
             </div>
+          </Field>
+
+          <div className="flex justify-end gap-3 pt-8">
+            <Button variant="ghost" onClick={closeModal}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSave}
+              disabled={!formData.name.trim()}
+            >
+              {editingId ? "Salvar Alterações" : "Criar Departamento"}
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

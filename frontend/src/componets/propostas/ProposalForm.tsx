@@ -273,7 +273,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
               {produtosFiltrados.map((p) => {
                 const preco = p.sale_price ?? p.cost_price ?? null;
                 return (
-                  <button key={p.id} onClick={() => setProduto(p.id)} className={`flex-none snap-start w-[300px] h-[140px] rounded-2xl p-4 ring-1 shadow-sm transition ${produto === p.id ? 'bg-emerald-50 ring-emerald-300' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}>
+                  <button key={p.id} onClick={() => setProduto(p.id)} className={`flex-none snap-start w-[300px] h-[140px] rounded-xl p-4 ring-1 shadow-sm transition ${produto === p.id ? 'bg-emerald-50 ring-emerald-300' : 'bg-white ring-zinc-200 hover:bg-zinc-50'}`}>
                     <div className="flex h-full flex-col">
                       <div className="font-medium text-zinc-800 leading-tight" title={p.name} style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.name}</div>
                       {(p.power || p.brand) && (
@@ -289,7 +289,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
 
           {/* Resumo dos dados solares calculados */}
           {solarData && (
-            <div className="bg-gradient-to-br from-emerald-50 to-green-50 p-4 rounded-xl ring-2 ring-emerald-300 shadow-sm">
+            <div className="bg-linear-to-br from-emerald-50 to-green-50 p-4 rounded-xl ring-2 ring-emerald-300 shadow-sm">
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-lg">☀️</span>
                 <div className="font-semibold text-emerald-900">Dados Solares Calculados</div>
@@ -407,7 +407,7 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
 
       {showLeadModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 shadow-xl">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl bg-white p-4 shadow-xl">
             <div className="flex items-center justify-between mb-2 sticky top-0 bg-white pb-2 z-10">
               <h3 className="font-semibold text-zinc-800">{leadModeNew ? 'Cadastrar novo cliente' : 'Selecionar cliente'}</h3>
               <button className="text-zinc-500 hover:text-zinc-800" onClick={() => { setShowLeadModal(false); setLeadModeNew(false); }}>x</button>
@@ -441,4 +441,5 @@ export default function ProposalForm({ initialLead = null, onClose, onSaved }: P
     </div>
   );
 }
+
 

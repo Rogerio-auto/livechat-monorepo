@@ -1,15 +1,40 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { FaPlus, FaTimes, FaUser, FaEnvelope, FaPhoneAlt, FaTag, FaEdit, FaCamera } from "react-icons/fa";
+import { FaPlus, FaTimes, FaUser, FaEnvelope, FaPhoneAlt, FaTag, FaEdit, FaCamera, FaFilter, FaArrowLeft, FaWhatsapp, FaCommentDots, FaTrash } from "react-icons/fa";
+import { 
+  DndContext, 
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+  defaultDropAnimationSideEffects,
+  DropAnimation,
+  UniqueIdentifier,
+  DragCancelEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { NewColumnForm } from "../componets/funil/NewColumnForm";
 import type { Column, Card, LeadListItem } from "./funil/types";
-import { LeadPicker } from "../componets/funil/LeadPicker";
-import { ClienteForm } from "../componets/clientes/ClienteForm";
 import { LoadingOverlay } from "../componets/ui/LoadingOverlay";
 import { CardImageCapture } from "../componets/funil/CardImageCapture";
 import { CardImageGallery } from "../componets/funil/CardImageGallery";
 import { useImageUpload, type UploadedPhoto } from "../hooks/useImageUpload";
+import { useRecentChats } from "../hooks/useDashboard";
 import { useNavigate } from "react-router-dom";
+import { showToast } from "../hooks/useToast";
 import { KanbanSetupModal } from "../componets/funil/KanbanSetupModal";
 import { TaskModal } from "../components/tasks/TaskModal";
 import { LeadTaskBadge } from "../components/tasks/LeadTaskBadge";
@@ -51,6 +76,256 @@ const EMPTY_CARD_FORM: CardFormState = {
   notes: "",
 };
 
+// --- Sortable Components ---
+
+interface SortableCardProps {
+  card: Card;
+  users: User[];
+  onClick: () => void;
+}
+
+function SortableCard({ card, users, onClick }: SortableCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: card.id, data: { type: 'Card', card } });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={onClick}
+      className={`group w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-left shadow-sm transition-all hover:border-emerald-500/50 hover:shadow-md cursor-pointer relative overflow-hidden ${
+        isDragging ? "z-50" : ""
+      }`}
+    >
+      {/* Linha de destaque lateral */}
+      <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200 dark:bg-slate-800 group-hover:bg-emerald-500 transition-colors" />
+
+      <div className="flex items-start justify-between gap-2 pl-1">
+        <span className="font-bold text-slate-900 dark:text-slate-100 leading-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2">
+          {card.title}
+        </span>
+        <span className="shrink-0 text-[10px] font-black uppercase tracking-wider rounded-md px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/50">
+          {currency(card.value || 0)}
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-col gap-1.5 pl-1">
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800/50">
+            <FaTag className="opacity-70" size={10} />
+            {card.source || "Direto"}
+          </span>
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800/50">
+            <FaUser className="opacity-70" size={10} />
+            {users.find((u) => u.id === card.owner)?.name?.split(' ')[0] || card.owner || "Sem dono"}
+          </span>
+        </div>
+
+        {(card.email || card.contact) && (
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 pl-1">
+            {card.email && (
+              <span className="inline-flex items-center gap-1 truncate max-w-[140px] hover:text-emerald-600 transition-colors">
+                <FaEnvelope size={10} className="text-slate-400" />
+                {card.email}
+              </span>
+            )}
+            {card.contact && (
+              <span className="inline-flex items-center gap-1 hover:text-emerald-600 transition-colors">
+                <FaPhoneAlt size={10} className="text-slate-400" />
+                {card.contact}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between pl-1">
+        <LeadTaskBadge leadId={card.leadId || ""} />
+      </div>
+    </div>
+  );
+}
+
+interface SortableColumnProps {
+  column: Column;
+  children: React.ReactNode;
+  onEdit: () => void;
+  count: number;
+}
+
+function SortableColumn({ column, children, onEdit, count }: SortableColumnProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: column.id, data: { type: 'Column', column } });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex w-80 flex-col shrink-0 snap-start md:w-96 h-full bg-slate-200/80 dark:bg-slate-900/60 rounded-2xl p-3 border border-slate-200/60 dark:border-slate-800/50"
+    >
+      {/* Cabeçalho da coluna */}
+      <div
+        {...attributes}
+        {...listeners}
+        className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-3 shadow-sm cursor-grab active:cursor-grabbing transition-all hover:border-slate-300 dark:hover:border-slate-700 mb-4"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div 
+              className="h-2.5 w-2.5 rounded-full shadow-sm" 
+              style={{ backgroundColor: column.color || '#10b981' }}
+            />
+            <div className="font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest text-[10px]">
+              {column.title}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-black text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shadow-sm">
+              {count}
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all"
+              title="Editar coluna"
+            >
+              <FaEdit size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cards Container */}
+      <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar min-h-[150px]">
+        <div className="space-y-3 pb-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LeadCreationView({ onBack, onSelectChat }: { onBack: () => void, onSelectChat: (chat: any) => void }) {
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const { data: chats, loading } = useRecentChats(50, debouncedSearch);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Filtrar apenas chats que ainda não são leads
+  const filteredChats = chats.filter(c => !c.is_lead);
+
+  return (
+    <div className="flex-1 flex flex-col bg-slate-50 dark:bg-slate-950 overflow-hidden">
+      <div className="h-16 shrink-0 flex items-center px-8 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 justify-between">
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-slate-500">
+            <FaArrowLeft size={18} />
+          </button>
+          <div>
+            <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">Criar Lead de Conversa</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Selecione uma conversa ativa para converter em lead</p>
+          </div>
+        </div>
+        <div className="w-64">
+          <input 
+            type="text" 
+            placeholder="Buscar por nome ou número..." 
+            className="w-full px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-8">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-64 gap-4">
+            <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-slate-500 font-medium">Buscando conversas...</p>
+          </div>
+        ) : filteredChats.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+            <FaCommentDots size={48} className="mb-4 opacity-20" />
+            <p className="font-medium">Nenhuma conversa encontrada</p>
+            <p className="text-xs">Tente buscar por outro nome ou número de telefone.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredChats.map(chat => (
+              <div 
+                key={chat.id}
+                onClick={() => onSelectChat(chat)}
+                className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 hover:border-emerald-500/50 hover:shadow-xl transition-all cursor-pointer relative overflow-hidden"
+              >
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-500 transition-colors" />
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                      <FaWhatsapp size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition-colors">{chat.customer_name || "Sem nome"}</h4>
+                      <p className="text-xs text-slate-500">{chat.customer_phone}</p>
+                    </div>
+                  </div>
+                  <div className="text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    {chat.status}
+                  </div>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 italic">
+                  "{chat.last_message || "Sem mensagens"}"
+                </p>
+                <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-800/50 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400">
+                    {chat.last_message_at ? new Date(chat.last_message_at).toLocaleDateString() : "N/A"}
+                  </span>
+                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
+                    Selecionar →
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SalesFunnel() {
   const [boardId, setBoardId] = useState<string | null>(null);
   const [loadingBoard, setLoadingBoard] = useState(true);
@@ -67,7 +342,7 @@ export function SalesFunnel() {
 
   const [showAddColumn, setShowAddColumn] = useState(false);
   const [leadFor, setLeadFor] = useState<string | null>(null);
-  const [leadModeNew, setLeadModeNew] = useState(false);
+  const [viewMode, setViewMode] = useState<'board' | 'create-lead'>('board');
 
   // Deixa UserOption alinhado ao UserRole
 
@@ -77,11 +352,21 @@ export function SalesFunnel() {
   const [editColModal, setEditColModal] = useState<null | { id: string }>(null);
   const [colDraft, setColDraft] = useState<{ title: string; color: string; position: number } | null>(null);
 
-  const [draggingColId, setDraggingColId] = useState<string | null>(null);
-  const [draggingCard, setDraggingCard] = useState<null | { id: string; fromColumnId: string }>(null);
-  const [cardDropIndicator, setCardDropIndicator] = useState<
-    null | { columnId: string; cardId: string | null; position: "before" | "after" | "end" }
-  >(null);
+  // dnd-kit state
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const [activeCard, setActiveCard] = useState<Card | null>(null);
+  const [activeColumn, setActiveColumn] = useState<Column | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const [leadProposals, setLeadProposals] = useState<ProposalOption[]>([]);
   const [loadingProposals, setLoadingProposals] = useState(false);
@@ -237,13 +522,36 @@ export function SalesFunnel() {
       });
     };
 
+    const onColumnsReordered = (payload: any) => {
+      if (payload?.boardId === boardId && Array.isArray(payload?.columns)) {
+        setColumns(payload.columns.sort((a: any, b: any) => a.position - b.position));
+      }
+    };
+
+    const onCardDeleted = (payload: any) => {
+      setCards((prev) => prev.filter((c) => c.id !== payload.id));
+      if (selectedRef.current?.id === payload.id) {
+        setSelected(null);
+      }
+    };
+
+    const onColumnDeleted = (payload: any) => {
+      setColumns((prev) => prev.filter((c) => c.id !== payload.id));
+    };
+
     s.on("kanban:card:updated", onCardUpdated);
     s.on("kanban:column:reordered", onColumnReordered);
+    s.on("kanban:columns:reordered", onColumnsReordered);
+    s.on("kanban:card:deleted", onCardDeleted);
+    s.on("kanban:column:deleted", onColumnDeleted);
     s.on("connect_error", () => { });
 
     return () => {
       s.off("kanban:card:updated", onCardUpdated);
       s.off("kanban:column:reordered", onColumnReordered);
+      s.off("kanban:columns:reordered", onColumnsReordered);
+      s.off("kanban:card:deleted", onCardDeleted);
+      s.off("kanban:column:deleted", onColumnDeleted);
       s.disconnect();
     };
   }, []);
@@ -342,12 +650,30 @@ export function SalesFunnel() {
       });
       const mapped = mapApiCard(updated);
       setCards((prev) => prev.map((c) => (c.id === id ? mapped : c)));
+      
+      // Atualizar o card selecionado para refletir a mudança na UI imediatamente
+      if (selectedRef.current?.id === id) {
+        setSelected(mapped);
+      }
+      
       return mapped;
     } catch (e) {
       console.error("Falha ao atualizar card:", e);
       return null;
     }
   }, []);
+
+  const deleteCard = async (id: string) => {
+    if (!window.confirm("Tem certeza que deseja excluir este card?")) return;
+    try {
+      await fetchJson(`${API}/kanban/cards/${id}`, { method: "DELETE" });
+      setCards((prev) => prev.filter((c) => c.id !== id));
+      setSelected(null);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao excluir card");
+    }
+  };
 
   const flushCardDraft = useCallback(async () => {
     if (cardSaveTimerRef.current) {
@@ -472,6 +798,19 @@ export function SalesFunnel() {
     }
   };
 
+  const deleteColumn = async (id: string) => {
+    if (!window.confirm("Tem certeza que deseja excluir esta coluna? Todos os cards serão apagados permanentemente.")) return;
+    try {
+      await fetchJson(`${API}/kanban/columns/${id}?force=true`, { method: "DELETE" });
+      setColumns((prev) => prev.filter((c) => c.id !== id));
+      setCards((prev) => prev.filter((c) => c.stage !== id));
+      closeEditColumn();
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao excluir coluna");
+    }
+  };
+
   // persistir ordem de colunas (j� sem badge de posi��o na UI)
   const persistColumnOrder = (orderedColumns: Column[], fallbackColumns: Column[]) => {
     if (!boardId) return;
@@ -490,100 +829,159 @@ export function SalesFunnel() {
       });
   };
 
-  const moveColumn = (fromId: string, toId: string) => {
-    if (!boardId) return;
-    setColumns((prev) => {
-      const arr = [...prev];
-      const fromIdx = arr.findIndex((c) => c.id === fromId);
-      const toIdx = arr.findIndex((c) => c.id === toId);
-      if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
-      const snapshot = prev.map((c) => ({ ...c }));
-      const [removed] = arr.splice(fromIdx, 1);
-      arr.splice(toIdx, 0, removed);
-      const reindexed = arr.map((c, i) => ({ ...c, position: i + 1 }));
-      persistColumnOrder(reindexed, snapshot);
-      return reindexed;
-    });
-  };
-
   const clearCardDragState = () => {
-    setDraggingCard(null);
-    setCardDropIndicator(null);
+    setActiveId(null);
+    setActiveCard(null);
+    setActiveColumn(null);
   };
 
-  const handleCardDrop = async (toColumnId: string, targetCardId: string | null, placeAfter: boolean) => {
-    if (!draggingCard) return;
-    const cardId = draggingCard.id;
-    const snapshot = cards.map((c) => ({ ...c }));
-    const movingCard = cards.find((c) => c.id === cardId);
-    if (!movingCard) {
-      clearCardDragState();
+  const findContainer = (id: UniqueIdentifier) => {
+    if (columns.some(c => c.id === id)) return id;
+    return cards.find(c => c.id === id)?.stage;
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    const id = active.id;
+    setActiveId(id);
+
+    const card = cards.find(c => c.id === id);
+    if (card) {
+      setActiveCard(card);
       return;
     }
 
-    const fromColumnId = movingCard.stage;
-    const targetColumnCards = cards.filter((c) => c.stage === toColumnId).slice().sort((a, b) => a.position - b.position);
-    if (targetCardId === cardId) {
-      clearCardDragState();
+    const column = columns.find(c => c.id === id);
+    if (column) {
+      setActiveColumn(column);
+    }
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    const id = active.id;
+    const overId = over?.id;
+
+    if (!overId || id === overId) return;
+
+    const activeContainer = findContainer(id);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer || activeContainer === overContainer) {
       return;
     }
 
-    const workingList = targetColumnCards.filter((c) => c.id !== cardId);
+    // Moving card between columns
+    setCards((prev) => {
+      const activeCard = prev.find(c => c.id === id);
+      if (!activeCard) return prev;
 
-    let insertIndex: number;
-    if (targetCardId) {
-      const baseIndex = workingList.findIndex((c) => c.id === targetCardId);
-      insertIndex = baseIndex === -1 ? workingList.length : placeAfter ? baseIndex + 1 : baseIndex;
-    } else {
-      insertIndex = workingList.length;
-    }
-    insertIndex = Math.max(0, Math.min(workingList.length, insertIndex));
+      const overItems = prev.filter(c => c.stage === overContainer);
+      const overIndex = overItems.findIndex(c => c.id === overId);
 
-    const updatedTargetList = [...workingList];
-    const movedCardWithStage: Card = { ...movingCard, stage: toColumnId };
-    updatedTargetList.splice(insertIndex, 0, movedCardWithStage);
-    const reindexedTarget = updatedTargetList.map((c, idx) => ({ ...c, position: idx + 1 }));
-    const reindexedTargetMap = new Map(reindexedTarget.map((c) => [c.id, c]));
+      let newIndex;
+      if (columns.some(c => c.id === overId)) {
+        newIndex = overItems.length;
+      } else {
+        newIndex = overIndex >= 0 ? overIndex : overItems.length;
+      }
 
-    let reindexedSourceMap: Map<string, Card> | undefined;
-    if (fromColumnId !== toColumnId) {
-      const sourceList = cards
-        .filter((c) => c.stage === fromColumnId && c.id !== cardId)
-        .slice()
-        .sort((a, b) => a.position - b.position)
-        .map((c, idx) => ({ ...c, position: idx + 1 }));
-      reindexedSourceMap = new Map(sourceList.map((c) => [c.id, c]));
-    }
+      const otherCards = prev.filter(c => c.id !== id);
+      const updatedCard = { ...activeCard, stage: overContainer as string };
+      
+      // Re-insert at new position
+      const targetColumnCards = otherCards.filter(c => c.stage === overContainer);
+      const otherColumnCards = otherCards.filter(c => c.stage !== overContainer);
+      
+      const newTargetColumnCards = [
+        ...targetColumnCards.slice(0, newIndex),
+        updatedCard,
+        ...targetColumnCards.slice(newIndex)
+      ];
 
-    const nextCards = cards.map((c) => {
-      if (c.id === cardId) return reindexedTargetMap.get(c.id)!;
-      if (c.stage === toColumnId) return reindexedTargetMap.get(c.id) ?? c;
-      if (fromColumnId !== toColumnId && c.stage === fromColumnId) return reindexedSourceMap?.get(c.id) ?? c;
-      return c;
+      return [...otherColumnCards, ...newTargetColumnCards];
     });
-
-    const newPosition = reindexedTargetMap.get(cardId)?.position ?? movingCard.position;
-
-    setCards(nextCards);
-    clearCardDragState();
-
-    const payload: Partial<Card> = { position: newPosition };
-    if (fromColumnId !== toColumnId) payload.stage = toColumnId;
-    const result = await updateCard(cardId, payload);
-    if (!result) setCards(snapshot);
   };
 
-  const autoScrollIfNeeded = (clientX: number) => {
-    if (!draggingCard) return;
-    const container = boardScrollRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const threshold = Math.min(160, rect.width * 0.25);
-    if (clientX < rect.left + threshold) {
-      container.scrollLeft -= 24;
-    } else if (clientX > rect.right - threshold) {
-      container.scrollLeft += 24;
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    const id = active.id;
+    const overId = over?.id;
+
+    if (!overId) {
+      clearCardDragState();
+      return;
     }
+
+    if (activeColumn) {
+      // Column reordering
+      if (id !== overId) {
+        setColumns((prev) => {
+          const oldIndex = prev.findIndex(c => c.id === id);
+          const newIndex = prev.findIndex(c => c.id === overId);
+          const newColumns = arrayMove(prev, oldIndex, newIndex);
+          const reindexed = newColumns.map((c, i) => ({ ...c, position: i + 1 }));
+          persistColumnOrder(reindexed, prev);
+          return reindexed;
+        });
+      }
+      clearCardDragState();
+      return;
+    }
+
+    const activeContainer = findContainer(id);
+    const overContainer = findContainer(overId);
+
+    if (!activeContainer || !overContainer) {
+      clearCardDragState();
+      return;
+    }
+
+    const activeItems = cards.filter(c => c.stage === activeContainer);
+    const overItems = cards.filter(c => c.stage === overContainer);
+
+    const activeIndex = activeItems.findIndex(c => c.id === id);
+    const overIndex = overItems.findIndex(c => c.id === overId);
+
+    if (activeContainer !== overContainer || activeIndex !== overIndex) {
+      const movingCard = cards.find(c => c.id === id);
+      if (!movingCard) return;
+
+      // Update local state for immediate feedback
+      setCards((prev) => {
+        const activeCard = prev.find(c => c.id === id)!;
+        const otherCards = prev.filter(c => c.id !== id);
+        
+        const targetColumnCards = otherCards.filter(c => c.stage === overContainer);
+        const otherColumnCards = otherCards.filter(c => c.stage !== overContainer);
+        
+        const finalIndex = overIndex >= 0 ? overIndex : targetColumnCards.length;
+        
+        const newTargetColumnCards = [
+          ...targetColumnCards.slice(0, finalIndex),
+          { ...activeCard, stage: overContainer as string },
+          ...targetColumnCards.slice(finalIndex)
+        ];
+
+        // Re-index positions
+        const reindexedTarget = newTargetColumnCards.map((c, i) => ({ ...c, position: i + 1 }));
+        
+        return [...otherColumnCards, ...reindexedTarget];
+      });
+
+      // Persist to API
+      const finalPosition = overIndex >= 0 ? overIndex + 1 : overItems.length + 1;
+      const payload: Partial<Card> = { position: finalPosition };
+      if (activeContainer !== overContainer) payload.stage = overContainer as string;
+      
+      await updateCard(id as string, payload);
+    }
+
+    clearCardDragState();
+  };
+
+  const handleDragCancel = () => {
+    clearCardDragState();
   };
 
   // propostas vinculadas (mesmo comportamento anterior)
@@ -675,6 +1073,53 @@ export function SalesFunnel() {
     setShowTaskModal(true);
   };
 
+  const handleSelectChat = async (chat: any) => {
+    try {
+      // Extrair telefone de forma robusta (fallback para remote_id ou external_id)
+      const phone = chat.customer_phone || 
+                    chat.remote_id?.split('@')[0] || 
+                    chat.external_id?.split('@')[0] || 
+                    "";
+
+      // 1. Criar o lead no backend
+      const res = await fetch(`${API}/leads`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: chat.customer_name || chat.display_name || "Lead de Chat",
+          celular: phone,
+          telefone: phone,
+          origem: "Chat",
+          chat_id: chat.id,
+          customer_id: chat.customer_id,
+          kanban_board_id: boardId
+        }),
+      });
+      
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error || `HTTP ${res.status}`);
+      }
+      
+      const data = await res.json();
+      
+      // 2. Adicionar o card no funil
+      await addCardFromLead(leadFor!, {
+        id: data?.id,
+        name: data?.name || chat.customer_name || chat.display_name,
+        email: data?.email || null,
+        contact: phone,
+      });
+      
+      // 3. Voltar para o board
+      setViewMode('board');
+      setLeadFor(null);
+    } catch (e: any) {
+      alert(e?.message || "Erro ao converter conversa em lead");
+    }
+  };
+
   const handleTaskSubmit = async (data: CreateTaskInput | UpdateTaskInput) => {
     try {
       await fetchJson(`${API}/api/tasks`, {
@@ -719,458 +1164,378 @@ export function SalesFunnel() {
   }
 
   // ===== RENDER =====
-  return (
-      
-      <div
-        className="relative ml-16 min-h-screen flex-1 transition-colors"
-        style={{
-          background:
-            "linear-gradient(140deg, color-mix(in srgb, var(--color-bg) 96%, transparent) 0%, color-mix(in srgb, var(--color-surface) 88%, transparent) 45%, color-mix(in srgb, var(--color-surface-muted) 82%, transparent) 100%)",
+  if (viewMode === 'create-lead') {
+    return (
+      <LeadCreationView 
+        onBack={() => {
+          setViewMode('board');
+          setLeadFor(null);
         }}
+        onSelectChat={handleSelectChat}
+      />
+    );
+  }
+
+  return (
+    <div className="relative h-full flex flex-col overflow-hidden">
+      {loadingData && (
+        <LoadingOverlay
+          text="Sincronizando funil de vendas"
+          subtext="Buscando colunas e cards atualizados"
+          fullscreen={false}
+        />
+      )}
+
+      {/* Header */}
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-8 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+            <FaFilter size={20} />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">
+              Funil de Vendas
+            </h1>
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Gerencie seus leads e oportunidades
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              setViewMode('create-lead');
+              setLeadFor(columns[0]?.id || null);
+            }}
+            className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-500/20 transition-all hover:bg-emerald-600 hover:shadow-emerald-500/40 active:scale-95"
+          >
+            <FaPlus />
+            <span>Novo Lead</span>
+          </button>
+        </div>
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
-        {loadingData && (
-          <LoadingOverlay
-            text="Sincronizando funil de vendas"
-            subtext="Buscando colunas e cards atualizados"
-            fullscreen={false}
-          />
-        )}
         <div
           ref={boardScrollRef}
-          className="flex flex-1 min-h-screen gap-6 overflow-x-auto overflow-y-hidden px-8 pb-10 pt-14 snap-x snap-mandatory [scrollbar-width:thin]"
+          className="flex-1 flex gap-6 overflow-x-auto overflow-y-hidden px-8 pb-10 pt-8 [scrollbar-width:thin] custom-scrollbar"
         >
-          <div className="w-72 shrink-0 snap-start">
+          <div className="w-80 md:w-96 shrink-0 snap-start">
             {showAddColumn ? (
-              <NewColumnForm apiBase={API} boardId={boardId} onCreated={(c) => onColumnCreated(c)} onCancel={() => setShowAddColumn(false)} />
+              <NewColumnForm 
+                apiBase={API} 
+                boardId={boardId} 
+                onCreated={(c) => onColumnCreated(c)} 
+                onCancel={() => setShowAddColumn(false)} 
+              />
             ) : (
               <button
                 onClick={() => setShowAddColumn(true)}
-                className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 transition-all duration-150 shadow-sm hover:shadow-md"
-                style={{
-                  borderColor: "color-mix(in srgb, var(--color-border) 55%, transparent)",
-                  background: "color-mix(in srgb, var(--color-surface) 90%, transparent)",
-                  color: "var(--color-text-muted)",
-                }}
+                className="flex h-14 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-200/50 dark:bg-slate-900/40 text-slate-400 transition-all hover:border-emerald-500/50 hover:bg-white dark:hover:bg-slate-900 hover:text-emerald-600 dark:hover:text-emerald-400 group"
               >
-                <FaPlus /> Nova coluna
+                <FaPlus className="group-hover:scale-110 transition-transform" />
+                <span className="font-bold text-xs uppercase tracking-widest">Nova coluna</span>
               </button>
             )}
           </div>
 
-          {columns.map((col) => {
-            const list = cardsByColumn[col.id] || [];
-            return (
-              <div
-                key={col.id}
-                className="flex w-80 flex-col shrink-0 snap-start md:w-96"
-                onDragOver={(e) => {
-                  if (!draggingColId || draggingColId === col.id) return;
-                  e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  if (!draggingColId || draggingColId === col.id) return;
-                  moveColumn(draggingColId, col.id);
-                  setDraggingColId(null);
-                }}
-              >
-                {/* Cabecalho da coluna (sem mostrar posicao) */}
-                <div
-                  className="rounded-2xl border px-4 py-3 shadow-sm cursor-grab active:cursor-grabbing transition-colors"
-                  draggable
-                  onDragStart={(e) => {
-                    e.stopPropagation();
-                    setDraggingColId(col.id);
-                    if (e.dataTransfer) {
-                      e.dataTransfer.effectAllowed = "move";
-                      const canvas = document.createElement("canvas");
-                      canvas.width = 1;
-                      canvas.height = 1;
-                      const ctx = canvas.getContext("2d");
-                      ctx?.clearRect(0, 0, 1, 1);
-                      e.dataTransfer.setDragImage(canvas, 0, 0);
-                    }
-                  }}
-                  onDragEnd={() => setDraggingColId(null)}
-                  style={{
-                    background: `linear-gradient(135deg, color-mix(in srgb, ${col.color} 22%, var(--color-surface)) 0%, color-mix(in srgb, ${col.color} 8%, var(--color-surface)) 100%)`,
-                    borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)",
-                    color: "var(--color-heading)",
-                    boxShadow: "0 18px 36px -24px var(--color-card-shadow)",
-                  }}
+          <SortableContext
+            items={columns.map(c => c.id)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {columns.map((col) => {
+              const list = cardsByColumn[col.id] || [];
+              return (
+                <SortableColumn
+                  key={col.id}
+                  column={col}
+                  count={list.length}
+                  onEdit={() => openEditColumn(col)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="font-semibold tracking-wide" style={{ color: "var(--color-heading)" }}>
-                      {col.title}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="rounded-full px-2 py-0.5 text-sm"
-                        style={{
-                          backgroundColor: "color-mix(in srgb, var(--color-primary) 12%, transparent)",
-                          color: "var(--color-primary)",
-                        }}
-                      >
-                        {list.length}
-                      </div>
-                      <button
-                        onClick={() => openEditColumn(col)}
-                        className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm transition-colors"
-                        style={{
-                          backgroundColor: `color-mix(in srgb, ${col.color} 14%, transparent)`,
-                          color: "var(--color-heading)",
-                        }}
-                        title="Editar coluna"
-                      >
-                        <FaEdit />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cards */}
-                <div className="mt-3 flex-1 overflow-y-auto pr-1">
-                  <div
-                    className="space-y-3 min-h-16"
-                    onDragOver={(e) => {
-                      if (!draggingCard) return;
-                      e.preventDefault();
-                      autoScrollIfNeeded(e.clientX);
-                      if (e.target !== e.currentTarget) return;
-                      setCardDropIndicator((current) =>
-                        current && current.columnId === col.id && current.cardId === null && current.position === "end"
-                          ? current
-                          : { columnId: col.id, cardId: null, position: "end" },
-                      );
-                    }}
-                    onDrop={(e) => {
-                      if (!draggingCard) return;
-                      e.preventDefault();
-                      if (e.target !== e.currentTarget) return;
-                      const indicator = cardDropIndicator;
-                      if (indicator && indicator.columnId === col.id) {
-                        const targetId = indicator.cardId;
-                        const placeAfter = indicator.position === "after" || indicator.position === "end";
-                        handleCardDrop(col.id, targetId, placeAfter);
-                      } else {
-                        handleCardDrop(col.id, null, true);
-                      }
-                    }}
-                    onDragLeave={(e) => {
-                      if (!draggingCard) return;
-                      const related = e.relatedTarget as Node | null;
-                      if (!related || !e.currentTarget.contains(related)) {
-                        if (e.target !== e.currentTarget) return;
-                        setCardDropIndicator((current) =>
-                          current && current.columnId === col.id && current.cardId === null ? null : current,
-                        );
-                      }
-                    }}
+                  <SortableContext
+                    items={list.map(c => c.id)}
+                    strategy={verticalListSortingStrategy}
                   >
-                    {list.map((lead) => {
-                      const isDraggingThisCard = draggingCard?.id === lead.id;
-                      const indicator = cardDropIndicator;
-                      const showBefore = indicator && indicator.columnId === col.id && indicator.cardId === lead.id && indicator.position === "before";
-                      const showAfter = indicator && indicator.columnId === col.id && indicator.cardId === lead.id && indicator.position === "after";
-
-                      return (
-                        <div key={lead.id} className="flex flex-col gap-2">
-                          {showBefore && <div className="h-2 rounded-lg bg-emerald-400/70 shadow-[0_0_0_2px_rgba(16,185,129,0.4)]" />}
-
-                          <button
-                            onClick={() => {
-                              void flushCardDraft();
-                              setSelected(lead);
-                            }}
-                            className={`group w-full rounded-2xl border p-3 text-left shadow-sm transition hover:shadow-md ${
-                              isDraggingThisCard ? "opacity-50" : ""
-                            }`}
-                            style={{
-                              background: "color-mix(in srgb, var(--color-surface) 86%, transparent)",
-                              borderColor: "color-mix(in srgb, var(--color-border) 60%, transparent)",
-                              color: "var(--color-text)",
-                            }}
-                            draggable
-                            onDragStart={(e) => {
-                              setDraggingCard({ id: lead.id, fromColumnId: col.id });
-                              setCardDropIndicator(null);
-                              e.dataTransfer.effectAllowed = "move";
-                              try {
-                                e.dataTransfer.setData("text/plain", lead.id);
-                              } catch { }
-                            }}
-                            onDragEnd={() => {
-                              clearCardDragState();
-                            }}
-                            onDragOver={(e) => {
-                              if (!draggingCard || draggingCard.id === lead.id) return;
-                              e.preventDefault();
-                              autoScrollIfNeeded(e.clientX);
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const shouldPlaceAfter = e.clientY >= rect.top + rect.height / 2;
-                              setCardDropIndicator({
-                                columnId: col.id,
-                                cardId: lead.id,
-                                position: shouldPlaceAfter ? "after" : "before",
-                              });
-                            }}
-                            onDrop={(e) => {
-                              if (!draggingCard || draggingCard.id === lead.id) return;
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const shouldPlaceAfter = e.clientY >= rect.top + rect.height / 2;
-                              handleCardDrop(col.id, lead.id, shouldPlaceAfter);
-                            }}
-                            onDragLeave={(e) => {
-                              if (!draggingCard) return;
-                              const related = e.relatedTarget as Node | null;
-                              if (!related || !e.currentTarget.contains(related)) {
-                                setCardDropIndicator((current) => (current && current.cardId === lead.id ? null : current));
-                              }
-                            }}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="inline-block h-2.5 w-2.5 rounded-full"
-                                  style={{ backgroundColor: "var(--color-primary)" }}
-                                />
-                                <span className="font-semibold leading-tight" style={{ color: "var(--color-heading)" }}>
-                                  {lead.title}
-                                </span>
-                              </div>
-                              <span
-                                className="text-xs font-semibold rounded-full px-2 py-1"
-                                style={{
-                                  backgroundColor: "color-mix(in srgb, var(--color-primary) 15%, transparent)",
-                                  color: "var(--color-primary)",
-                                }}
-                              >
-                                {currency(lead.value || 0)}
-                              </span>
-                            </div>
-
-                            <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
-                              <span className="inline-flex items-center gap-1">
-                                <FaTag className="opacity-70" />
-                                {lead.source || "-"}
-                              </span>
-                              <span className="opacity-30">•</span>
-                              <span className="inline-flex items-center gap-1">
-                                <FaUser className="opacity-70" />
-                                {users.find((u) => u.id === lead.owner)?.name || lead.owner || "-"}
-                              </span>
-                            </div>
-
-                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: "var(--color-text-muted)" }}>
-                              {lead.email && (
-                                <span className="inline-flex items-center gap-1">
-                                  <FaEnvelope className="opacity-70" />
-                                  {lead.email}
-                                </span>
-                              )}
-                              {lead.contact && (
-                                <span className="inline-flex items-center gap-1">
-                                  <FaPhoneAlt className="opacity-70" />
-                                  {lead.contact}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Badge de Tarefas */}
-                            {lead.leadId && (
-                              <div className="mt-2">
-                                <LeadTaskBadge
-                                  leadId={lead.leadId}
-                                  onCreateTask={() => handleCreateTaskForLead(lead.leadId!)}
-                                />
-                              </div>
-                            )}
-                          </button>
-
-                          {showAfter && <div className="h-2 rounded-lg bg-emerald-400/70 shadow-[0_0_0_2px_rgba(16,185,129,0.4)]" />}
-                        </div>
-                      );
-                    })}
-                    {cardDropIndicator?.columnId === col.id && cardDropIndicator.cardId === null && draggingCard && (
-                      <div className="h-2 rounded-lg bg-emerald-400/70 shadow-[0_0_0_2px_rgba(16,185,129,0.4)]" />
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                    {list.map((lead) => (
+                      <SortableCard
+                        key={lead.id}
+                        card={lead}
+                        users={users}
+                        onClick={() => {
+                          void flushCardDraft();
+                          setSelected(lead);
+                        }}
+                      />
+                    ))}
+                  </SortableContext>
+                  
+                  <button
+                    onClick={() => {
+                      setViewMode('create-lead');
+                      setLeadFor(col.id);
+                    }}
+                    className="w-full py-3 border-2 border-dashed border-slate-200 dark:border-slate-700/50 rounded-xl text-slate-400 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-white dark:hover:bg-slate-900 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest mt-2 group"
+                  >
+                    <FaPlus className="w-3 h-3 group-hover:rotate-90 transition-transform" />
+                    Adicionar Lead
+                  </button>
+                </SortableColumn>
+              );
+            })}
+          </SortableContext>
         </div>
+
+        <DragOverlay dropAnimation={defaultDropAnimationSideEffects({
+          styles: {
+            active: {
+              opacity: '0.5',
+            },
+          },
+        }) as any}>
+          {activeCard ? (
+            <div className="transform rotate-2 cursor-grabbing w-80 md:w-96">
+              <SortableCard card={activeCard} users={users} onClick={() => {}} />
+            </div>
+          ) : activeColumn ? (
+            <div className="transform rotate-1 cursor-grabbing opacity-80">
+              <SortableColumn 
+                column={activeColumn} 
+                count={cardsByColumn[activeColumn.id]?.length || 0} 
+                onEdit={() => {}}
+              >
+                {cardsByColumn[activeColumn.id]?.map(lead => (
+                  <SortableCard key={lead.id} card={lead} users={users} onClick={() => {}} />
+                ))}
+              </SortableColumn>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
         {/* Painel lateral (exibi��o + ajustes de oportunidade) */}
         {selected && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-            <div className="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-              <button
-                className="absolute top-4 right-4 text-zinc-500 hover:text-zinc-800"
-                onClick={() => {
-                  void flushCardDraft();
-                  setSelected(null);
-                  setLeadProposals([]);
-                  setSelectedProposalId(null);
-                }}
-                title="Fechar"
-              >
-                <FaTimes size={20} />
-              </button>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm px-4">
+            <div className="relative w-full max-w-3xl rounded-xl bg-white p-8 shadow-2xl max-h-[90vh] overflow-y-auto border border-slate-200">
+              <div className="absolute top-6 right-6 flex items-center gap-4">
+                <button
+                  className="text-slate-300 hover:text-red-600 transition-colors p-1"
+                  onClick={() => deleteCard(selected.id)}
+                  title="Excluir Card"
+                >
+                  <FaTrash size={18} />
+                </button>
+                <button
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                  onClick={() => {
+                    void flushCardDraft();
+                    setSelected(null);
+                    setLeadProposals([]);
+                    setSelectedProposalId(null);
+                  }}
+                  title="Fechar"
+                >
+                  <FaTimes size={20} />
+                </button>
+              </div>
 
-              <h2 className="text-xl font-semibold text-[#1d2b22] pr-10">{selected.title}</h2>
-              <p className="pr-10 text-sm text-zinc-600">
-                {currency(parseNumericInput(cardForm.value))} - {columns.find((c) => c.id === selected.stage)?.title}
+              <h2 className="text-2xl font-bold text-slate-800 pr-20">{selected.title}</h2>
+              <p className="pr-10 text-sm font-medium text-slate-500 mt-1">
+                {currency(parseNumericInput(cardForm.value))} • {columns.find((c) => c.id === selected.stage)?.title}
               </p>
 
-              <div className="mt-6 space-y-6 pr-6">
+              <div className="mt-8 space-y-8">
                 <section>
-                  <h3 className="text-xs uppercase tracking-wider text-zinc-500">Contato (somente leitura)</h3>
-                  <div className="mt-2 grid grid-cols-1 gap-2">
-                    <input
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm bg-zinc-50 text-zinc-700"
-                      value={selected.email || ""}
-                      placeholder="E-mail"
-                      readOnly
-                    />
-                    <input
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm bg-zinc-50 text-zinc-700"
-                      value={selected.contact || ""}
-                      placeholder="Telefone / Celular"
-                      readOnly
-                    />
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Contato (somente leitura)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">E-mail</label>
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
+                        value={selected.email || ""}
+                        placeholder="E-mail"
+                        readOnly
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Telefone / Celular</label>
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm bg-slate-50 text-slate-600 cursor-not-allowed"
+                        value={selected.contact || ""}
+                        placeholder="Telefone / Celular"
+                        readOnly
+                      />
+                    </div>
                   </div>
                 </section>
 
                 <section>
-                  <h3 className="text-xs uppercase tracking-wider text-zinc-500">Oportunidade</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Oportunidade</h3>
 
-                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <input
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
-                      value={cardForm.value}
-                      placeholder="Valor"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      autoComplete="off"
-                      onChange={(e) => {
-                        const digits = e.target.value.replace(/\D/g, "");
-                        scheduleCardDraft({ value: digits }, { value: parseNumericInput(digits) });
-                      }}
-                      onBlur={() => { void flushCardDraft(); }}
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Valor</label>
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        value={cardForm.value}
+                        placeholder="Valor"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        autoComplete="off"
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "");
+                          scheduleCardDraft({ value: digits }, { value: parseNumericInput(digits) });
+                        }}
+                        onBlur={() => { void flushCardDraft(); }}
+                      />
+                    </div>
 
-                    <select
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
-                      value={selected.stage}
-                      onChange={(e) => {
-                        void flushCardDraft();
-                        updateCard(selected.id, { stage: e.target.value });
-                      }}
-                    >
-                      {columns.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.title}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Etapa</label>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all bg-white"
+                        value={selected.stage}
+                        onChange={(e) => {
+                          void flushCardDraft();
+                          updateCard(selected.id, { stage: e.target.value });
+                        }}
+                      >
+                        {columns.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                    <select
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
-                      value={selected.owner || ""}
-                      onChange={(e) => {
-                        void flushCardDraft();
-                        updateCard(selected.id, { owner: e.target.value });
-                      }}
-                    >
-                      <option value="">Selecionar responsavel</option>
-                      {users.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name} ({u.roleLabel})
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Responsável</label>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all bg-white"
+                        value={selected.owner || ""}
+                        onChange={(e) => {
+                          void flushCardDraft();
+                          updateCard(selected.id, { owner: e.target.value });
+                        }}
+                      >
+                        <option value="">Selecionar responsável</option>
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({u.roleLabel})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                    <input
-                      className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
-                      value={cardForm.source}
-                      placeholder="Origem"
-                      autoComplete="off"
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Origem</label>
+                      <input
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                        value={cardForm.source}
+                        placeholder="Origem"
+                        autoComplete="off"
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          scheduleCardDraft({ source: raw }, { source: raw });
+                        }}
+                        onBlur={() => { void flushCardDraft(); }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Notas / Próximo Passo</label>
+                    <textarea
+                      className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all resize-y min-h-24"
+                      placeholder="Notas / próximo passo..."
+                      value={cardForm.notes}
                       onChange={(e) => {
                         const raw = e.target.value;
-                        scheduleCardDraft({ source: raw }, { source: raw });
+                        scheduleCardDraft({ notes: raw }, { notes: raw });
                       }}
                       onBlur={() => { void flushCardDraft(); }}
+                      rows={4}
                     />
                   </div>
-
-                  <textarea
-                    className="mt-2 w-full rounded-xl border px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none resize-y min-h-24"
-                    placeholder="Notas / proximo passo."
-                    value={cardForm.notes}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      scheduleCardDraft({ notes: raw }, { notes: raw });
-                    }}
-                    onBlur={() => { void flushCardDraft(); }}
-                    rows={4}
-                  />
                 </section>
 
 
                 <section>
-                  <h3 className="text-xs uppercase tracking-wider text-zinc-500">Propostas vinculadas</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Propostas vinculadas</h3>
                   {selected.leadId ? (
-                    <div className="mt-2 space-y-3">
+                    <div className="space-y-4">
                       {loadingProposals ? (
-                        <div className="text-sm text-zinc-500">Carregando propostas...</div>
+                        <div className="flex items-center gap-2 text-sm text-slate-500 italic">
+                          <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                          Carregando propostas...
+                        </div>
                       ) : leadProposals.length === 0 ? (
-                        <div className="text-sm text-zinc-500">Nenhuma proposta vinculada a este lead.</div>
+                        <div className="text-sm text-slate-500 bg-slate-50 rounded-xl p-4 border border-dashed border-slate-200">
+                          Nenhuma proposta vinculada a este lead.
+                        </div>
                       ) : (
-                        <>
-                          <select
-                            className="rounded-xl border border-zinc-200 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-300 outline-none"
-                            value={selectedProposalId || ""}
-                            onChange={(e) => setSelectedProposalId(e.target.value || null)}
-                          >
-                            {leadProposals.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.number} - {p.title}
-                              </option>
-                            ))}
-                          </select>
+                        <div className="space-y-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Selecionar Proposta</label>
+                            <select
+                              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all bg-white"
+                              value={selectedProposalId || ""}
+                              onChange={(e) => setSelectedProposalId(e.target.value || null)}
+                            >
+                              <option value="">Selecione uma proposta</option>
+                              {leadProposals.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.number} - {p.title}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           {selectedProposal && (
-                            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-                              <div className="font-semibold text-[#1d2b22]">
-                                Valor: {currency(selectedProposal.totalValue)}
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="text-lg font-bold text-emerald-700">
+                                  {currency(selectedProposal.totalValue)}
+                                </div>
+                                <span className="px-2 py-1 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase">
+                                  Proposta Ativa
+                                </span>
                               </div>
-                              <div className="mt-1 whitespace-pre-wrap">
-                                {selectedProposal.description?.trim() || "Sem descricao do produto."}
+                              <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">
+                                {selectedProposal.description?.trim() || "Sem descrição do produto."}
                               </div>
                             </div>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   ) : (
-                    <div className="mt-2 text-sm text-zinc-500">Nenhum lead vinculado a este card.</div>
+                    <div className="text-sm text-slate-500 bg-slate-50 rounded-xl p-4 border border-dashed border-slate-200">
+                      Nenhum lead vinculado a este card.
+                    </div>
                   )}
                 </section>
 
                 <section>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-xs uppercase tracking-wider text-zinc-500">Fotos anexadas</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Fotos anexadas</h3>
                     <button
                       onClick={() => setShowPhotoCapture(true)}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all shadow-sm hover:shadow-md active:scale-95"
                     >
                       <FaCamera />
                       Adicionar Foto
                     </button>
                   </div>
-                  <CardImageGallery photos={cardPhotos} onDelete={handleDeletePhoto} />
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                    <CardImageGallery photos={cardPhotos} onDelete={handleDeletePhoto} />
+                  </div>
                 </section>
               </div>
             </div>
@@ -1186,71 +1551,10 @@ export function SalesFunnel() {
           />
         )}
 
-        {/* Modal: escolher/cadastrar lead para criar card */}
-        {leadFor && (
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="w-full max-w-xl rounded-2xl bg-white p-4 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-zinc-800">{leadModeNew ? "Cadastrar novo lead" : "Selecionar lead"}</h3>
-                <button
-                  className="text-zinc-500 hover:text-zinc-800"
-                  onClick={() => {
-                    setLeadFor(null);
-                    setLeadModeNew(false);
-                  }}
-                >
-                  <FaTimes />
-                </button>
-              </div>
-              {leadModeNew ? (
-                <ClienteForm
-                  onSubmit={async (payload: any) => {
-                    try {
-                      const res = await fetch(`${API}/leads`, {
-                        method: "POST",
-                        credentials: "include",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload),
-                      });
-                      if (!res.ok) {
-                        const err = await res.json().catch(() => ({}));
-                        throw new Error(err?.error || `HTTP ${res.status}`);
-                      }
-                      const data = await res.json();
-                      const contact = data?.cellphone || data?.telephone || null;
-                      await addCardFromLead(leadFor!, {
-                        id: data?.id,
-                        name: data?.name || payload?.nome,
-                        email: data?.email || null,
-                        contact,
-                      });
-                      setLeadFor(null);
-                      setLeadModeNew(false);
-                    } catch (e: any) {
-                      alert(e?.message || "Erro ao salvar lead");
-                    }
-                  }}
-                />
-              ) : (
-                <LeadPicker
-                  apiBase={API}
-                  onSelect={(l: LeadListItem) => {
-                    const contact = l.celular || l.telefone || l.celularAlternativo || l.telefoneAlternativo || null;
-                    addCardFromLead(leadFor!, { id: l.id, name: l.name, email: l.email ?? null, contact });
-                    setLeadFor(null);
-                    setLeadModeNew(false);
-                  }}
-                  onCreateNew={() => setLeadModeNew(true)}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Editar coluna */}
         {editColModal && colDraft && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-md">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-[#1d2b22]">Editar coluna</h3>
                 <button className="text-zinc-500 hover:text-zinc-800" onClick={closeEditColumn}>
@@ -1283,16 +1587,25 @@ export function SalesFunnel() {
                   </div>
                 </div>
               </div>
-              <div className="mt-5 flex justify-end gap-2">
-                <button onClick={closeEditColumn} className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-800">
-                  Cancelar
-                </button>
+              <div className="mt-5 flex justify-between items-center">
                 <button
-                  onClick={() => saveColumn(editColModal.id)}
-                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => deleteColumn(editColModal.id)}
+                  className="px-4 py-2 rounded-xl bg-red-50 text-red-600 hover:bg-red-100 transition-colors text-sm font-medium flex items-center gap-2"
                 >
-                  Salvar
+                  <FaTrash size={14} />
+                  Excluir Coluna
                 </button>
+                <div className="flex gap-2">
+                  <button onClick={closeEditColumn} className="px-4 py-2 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-800">
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => saveColumn(editColModal.id)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    Salvar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1312,6 +1625,7 @@ export function SalesFunnel() {
   );
 
 }
+
 
 
 

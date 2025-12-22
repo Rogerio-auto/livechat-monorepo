@@ -17,53 +17,52 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   }, ref) => {
     
     const baseClasses = 
-      "inline-flex items-center justify-center font-medium " +
+      "inline-flex items-center justify-center font-bold " +
       "transition-all duration-200 " +
       "disabled:opacity-60 disabled:cursor-not-allowed " +
       "focus:outline-none focus:ring-2 focus:ring-offset-2 " +
-      "dark:focus:ring-offset-gray-900";
+      "dark:focus:ring-offset-[#0b1015]";
 
     const sizeClasses = {
-      sm: "px-3 py-1.5 text-sm rounded-lg",
-      md: "px-4 py-2.5 text-base rounded-xl",
-      lg: "px-6 py-3 text-lg rounded-xl",
+      sm: "px-3 py-1.5 text-xs rounded-lg",
+      md: "px-4 py-2.5 text-sm rounded-xl",
+      lg: "px-6 py-3 text-base rounded-xl",
     };
 
     const variantClasses = {
       primary: 
-        "bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 " +
-        "text-white shadow-md hover:shadow-lg " +
-        "focus:ring-blue-500 dark:focus:ring-blue-400",
+        "bg-[#2fb463] hover:bg-[#1f8b49] " +
+        "text-white shadow-lg shadow-[#2fb463]/20  " +
+        "focus:ring-[#2fb463]",
       
       gradient: 
-        "bg-gradient-to-r from-blue-600 to-indigo-600 " +
-        "hover:from-blue-700 hover:to-indigo-700 " +
-        "text-white shadow-md hover:shadow-lg " +
-        "focus:ring-blue-500",
+        "bg-gradient-to-r from-[#2fb463] to-[#1f8b49] " +
+        "hover:from-[#1f8b49] hover:to-[#1a7a40] " +
+        "text-white shadow-lg shadow-[#2fb463]/20  " +
+        "focus:ring-[#2fb463]",
       
       secondary: 
-        "bg-white dark:bg-gray-800 " +
-        "text-gray-700 dark:text-gray-300 " +
-        "border border-gray-300 dark:border-gray-700 " +
-        "hover:bg-gray-50 dark:hover:bg-gray-750 " +
-        "focus:ring-gray-500 dark:focus:ring-gray-400",
+        "bg-white dark:bg-[#151b23] " +
+        "text-slate-700 dark:text-slate-300 " +
+        "border border-slate-200 dark:border-slate-800 " +
+        "hover:bg-slate-50 dark:hover:bg-slate-800/50 " +
+        "focus:ring-slate-500 dark:focus:ring-slate-400",
       
       danger: 
-        "bg-gradient-to-r from-red-600 to-red-700 " +
-        "hover:from-red-700 hover:to-red-800 " +
-        "text-white shadow-md hover:shadow-lg " +
-        "focus:ring-red-500",
+        "bg-rose-600 hover:bg-rose-700 " +
+        "text-white shadow-lg shadow-rose-600/20  " +
+        "focus:ring-rose-500",
       
       ghost: 
-        "text-gray-700 dark:text-gray-300 " +
-        "hover:bg-gray-100 dark:hover:bg-gray-800 " +
-        "focus:ring-gray-500 dark:focus:ring-gray-400",
+        "text-slate-700 dark:text-slate-300 " +
+        "hover:bg-slate-100 dark:hover:bg-slate-800 " +
+        "focus:ring-slate-500 dark:focus:ring-slate-400",
       
       outline:
-        "bg-transparent border border-gray-300 dark:border-gray-700 " +
-        "text-gray-700 dark:text-gray-300 " +
-        "hover:bg-gray-50 dark:hover:bg-gray-800 " +
-        "focus:ring-gray-500 dark:focus:ring-gray-400",
+        "bg-transparent border border-slate-200 dark:border-slate-800 " +
+        "text-slate-700 dark:text-slate-300 " +
+        "hover:bg-slate-50 dark:hover:bg-slate-800 " +
+        "focus:ring-slate-500 dark:focus:ring-slate-400",
     };
 
     const widthClasses = fullWidth ? "w-full" : "";

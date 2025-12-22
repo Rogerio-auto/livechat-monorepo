@@ -3,7 +3,27 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import ProposalForm from "../componets/propostas/ProposalForm";
 import { toast } from "../hooks/useToast";
 import { io } from "socket.io-client";
-import { FaFileAlt, FaFileSignature, FaReceipt, FaTrash, FaFileDownload, FaCog } from "react-icons/fa";
+import { 
+  FileText, 
+  FileSignature, 
+  Receipt, 
+  Trash2, 
+  Download, 
+  Settings, 
+  Plus, 
+  Search, 
+  Filter,
+  MoreHorizontal,
+  Eye,
+  FileDown,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  ArrowUpRight,
+  DollarSign,
+  Files,
+  Bot
+} from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -157,10 +177,10 @@ export default function DocumentosPage() {
 
   const badgeClass = (s?: string | null) => {
     const st = String(s || "").toUpperCase();
-    if (st === "ACCEPTED" || st === "APPROVED") return "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-100 dark:ring-emerald-500/40";
-    if (st === "SENT" || st === "ISSUED") return "bg-sky-100 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-100 dark:ring-sky-400/40";
-    if (st === "REJECTED" || st === "CANCELLED") return "bg-rose-100 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-100 dark:ring-rose-400/40";
-    return "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-600/30 dark:text-slate-100 dark:ring-slate-500/40";
+    if (st === "ACCEPTED" || st === "APPROVED") return "bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-400 border border-green-100 dark:border-green-500/20";
+    if (st === "SENT" || st === "ISSUED") return "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border border-blue-100 dark:border-blue-500/20";
+    if (st === "REJECTED" || st === "CANCELLED") return "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 border border-red-100 dark:border-red-500/20";
+    return "bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-100 dark:border-gray-700";
   };
 
   const allowedStatuses = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED", "APPROVED"];
@@ -412,117 +432,121 @@ export default function DocumentosPage() {
   }, [createDoc?.step, createDoc?.type]);
 
   return (
-      <div
-        className="ml-16 min-h-screen p-8"
-        style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text)" }}
-      >
+    <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-950">
+      <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 pt-8 sm:px-6 lg:px-8">
         
-        
-        <div
-          className="mt-8 rounded-2xl border p-6 shadow-lg theme-surface"
-          style={{
-            borderColor: "var(--color-border)",
-            boxShadow: "0 32px 48px -32px var(--color-card-shadow)",
-          }}
-        >
-          <div className="flex flex-wrap justify-between gap-4 items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Documentos</h1>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Gerencie propostas, contratos e recibos</p>
+        {/* Header Section */}
+        <div className="mb-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6 border-b border-gray-100 dark:border-gray-800 pb-8">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Documentos</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1 text-sm">Gerencie propostas, contratos e recibos da sua empresa.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/templates')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-sm font-medium shadow-sm"
+            >
+              <Settings size={18} />
+              <span>Templates</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNew(true)}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-md shadow-blue-500/20"
+            >
+              <Plus size={18} />
+              <span>Nova Proposta</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Metrics Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+          {/* Total de Propostas */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-blue-50 dark:bg-blue-500/10 rounded-xl text-blue-600 dark:text-blue-400">
+                <Files size={20} />
+              </div>
+              <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider bg-blue-50 dark:bg-blue-500/10 px-2 py-1 rounded-lg">Geral</span>
             </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('/templates')}
-                className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2 shadow-sm font-medium"
-              >
-                <FaCog />
-                <span>Gerenciar Templates</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNew(true)}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-colors flex items-center gap-2 shadow-sm font-medium"
-              >
-                <span className="text-lg leading-none">+</span>
-                <span>Nova Proposta</span>
-              </button>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.totalProposals}</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Total de propostas</p>
+            <div className="mt-4 flex items-center gap-3 text-xs">
+              <span className="text-gray-400">{summaryMetrics.sentCount} enviadas</span>
+              <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-700" />
+              <span className="text-green-600 dark:text-green-400 font-medium">{summaryMetrics.approvedCount} aprovadas</span>
             </div>
           </div>
 
-          <div className="grid gap-5 mb-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {/* Total de Propostas */}
-            <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-blue-500/10 via-transparent to-transparent p-5">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-blue-500/10 blur-2xl" />
-              <div className="relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Total de Propostas</span>
-                  <svg className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                </div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.totalProposals}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">{summaryMetrics.sentCount} enviadas • {summaryMetrics.approvedCount} aprovadas</div>
+          {/* Valor em Propostas */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-green-50 dark:bg-green-500/10 rounded-xl text-green-600 dark:text-green-400">
+                <DollarSign size={20} />
               </div>
+              <span className="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase tracking-wider bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded-lg">Volume</span>
             </div>
-
-            {/* Valor em Propostas */}
-            <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-green-500/10 via-transparent to-transparent p-5">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-green-500/10 blur-2xl" />
-              <div className="relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Valor em Propostas</span>
-                  <svg className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatMoney(summaryMetrics.totalValue)}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Atualizado automaticamente</div>
-              </div>
-            </div>
-
-            {/* Contratos Gerados */}
-            <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-purple-500/10 via-transparent to-transparent p-5">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-purple-500/10 blur-2xl" />
-              <div className="relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Contratos Gerados</span>
-                  <FaFileSignature className="h-5 w-5 text-purple-500" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.contractDocs}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Arquivos prontos para download</div>
-              </div>
-            </div>
-
-            {/* Recibos Emitidos */}
-            <div className="relative overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-orange-500/10 via-transparent to-transparent p-5">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 rounded-full bg-orange-500/10 blur-2xl" />
-              <div className="relative">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide">Recibos Emitidos</span>
-                  <FaReceipt className="h-5 w-5 text-orange-500" />
-                </div>
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.receiptDocs}</div>
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Gerados automaticamente</div>
-              </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{formatMoney(summaryMetrics.totalValue)}</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Valor total em aberto</p>
+            <div className="mt-4 flex items-center text-xs text-gray-400">
+              <ArrowUpRight size={14} className="mr-1 text-green-500" />
+              <span>Atualizado em tempo real</span>
             </div>
           </div>
 
-          {/* Filtros */}
-          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 mb-6 shadow-sm">
-            <div className="flex flex-wrap gap-3 items-center">
-              <div className="relative flex-1 min-w-[250px]">
-                <input
-                  value={q}
-                  onChange={e => setQ(e.target.value)}
-                  placeholder="Pesquisar número ou título..."
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
+          {/* Contratos Gerados */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-purple-50 dark:bg-purple-500/10 rounded-xl text-purple-600 dark:text-purple-400">
+                <FileSignature size={20} />
               </div>
+              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider bg-purple-50 dark:bg-purple-500/10 px-2 py-1 rounded-lg">Jurídico</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.contractDocs}</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Contratos gerados</p>
+            <div className="mt-4 flex items-center text-xs text-gray-400">
+              <CheckCircle2 size={14} className="mr-1 text-purple-500" />
+              <span>Prontos para assinatura</span>
+            </div>
+          </div>
+
+          {/* Recibos Emitidos */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 p-6 shadow-sm hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-orange-50 dark:bg-orange-500/10 rounded-xl text-orange-600 dark:text-orange-400">
+                <Receipt size={20} />
+              </div>
+              <span className="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider bg-orange-50 dark:bg-orange-500/10 px-2 py-1 rounded-lg">Financeiro</span>
+            </div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{summaryMetrics.receiptDocs}</div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Recibos emitidos</p>
+            <div className="mt-4 flex items-center text-xs text-gray-400">
+              <Clock size={14} className="mr-1 text-orange-500" />
+              <span>Histórico completo</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filters and Search */}
+        <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-4 mb-8 flex flex-col md:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <input
+              value={q}
+              onChange={e => setQ(e.target.value)}
+              placeholder="Pesquisar por número, título ou cliente..."
+              className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+            />
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative w-full md:w-48">
+              <Filter className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none transition-all"
               >
                 <option value="ALL">Todos os status</option>
                 {statusOptions.map(s => (
@@ -531,46 +555,72 @@ export default function DocumentosPage() {
               </select>
             </div>
           </div>
+        </div>
 
-          {loading && <div className="text-center py-12 text-gray-500 dark:text-gray-400">Carregando...</div>}
-          {error && !loading && <div className="text-center py-12 text-red-500">{error}</div>}
-
-          {!loading && !error && (
-            <div className="overflow-hidden rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm"
-            >
+        {/* Table Section */}
+        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="w-10 h-10 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Carregando documentos...</p>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+              <div className="p-3 bg-red-50 dark:bg-red-500/10 rounded-full text-red-600 mb-4">
+                <AlertCircle size={24} />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Erro ao carregar</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1 max-w-xs">{error}</p>
+              <button onClick={load} className="mt-6 text-blue-600 hover:underline text-sm font-medium">Tentar novamente</button>
+            </div>
+          ) : filteredPropostas.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+              <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-full text-gray-400 mb-4">
+                <FileText size={32} />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Nenhum documento encontrado</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Tente ajustar seus filtros ou crie uma nova proposta.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50 dark:bg-gray-900/50">
-                  <tr className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">
-                    <th className="px-6 py-4">Número</th>
-                    <th className="px-6 py-4">Título</th>
-                    <th className="px-6 py-4">Valor</th>
-                    <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4">Criado em</th>
-                    <th className="px-6 py-4">Válido até</th>
-                    <th className="px-6 py-4">Ações</th>
+                <thead>
+                  <tr className="bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-800">
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Número</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Título</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Valor</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Datas</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider text-right">Ações</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {filteredPropostas.map((p) => {
                     const rel = docsByProposal.get(p.id) || {} as any;
-                    const hasContractDoc = !!rel.contract;
-                    const hasContractPdf = !!rel.contract?.has_pdf;
-                    const hasReceiptDoc = !!rel.receipt;
-                    const hasReceiptPdf = !!rel.receipt?.has_pdf;
                     return (
-                      <tr
-                        key={p.id}
-                        className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-                      >
-                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{p.number}</td>
-                        <td className="px-6 py-4 text-gray-700 dark:text-gray-300">{p.title}</td>
-                        <td className="px-6 py-4 font-semibold text-gray-900 dark:text-white">{formatMoney(p.total_value)}</td>
+                      <tr key={p.id} className="group hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">#{p.number}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-900 dark:text-white">{p.title}</span>
+                            {p.ai_generated && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400 font-medium mt-0.5">
+                                <Bot size={10} /> IA Gerado
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">{formatMoney(p.total_value)}</span>
+                        </td>
                         <td className="px-6 py-4">
                           {editingStatusId === p.id ? (
                             <select
                               autoFocus
                               onBlur={() => setEditingStatusId(null)}
-                              className="text-xs rounded-lg px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              className="text-xs rounded-lg px-2 py-1 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none"
                               value={String(p.status || "DRAFT").toUpperCase()}
                               onChange={async (e) => { await changeStatus(p.id, e.target.value); setEditingStatusId(null); }}
                             >
@@ -580,387 +630,377 @@ export default function DocumentosPage() {
                             </select>
                           ) : (
                             <button
-                              className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${badgeClass(p.status)}`}
                               onClick={() => setEditingStatusId(p.id)}
-                              title="Clique para editar status"
-                            >{p.status || '-'}</button>
+                              className={`text-[11px] px-2.5 py-1 rounded-full font-bold uppercase tracking-tight transition-all ${badgeClass(p.status)}`}
+                            >
+                              {p.status || 'DRAFT'}
+                            </button>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatDate(p.created_at)}</td>
-                        <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{formatDate(p.valid_until)}</td>
                         <td className="px-6 py-4">
-                          <div className="flex gap-2 items-center flex-wrap">
-                            {/* Gerar documento com template */}
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                              <Clock size={12} className="opacity-60" />
+                              <span>{formatDate(p.created_at)}</span>
+                            </div>
+                            {p.valid_until && (
+                              <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                                <AlertCircle size={11} className="opacity-50" />
+                                <span>Expira {formatDate(p.valid_until)}</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
                             <button
-                              className="p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
-                              title="Gerar documento com template"
                               onClick={() => openTemplateGeneration(p, 'PROPOSTA')}
+                              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-all"
+                              title="Gerar PDF"
                             >
-                              <FaFileDownload />
-                            </button>
-                            {/* Proposta - Gerar PDF direto */}
-                            <button
-                              className="p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm"
-                              title="Gerar PDF da proposta (direto)"
-                              onClick={() => generatePdfDirectly(p)}
-                            ><FaFileAlt /> </button>
-                            {/* Contrato */}
-                            <button
-                              className={`p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 transition-colors shadow-sm ${hasContractDoc ? (hasContractPdf ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white') : 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}`}
-                              title={hasContractDoc ? (hasContractPdf ? 'Baixar Contrato' : 'Contrato criado (sem PDF)') : 'Criar Contrato'}
-                              onClick={() => {
-                                if (hasContractPdf) onDownloadDoc(rel.contract?.id);
-                                else if (!hasContractDoc) setCreateDoc({ type: 'CONTRACT', proposal: p, step: 'confirm', item_description: `Ref: Proposta ${p.number} - ${p.title}`, quantity: 1, unit_price: Number(p.total_value||0), discountPct: 0 });
-                              }}
-                            >
-                              <FaFileSignature />
-                            </button>
-                            {/* Recibo */}
-                            <button
-                              className={`p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 transition-colors shadow-sm ${hasReceiptDoc ? (hasReceiptPdf ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white') : 'bg-gray-200 text-gray-600 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'}`}
-                              title={hasReceiptDoc ? (hasReceiptPdf ? 'Baixar Recibo' : 'Recibo criado (sem PDF)') : 'Criar Recibo'}
-                              onClick={() => {
-                                if (hasReceiptPdf) onDownloadDoc(rel.receipt?.id);
-                                else if (!hasReceiptDoc) setCreateDoc({ type: 'RECEIPT', proposal: p, step: 'confirm', item_description: `Ref: Proposta ${p.number} - ${p.title}`, quantity: 1, unit_price: Number(p.total_value||0), discountPct: 0 });
-                              }}
-                            >
-                              <FaReceipt />
+                              <FileDown size={18} />
                             </button>
                             <button
-                              className="p-2 rounded-lg text-lg flex items-center justify-center w-9 h-9 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-red-500/30 transition-colors shadow-sm"
-                              title="Excluir proposta"
+                              onClick={() => navigate(`/propostas/${p.id}`)}
+                              className="p-2 text-gray-500 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-all"
+                              title="Visualizar"
+                            >
+                              <Eye size={18} />
+                            </button>
+                            <button
                               onClick={() => deleteProposal(p.id)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all"
+                              title="Excluir"
                             >
-                              <FaTrash />
-                            </button>
-                            <button
-                              className="text-xs px-3 py-1.5 rounded-lg transition-colors bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 font-medium"
-                              title="Duplicar proposta"
-                              onClick={() => duplicateProposal(p.id)}
-                            >
-                              Duplicar
+                              <Trash2 size={18} />
                             </button>
                           </div>
                         </td>
                       </tr>
                     );
                   })}
-                  {filteredPropostas.length === 0 && (
-                    <tr>
-                      <td className="px-6 py-12 text-center text-gray-500 dark:text-gray-400" colSpan={7}>
-                        Nenhuma proposta encontrada.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
           )}
         </div>
+      </div>
 
-        {showNew && (
-          <div
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            style={{ backgroundColor: "var(--color-overlay)" }}
-          >
-            <div
-              className="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl border p-5 shadow-xl theme-surface"
-              style={{
-                borderColor: "var(--color-border)",
-                boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-4 sticky top-0 theme-surface pb-2 z-10">
-                <h3 className="font-semibold theme-heading">Criar Proposta</h3>
-                <button className="theme-text-muted hover:opacity-70 transition" onClick={() => setShowNew(false)}>x</button>
-              </div>
+      {/* Modais e Overlays */}
+      {showNew && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+              <h3 className="font-semibold text-gray-900 dark:text-white">Criar Proposta</h3>
+              <button 
+                onClick={() => setShowNew(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <Plus className="rotate-45" size={20} />
+              </button>
+            </div>
+            <div className="p-6 max-h-[85vh] overflow-y-auto">
               <ProposalForm initialLead={initialLead} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load(); }} />
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {createDoc && (
-          <div
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            style={{ backgroundColor: "var(--color-overlay)" }}
-          >
-            <div
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-5 shadow-xl theme-surface"
-              style={{
-                borderColor: "var(--color-border)",
-                boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-4 sticky top-0 theme-surface pb-2 z-10">
-                <h3 className="font-semibold theme-heading">{createDoc.type === 'CONTRACT' ? 'Criar Contrato' : 'Criar Recibo'}</h3>
-                <button className="theme-text-muted hover:opacity-70 transition" onClick={() => setCreateDoc(null)}>x</button>
-              </div>
+      {/* Modal para criar documento (Contrato/Recibo) */}
+      {createDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+              <h3 className="font-semibold text-gray-900 dark:text-white">
+                {createDoc.type === 'CONTRACT' ? 'Criar Contrato' : 'Criar Recibo'}
+              </h3>
+              <button 
+                onClick={() => setCreateDoc(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+              >
+                <Plus className="rotate-45" size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 max-h-[80vh] overflow-y-auto">
               {createDoc.step === 'confirm' ? (
-                <div className="space-y-4">
-                  <div className="theme-text-muted">
-                    Deseja criar {createDoc.type === 'CONTRACT' ? 'um Contrato' : 'um Recibo'} a partir da proposta {createDoc.proposal.number} - {createDoc.proposal.title}?
+                <div className="space-y-6">
+                  <div className="p-4 bg-blue-50 dark:bg-blue-500/10 rounded-xl border border-blue-100 dark:border-blue-500/20">
+                    <p className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed">
+                      Deseja criar {createDoc.type === 'CONTRACT' ? 'um Contrato' : 'um Recibo'} a partir da proposta 
+                      <span className="font-bold mx-1">#{createDoc.proposal.number} - {createDoc.proposal.title}</span>?
+                    </p>
                   </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-3">
                     <button
-                      className="px-3 py-2 rounded-xl border theme-surface-muted"
-                      style={{ borderColor: "var(--color-border)" }}
                       onClick={() => setCreateDoc(null)}
+                      className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-sm font-medium"
                     >
                       Cancelar
                     </button>
                     <button
-                      className="px-3 py-2 rounded-xl theme-primary"
                       onClick={() => setCreateDoc({ ...createDoc, step: 'form' })}
+                      className="px-6 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-md shadow-blue-500/20"
                     >
                       Avançar
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Descrição do item</label>
-                    <input className="w-full rounded-lg p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.item_description} onChange={e => setCreateDoc({ ...createDoc, item_description: e.target.value })} />
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Descrição do item</label>
+                      <input 
+                        className="w-full rounded-xl px-4 py-2.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" 
+                        value={createDoc.item_description} 
+                        onChange={e => setCreateDoc({ ...createDoc, item_description: e.target.value })} 
+                      />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Quantidade</label>
+                        <input 
+                          type="number" 
+                          className="w-full rounded-xl px-4 py-2.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" 
+                          value={createDoc.quantity} 
+                          onChange={e => setCreateDoc({ ...createDoc, quantity: Number(e.target.value) })} 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Valor unitário (R$)</label>
+                        <input 
+                          type="number" 
+                          className="w-full rounded-xl px-4 py-2.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" 
+                          value={createDoc.unit_price} 
+                          onChange={e => setCreateDoc({ ...createDoc, unit_price: Number(e.target.value) })} 
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1.5">Desconto (%)</label>
+                        <input 
+                          type="number" 
+                          className="w-full rounded-xl px-4 py-2.5 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" 
+                          value={createDoc.discountPct} 
+                          onChange={e => setCreateDoc({ ...createDoc, discountPct: Number(e.target.value) })} 
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Quantidade</label>
-                      <input type="number" className="w-full rounded-lg p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.quantity} onChange={e => setCreateDoc({ ...createDoc, quantity: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Valor unitário (R$)</label>
-                      <input type="number" className="w-full rounded-lg p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.unit_price} onChange={e => setCreateDoc({ ...createDoc, unit_price: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">Desconto (%)</label>
-                      <input type="number" className="w-full rounded-lg p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.discountPct} onChange={e => setCreateDoc({ ...createDoc, discountPct: Number(e.target.value) })} />
-                    </div>
-                  </div>
+
                   {createDoc.type === 'RECEIPT' && (
-                    <div className="space-y-2 rounded-xl border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/30 p-3">
-                      <div className="font-medium text-sm text-indigo-700 dark:text-indigo-300">Dados do recibo</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Eu (Emissor) - Nome</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.issuer_name || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), issuer_name: e.target.value } })} />
+                    <div className="space-y-4 p-5 rounded-2xl border border-blue-100 dark:border-blue-500/20 bg-blue-50/30 dark:bg-blue-500/5">
+                      <div className="flex items-center gap-2 text-blue-700 dark:text-blue-400 font-semibold text-sm mb-2">
+                        <Receipt size={18} />
+                        <span>Dados do Recibo</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Emissor (Nome)</label>
+                            <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.issuer_name || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), issuer_name: e.target.value } })} />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">CPF/CNPJ</label>
+                            <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.issuer_cpf || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), issuer_cpf: e.target.value } })} />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">CPF/CNPJ</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.issuer_cpf || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), issuer_cpf: e.target.value } })} />
+                        <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Pagador (Nome)</label>
+                            <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.payer_name || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), payer_name: e.target.value } })} />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">CPF</label>
+                            <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.payer_cpf || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), payer_cpf: e.target.value } })} />
+                          </div>
                         </div>
-                        <div className="sm:col-span-2" />
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Recebi de (Pagador) - Nome</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.payer_name || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), payer_name: e.target.value } })} />
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referente a</label>
+                          <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.reference || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), reference: e.target.value } })} />
                         </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">CPF</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.payer_cpf || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), payer_cpf: e.target.value } })} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">RG</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.payer_rg || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), payer_rg: e.target.value } })} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Referente ao pagamento</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.reference || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), reference: e.target.value } })} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Cidade</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.city || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), city: e.target.value } })} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">UF</label>
-                          <input className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.uf || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), uf: e.target.value } })} />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium mb-1 text-gray-700 dark:text-gray-300">Data</label>
-                          <input type="date" className="w-full rounded-lg p-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" value={createDoc.receipt?.date || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), date: e.target.value } })} />
+                        <div className="grid grid-cols-2 gap-4 sm:col-span-2">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Cidade</label>
+                            <input className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.city || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), city: e.target.value } })} />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Data</label>
+                            <input type="date" className="w-full rounded-xl px-3 py-2 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 outline-none" value={createDoc.receipt?.date || ''} onChange={e => setCreateDoc({ ...createDoc, receipt: { ...(createDoc.receipt || {}), date: e.target.value } })} />
+                          </div>
                         </div>
                       </div>
                     </div>
                   )}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-3 pt-4">
                     <button
-                      className="px-3 py-2 rounded-xl border theme-surface-muted"
-                      style={{ borderColor: "var(--color-border)" }}
                       onClick={() => setCreateDoc(null)}
+                      className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-sm font-medium"
                     >
                       Cancelar
                     </button>
-                    <button className="px-3 py-2 rounded-xl theme-primary" onClick={saveCreateDoc}>Salvar</button>
+                    <button 
+                      onClick={saveCreateDoc}
+                      className="px-8 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white transition-all text-sm font-medium shadow-md shadow-blue-500/20"
+                    >
+                      Salvar Documento
+                    </button>
                   </div>
                 </div>
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Template generation modal */}
         {generateTemplate && (
-          <div
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            style={{ backgroundColor: "var(--color-overlay)" }}
-          >
-            <div
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border p-5 shadow-xl theme-surface"
-              style={{
-                borderColor: "var(--color-border)",
-                boxShadow: "0 40px 64px -40px var(--color-card-shadow)",
-              }}
-            >
-              <div className="flex items-center justify-between mb-4 sticky top-0 theme-surface pb-2 z-10">
-                <h3 className="font-semibold theme-heading">Gerar Documento com Template</h3>
-                <button className="theme-text-muted hover:opacity-70 transition" onClick={() => setGenerateTemplate(null)}>×</button>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-800 overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gray-50/50 dark:bg-gray-800/50">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Gerar Documento com Template</h3>
+                <button 
+                  onClick={() => setGenerateTemplate(null)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                >
+                  <Plus className="rotate-45" size={20} />
+                </button>
               </div>
 
-              {generateTemplate.loading ? (
-                <div className="py-8 text-center theme-text-muted">
-                  <div className="animate-pulse">Carregando templates...</div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-                    <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Proposta Selecionada</h4>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm">
-                      <strong>Número:</strong> {generateTemplate.proposal.number}
-                    </p>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm">
-                      <strong>Título:</strong> {generateTemplate.proposal.title}
-                    </p>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm">
-                      <strong>Valor:</strong> {formatMoney(generateTemplate.proposal.total_value)}
-                    </p>
+              <div className="p-6 max-h-[80vh] overflow-y-auto">
+                {generateTemplate.loading ? (
+                  <div className="py-12 flex flex-col items-center justify-center">
+                    <div className="w-10 h-10 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">Carregando templates...</p>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">Selecione um Template</label>
-                    {generateTemplate.templates.length === 0 ? (
-                      <div className="p-4 rounded-xl border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-center">
-                        <p className="text-gray-600 dark:text-gray-400">Nenhum template disponível para este tipo de documento.</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
-                          Crie templates na página de{' '}
-                          <a href="/templates" className="text-indigo-600 dark:text-indigo-400 hover:underline">Templates</a>
-                        </p>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="p-4 bg-gray-50 dark:bg-gray-950 rounded-xl border border-gray-100 dark:border-gray-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Proposta Selecionada</span>
+                        <span className="text-sm font-bold text-blue-600 dark:text-blue-400">#{generateTemplate.proposal.number}</span>
                       </div>
-                    ) : (
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
-                        {generateTemplate.templates.map((template) => (
-                          <button
-                            key={template.id}
-                            onClick={() => setGenerateTemplate(prev => prev ? { ...prev, selectedTemplateId: template.id } : null)}
-                            className={`w-full p-4 rounded-xl border text-left transition-all ${
-                              generateTemplate.selectedTemplateId === template.id
-                                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
-                                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300 dark:hover:border-indigo-600'
-                            }`}
+                      <h4 className="font-semibold text-gray-900 dark:text-white mb-1">{generateTemplate.proposal.title}</h4>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{formatMoney(generateTemplate.proposal.total_value)}</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Selecione um Template</label>
+                      {generateTemplate.templates.length === 0 ? (
+                        <div className="p-8 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 text-center">
+                          <FileText className="mx-auto text-gray-300 dark:text-gray-700 mb-3" size={32} />
+                          <p className="text-gray-500 dark:text-gray-400 text-sm">Nenhum template disponível para este tipo.</p>
+                          <button 
+                            onClick={() => navigate('/templates')}
+                            className="mt-4 text-blue-600 hover:underline text-sm font-medium"
                           >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1">
-                                <h5 className="font-medium text-gray-900 dark:text-gray-100">{template.name}</h5>
-                                {template.description && (
-                                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{template.description}</p>
-                                )}
-                                <div className="flex gap-2 mt-2">
-                                  <span className={`text-xs px-2 py-1 rounded-full ${
-                                    template.is_default
-                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                                      : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
-                                  }`}>
-                                    {template.is_default ? 'Padrão' : 'Customizado'}
-                                  </span>
-                                  <span className="text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">
-                                    {template.doc_type}
-                                  </span>
+                            Criar meu primeiro template
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3">
+                          {generateTemplate.templates.map((template) => (
+                            <button
+                              key={template.id}
+                              onClick={() => setGenerateTemplate(prev => prev ? { ...prev, selectedTemplateId: template.id } : null)}
+                              className={`w-full p-4 rounded-xl border text-left transition-all group ${
+                                generateTemplate.selectedTemplateId === template.id
+                                  ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-500/10 ring-1 ring-blue-500'
+                                  : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-950 hover:border-blue-300 dark:hover:border-blue-700'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h5 className="font-semibold text-gray-900 dark:text-white">{template.name}</h5>
+                                    {template.is_default && (
+                                      <span className="text-[9px] font-bold bg-green-100 text-green-700 dark:bg-green-500/20 dark:text-green-400 px-1.5 py-0.5 rounded uppercase tracking-tighter">Padrão</span>
+                                    )}
+                                  </div>
+                                  {template.description && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{template.description}</p>
+                                  )}
+                                </div>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                                  generateTemplate.selectedTemplateId === template.id
+                                    ? 'border-blue-600 bg-blue-600'
+                                    : 'border-gray-200 dark:border-gray-700'
+                                }`}>
+                                  {generateTemplate.selectedTemplateId === template.id && <div className="w-2 h-2 bg-white rounded-full" />}
                                 </div>
                               </div>
-                              {generateTemplate.selectedTemplateId === template.id && (
-                                <div className="ml-2 text-indigo-600 dark:text-indigo-400">
-                                  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Checkbox para converter em PDF */}
-                  <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
-                    <input 
-                      type="checkbox"
-                      id="convertToPdf"
-                      checked={generateTemplate.convertToPdf}
-                      onChange={(e) => setGenerateTemplate(prev => prev ? { ...prev, convertToPdf: e.target.checked } : null)}
-                      className="w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <label htmlFor="convertToPdf" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                      <span className="font-medium">Gerar PDF automaticamente</span>
-                      <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">Além do DOCX, também será gerado um arquivo PDF</span>
-                    </label>
-                  </div>
+                    {/* Checkbox para converter em PDF */}
+                    <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-950 border border-gray-100 dark:border-gray-800">
+                      <input 
+                        type="checkbox"
+                        id="convertToPdf"
+                        checked={generateTemplate.convertToPdf}
+                        onChange={(e) => setGenerateTemplate(prev => prev ? { ...prev, convertToPdf: e.target.checked } : null)}
+                        className="w-4 h-4 text-blue-600 bg-white border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="convertToPdf" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                        <span className="font-medium">Gerar PDF automaticamente</span>
+                        <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">Além do DOCX, também será gerado um arquivo PDF</span>
+                      </label>
+                    </div>
 
-                  <div className="flex justify-end gap-2 pt-4 border-t" style={{ borderColor: "var(--color-border)" }}>
-                    <button
-                      className="px-4 py-2 rounded-xl border theme-surface-muted"
-                      style={{ borderColor: "var(--color-border)" }}
-                      onClick={() => setGenerateTemplate(null)}
-                      disabled={generateTemplate.generating}
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      onClick={generateFromTemplate}
-                      disabled={!generateTemplate.selectedTemplateId || generateTemplate.generating}
-                    >
-                      {generateTemplate.generating ? 'Gerando...' : 'Gerar Documento'}
-                    </button>
+                    <div className="flex justify-end gap-3 pt-4">
+                      <button
+                        onClick={() => setGenerateTemplate(null)}
+                        className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-sm font-medium"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        disabled={!generateTemplate.selectedTemplateId || generateTemplate.generating}
+                        onClick={generateFromTemplate}
+                        className="px-8 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white transition-all text-sm font-medium shadow-md shadow-blue-500/20 flex items-center gap-2"
+                      >
+                        {generateTemplate.generating ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                            <span>Gerando...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FileDown size={18} />
+                            <span>Gerar Documento</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Loading Overlay for PDF Generation */}
-        {generatingPdf && (
-          <div 
-            className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-            style={{ backgroundColor: "var(--color-overlay)" }}
-          >
-            <div className="theme-surface rounded-2xl shadow-2xl p-8 max-w-sm w-full border" style={{ borderColor: "var(--color-border)" }}>
-              <div className="flex flex-col items-center space-y-4">
-                {/* Spinner animado */}
-                <div className="relative">
-                  <div className="w-16 h-16 border-4 border-indigo-200 dark:border-indigo-900 rounded-full"></div>
-                  <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin absolute top-0"></div>
-                </div>
-                
-                {/* Texto */}
-                <div className="text-center space-y-2">
-                  <h3 className="text-lg font-semibold theme-text">
-                    Gerando Proposta
-                  </h3>
-                  <p className="text-sm theme-text-muted">
-                    Por favor, aguarde enquanto o documento está sendo gerado...
-                  </p>
-                  <div className="flex items-center justify-center gap-1 pt-2">
-                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
         )}
-      </div>
+
+      {/* Loading Overlay for PDF Generation */}
+      {generatingPdf && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+            <p className="text-gray-900 dark:text-white font-medium">Gerando documento...</p>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Isso pode levar alguns segundos.</p>
+            <div className="flex items-center justify-center gap-1 pt-4">
+              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
+
 
 
 

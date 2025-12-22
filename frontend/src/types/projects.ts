@@ -87,6 +87,8 @@ export type Project = {
   
   // Joined fields (optional)
   template_name?: string;
+  current_stage_name?: string;
+  stage?: ProjectStage;
   owner_name?: string;
   contact_name?: string;
   tasks_count?: number;

@@ -120,7 +120,7 @@ export default function TemplateWizard({ onComplete }: { onComplete: () => void 
     <div className="max-w-4xl mx-auto py-12 px-4">
       {step === 1 && (
         <div className="text-center space-y-8 animate-in fade-in slide-in-from-bottom-4">
-          <div className="inline-flex p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600">
+          <div className="inline-flex p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600">
             <Rocket size={48} />
           </div>
           <div>
@@ -156,7 +156,7 @@ export default function TemplateWizard({ onComplete }: { onComplete: () => void 
               <button
                 key={ind.id}
                 onClick={() => setSelectedIndustry(ind.id)}
-                className={`p-6 rounded-2xl border-2 text-left transition-all ${
+                className={`p-6 rounded-xl border-2 text-left transition-all ${
                   selectedIndustry === ind.id
                     ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/10'
                     : 'border-gray-100 dark:border-gray-800 hover:border-indigo-200 dark:hover:border-indigo-900'
@@ -210,3 +210,4 @@ export default function TemplateWizard({ onComplete }: { onComplete: () => void 
     </div>
   );
 }
+

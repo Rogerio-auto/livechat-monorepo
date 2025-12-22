@@ -224,12 +224,12 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
   if (profileLoading || subscriptionLoading) {
     return (
       <aside
-        className={`group z-40 hidden flex-col overflow-hidden border-r border-white/5 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-xl transition-all duration-300 ease-in-out md:flex w-[64px] ${
+        className={`group z-40 hidden flex-col overflow-hidden border-r border-(--color-sidebar-border) bg-(--color-sidebar-bg) text-(--color-sidebar-text) shadow-xl transition-all duration-300 ease-in-out md:flex w-16 ${
           staticPosition ? "relative h-full" : "fixed inset-y-0 left-0"
         } ${className}`}
       >
         <div className="flex h-full items-center justify-center">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-(--color-sidebar-border) border-t-(--color-sidebar-active)" />
         </div>
       </aside>
     );
@@ -238,10 +238,9 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
   return (
     <>
       <aside
-        className={`group z-40 hidden flex-col overflow-hidden border-r border-white/5 bg-gradient-to-b from-[#1b3a29] via-[#122517] to-[#08150c] text-white/90 shadow-xl transition-all duration-300 ease-in-out md:flex w-[64px] hover:w-[18rem] ${
+        className={`group z-40 hidden flex-col overflow-hidden border-r border-(--color-sidebar-border) bg-(--color-sidebar-bg) text-(--color-sidebar-text) shadow-xl transition-all duration-300 ease-in-out md:flex w-16 hover:w-[18rem] ${
           staticPosition ? "relative h-full" : "fixed inset-y-0 left-0"
         } ${className}`}
-        style={{ backdropFilter: "blur(8px)" }}
       >
         <SidebarContent
           profile={profile}
@@ -253,7 +252,6 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
           theme={theme}
           toggleTheme={toggleTheme}
         />
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/35 via-transparent to-transparent" />
       </aside>
 
       <div
@@ -262,21 +260,20 @@ export default function Sidebar({ mobileOpen = false, onRequestClose, staticPosi
         }`}
       >
         <div
-          className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${
+          className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ${
             mobileOpen ? "opacity-100" : "opacity-0"
           }`}
           onClick={onRequestClose}
           aria-hidden="true"
         />
         <aside
-          className={`absolute left-0 top-0 flex h-full w-[min(20rem,82vw)] translate-x-0 flex-col overflow-hidden border-r border-black/25 bg-gradient-to-b from-[#1f4230] via-[#122617] to-[#070f08] text-white shadow-[0_40px_120px_-45px_rgba(0,0,0,0.85)] transition-transform duration-300 ${
+          className={`absolute left-0 top-0 flex h-full w-[min(20rem,82vw)] translate-x-0 flex-col overflow-hidden border-r border-(--color-sidebar-border) bg-(--color-sidebar-bg) text-(--color-sidebar-text) shadow-md transition-transform duration-300 ${
             mobileOpen ? "translate-x-0" : "-translate-x-full"
           }`}
-          style={{ backdropFilter: "blur(10px)" }}
         >
           <button
             type="button"
-            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-white/90 backdrop-blur-md"
+            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border border-(--color-sidebar-border) text-(--color-sidebar-text-muted) hover:bg-(--color-sidebar-hover) transition-colors"
             onClick={onRequestClose}
             aria-label="Fechar navegação"
           >
@@ -331,9 +328,9 @@ function SidebarContent({
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="relative border-b border-white/10 px-4 pb-4 pt-5">
+      <div className="relative border-b border-(--color-sidebar-border) px-4 pb-4 pt-5">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 shadow-inner shadow-black/40">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-(--color-sidebar-hover) shadow-sm">
             <img src={Logo} alt="logo" className="h-7 w-auto" />
           </div>
           <div
@@ -341,10 +338,10 @@ function SidebarContent({
               forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             } transition-opacity duration-300`}
           >
-            <div className="text-sm font-semibold tracking-wide text-white">
+            <div className="text-sm font-bold tracking-tight text-(--color-sidebar-text)">
               {profile?.companyName || "Sua Empresa"}
             </div>
-            <div className="text-[10px] uppercase tracking-[0.3em] text-white/60">
+            <div className="text-[10px] font-medium uppercase tracking-wider text-(--color-sidebar-text-muted)">
               {metaLabel}
             </div>
           </div>
@@ -356,19 +353,19 @@ function SidebarContent({
               profile?.avatarUrl ||
               `https://ui-avatars.com/api/?name=${encodeURIComponent(
                 profile?.name || "User",
-              )}&background=204A34&color=fff`
+              )}&background=2fb463&color=fff`
             }
-            className="h-11 w-11 rounded-2xl object-cover ring-2 ring-white/15"
+            className="h-11 w-11 rounded-xl object-cover ring-2 ring-(--color-sidebar-border)"
           />
           <div
             className={`${
               forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             } transition-opacity duration-300`}
           >
-            <p className="text-sm font-medium text-white">
+            <p className="text-sm font-semibold text-(--color-sidebar-text)">
               {profile?.name || "Usuário"}
             </p>
-            <p className="text-xs text-white/70">{profile?.email || ""}</p>
+            <p className="text-xs text-(--color-sidebar-text-muted)">{profile?.email || ""}</p>
           </div>
         </div>
 
@@ -384,8 +381,8 @@ function SidebarContent({
       <nav className="sidebar-scroll flex flex-1 flex-col gap-1 px-2 py-4">
         <p
           className={`${
-            forceExpanded ? "opacity-70" : "opacity-0 group-hover:opacity-70"
-          } px-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-white duration-300`}
+            forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          } px-3 text-[9px] font-bold uppercase tracking-widest text-(--color-sidebar-text-muted) duration-300`}
         >
           Navegação
         </p>
@@ -402,11 +399,11 @@ function SidebarContent({
         ))}
 
         {isAdmin && (
-          <div className="mt-3 border-t border-white/5 pt-3">
+          <div className="mt-4 border-t border-(--color-sidebar-border) pt-4">
             <p
               className={`${
-                forceExpanded ? "opacity-60" : "opacity-0 group-hover:opacity-60"
-              } px-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-white duration-300`}
+                forceExpanded ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+              } px-3 text-[9px] font-bold uppercase tracking-widest text-(--color-sidebar-text-muted) duration-300`}
             >
               Controle
             </p>
@@ -425,14 +422,14 @@ function SidebarContent({
         )}
       </nav>
 
-      <div className="border-t border-white/10 px-3 py-4">
+      <div className="border-t border-(--color-sidebar-border) px-3 py-4 space-y-1">
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-white/80 transition-all duration-200 hover:bg-white/10"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-(--color-sidebar-text-muted) transition-all duration-200 hover:bg-(--color-sidebar-hover)"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-lg text-white">
-            {theme === "dark" ? <FaSun /> : <FaMoon />}
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-(--color-sidebar-hover) text-lg">
+            {theme === "dark" ? <FaSun className="text-amber-400" /> : <FaMoon className="text-blue-400" />}
           </span>
           <span
             className={`text-sm font-semibold tracking-wide ${
@@ -451,9 +448,9 @@ function SidebarContent({
             logout();
             onNavigate?.();
           }}
-          className="mt-2 flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-white/80 transition-all duration-200 hover:bg-white/10"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-rose-500 transition-all duration-200 hover:bg-rose-500/10"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 text-lg text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/10 text-lg">
             <FaSignOutAlt />
           </span>
           <span
@@ -493,19 +490,23 @@ type ItemProps = LinkItem | ButtonItem;
 
 function SidebarItem({ icon, label, to, active, onClick, forceExpanded, onNavigate }: ItemProps) {
   const baseClasses =
-    "flex w-full items-center gap-3 rounded-2xl px-3 py-3 transition-all duration-200";
+    "flex w-full items-center gap-3 rounded-xl px-3 py-2 transition-all duration-200";
 
   const classes = to
     ? `${baseClasses} ${
         active
-          ? "bg-white/10 text-white shadow-sm ring-1 ring-white/10"
-          : "text-white/70 hover:bg-white/5"
+          ? "bg-(--color-sidebar-hover) text-(--color-sidebar-active) font-semibold shadow-sm"
+          : "text-(--color-sidebar-text-muted) hover:bg-(--color-sidebar-hover) hover:text-(--color-sidebar-text)"
       }`
-    : `${baseClasses} text-white/80 hover:bg-white/5`;
+    : `${baseClasses} text-(--color-sidebar-text-muted) hover:bg-(--color-sidebar-hover) hover:text-(--color-sidebar-text)`;
 
-  const iconColor = active ? "text-[#7bf0b0]" : "text-white";
+  const iconColor = active 
+    ? "text-(--color-sidebar-icon)" 
+    : "text-(--color-sidebar-text-muted) opacity-50 group-hover:opacity-100";
 
-  const labelColor = active ? "text-white" : "text-white/80";
+  const labelColor = active 
+    ? "text-(--color-sidebar-text)" 
+    : "text-(--color-sidebar-text-muted)";
 
   const labelVisibility = forceExpanded
     ? "opacity-100 translate-x-0"
@@ -513,8 +514,8 @@ function SidebarItem({ icon, label, to, active, onClick, forceExpanded, onNaviga
 
   const content = (
     <>
-      <span className={`text-lg ${iconColor}`}>{icon}</span>
-      <span className={`${labelVisibility} ${labelColor}`}>{label}</span>
+      <span className={`text-base ${iconColor}`}>{icon}</span>
+      <span className={`text-[13px] ${labelVisibility} ${labelColor}`}>{label}</span>
     </>
   );
 
@@ -545,3 +546,4 @@ function SidebarItem({ icon, label, to, active, onClick, forceExpanded, onNaviga
     </button>
   );
 }
+

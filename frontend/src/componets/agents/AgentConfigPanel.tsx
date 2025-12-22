@@ -4,6 +4,18 @@
 import { useState, useEffect } from "react";
 import { API, fetchJson } from "../../utils/api";
 import { InboxMultiSelect } from "./InboxMultiSelect";
+import { 
+  ArrowLeft, 
+  Save, 
+  Cpu, 
+  MessageSquare, 
+  Video, 
+  Settings2, 
+  Inbox,
+  AlertCircle,
+  CheckCircle2,
+  Loader2
+} from "lucide-react";
 
 type AgentConfig = {
   id: string;
@@ -149,158 +161,180 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent" />
+      <div className="flex flex-col items-center justify-center h-64 space-y-4">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+        <p className="text-gray-500 animate-pulse">Carregando configurações...</p>
       </div>
     );
   }
 
   if (!config) {
     return (
-      <div className="text-center py-12">
-        <p className="text-red-400">Agente não encontrado</p>
-        <button onClick={onBack} className="mt-4 text-blue-400 hover:text-blue-300">
-          Voltar
+      <div className="text-center py-12 bg-white rounded-xl border border-gray-200 shadow-sm">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+        <p className="text-gray-900 font-medium">Agente não encontrado</p>
+        <button 
+          onClick={onBack} 
+          className="mt-4 text-blue-600 hover:text-blue-700 font-medium flex items-center justify-center gap-2 mx-auto"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar para a lista
         </button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl mx-auto">
       {/* Header */}
-      <div className="mb-8">
-        <button
-          onClick={onBack}
-          className="text-gray-400 hover:text-white mb-4 flex items-center gap-2 transition"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Voltar
-        </button>
-        <h2 className="text-3xl font-bold text-white mb-2">Configurar Agente</h2>
-        <p className="text-gray-400">{config.name}</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <button
+            onClick={onBack}
+            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 mb-4 flex items-center gap-2 transition-colors group"
+          >
+            <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
+            Voltar para Agentes
+          </button>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Configurar Agente</h2>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">Ajuste o comportamento e modelos de {config.name}</p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          >
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" />
+                Salvar Alterações
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="mb-6 bg-red-900/30 border border-red-700 text-red-400 rounded-lg p-4">
-          {error}
+        <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <p className="text-sm">{error}</p>
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-12 pb-12">
         {/* Integração OpenAI */}
-        <section className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-green-600/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-white">Integração OpenAI</h3>
-              <p className="text-sm text-gray-400">Selecione a chave de API que o agente usará</p>
+        <section className="overflow-hidden">
+          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+                <Cpu className="w-6 h-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Integração OpenAI</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Selecione a chave de API que o agente usará</p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="py-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Integração OpenAI <span className="text-red-400">*</span>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Integração OpenAI <span className="text-red-500">*</span>
               </label>
               <select
                 value={config.integration_openai_id || ""}
                 onChange={(e) => setConfig({ ...config, integration_openai_id: e.target.value || null })}
-                className="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none dark:[color-scheme:dark]"
               >
-                <option value="">Selecione uma integração...</option>
+                <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Selecione uma integração...</option>
                 {openAIIntegrations.map((integration) => (
-                  <option key={integration.id} value={integration.id}>
+                  <option key={integration.id} value={integration.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
                     {integration.name}
                   </option>
                 ))}
               </select>
               {!config.integration_openai_id && (
-                <p className="mt-2 text-sm text-yellow-400">
-                  ⚠️ O agente não responderá sem uma integração OpenAI configurada
-                </p>
+                <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-100 dark:border-amber-800">
+                  <AlertCircle className="w-4 h-4" />
+                  O agente não responderá sem uma integração OpenAI configurada
+                </div>
               )}
               {openAIIntegrations.length === 0 && (
-                <p className="mt-2 text-sm text-red-400">
+                <div className="mt-3 flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800">
+                  <AlertCircle className="w-4 h-4" />
                   Nenhuma integração OpenAI encontrada. Configure uma integração primeiro.
-                </p>
+                </div>
               )}
             </div>
           </div>
         </section>
 
         {/* Modelo de Atendimento (Chat) */}
-        <section className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-600/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-white">Modelo de Atendimento</h3>
-              <p className="text-sm text-gray-400">Modelo usado para conversas e respostas</p>
+        <section className="overflow-hidden">
+          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+                <MessageSquare className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Modelo de Atendimento</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Modelo usado para conversas e respostas</p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          <div className="py-6 space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Modelo Principal</label>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Modelo Principal</label>
               <div className="relative">
                 <select
                   value={config.model || ""}
                   onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500 appearance-none"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none dark:[color-scheme:dark]"
                 >
-                  <option value="">Selecione um modelo</option>
+                  <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Selecione um modelo</option>
                   {CHAT_MODELS.map((m) => (
-                    <option key={m.id} value={m.id}>
+                    <option key={m.id} value={m.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
                       {m.name} - {m.description}
                     </option>
                   ))}
-                  <option value="custom">Outro (Digitar manualmente)</option>
+                  <option value="custom" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Outro (Digitar manualmente)</option>
                 </select>
-                <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
+                <div className="absolute inset-y-0 right-0 flex items-center px-3 pointer-events-none">
+                  <Settings2 className="w-4 h-4 text-gray-400" />
                 </div>
               </div>
               
-              {/* Campo de texto livre caso o modelo não esteja na lista (ou usuário escolha 'custom') */}
               {(!CHAT_MODELS.find(m => m.id === config.model) && config.model) && (
-                 <div className="mt-2">
-                    <label className="block text-xs text-gray-400 mb-1">Nome do modelo personalizado:</label>
+                 <div className="mt-3">
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Nome do modelo personalizado:</label>
                     <input 
                       type="text"
                       value={config.model || ""}
                       onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                      className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                      className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none text-sm"
                       placeholder="Ex: gpt-4-32k"
                     />
                  </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Temperatura (Criatividade)
                 </label>
                 <input
@@ -318,13 +352,16 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
                       },
                     })
                   }
-                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">0 = Preciso, 2 = Criativo</p>
+                <div className="flex justify-between mt-2">
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase">Preciso (0)</span>
+                  <span className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase">Criativo (2)</span>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Tokens Máximos</label>
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Tokens Máximos</label>
                 <input
                   type="number"
                   min="100"
@@ -340,92 +377,86 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
                       },
                     })
                   }
-                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                 />
-                <p className="text-xs text-gray-500 mt-1">Tamanho máximo da resposta</p>
+                <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase mt-2">Tamanho máximo da resposta</p>
               </div>
             </div>
           </div>
         </section>
 
         {/* Modelos de Mídia */}
-        <section className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-white">Modelos de Mídia</h3>
-              <p className="text-sm text-gray-400">Processamento de áudio, imagem e voz</p>
+        <section className="overflow-hidden">
+          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+                <Video className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Modelos de Mídia</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Processamento de áudio, imagem e voz</p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
-            {/* Transcrição */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Modelo de Transcrição (Áudio → Texto)
-              </label>
-              <select
-                value={config.media_config?.transcription_model || ""}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    media_config: {
-                      ...config.media_config,
-                      transcription_model: e.target.value,
-                    },
-                  })
-                }
-                className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500"
-              >
-                <option value="">Nenhum (desabilitado)</option>
-                {TRANSCRIPTION_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} - {m.description}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Visão */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Modelo de Visão (Análise de Imagens)
-              </label>
-              <select
-                value={config.media_config?.vision_model || ""}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    media_config: {
-                      ...config.media_config,
-                      vision_model: e.target.value,
-                    },
-                  })
-                }
-                className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500"
-              >
-                <option value="">Nenhum (desabilitado)</option>
-                {VISION_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} - {m.description}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* TTS */}
-            <div className="grid grid-cols-2 gap-4">
+          <div className="py-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Transcrição (Áudio → Texto)
+                </label>
+                <select
+                  value={config.media_config?.transcription_model || ""}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      media_config: {
+                        ...config.media_config,
+                        transcription_model: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none dark:[color-scheme:dark]"
+                >
+                  <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Nenhum (desabilitado)</option>
+                  {TRANSCRIPTION_MODELS.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Visão (Análise de Imagens)
+                </label>
+                <select
+                  value={config.media_config?.vision_model || ""}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      media_config: {
+                        ...config.media_config,
+                        vision_model: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none dark:[color-scheme:dark]"
+                >
+                  <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Nenhum (desabilitado)</option>
+                  {VISION_MODELS.map((m) => (
+                    <option key={m.id} value={m.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-100 dark:border-gray-800">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                   Modelo TTS (Texto → Voz)
                 </label>
                 <select
@@ -439,19 +470,19 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
                       },
                     })
                   }
-                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none dark:[color-scheme:dark]"
                 >
-                  <option value="">Nenhum (desabilitado)</option>
+                  <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Nenhum (desabilitado)</option>
                   {TTS_MODELS.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} - {m.description}
+                    <option key={m.id} value={m.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                      {m.name}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Voz TTS</label>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Voz TTS</label>
                 <select
                   value={config.media_config?.tts_voice || ""}
                   onChange={(e) =>
@@ -464,12 +495,12 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
                     })
                   }
                   disabled={!config.media_config?.tts_model}
-                  className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all outline-none disabled:opacity-50 disabled:bg-gray-50 dark:disabled:bg-gray-800 dark:[color-scheme:dark]"
                 >
-                  <option value="">Selecione uma voz</option>
+                  <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Selecione uma voz</option>
                   {TTS_VOICES.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} - {v.description}
+                    <option key={v.id} value={v.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+                      {v.name}
                     </option>
                   ))}
                 </select>
@@ -479,38 +510,33 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
         </section>
 
         {/* Comportamento */}
-        <section className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-lg bg-green-600/20 flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
-                />
-              </svg>
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-white">Comportamento do Agente</h3>
-              <p className="text-sm text-gray-400">Configurações de timing e agregação</p>
+        <section className="overflow-hidden">
+          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/20 flex items-center justify-center">
+                <Settings2 className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Comportamento</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Configurações de timing e automação</p>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
+          <div className="py-6 space-y-6">
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-800">
               <div>
-                <p className="font-medium text-white">Permitir Transferência para Humano</p>
-                <p className="text-sm text-gray-400">Agente pode transferir atendimento</p>
+                <p className="font-semibold text-gray-900 dark:text-white">Permitir Transferência para Humano</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">O agente pode transferir o atendimento para um atendente real</p>
               </div>
               <button
                 onClick={() => setConfig({ ...config, allow_handoff: !config.allow_handoff })}
-                className={`w-12 h-6 rounded-full transition-colors relative ${
-                  config.allow_handoff ? "bg-green-600" : "bg-gray-600"
+                className={`w-12 h-6 rounded-full transition-all relative ${
+                  config.allow_handoff ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-700"
                 }`}
               >
                 <div
-                  className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
                     config.allow_handoff ? "translate-x-7" : "translate-x-1"
                   }`}
                 />
@@ -518,74 +544,74 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                 Responder se Ocioso (segundos)
               </label>
-              <input
-                type="number"
-                min="0"
-                max="300"
-                value={config.reply_if_idle_sec ?? 0}
-                onChange={(e) => {
-                  const val = e.target.value ? parseInt(e.target.value) : undefined;
-                  setConfig({ ...config, reply_if_idle_sec: val });
-                }}
-                className="w-full bg-gray-900 border border-gray-600 text-white rounded-lg px-4 py-2.5 focus:outline-none focus:border-green-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">0 = desabilitado, aguarda cliente enviar mensagem</p>
+              <div className="flex items-center gap-4">
+                <input
+                  type="number"
+                  min="0"
+                  max="300"
+                  value={config.reply_if_idle_sec ?? 0}
+                  onChange={(e) => {
+                    const val = e.target.value ? parseInt(e.target.value) : undefined;
+                    setConfig({ ...config, reply_if_idle_sec: val });
+                  }}
+                  className="w-32 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 text-gray-900 dark:text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
+                />
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {config.reply_if_idle_sec && config.reply_if_idle_sec > 0 
+                    ? `O agente enviará uma mensagem após ${config.reply_if_idle_sec}s de inatividade.`
+                    : "Desabilitado. O agente aguardará o cliente enviar uma mensagem."}
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
-          {/* Inboxes e Grupos */}
-          <section className="bg-gray-800 rounded-2xl p-6 border border-gray-700">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-                  />
-                </svg>
+        {/* Inboxes e Grupos */}
+        <section className="overflow-hidden">
+          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/20 flex items-center justify-center">
+                <Inbox className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-white">Inboxes e Grupos</h3>
-                <p className="text-sm text-gray-400">Controle onde o agente responde</p>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Inboxes e Grupos</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Controle onde o agente deve atuar</p>
               </div>
             </div>
+          </div>
 
-            <div className="space-y-4">
-              {/* Toggle: Ignorar Grupos */}
-              <div className="flex items-center justify-between p-4 bg-gray-900/50 rounded-lg">
-                <div>
-                  <p className="font-medium text-white">Ignorar Mensagens de Grupos</p>
-                  <p className="text-sm text-gray-400">Agente não responde em grupos do WhatsApp</p>
-                </div>
-                <button
-                  onClick={() => setConfig({ ...config, ignore_group_messages: !config.ignore_group_messages })}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${
-                    config.ignore_group_messages ? "bg-green-600" : "bg-gray-600"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                      config.ignore_group_messages ? "translate-x-7" : "translate-x-1"
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Seletor de Inboxes */}
+          <div className="py-6 space-y-6">
+            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-100 dark:border-gray-800">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Inboxes Habilitadas
-                </label>
-                <p className="text-xs text-gray-500 mb-3">
+                <p className="font-semibold text-gray-900 dark:text-white">Ignorar Mensagens de Grupos</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">O agente não responderá em grupos do WhatsApp</p>
+              </div>
+              <button
+                onClick={() => setConfig({ ...config, ignore_group_messages: !config.ignore_group_messages })}
+                className={`w-12 h-6 rounded-full transition-all relative ${
+                  config.ignore_group_messages ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-700"
+                }`}
+              >
+                <div
+                  className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${
+                    config.ignore_group_messages ? "translate-x-7" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Inboxes Habilitadas
+              </label>
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   {config.enabled_inbox_ids.length === 0 
-                    ? "Agente responde em todas as inboxes" 
-                    : `Agente responde em ${config.enabled_inbox_ids.length} inbox(es) selecionada(s)`}
+                    ? "Atualmente o agente responde em todas as inboxes disponíveis." 
+                    : `O agente está restrito a ${config.enabled_inbox_ids.length} inbox(es) específica(s).`}
                 </p>
                 <InboxMultiSelect
                   selectedIds={config.enabled_inbox_ids}
@@ -593,25 +619,10 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
                 />
               </div>
             </div>
-          </section>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-4 mt-8">
-        <button
-          onClick={onBack}
-          className="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-medium py-3 px-6 rounded-xl transition"
-        >
-          Cancelar
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {saving ? "Salvando..." : "Salvar Configurações"}
-        </button>
+          </div>
+        </section>
       </div>
     </div>
   );
 }
+

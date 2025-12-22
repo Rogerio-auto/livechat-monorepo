@@ -15,7 +15,7 @@ export async function ensureSingleWorkerInstance(workerType: string = "all"): Pr
   const instanceId = `${process.pid}-${Date.now()}`;
 
   // Tenta registrar esta instância
-  const registered = await redis.set(INSTANCE_KEY, instanceId, "NX", "EX", INSTANCE_TTL);
+  const registered = await (redis as any).set(INSTANCE_KEY, instanceId, "NX", "EX", INSTANCE_TTL);
 
   if (!registered) {
     // Outra instância já está rodando

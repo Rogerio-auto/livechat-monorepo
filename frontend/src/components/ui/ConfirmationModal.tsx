@@ -43,8 +43,8 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   const color = colors[type || 'danger'];
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all scale-100">
+    <div className="fixed inset-0 z-9999 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-xl shadow-md max-w-md w-full overflow-hidden transform transition-all scale-100">
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div className={`p-3 rounded-full shrink-0 ${color.icon}`}>

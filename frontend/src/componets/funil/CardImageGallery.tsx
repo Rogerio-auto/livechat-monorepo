@@ -69,7 +69,7 @@ export function CardImageGallery({ photos, onDelete }: CardImageGalleryProps) {
       {/* Modal de visualização */}
       {selectedPhoto && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 bg-white">
               <h3 className="text-lg font-semibold text-zinc-800">Detalhes da Foto</h3>
@@ -111,7 +111,7 @@ export function CardImageGallery({ photos, onDelete }: CardImageGalleryProps) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   {selectedPhoto.metadata.capturedAt && (
                     <div className="flex items-start gap-2">
-                      <FaClock className="text-zinc-400 mt-0.5 flex-shrink-0" />
+                      <FaClock className="text-zinc-400 mt-0.5 shrink-0" />
                       <div>
                         <div className="text-zinc-500">Data/Hora</div>
                         <div className="text-zinc-800 font-medium">
@@ -123,7 +123,7 @@ export function CardImageGallery({ photos, onDelete }: CardImageGalleryProps) {
 
                   {selectedPhoto.metadata.latitude && selectedPhoto.metadata.longitude && (
                     <div className="flex items-start gap-2">
-                      <FaMapMarkerAlt className="text-zinc-400 mt-0.5 flex-shrink-0" />
+                      <FaMapMarkerAlt className="text-zinc-400 mt-0.5 shrink-0" />
                       <div>
                         <div className="text-zinc-500">Coordenadas</div>
                         <div className="text-zinc-800 font-medium font-mono text-xs">
@@ -219,3 +219,4 @@ export function CardImageGallery({ photos, onDelete }: CardImageGalleryProps) {
     </>
   );
 }
+

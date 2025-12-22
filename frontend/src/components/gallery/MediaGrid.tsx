@@ -16,7 +16,7 @@ export default function MediaGrid({ media, loading, onRefresh }: MediaGridProps)
         {Array.from({ length: 8 }).map((_, index) => (
           <div
             key={index}
-            className="h-48 animate-pulse rounded-2xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
+            className="h-48 animate-pulse rounded-xl bg-[color-mix(in_srgb,var(--color-muted) 78%,transparent)]"
           />
         ))}
       </div>
@@ -25,7 +25,7 @@ export default function MediaGrid({ media, loading, onRefresh }: MediaGridProps)
 
   if (!loading && media.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-8 py-16 text-center text-(--color-text-muted)">
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-[color-mix(in_srgb,var(--color-muted) 70%,transparent)] bg-[color-mix(in_srgb,var(--color-muted) 72%,transparent)] px-8 py-16 text-center text-(--color-text-muted)">
         <FiImage className="h-12 w-12 text-(--color-primary)" />
         <div>
           <h3 className="text-base font-semibold text-(--color-text)">Nenhuma mídia encontrada</h3>
@@ -45,3 +45,4 @@ export default function MediaGrid({ media, loading, onRefresh }: MediaGridProps)
     </div>
   );
 }
+

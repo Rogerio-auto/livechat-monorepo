@@ -19,13 +19,18 @@ type EmpresaPanelProps = {
   userRole?: string | null;
 };
 
-const inputClasses = "w-full rounded-xl px-4 py-2.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-60 transition-colors duration-200";
+const inputClasses = "w-full rounded-md px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 transition-all duration-200 text-sm shadow-xs";
 
-const Field = ({ label, children }: { label: string; children: ReactNode }) => (
-  <label className="block">
-    <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">{label}</div>
-    {children}
-  </label>
+const Field = ({ label, children, description }: { label: string; children: ReactNode; description?: string }) => (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-6 border-b border-gray-50 dark:border-gray-800 last:border-0">
+    <div className="md:col-span-1">
+      <div className="text-sm font-medium text-gray-900 dark:text-white">{label}</div>
+      {description && <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{description}</div>}
+    </div>
+    <div className="md:col-span-2">
+      {children}
+    </div>
+  </div>
 );
 
 export default function EmpresaPanel({ form, baseline, setForm, onSaved, disabled, userRole }: EmpresaPanelProps) {
@@ -113,177 +118,144 @@ export default function EmpresaPanel({ form, baseline, setForm, onSaved, disable
   };
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-0">
       {!isAdmin && (
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 flex items-start gap-3">
-          <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mb-6 bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20 rounded-md p-4 flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <div className="text-sm text-yellow-800 dark:text-yellow-200">
+          <div className="text-sm text-amber-800 dark:text-amber-200">
             <strong>Visualização limitada:</strong> Informações de plano e configurações avançadas são visíveis apenas para Administradores, Gerentes e Supervisores.
           </div>
         </div>
       )}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Nome da empresa">
+
+      <div className="divide-y divide-gray-50 dark:divide-gray-800">
+        <Field label="Nome da empresa" description="O nome público da sua organização.">
           <input
             className={inputClasses}
             value={form.empresa}
             onChange={(e) => setForm((prev) => ({ ...prev, empresa: e.target.value }))}
             autoComplete="organization"
             disabled={disabled}
-            placeholder="Digite o nome da empresa"
+            placeholder="Ex: Minha Empresa LTDA"
           />
         </Field>
 
-        <Field label="Logo da Empresa">
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              {form.logoUrl && (
-                <img 
-                  src={form.logoUrl} 
-                  alt="Logo preview" 
-                  className="w-20 h-20 object-contain rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 p-2"
-                />
-              )}
-              <label className="flex-1">
-                <input
-                  type="file"
-                  accept="image/png"
-                  onChange={handleLogoUpload}
-                  disabled={disabled || uploading}
-                  className="hidden"
-                  id="logo-upload"
-                />
-                <div className="cursor-pointer px-3 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-600 transition text-sm flex items-center gap-2 justify-center">
-                  {uploading ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Enviando...
-                    </>
-                  ) : form.logoUrl ? (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Atualizar logo
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                      </svg>
-                      Escolher logo
-                    </>
-                  )}
-                </div>
-              </label>
+        <Field label="Logo da Empresa" description="PNG de até 2MB. Recomendado 512x512px.">
+          <div className="flex items-center gap-6">
+            <div className="relative group">
+              <div className="w-20 h-20 rounded-md border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex items-center justify-center overflow-hidden">
+                {form.logoUrl ? (
+                  <img src={form.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                ) : (
+                  <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </div>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              PNG, máx 2MB, dimensões máx 1000x1000px
-            </p>
-            {uploadError && (
-              <p className="text-xs text-red-600 dark:text-red-400">
-                {uploadError}
-              </p>
-            )}
+            
+            <div className="flex flex-col gap-2">
+              <label className="cursor-pointer inline-flex items-center px-3 py-1.5 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
+                <input type="file" accept="image/png" onChange={handleLogoUpload} disabled={disabled || uploading} className="hidden" />
+                {uploading ? "Enviando..." : "Alterar logo"}
+              </label>
+              {uploadError && <p className="text-[10px] text-red-500">{uploadError}</p>}
+            </div>
           </div>
         </Field>
 
-        <Field label="Endereço">
-          <input
-            className={inputClasses}
-            value={form.endereco}
-            onChange={(e) => setForm((prev) => ({ ...prev, endereco: e.target.value }))}
-            autoComplete="street-address"
-            disabled={disabled}
-            placeholder="Rua, número, complemento"
-          />
-        </Field>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-2">
-            <Field label="Cidade">
-              <input
-                className={inputClasses}
-                value={form.cidade}
-                onChange={(e) => setForm((prev) => ({ ...prev, cidade: e.target.value }))}
-                autoComplete="address-level2"
-                disabled={disabled}
-                placeholder="Cidade"
-              />
-            </Field>
-          </div>
-          <Field label="UF">
+        <Field label="Endereço" description="Endereço físico da sede da empresa.">
+          <div className="space-y-3">
             <input
               className={inputClasses}
-              value={form.uf}
-              maxLength={2}
-              onChange={(e) => setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase().slice(0, 2) }))}
-              autoComplete="address-level1"
+              value={form.endereco}
+              onChange={(e) => setForm((prev) => ({ ...prev, endereco: e.target.value }))}
+              autoComplete="street-address"
               disabled={disabled}
-              placeholder="SP"
+              placeholder="Rua, número, complemento"
             />
-          </Field>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2">
+                <input
+                  className={inputClasses}
+                  value={form.cidade}
+                  onChange={(e) => setForm((prev) => ({ ...prev, cidade: e.target.value }))}
+                  autoComplete="address-level2"
+                  disabled={disabled}
+                  placeholder="Cidade"
+                />
+              </div>
+              <input
+                className={inputClasses}
+                value={form.uf}
+                maxLength={2}
+                onChange={(e) => setForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase().slice(0, 2) }))}
+                autoComplete="address-level1"
+                disabled={disabled}
+                placeholder="UF"
+              />
+            </div>
+          </div>
+        </Field>
+
+        <div className="py-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-medium text-gray-900 dark:text-white">Plano e Assinatura</h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Gerencie seu plano atual e faturamento.</p>
+            </div>
+            <button
+              onClick={() => setShowPlans(!showPlans)}
+              className="text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              {showPlans ? "Ocultar detalhes" : "Ver planos"}
+            </button>
+          </div>
+          
+          {showPlans ? (
+            <div className="mt-6 animate-in fade-in slide-in-from-top-2 duration-300">
+              <PlansSection />
+            </div>
+          ) : (
+            <div className="p-4 rounded-md bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-gray-900 dark:text-white">Plano Profissional</div>
+                  <div className="text-[10px] text-gray-500 dark:text-gray-400">Sua assinatura está ativa</div>
+                </div>
+              </div>
+              <button className="text-[10px] font-bold uppercase tracking-wider text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                Gerenciar
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="space-y-4">
-        <button
-          onClick={() => setShowPlans(!showPlans)}
-          className="w-full p-6 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-200 dark:border-blue-800 transition-colors duration-300 hover:shadow-lg"
-        >
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div className="text-left">
-              <div className="font-semibold text-gray-900 dark:text-white mb-1 flex items-center gap-2">
-                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-                Planos e Assinatura
-              </div>
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                Clique para {showPlans ? "ocultar" : "ver"} planos disponíveis e gerenciar sua assinatura
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <svg 
-                className={`w-5 h-5 text-blue-600 dark:text-blue-400 transition-transform ${showPlans ? "rotate-180" : ""}`} 
-                fill="none" 
-                stroke="currentColor" 
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        {showPlans && <PlansSection />}
-      </div>
-
-      <div className="flex gap-3 pt-2">
-        <button
-          onClick={save}
-          disabled={!dirty || disabled}
-          className={`px-6 py-2.5 rounded-xl font-medium transition shadow-md disabled:opacity-60 ${
-            dirty && !disabled 
-              ? "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white" 
-              : "bg-gray-200 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
-          }`}
-        >
-          Salvar alterações
-        </button>
+      <div className="flex items-center justify-end gap-3 pt-8 border-t border-gray-100 dark:border-gray-800">
         <button
           onClick={reset}
           disabled={!dirty || disabled}
-          className="px-6 py-2.5 rounded-xl text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition font-medium disabled:opacity-60"
+          className="px-4 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white disabled:opacity-50 transition-all"
         >
           Cancelar
+        </button>
+        <button
+          onClick={save}
+          disabled={!dirty || disabled}
+          className="px-4 py-2 rounded-md text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm disabled:opacity-50 disabled:bg-gray-400 transition-all"
+        >
+          Salvar alterações
         </button>
       </div>
     </section>
   );
 }
+

@@ -35,9 +35,11 @@ import {
   Filter,
   Search,
   ChevronLeft,
-  LayoutTemplate
+  LayoutTemplate,
+  ArrowLeft
 } from "lucide-react";
 import type { ProjectTemplate, ProjectStage } from "../../types/projects";
+import { Breadcrumbs } from "../../components/Breadcrumbs";
 
 const API = import.meta.env.VITE_API_URL;
 
@@ -85,8 +87,8 @@ const SortableProjectCard = ({ project, onClick }: { project: ProjectCard, onCli
     switch (priority) {
       case "urgent": return "bg-red-500";
       case "high": return "bg-orange-500";
-      case "medium": return "bg-[color:var(--color-primary)]";
-      default: return "bg-[color:var(--color-text-muted)]";
+      case "medium": return "bg-emerald-500";
+      default: return "bg-slate-400";
     }
   };
 
@@ -97,33 +99,33 @@ const SortableProjectCard = ({ project, onClick }: { project: ProjectCard, onCli
       {...attributes} 
       {...listeners} 
       onClick={onClick}
-      className="bg-[color:var(--color-surface)] p-5 rounded-lg border border-[color:var(--color-border)] shadow-sm hover:shadow-md hover:border-[color:var(--color-primary)]/50 transition-all cursor-grab active:cursor-grabbing group relative"
+      className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-emerald-500/50 transition-all cursor-grab active:cursor-grabbing group relative"
     >
       <div className="flex items-start justify-between mb-3">
         <div className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-tighter text-white ${getPriorityColor(project.priority)}`}>
           {project.priority}
         </div>
-        <button className="opacity-0 group-hover:opacity-100 p-1 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] transition-all">
+        <button className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-emerald-500 transition-all">
           <MoreHorizontal className="w-4 h-4" />
         </button>
       </div>
 
-      <h4 className="text-sm font-bold text-[color:var(--color-text)] mb-3 leading-snug group-hover:text-[color:var(--color-primary)] transition-colors">
+      <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-3 leading-snug group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
         {project.title}
       </h4>
 
       {project.tags && project.tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5 mb-4">
           {project.tags.map(tag => (
-            <span key={tag} className="px-2 py-0.5 bg-[color:var(--color-primary)]/10 text-[color:var(--color-primary)] rounded-md text-[9px] font-bold uppercase tracking-wider">
+            <span key={tag} className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-md text-[9px] font-bold uppercase tracking-wider">
               {tag}
             </span>
           ))}
         </div>
       )}
 
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[color:var(--color-border)]">
-        <div className="flex items-center gap-3 text-[color:var(--color-text-muted)]">
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-50 dark:border-slate-700">
+        <div className="flex items-center gap-3 text-slate-400 dark:text-slate-500">
           <div className="flex items-center gap-1">
             <CheckSquare className="w-3.5 h-3.5" />
             <span className="text-[10px] font-bold">{project.completed_tasks_count}/{project.tasks_count}</span>
@@ -136,12 +138,12 @@ const SortableProjectCard = ({ project, onClick }: { project: ProjectCard, onCli
 
         <div className="flex items-center gap-2">
           {project.end_date && (
-            <div className="flex items-center gap-1 text-[color:var(--color-text-muted)]">
+            <div className="flex items-center gap-1 text-slate-400 dark:text-slate-500">
               <Calendar className="w-3 h-3" />
               <span className="text-[10px] font-bold">20 Dez</span>
             </div>
           )}
-          <div className="w-7 h-7 rounded-full bg-[color:var(--color-primary)]/10 flex items-center justify-center text-[10px] font-black text-[color:var(--color-primary)] border-2 border-[color:var(--color-surface)] shadow-sm">
+          <div className="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-[10px] font-black text-emerald-600 dark:text-emerald-400 border-2 border-white dark:border-slate-800 shadow-sm">
             {project.owner_name?.charAt(0) || "U"}
           </div>
         </div>
@@ -156,22 +158,22 @@ const KanbanColumn = ({ stage, children }: { stage: KanbanStage, children: React
   return (
     <div 
       ref={setNodeRef}
-      className="flex flex-col w-80 bg-[color:var(--color-surface-muted)] rounded-lg border border-[color:var(--color-border)] p-4 h-full max-h-full"
+      className="flex flex-col w-80 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 p-5 h-full max-h-full"
     >
-      <div className="flex items-center justify-between mb-4 px-2">
+      <div className="flex items-center justify-between mb-5 px-1">
         <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: stage.color }}></div>
-          <h3 className="font-bold text-[color:var(--color-text)] uppercase tracking-wider text-xs">{stage.name}</h3>
-          <span className="px-2 py-0.5 bg-[color:var(--color-surface)] text-[color:var(--color-text-muted)] rounded-md text-[10px] font-black border border-[color:var(--color-border)] shadow-sm">
+          <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: stage.color }}></div>
+          <h3 className="font-bold text-slate-900 dark:text-white uppercase tracking-widest text-[10px]">{stage.name}</h3>
+          <span className="px-2 py-0.5 bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 rounded-lg text-[10px] font-black border border-slate-100 dark:border-slate-700 shadow-sm">
             {stage.projects.length}
           </span>
         </div>
-        <button className="p-1.5 text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] rounded-md hover:bg-[color:var(--color-surface)] transition-all">
+        <button className="p-1.5 text-slate-400 hover:text-emerald-500 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all">
           <MoreHorizontal className="w-4.5 h-4.5" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar min-h-[100px]">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar min-h-[100px]">
         {children}
       </div>
     </div>
@@ -449,117 +451,119 @@ const ProjectKanban: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col livechat-theme bg-[color:var(--color-bg)] overflow-hidden">
-      {/* Header */}
-      <div className="livechat-panel border-b border-[color:var(--color-border)] px-8 py-6">
-        <div className="max-w-[1600px] mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={() => navigate("/projects")}
-              className="p-2 hover:bg-[color:var(--color-surface-muted)] rounded-md transition-colors text-[color:var(--color-text-muted)]"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
+    <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900 h-screen overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto px-4 py-8 sm:px-6 lg:px-8 flex flex-col h-full overflow-hidden">
+        <Breadcrumbs 
+          items={[
+            { label: "Projetos", href: "/projects" },
+            { label: "Quadro Kanban", active: true }
+          ]} 
+        />
+
+        {/* Header Section */}
+        <div className="mb-8 shrink-0">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[color:var(--color-text)]">Quadro Kanban</h1>
-              <p className="text-sm text-[color:var(--color-text-muted)] mt-0.5">Visualize e gerencie o fluxo de trabalho dos seus projetos.</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Template Selector */}
-            <div className="relative">
-              <LayoutTemplate className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[color:var(--color-text-muted)]" />
-              <select
-                value={selectedTemplateId}
-                onChange={(e) => setSelectedTemplateId(e.target.value)}
-                className="pl-9 pr-8 py-2.5 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-md focus:outline-none focus:ring-4 focus:ring-[color:var(--color-primary)]/10 focus:border-[color:var(--color-primary)] transition-all text-sm text-[color:var(--color-text)] appearance-none cursor-pointer min-w-[200px]"
-              >
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+              <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+                Quadro Kanban
+              </h1>
+              <p className="mt-2 text-lg text-slate-500 dark:text-slate-400">
+                Visualize e gerencie o fluxo de trabalho dos seus projetos.
+              </p>
             </div>
 
-            <div className="relative flex-1 min-w-[300px]">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-[color:var(--color-text-muted)]" />
-              <input
-                type="text"
-                placeholder="Filtrar por nome ou tag..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-md focus:outline-none focus:ring-4 focus:ring-[color:var(--color-primary)]/10 focus:border-[color:var(--color-primary)] transition-all text-sm text-[color:var(--color-text)] placeholder:text-[color:var(--color-text-muted)]"
-              />
-            </div>
-            <button className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-[color:var(--color-text-muted)] bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-md hover:bg-[color:var(--color-surface-muted)] shadow-sm transition-all">
-              <Filter className="w-4.5 h-4.5" />
-              Filtros
-            </button>
-            <button 
-              onClick={() => navigate("/projects/new")}
-              className="flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-[color:var(--color-primary)] rounded-md hover:opacity-90 transition-all shadow-md hover:shadow-lg active:scale-95"
-            >
-              <Plus className="w-5 h-5" />
-              Novo Projeto
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Kanban Board */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
-      >
-        <div className="flex-1 overflow-x-auto p-8 custom-scrollbar">
-          <div className="flex gap-8 h-full min-w-max">
-            {filteredStages.map((stage) => (
-              <SortableContext
-                key={stage.id}
-                items={stage.projects.map(p => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <KanbanColumn stage={stage}>
-                  {stage.projects.map((project) => (
-                    <SortableProjectCard 
-                      key={project.id} 
-                      project={project} 
-                      onClick={() => navigate(`/projects/${project.id}`)}
-                    />
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Template Selector */}
+              <div className="relative">
+                <LayoutTemplate className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="pl-10 pr-10 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-sm text-slate-700 dark:text-slate-200 appearance-none cursor-pointer min-w-[220px] font-bold"
+                >
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate("/projects/new");
-                    }}
-                    className="w-full py-3 border-2 border-dashed border-[color:var(--color-border)] rounded-lg text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)]/50 hover:bg-[color:var(--color-primary)]/5 transition-all flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest mt-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Adicionar Projeto
-                  </button>
-                </KanbanColumn>
-              </SortableContext>
-            ))}
+                </select>
+              </div>
 
-            <button className="w-80 h-fit py-6 border-2 border-dashed border-[color:var(--color-border)] rounded-lg text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)]/50 hover:bg-[color:var(--color-primary)]/5 transition-all flex items-center justify-center gap-2 text-sm font-bold uppercase tracking-widest">
-              <Plus className="w-5 h-5" />
-              Novo Estágio
-            </button>
+              <div className="relative flex-1 min-w-[280px]">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Filtrar por nome ou tag..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 font-medium"
+                />
+              </div>
+
+              <button 
+                onClick={() => navigate("/projects/new")}
+                className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 dark:shadow-none "
+              >
+                <Plus className="w-5 h-5" />
+                Novo Projeto
+              </button>
+            </div>
           </div>
         </div>
 
-        <DragOverlay dropAnimation={dropAnimation}>
-          {activeProject ? (
-            <div className="transform rotate-3 cursor-grabbing">
-               <SortableProjectCard project={activeProject} onClick={() => {}} />
+        {/* Kanban Board */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="flex-1 overflow-x-auto pb-8 custom-scrollbar">
+            <div className="flex gap-8 h-full min-w-max">
+              {filteredStages.map((stage) => (
+                <SortableContext
+                  key={stage.id}
+                  items={stage.projects.map(p => p.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <KanbanColumn stage={stage}>
+                    {stage.projects.map((project) => (
+                      <SortableProjectCard 
+                        key={project.id} 
+                        project={project} 
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                      />
+                    ))}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/projects/new");
+                      }}
+                      className="w-full py-4 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 transition-all flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar Projeto
+                    </button>
+                  </KanbanColumn>
+                </SortableContext>
+              ))}
+
+              <button className="w-80 h-fit py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 hover:text-emerald-500 hover:border-emerald-500/50 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 transition-all flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest">
+                <Plus className="w-5 h-5" />
+                Novo Estágio
+              </button>
             </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+          </div>
+
+          <DragOverlay dropAnimation={dropAnimation}>
+            {activeProject ? (
+              <div className="transform rotate-3 cursor-grabbing">
+                 <SortableProjectCard project={activeProject} onClick={() => {}} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </div>
     </div>
   );
 };

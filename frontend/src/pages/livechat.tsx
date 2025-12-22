@@ -27,11 +27,11 @@ const API =
   "http://localhost:5000";
 
 const MEDIA_PREVIEW_LABELS: Record<string, string> = {
-  IMAGE: "??? Imagem",
-  VIDEO: "?? V?deo",
-  AUDIO: "?? ?udio",
-  DOCUMENT: "?? Documento",
-  FILE: "?? Documento",
+  IMAGE: "📷 Imagem",
+  VIDEO: "🎥 Vídeo",
+  AUDIO: "🎤 Áudio",
+  DOCUMENT: "📄 Documento",
+  FILE: "📄 Documento",
 };
 
 const WHATSAPP_GROUP_SUFFIX = "@g.us";
@@ -672,7 +672,18 @@ export default function LiveChatPage() {
         lastMessageText = mediaLabel;
       } else if (chat.last_message) {
         const prefix = chat.last_message_from === "AGENT" ? "Você: " : "";
-        lastMessageText = `${prefix}${chat.last_message}`;
+        const cleanLastMessage = chat.last_message
+          .replace(/\?\?\s*audio/gi, "🎤 Áudio")
+          .replace(/\?\?\s*Documento/gi, "📄 Documento")
+          .replace(/\?\?\s*Imagem/gi, "📷 Imagem")
+          .replace(/\?\?\s*Vídeo/gi, "🎥 Vídeo")
+          .replace(/\?\?\s*Sticker/gi, "🎨 Sticker")
+          .replace(/\[AUDIO\]/gi, "🎤 Áudio")
+          .replace(/\[IMAGE\]/gi, "📷 Imagem")
+          .replace(/\[VIDEO\]/gi, "🎥 Vídeo")
+          .replace(/\[DOCUMENT\]/gi, "📄 Documento")
+          .replace(/\[STICKER\]/gi, "🎨 Sticker");
+        lastMessageText = `${prefix}${cleanLastMessage}`;
       }
       
       const displayName = (chat.display_name && chat.display_name.trim())
@@ -1659,12 +1670,14 @@ const scrollToBottom = useCallback(
             : null;
     
     // Ensure sender_type is set correctly
-    // If missing or invalid, derive from is_from_customer
+    // If missing or invalid, derive from is_from_customer or fromMe
     let senderType = raw.sender_type;
     if (!senderType || (senderType !== "AGENT" && senderType !== "CUSTOMER" && senderType !== "SYSTEM" && senderType !== "AI")) {
       // Map boolean is_from_customer to string sender_type
       if (typeof raw.is_from_customer === "boolean") {
-        senderType = raw.is_from_customer ? "CUSTOMER" : "AGENT";
+        senderType = raw.is_from_customer ? "CUSTOMER" : (raw.type === "SYSTEM" ? "SYSTEM" : (raw.sender_id ? "AGENT" : "AI"));
+      } else if (typeof raw.fromMe === "boolean") {
+        senderType = raw.fromMe ? "AGENT" : "CUSTOMER";
       } else if (typeof raw.is_from_customer === "string") {
         senderType = raw.is_from_customer;
       } else {
@@ -1676,7 +1689,8 @@ const scrollToBottom = useCallback(
       ...raw,
       chat_id: raw.chat_id ?? raw.chatId ?? null,
       sender_type: senderType,
-      media_url: raw.media_url ?? null,
+      media_url: raw.media_url ?? raw.mediaUrl ?? null,
+      media_public_url: raw.media_public_url ?? raw.mediaPublicUrl ?? null,
       type: raw.type ?? "TEXT",
       remote_participant_id: raw.remote_participant_id ?? null,
       remote_sender_id: raw.remote_sender_id ?? null,
@@ -2194,20 +2208,30 @@ const scrollToBottom = useCallback(
       if (!payload?.messageId || (!payload?.media_url && !payload?.media_storage_path && !payload?.media_public_url)) return;
       console.log('[livechat] Media ready:', payload);
       
-      // Atualiza mensagem no cache incluindo caption
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === payload.messageId
-            ? { 
-                ...msg, 
-                media_url: payload.media_url ?? msg.media_url, 
-                media_public_url: payload.media_public_url ?? msg.media_public_url,
-                media_storage_path: payload.media_storage_path ?? msg.media_storage_path,
-                caption: payload.caption ?? msg.caption,
-              }
-            : msg
-        )
-      );
+      const updateMsg = (msg: Message): Message => {
+        if (msg.id !== payload.messageId) return msg;
+        return { 
+          ...msg, 
+          media_url: payload.media_url ?? msg.media_url, 
+          media_public_url: payload.media_public_url ?? msg.media_public_url,
+          media_storage_path: payload.media_storage_path ?? msg.media_storage_path,
+          caption: payload.caption ?? msg.caption,
+        };
+      };
+
+      // 1. Atualiza estado local (mensagens visíveis)
+      setMessages((prev) => prev.map(updateMsg));
+
+      // 2. Atualiza cache global para persistência entre trocas de chat
+      messagesCache.forEach((msgs, chatId) => {
+        const index = msgs.findIndex(m => m.id === payload.messageId);
+        if (index !== -1) {
+          const updated = [...msgs];
+          updated[index] = updateMsg(updated[index]);
+          messagesCache.set(chatId, updated);
+          console.log(`[livechat] Cache updated for message ${payload.messageId} in chat ${chatId}`);
+        }
+      });
     };
 
     // Listener para mudança de agente de IA

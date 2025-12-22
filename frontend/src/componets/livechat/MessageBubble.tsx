@@ -75,7 +75,23 @@ export function MessageBubble({
       color: "var(--color-text)",
     };
   }, [isAgent, isPrivate]);
-  const messageType = (m.type || "TEXT").toUpperCase();
+
+  const messageType = useMemo(() => {
+    const type = (m.type || "TEXT").toUpperCase();
+    const body = (m.body || m.content || "").toUpperCase();
+    const hasMedia = !!(m.media_public_url || m.media_url);
+    
+    if (type === "TEXT" && hasMedia) {
+      if (body.startsWith("[DOCUMENT]") || body.startsWith("[DOCUMENTO]") || body.startsWith("[FILE]") || body.includes("📄 DOCUMENTO")) {
+        return "DOCUMENT";
+      }
+      if (body.startsWith("[IMAGE]") || body.includes("📷 IMAGEM")) return "IMAGE";
+      if (body.startsWith("[VIDEO]") || body.includes("🎥 VÍDEO")) return "VIDEO";
+      if (body.startsWith("[AUDIO]") || body.startsWith("[PTT]") || body.includes("🎵 ÁUDIO") || body.includes("🎤 ÁUDIO") || body.includes("🎤 VOZ")) return "AUDIO";
+      if (body.startsWith("[STICKER]") || body.includes("💟 FIGURINHA")) return "STICKER";
+    }
+    return type;
+  }, [m.type, m.body, m.content, m.media_public_url, m.media_url]);
 
   if (messageType === "SYSTEM") {
     return (
@@ -92,6 +108,18 @@ export function MessageBubble({
   const mediaUrl = m.media_public_url || m.media_url || null;
   const textBody = m.body ?? m.content ?? "";
   const caption = m.caption ?? null;
+
+  const displayFilename = useMemo(() => {
+    if (messageType !== "DOCUMENT" && messageType !== "FILE") return null;
+    let name = m.body || m.content || "Documento";
+    // Remove prefixos comuns de worker
+    name = name.replace(/^\[DOCUMENT\]\s*/i, "");
+    name = name.replace(/^\[DOCUMENTO\]\s*/i, "");
+    name = name.replace(/^\[FILE\]\s*/i, "");
+    name = name.replace(/^📄\s*Documento\s*/i, "");
+    return name;
+  }, [messageType, m.body, m.content]);
+
   const remoteDisplayName = useMemo(() => {
     return (
       m.remote_sender_name ||
@@ -305,7 +333,7 @@ export function MessageBubble({
         )}
         <div className="flex items-center gap-2 text-sm font-medium">
           <span className="text-lg font-semibold">📄</span>
-          <span>Documento</span>
+          <span className="truncate max-w-[200px]">{displayFilename}</span>
           {m.media_size && (
             <span className="text-[10px] opacity-60">
               ({(m.media_size / 1024 / 1024).toFixed(2)} MB)

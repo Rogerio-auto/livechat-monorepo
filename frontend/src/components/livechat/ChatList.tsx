@@ -109,12 +109,25 @@ function decodeHtmlEntities(text: string | null | undefined): string {
   
   const textarea = document.createElement("textarea");
   textarea.innerHTML = text;
-  const decoded = textarea.value;
+  let decoded = textarea.value;
   
   // Também substituir entidades numéricas hexadecimais e decimais manualmente
-  return decoded
+  decoded = decoded
     .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
+
+  // Limpar artefatos de codificação comuns (?? audio, ?? Documento, etc)
+  return decoded
+    .replace(/\?\?\s*audio/gi, "🎤 Áudio")
+    .replace(/\?\?\s*Documento/gi, "📄 Documento")
+    .replace(/\?\?\s*Imagem/gi, "📷 Imagem")
+    .replace(/\?\?\s*Vídeo/gi, "🎥 Vídeo")
+    .replace(/\?\?\s*Sticker/gi, "🎨 Sticker")
+    .replace(/\[AUDIO\]/gi, "🎤 Áudio")
+    .replace(/\[IMAGE\]/gi, "📷 Imagem")
+    .replace(/\[VIDEO\]/gi, "🎥 Vídeo")
+    .replace(/\[DOCUMENT\]/gi, "📄 Documento")
+    .replace(/\[STICKER\]/gi, "🎨 Sticker");
 }
 
 export default function ChatList({

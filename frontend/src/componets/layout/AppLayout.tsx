@@ -5,8 +5,9 @@ import { TopBar } from "./TopBar";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { io, Socket } from "socket.io-client";
 import { FloatingNotificationBell } from "../../components/notifications/FloatingNotificationBell";
+import { cleanupService } from "../../services/cleanupService";
 
-const API = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
 
 export function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -17,6 +18,31 @@ export function AppLayout() {
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
+
+  // Cron a cada 15 minutos para validar sessão
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        // Usar o mesmo endpoint de validação do RequireAuth
+        const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
+        const headers = devCompany && import.meta.env.DEV ? { 'X-Company-Id': devCompany } : undefined;
+        const res = await fetch(`${API}/auth/me`, { credentials: 'include', headers });
+        
+        if (res.status === 401) {
+          console.warn("[AppLayout] 🔒 Sessão expirada (401), desconectando usuário...");
+          await cleanupService.cleanup();
+          window.location.href = "/login";
+        }
+      } catch (err) {
+        console.error("[AppLayout] ❌ Erro ao validar sessão:", err);
+      }
+    };
+
+    // Executa a cada 15 minutos (15 * 60 * 1000 ms)
+    const interval = setInterval(checkSession, 15 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Solicitar permissão de notificação ao carregar o layout
   useEffect(() => {
@@ -112,8 +138,20 @@ export function AppLayout() {
 
          // Mostrar notificação nativa do navegador
          if ("Notification" in window && Notification.permission === "granted") {
+            const cleanMessage = (data.last_message || "")
+              .replace(/\?\?\s*audio/gi, "🎤 Áudio")
+              .replace(/\?\?\s*Documento/gi, "📄 Documento")
+              .replace(/\?\?\s*Imagem/gi, "📷 Imagem")
+              .replace(/\?\?\s*Vídeo/gi, "🎥 Vídeo")
+              .replace(/\?\?\s*Sticker/gi, "🎨 Sticker")
+              .replace(/\[AUDIO\]/gi, "🎤 Áudio")
+              .replace(/\[IMAGE\]/gi, "📷 Imagem")
+              .replace(/\[VIDEO\]/gi, "🎥 Vídeo")
+              .replace(/\[DOCUMENT\]/gi, "📄 Documento")
+              .replace(/\[STICKER\]/gi, "🎨 Sticker");
+
             const notif = new Notification("Nova mensagem", {
-              body: `${data.customer_name || 'Cliente'}: ${data.last_message}`,
+              body: `${data.customer_name || 'Cliente'}: ${cleanMessage}`,
               icon: "/icon.png",
               tag: `chat-${data.chatId}` // Evita spam de notificações para o mesmo chat
             });

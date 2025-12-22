@@ -878,7 +878,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
         id: row.id,
         chat_id: row.chat_id,
         body: row.content,
-        sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_type: row.is_from_customer ? "CUSTOMER" : (row.type === "SYSTEM" ? "SYSTEM" : (row.sender_id ? "AGENT" : "AI")),
         sender_id: row.sender_id,
         sender_name: row.sender_name,
   sender_avatar_url: row.sender_avatar_url ?? null,
@@ -1018,36 +1018,36 @@ function extractContentAndType(m: any): { content: string; type: string; caption
       return { content: String(m?.text?.body ?? ""), type: "TEXT", caption: null };
     case "image":
       return {
-        content: m?.image?.caption ? `[IMAGE] ${m.image.caption}` : "[IMAGE]",
+        content: m?.image?.caption ? String(m.image.caption) : "📷 Imagem",
         type: "IMAGE",
         caption: m?.image?.caption ? String(m.image.caption) : null,
       };
     case "audio":
-      return { content: "[AUDIO]", type: "AUDIO", caption: null };
+      return { content: "🎤 Áudio", type: "AUDIO", caption: null };
     case "video":
       return {
-        content: m?.video?.caption ? `[VIDEO] ${m.video.caption}` : "[VIDEO]",
+        content: m?.video?.caption ? String(m.video.caption) : "🎥 Vídeo",
         type: "VIDEO",
         caption: m?.video?.caption ? String(m.video.caption) : null,
       };
     case "document":
       return {
-        content: m?.document?.filename
-          ? `[DOCUMENT] ${m.document.filename}`
-          : "[DOCUMENT]",
+        content: m?.document?.caption 
+          ? String(m.document.caption) 
+          : (m?.document?.filename ? String(m.document.filename) : "📄 Documento"),
         type: "DOCUMENT",
         caption: m?.document?.caption ? String(m.document.caption) : null,
       };
     case "sticker":
-      return { content: "[STICKER]", type: "STICKER", caption: null };
+      return { content: "💟 Figurinha", type: "STICKER", caption: null };
     case "location":
       return {
-        content: `[LOCATION] ${m?.location?.latitude},${m?.location?.longitude}`,
+        content: "📍 Localização",
         type: "LOCATION",
         caption: null,
       };
     case "contacts":
-      return { content: "[CONTACTS]", type: "CONTACTS", caption: null };
+      return { content: "👤 Contato", type: "CONTACTS", caption: null };
     case "interactive":
       let interactiveText = "[INTERACTIVE]";
       const interactive = m?.interactive;
@@ -2818,7 +2818,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       case "AUDIO": return "🎵 Áudio";
       case "VOICE": return "🎤 Voz";
       case "DOCUMENT": return "📄 Documento";
-      case "STICKER": return "💟 Figurinha";
+      case "STICKER": return "🎨 Sticker";
       case "LOCATION": return "📍 Localização";
       case "CONTACT": return "👤 Contato";
       default: return type === "TEXT" ? "" : `[${type}]`;
@@ -2827,7 +2827,9 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
 
   let rawBody = typeof msg?.body === "string" ? msg.body.trim() : "";
   // Fix artifacts
-  if (rawBody.includes("?? audio") || rawBody.includes("?? Audio")) rawBody = "";
+  if (/^\?\?\s*(audio|documento|imagem|vídeo|sticker)/i.test(rawBody) || /^\[(AUDIO|IMAGE|VIDEO|DOCUMENT|STICKER)\]$/i.test(rawBody)) {
+    rawBody = "";
+  }
 
   const body =
     rawBody
@@ -4041,7 +4043,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       id: messageRow.id,
       chat_id: messageRow.chat_id,
       body: messageRow.content,
-      sender_type: "AGENT" as const,
+      sender_type: (messageRow as any).is_from_customer ? "CUSTOMER" : ((messageRow as any).type === "SYSTEM" ? "SYSTEM" : ((messageRow as any).sender_id ? "AGENT" : "AI")),
       sender_id: messageRow.sender_id,
       sender_name: (messageRow as any).sender_name ?? null,
       sender_avatar_url: (messageRow as any).sender_avatar_url ?? null,
@@ -4857,7 +4859,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           id: upsert.message.id,
           chat_id: upsert.message.chat_id,
           body: upsert.message.content,
-          sender_type: "AGENT" as const,
+          sender_type: (upsert.message as any).is_from_customer ? "CUSTOMER" : ((upsert.message as any).type === "SYSTEM" ? "SYSTEM" : ((upsert.message as any).sender_id ? "AGENT" : "AI")),
           sender_id: upsert.message.sender_id,
           sender_name: (upsert.message as any).sender_name ?? senderName ?? null,
           sender_avatar_url: (upsert.message as any).sender_avatar_url ?? senderAvatarUrl ?? null,

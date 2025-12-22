@@ -107,7 +107,7 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
         id: row.id,
         chat_id: row.chat_id,
         body: row.content,
-        sender_type: row.type === "SYSTEM" ? "SYSTEM" : (row.is_from_customer ? "CUSTOMER" : "AGENT"),
+        sender_type: row.type === "SYSTEM" ? "SYSTEM" : (row.is_from_customer ? "CUSTOMER" : (row.sender_id ? "AGENT" : "AI")),
         sender_id: row.sender_id || null,
         created_at: row.created_at,
         view_status: row.view_status || null,
@@ -1011,21 +1011,31 @@ export function registerLivechatChatRoutes(app: express.Application) {
         const normalizedType = (chat.last_message_type || "MEDIA").toString().toUpperCase();
         const isBracketStyle = chat.last_message && /^\[[A-Z]+\]$/.test(chat.last_message);
         
-        if ((!chat.last_message && chat.last_message_media_url) || isBracketStyle || chat.last_message === "?? audio") {
+        if ((!chat.last_message && chat.last_message_media_url) || isBracketStyle || chat.last_message === "?? audio" || chat.last_message === "?? Documento") {
           switch (normalizedType) {
             case "IMAGE": chat.last_message = "📷 Imagem"; break;
             case "VIDEO": chat.last_message = "🎥 Vídeo"; break;
-            case "AUDIO": chat.last_message = "🎵 Áudio"; break;
+            case "AUDIO": chat.last_message = "� Áudio"; break;
             case "PTT": chat.last_message = "🎤 Áudio"; break;
             case "DOCUMENT": chat.last_message = "📄 Documento"; break;
-            case "STICKER": chat.last_message = "💟 Figurinha"; break;
+            case "STICKER": chat.last_message = "🎨 Sticker"; break;
             case "LOCATION": chat.last_message = "📍 Localização"; break;
             case "CONTACT": chat.last_message = "👤 Contato"; break;
             default: chat.last_message = "📎 Mídia"; break;
           }
-        } else if (chat.last_message && chat.last_message.includes("?? audio")) {
-           // Corrigir encoding incorreto de emoji de microfone
-           chat.last_message = chat.last_message.replace(/\?\? audio/gi, "🎤 Áudio");
+        } else if (chat.last_message && (chat.last_message.includes("??") || chat.last_message.includes("["))) {
+           // Corrigir encoding incorreto de emojis e artefatos
+           chat.last_message = chat.last_message
+             .replace(/\?\?\s*audio/gi, "🎤 Áudio")
+             .replace(/\?\?\s*Documento/gi, "📄 Documento")
+             .replace(/\?\?\s*Imagem/gi, "📷 Imagem")
+             .replace(/\?\?\s*Vídeo/gi, "🎥 Vídeo")
+             .replace(/\?\?\s*Sticker/gi, "🎨 Sticker")
+             .replace(/\[AUDIO\]/gi, "🎤 Áudio")
+             .replace(/\[IMAGE\]/gi, "📷 Imagem")
+             .replace(/\[VIDEO\]/gi, "🎥 Vídeo")
+             .replace(/\[DOCUMENT\]/gi, "📄 Documento")
+             .replace(/\[STICKER\]/gi, "🎨 Sticker");
         }
 
         const chatTypeUpper = typeof chat.chat_type === "string" ? chat.chat_type.toUpperCase() : null;
@@ -1407,7 +1417,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           id: inserted.id,
           chat_id: inserted.chat_id,
           body: inserted.content,
-          sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+          sender_type: inserted.is_from_customer ? "CUSTOMER" : (inserted.type === "SYSTEM" ? "SYSTEM" : (inserted.sender_id ? "AGENT" : "AI")),
           sender_id: inserted.sender_id || null,
           sender_name: (inserted as any).sender_name || senderName || null,
           sender_avatar_url: (inserted as any).sender_avatar_url || senderAvatarUrl || null,
@@ -2601,7 +2611,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           id: row.id,
           chat_id: row.chat_id,
           body: row.content,
-          sender_type: row.is_from_customer ? "CUSTOMER" : "AGENT",
+          sender_type: row.is_from_customer ? "CUSTOMER" : (row.type === "SYSTEM" ? "SYSTEM" : (row.sender_id ? "AGENT" : "AI")),
           sender_id: row.sender_id || null,
           sender_name: row.sender_name || null,
           sender_avatar_url: row.sender_avatar_url || null,
@@ -2841,7 +2851,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           id: inserted.id,
           chat_id: inserted.chat_id,
           body: inserted.content,
-          sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+          sender_type: inserted.is_from_customer ? "CUSTOMER" : (inserted.type === "SYSTEM" ? "SYSTEM" : (inserted.sender_id ? "AGENT" : "AI")),
           sender_id: inserted.sender_id || senderId || null,
           sender_name: inserted.sender_name || senderName || null,
           sender_avatar_url: (inserted as any).sender_avatar_url || senderAvatarUrl || null,
@@ -3029,7 +3039,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         id: inserted.id,
         chat_id: inserted.chat_id,
         body: inserted.content,
-        sender_type: inserted.is_from_customer ? "CUSTOMER" : "AGENT",
+        sender_type: inserted.is_from_customer ? "CUSTOMER" : (inserted.type === "SYSTEM" ? "SYSTEM" : (inserted.sender_id ? "AGENT" : "AI")),
         sender_id: inserted.sender_id || senderId || null,
         sender_name: inserted.sender_name || senderName || null,
         sender_avatar_url: inserted.sender_avatar_url || senderAvatarUrl || null,
@@ -3229,7 +3239,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         id: inserted.id,
         chat_id: inserted.chat_id,
         body: inserted.content,
-        sender_type: "AGENT" as const,
+        sender_type: inserted.is_from_customer ? "CUSTOMER" : (inserted.type === "SYSTEM" ? "SYSTEM" : (inserted.sender_id ? "AGENT" : "AI")),
         sender_id: inserted.sender_id || senderId || null,
         sender_name: inserted.sender_name || senderName || null,
         sender_avatar_url: inserted.sender_avatar_url || senderAvatarUrl || null,

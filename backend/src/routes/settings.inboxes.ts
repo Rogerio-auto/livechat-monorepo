@@ -196,7 +196,7 @@ function resolveMetaWebhookUrl(req: any): string | null {
   const forwardedProto = (req?.get?.("x-forwarded-proto") || "").toString().split(",")[0].trim();
   const proto = forwardedProto || req?.protocol || "http";
   const host =
-    req?.get?.("x-forwarded-host")?.toString().split(",")[0].trim() ||
+    req?.get?.("x-forwarded-host")?.toString().split(",")?.[0]?.trim() ||
     req?.get?.("host") ||
     null;
   if (!host) return null;
@@ -349,8 +349,9 @@ export function registerSettingsInboxesRoutes(app: Application) {
         const errorDetails = parsed.error.format();
         console.error("[POST /settings/inboxes] ❌ Validação falhou:", errorDetails);
         
-        // Pegar a primeira mensagem de erro amigável
-        const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
+        // Pegar a primeira mensagem de erro amigável de forma segura
+        const issues = parsed.error.issues || [];
+        const firstError = issues[0]?.message || "Dados inválidos";
         
         return res
           .status(400)

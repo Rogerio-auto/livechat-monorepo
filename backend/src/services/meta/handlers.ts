@@ -1,6 +1,6 @@
 // src/services/meta/handlers.ts
 import crypto from "node:crypto";
-import { getInboxByPhoneNumberId, getDecryptedCredsForInbox } from "./store.ts";
+import { getInboxByPhoneNumberId, getDecryptedCredsForInbox, getInboxByVerifyToken } from "./store.ts";
 import { EX_META, publish } from "../../queue/rabbit.ts"; // <- PLURAL "queues"
 
 const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "";
@@ -11,9 +11,28 @@ export async function verifyMetaWebhook(query: any) {
   const mode = query["hub.mode"];
   const token = query["hub.verify_token"];
   const challenge = query["hub.challenge"];
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+
+  if (mode !== "subscribe") {
+    return { status: 403, body: "forbidden" };
+  }
+
+  // 1. Tenta o token global da env
+  if (VERIFY_TOKEN && token === VERIFY_TOKEN) {
     return { status: 200, body: String(challenge ?? "") };
   }
+
+  // 2. Tenta buscar no banco por esse token
+  if (token) {
+    try {
+      const inbox = await getInboxByVerifyToken(token);
+      if (inbox) {
+        return { status: 200, body: String(challenge ?? "") };
+      }
+    } catch (err) {
+      console.error("[META] Erro ao verificar token no banco:", err);
+    }
+  }
+
   return { status: 403, body: "forbidden" };
 }
 

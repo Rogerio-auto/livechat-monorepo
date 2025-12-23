@@ -512,6 +512,15 @@ type InboxCredentials = {
   phone_number_id?: string | null;
   waba_id?: string | null;
 };
+export async function getInboxByVerifyToken(token: string) {
+  if (!token) return null;
+  const row = await db.oneOrNone<{ id: string }>(
+    "SELECT id FROM public.inboxes WHERE webhook_verify_token = $1 LIMIT 1",
+    [token]
+  );
+  return row;
+}
+
 export async function getInboxByPhoneNumberId(
   phoneNumberId?: string | null,
   displayPhoneNumber?: string | null,

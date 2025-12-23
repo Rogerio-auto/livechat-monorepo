@@ -124,7 +124,7 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
     console.warn("[subscriptions] Cache read error:", cacheError);
   }
 
-  const row = await db.oneOrNone<Subscription & { plan_json: any }>(
+  let row = await db.oneOrNone<Subscription & { plan_json: any }>(
     `SELECT 
       s.*,
       to_jsonb(p.*) as plan_json

@@ -1010,8 +1010,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
         // OTIMIZAÇÃO: Formatar last_message para tipos de mídia (substituir [IMAGE], [MEDIA] etc por ícones amigáveis)
         const normalizedType = (chat.last_message_type || "MEDIA").toString().toUpperCase();
         const isBracketStyle = chat.last_message && /^\[[A-Z]+\]$/.test(chat.last_message);
+        const isArtifactStyle = chat.last_message && /^\?\?\s*(audio|documento|imagem|vídeo|sticker)/i.test(chat.last_message);
         
-        if ((!chat.last_message && chat.last_message_media_url) || isBracketStyle || chat.last_message === "?? audio" || chat.last_message === "?? Documento") {
+        if ((!chat.last_message && chat.last_message_media_url) || isBracketStyle || isArtifactStyle) {
           switch (normalizedType) {
             case "IMAGE": chat.last_message = "📷 Imagem"; break;
             case "VIDEO": chat.last_message = "🎥 Vídeo"; break;

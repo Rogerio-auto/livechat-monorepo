@@ -135,6 +135,47 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
     [companyId]
   );
 
+  if (!row) {
+    console.log("[subscriptions] 🆕 No subscription found for company, creating 30-day trial:", companyId);
+    try {
+      // Buscar o plano 'starter' ou o primeiro disponível para o trial
+      const defaultPlan = await db.oneOrNone<Plan>(
+        `SELECT * FROM public.plans WHERE id = 'starter' OR is_active = TRUE ORDER BY sort_order ASC LIMIT 1`
+      );
+
+      if (defaultPlan) {
+        const trialEndsAt = new Date();
+        trialEndsAt.setDate(trialEndsAt.getDate() + 30);
+
+        await db.none(
+          `INSERT INTO public.subscriptions (
+            company_id, plan_id, status, billing_cycle, 
+            trial_ends_at, trial_used, 
+            current_period_start, current_period_end
+          )
+          VALUES ($1, $2, 'trial', 'monthly', $3, true, NOW(), $3)`,
+          [companyId, defaultPlan.id, trialEndsAt]
+        );
+
+        // Buscar novamente após criar
+        row = await db.oneOrNone<Subscription & { plan_json: any }>(
+          `SELECT 
+            s.*,
+            to_jsonb(p.*) as plan_json
+          FROM public.subscriptions s
+          INNER JOIN public.plans p ON p.id = s.plan_id
+          WHERE s.company_id = $1
+          LIMIT 1`,
+          [companyId]
+        );
+      } else {
+        console.error("[subscriptions] ❌ No active plans found to create trial subscription");
+      }
+    } catch (createError) {
+      console.error("[subscriptions] ❌ Error creating trial subscription:", createError);
+    }
+  }
+
   if (!row) return null;
 
   const result = {
@@ -145,6 +186,18 @@ export async function getSubscription(companyId: string): Promise<SubscriptionWi
   // Remove temporary field
   if ('plan_json' in result) {
     delete (result as any).plan_json;
+  }
+
+  // 🆕 Verificar se o trial expirou
+  if (result.status === 'trial' && result.trial_ends_at) {
+    const trialEnd = new Date(result.trial_ends_at);
+    if (trialEnd < new Date()) {
+      console.log("[subscriptions] ⚠️ Trial expired for company:", companyId);
+      result.status = 'expired';
+      // Atualizar no banco de forma assíncrona (não precisa esperar)
+      db.none('UPDATE public.subscriptions SET status = $1 WHERE company_id = $2', ['expired', companyId])
+        .catch(err => console.error("[subscriptions] Error updating expired trial:", err));
+    }
   }
 
   // ✅ Salvar no cache
@@ -295,9 +348,9 @@ export async function checkLimit(
   companyId: string,
   resource: keyof PlanLimits
 ): Promise<LimitCheckResult> {
-  const limits = await getPlanLimits(companyId);
+  const sub = await getSubscription(companyId);
   
-  if (!limits) {
+  if (!sub) {
     return {
       allowed: false,
       limit: 0,
@@ -308,6 +361,52 @@ export async function checkLimit(
     };
   }
 
+  // 🆕 Se estiver em trial, libera tudo (totalmente liberado)
+  if (sub.status === "trial") {
+    // Ainda queremos contar o uso atual para mostrar no dashboard, mas allowed é sempre true
+    let current = 0;
+    try {
+      switch (resource) {
+        case "users":
+          current = await db.one<{ count: number }>(
+            `SELECT COUNT(*)::int as count FROM public.users WHERE company_id = $1`,
+            [companyId]
+          ).then(r => r.count);
+          break;
+        case "inboxes":
+          current = await db.one<{ count: number }>(
+            `SELECT COUNT(*)::int as count FROM public.inboxes WHERE company_id = $1`,
+            [companyId]
+          ).then(r => r.count);
+          break;
+        case "ai_agents":
+          current = await db.one<{ count: number }>(
+            `SELECT COUNT(*)::int as count FROM public.agents WHERE company_id = $1 AND status != 'ARCHIVED'`,
+            [companyId]
+          ).then(r => r.count);
+          break;
+        case "messages_per_month":
+          current = await getCurrentUsage(companyId, "messages_sent");
+          break;
+        case "campaigns_per_month":
+          current = await getCurrentUsage(companyId, "campaigns_sent");
+          break;
+      }
+    } catch (e) {
+      console.warn(`[subscriptions] Error counting usage for ${resource} during trial:`, e);
+    }
+
+    return {
+      allowed: true,
+      limit: -1,
+      current,
+      remaining: -1,
+      isUnlimited: true,
+      warningLevel: "none",
+    };
+  }
+
+  const limits = sub.plan.limits;
   const limit = limits[resource];
   
   // -1 = ilimitado
@@ -388,9 +487,13 @@ export async function checkLimit(
  * Verificar se empresa tem acesso a uma feature
  */
 export async function checkFeatureAccess(companyId: string, feature: keyof PlanFeatures): Promise<boolean> {
-  const features = await getPlanFeatures(companyId);
-  if (!features) return false;
-  return features[feature] === true;
+  const sub = await getSubscription(companyId);
+  if (!sub) return false;
+
+  // Se estiver em trial, libera todas as features
+  if (sub.status === "trial") return true;
+
+  return sub.plan.features[feature] === true;
 }
 
 // ========== TRIAL & EXPIRATION ==========

@@ -30,7 +30,11 @@ const INBOX_SELECT =
 const META_PROVIDER = "META_CLOUD";
 const WAHA_PROVIDER = "WAHA";
 
-const metaFieldSchema = z.union([z.string().min(1), z.null()]);
+const metaFieldSchema = z.preprocess((val) => {
+  if (typeof val === "string" && val.trim() === "") return null;
+  return val;
+}, z.string().min(1).nullable());
+
 const metaConfigSchema = z
   .object({
     access_token: metaFieldSchema,

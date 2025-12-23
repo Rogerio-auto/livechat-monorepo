@@ -37,7 +37,19 @@ export default function InboxesPage() {
   const isWaha = createInboxForm.provider === "WAHA";
 
   const openCreateModalForProvider = (provider: "META_CLOUD" | "WAHA") => {
-    setCreateInboxForm(provider === "META_CLOUD" ? { ...EMPTY_INBOX_FORM } : { ...EMPTY_WAHA_FORM });
+    if (provider === "META_CLOUD") {
+      setCreateInboxForm({
+        ...EMPTY_INBOX_FORM,
+        provider_config: {
+          meta: {
+            ...EMPTY_INBOX_FORM.provider_config?.meta,
+            webhook_verify_token: generateVerifyToken(),
+          },
+        },
+      });
+    } else {
+      setCreateInboxForm({ ...EMPTY_WAHA_FORM });
+    }
     setProviderPickerOpen(false);
     setCreateModalOpen(true);
   };
@@ -221,6 +233,48 @@ export default function InboxesPage() {
                   }
                 })}
               />
+              <Input
+                label="App Secret"
+                placeholder="App Secret do Painel Meta"
+                type="password"
+                value={createInboxForm.provider_config?.meta?.app_secret || ""}
+                onChange={(e) => setCreateInboxForm({
+                  ...createInboxForm,
+                  provider_config: {
+                    ...createInboxForm.provider_config,
+                    meta: { ...createInboxForm.provider_config?.meta, app_secret: e.target.value }
+                  }
+                })}
+              />
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Webhook Verify Token</label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="token seguro"
+                    className="flex-1"
+                    value={createInboxForm.provider_config?.meta?.webhook_verify_token || ""}
+                    onChange={(e) => setCreateInboxForm({
+                      ...createInboxForm,
+                      provider_config: {
+                        ...createInboxForm.provider_config,
+                        meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: e.target.value }
+                      }
+                    })}
+                  />
+                  <Button
+                    variant="ghost"
+                    onClick={() => setCreateInboxForm({
+                      ...createInboxForm,
+                      provider_config: {
+                        ...createInboxForm.provider_config,
+                        meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: generateVerifyToken() }
+                      }
+                    })}
+                  >
+                    Gerar
+                  </Button>
+                </div>
+              </div>
             </>
           )}
 

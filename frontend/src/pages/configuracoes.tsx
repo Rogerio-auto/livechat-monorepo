@@ -787,7 +787,7 @@ export default function ConfiguracoesPage() {
         <div className="grid grid-cols-12 gap-6 h-[calc(100vh-4rem)] p-6">
           {/* Sidebar de navegação */}
           <div className="col-span-12 md:col-span-2">
-            <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-xl sticky top-6 transition-colors duration-300">
+            <div className="p-4 sticky top-6 transition-colors duration-300">
               <SettingsNav sections={[...sections]} current={tab} onChange={(id) => goTab(id as TabId)} />
             </div>
           </div>
@@ -795,7 +795,7 @@ export default function ConfiguracoesPage() {
           {/* Conteúdo principal */}
           <div className="col-span-12 md:col-span-10 overflow-y-auto pr-1 space-y-6">
             {tab === "empresa" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-600/20 flex items-center justify-center transition-colors duration-300">
@@ -822,7 +822,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "perfil" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
@@ -848,7 +848,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "inboxes" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
@@ -882,7 +882,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "integracoes" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-600/20 flex items-center justify-center transition-colors duration-300">
@@ -899,7 +899,7 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "billing" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-600/20 flex items-center justify-center transition-colors duration-300">
@@ -918,7 +918,7 @@ export default function ConfiguracoesPage() {
               const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
               if (!allowed) {
                 return (
-                  <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+                  <div className="p-8 transition-colors duration-300">
                     <div className="text-gray-900 dark:text-white">Você não tem permissão para configurar agentes.</div>
                   </div>
                 );
@@ -934,7 +934,7 @@ export default function ConfiguracoesPage() {
             })()}
             
             {tab === "colaborador" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-600/20 flex items-center justify-center transition-colors duration-300">
@@ -951,20 +951,20 @@ export default function ConfiguracoesPage() {
             )}
 
             {tab === "departamentos" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <DepartmentsManager />
               </div>
             )}
 
             {tab === "times" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <TeamsManager />
               </div>
             )}
 
             {/* TAB: CALENDÁRIOS */}
             {tab === "calendarios" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-600/20 flex items-center justify-center transition-colors duration-300">
@@ -1078,7 +1078,7 @@ export default function ConfiguracoesPage() {
 
             {/* TAB: PERMISSÕES DE CALENDÁRIO */}
             {tab === "permissoes-calendario" && (
-              <div className="bg-linear-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 rounded-xl p-8 border border-gray-200 dark:border-gray-700 shadow-md transition-colors duration-300">
+              <div className="p-8 transition-colors duration-300">
                 <div className="mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-600/20 flex items-center justify-center transition-colors duration-300">

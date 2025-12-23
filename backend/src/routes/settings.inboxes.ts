@@ -49,15 +49,25 @@ const wahaConfigSchema = z
   })
   .partial();
 
+const optionalUrl = z.preprocess((val) => {
+  if (!val || typeof val !== "string" || val.trim() === "") return null;
+  const s = val.trim();
+  // Se não tem protocolo, mas parece uma URL/IP, adiciona http://
+  if (!/^https?:\/\//i.test(s)) {
+    return `http://${s}`;
+  }
+  return s;
+}, z.string().url().nullable());
+
 const inboxCreateSchema = z
   .object({
-    name: z.string().min(1),
-    phone_number: z.string().min(5),
-    webhook_url: z.string().url().optional().nullable(),
+    name: z.string().min(1, "Nome é obrigatório"),
+    phone_number: z.string().min(5, "Número de telefone inválido ou muito curto"),
+    webhook_url: optionalUrl.optional(),
     channel: z.string().optional(),
     provider: z.string().optional(),
     is_active: z.boolean().optional(),
-    base_url: z.string().url().optional().nullable(),
+    base_url: optionalUrl.optional(),
     api_version: z.string().optional().nullable(),
     instance_id: z.string().optional().nullable(),
     provider_config: z
@@ -336,10 +346,18 @@ export function registerSettingsInboxesRoutes(app: Application) {
       
       const parsed = inboxCreateSchema.safeParse(req.body || {});
       if (!parsed.success) {
-        console.error("[POST /settings/inboxes] ❌ Validação falhou:", parsed.error.format());
+        const errorDetails = parsed.error.format();
+        console.error("[POST /settings/inboxes] ❌ Validação falhou:", errorDetails);
+        
+        // Pegar a primeira mensagem de erro amigável
+        const firstError = parsed.error.errors[0]?.message || "Dados inválidos";
+        
         return res
           .status(400)
-          .json({ error: "Dados invalidos", details: parsed.error.format() });
+          .json({ 
+            error: `Dados inválidos: ${firstError}`, 
+            details: errorDetails 
+          });
       }
       const body = parsed.data;
       const provider = (body.provider || META_PROVIDER).toUpperCase();

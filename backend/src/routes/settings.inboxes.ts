@@ -30,28 +30,26 @@ const INBOX_SELECT =
 const META_PROVIDER = "META_CLOUD";
 const WAHA_PROVIDER = "WAHA";
 
-const metaFieldSchema = z.preprocess((val) => {
+const safeConfigField = z.preprocess((val) => {
   if (typeof val === "string" && val.trim() === "") return null;
   return val;
-}, z.string().min(1).nullable());
+}, z.string().nullable().optional());
 
 const metaConfigSchema = z
   .object({
-    access_token: metaFieldSchema,
-    phone_number_id: metaFieldSchema,
-    waba_id: metaFieldSchema,
-    webhook_verify_token: metaFieldSchema,
-    app_secret: metaFieldSchema,
-    refresh_token: z.union([z.string().min(1), z.null()]).optional(),
-    provider_api_key: z.union([z.string().min(1), z.null()]).optional(),
-  })
-  .partial();
+    access_token: safeConfigField,
+    phone_number_id: safeConfigField,
+    waba_id: safeConfigField,
+    webhook_verify_token: safeConfigField,
+    app_secret: safeConfigField,
+    refresh_token: safeConfigField,
+    provider_api_key: safeConfigField,
+  });
 
 const wahaConfigSchema = z
   .object({
-    api_key: z.union([z.string().min(1), z.null()]).optional(),
-  })
-  .partial();
+    api_key: safeConfigField,
+  });
 
 const optionalUrl = z.preprocess((val) => {
   if (!val || typeof val !== "string" || val.trim() === "") return null;

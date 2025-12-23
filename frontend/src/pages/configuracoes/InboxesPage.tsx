@@ -2,7 +2,7 @@ import { useState } from "react";
 import InboxesPanel from "../../componets/inboxes/InboxesPanel";
 import { useInboxesSettings, EMPTY_INBOX_FORM, EMPTY_WAHA_FORM } from "../../hooks/useInboxesSettings";
 import type { InboxFormExtended } from "../../types/types";
-import { API, fetchJson } from "../../utils/api";
+import { API, fetchJson, getAccessToken } from "../../utils/api";
 import type { Inbox } from "../../types/types";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
@@ -61,15 +61,33 @@ export default function InboxesPage() {
         ...createInboxForm,
         webhook_url: isMeta ? metaWebhookUrl : createInboxForm.webhook_url,
       };
-      await fetchJson(`${API}/settings/inboxes`, {
+      
+      console.log("[submitCreateInbox] Enviando payload:", JSON.stringify(payload, null, 2));
+
+      const response = await fetch(`${API}/settings/inboxes`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${getAccessToken() || ""}`
+        },
         body: JSON.stringify(payload),
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[submitCreateInbox] Erro na resposta:", data);
+        const errorMsg = data.error || "Erro desconhecido";
+        const details = data.details ? JSON.stringify(data.details, null, 2) : "";
+        alert(`Erro ao criar caixa: ${errorMsg}\n${details}`);
+        return;
+      }
+
       await refetch();
       setCreateModalOpen(false);
     } catch (err) {
       console.error("Erro ao criar caixa:", err);
-      alert("Erro ao criar caixa de entrada");
+      alert("Erro ao criar caixa de entrada. Verifique o console para mais detalhes.");
     } finally {
       setCreateSaving(false);
     }

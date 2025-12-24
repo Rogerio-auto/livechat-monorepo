@@ -96,10 +96,12 @@ async function resolvePublicUser(userId: string) {
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   try {
-    // DEV backdoor opcional (usar DEV_COMPANY_ID ou header)
-    if (isDev) {
+    // 🔒 SEGURANÇA: DEV backdoor restrito (requer DEV_BYPASS_TOKEN no .env e no header)
+    if (isDev && process.env.DEV_BYPASS_TOKEN) {
       const devCompany = (req.header("x-company-id") || process.env.DEV_COMPANY_ID || "").trim();
-      if (devCompany) {
+      const devToken = req.header("x-dev-token");
+
+      if (devCompany && devToken === process.env.DEV_BYPASS_TOKEN) {
         (req as any).user = {
           id: "dev",
           email: "dev@local",

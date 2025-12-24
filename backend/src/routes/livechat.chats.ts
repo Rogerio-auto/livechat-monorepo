@@ -24,6 +24,13 @@ import { normalizeMsisdn } from "../util.js";
 import { getAgent as getRuntimeAgent } from "../services/agents.runtime.js";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.js";
 import messagesRouter from "./livechat.messages.js";
+import { logger } from "../lib/logger.js";
+import { 
+  SendMessageSchema, 
+  CreateChatSchema, 
+  UpdateChatStatusSchema, 
+  TransferChatSchema 
+} from "../schemas/chat.schema.ts";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -1151,31 +1158,26 @@ export function registerLivechatChatRoutes(app: express.Application) {
       endTimer();
     }
   });
-  app.post("/livechat/messages", requireAuth, async (req: any, res) => {
+  app.post("/livechat/messages", requireAuth, async (req: any, res, next) => {
     const startedAt = performance.now();
     let insertedId: string | null = null;
     let logStatus: "ok" | "error" = "ok";
     let logError: string | null = null;
-    const { chatId, text, senderType = "AGENT", reply_to } = req.body || {};
-    const logMetrics = () => {
-      const durationMs = Number((performance.now() - startedAt).toFixed(1));
-      console.log("[metrics][api]", {
-        chatId: chatId ?? null,
-        durationMs,
-        insertedId,
-        status: logStatus,
-        error: logError,
-      });
-    };
-
-    if (!chatId || !text) {
-      logStatus = "error";
-      logError = "chatId_text_missing";
-      logMetrics();
-      return res.status(400).json({ error: "chatId e text obrigatorios" });
-    }
-
+    
     try {
+      const { chatId, text, senderType, reply_to } = SendMessageSchema.parse(req.body);
+      
+      const logMetrics = () => {
+        const durationMs = Number((performance.now() - startedAt).toFixed(1));
+        logger.info("[metrics][api] /livechat/messages", {
+          chatId,
+          durationMs,
+          insertedId,
+          status: logStatus,
+          error: logError,
+        });
+      };
+
       const authUserId = typeof req.user?.id === "string" ? req.user.id : null;
       const needsSenderId = String(senderType).toUpperCase() !== "CUSTOMER";
       const chatSelect = `
@@ -1529,10 +1531,10 @@ export function registerLivechatChatRoutes(app: express.Application) {
       runCacheInvalidation();
       return res.status(201).json({ ok: true, data: inserted });
     } catch (e: any) {
-      console.error("[livechat:send] error (service route)", e);
+      logger.error("[livechat:send] error (service route)", { error: e.message, stack: e.stack });
       logStatus = "error";
       logError = e?.message || "send error";
-      return res.status(500).json({ error: e?.message || "send error" });
+      next(e);
     } finally {
       logMetrics();
     }
@@ -1677,18 +1679,16 @@ export function registerLivechatChatRoutes(app: express.Application) {
     }
   });
 
-  app.post("/livechat/chats", requireAuth, async (req, res) => {
-    const { inboxId, customerId, externalId, initialMessage } = req.body || {};
-    if (!inboxId || !customerId) {
-      return res.status(400).json({ error: "inboxId e customerId sao obrigatorios" });
-    }
+  app.post("/livechat/chats", requireAuth, async (req, res, next) => {
+    try {
+      const { inboxId, customerId, externalId, initialMessage } = CreateChatSchema.parse(req.body);
 
-    const payload: any = {
-      inbox_id: inboxId,
-      customer_id: customerId,
-      external_id: externalId || null,
-      status: "OPEN",
-    };
+      const payload: any = {
+        inbox_id: inboxId,
+        customer_id: customerId,
+        external_id: externalId || null,
+        status: "OPEN",
+      };
 
     const { data: chat, error: errUpsert } = await supabaseAdmin
       .from("chats")
@@ -1761,6 +1761,9 @@ export function registerLivechatChatRoutes(app: express.Application) {
     }
 
     return res.status(201).json(chat);
+    } catch (error) {
+      next(error);
+    }
   });
 
   // Detalhar chat (com cache)

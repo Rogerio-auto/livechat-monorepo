@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { logger } from "../lib/logger.ts";
 import { getIO } from "../lib/io.ts";
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "../lib/crypto.ts";
 import type { PostgrestError } from "@supabase/supabase-js";
@@ -336,11 +337,11 @@ export function registerSettingsInboxesRoutes(app: Application) {
 
   app.post("/settings/inboxes", requireAuth, checkResourceLimit("inboxes"), async (req: any, res) => {
     try {
-      console.log("[POST /settings/inboxes] 🎬 Iniciando criação de inbox");
-      console.log("[POST /settings/inboxes] 📦 Body recebido:", JSON.stringify(req.body, null, 2));
+      logger.info("[POST /settings/inboxes] 🎬 Iniciando criação de inbox");
+      logger.info("[POST /settings/inboxes] 📦 Body recebido:", req.body);
       
       const ctx = await fetchActorContext(req);
-      console.log("[POST /settings/inboxes] 👤 Contexto do usuário:", {
+      logger.info("[POST /settings/inboxes] 👤 Contexto do usuário:", {
         userId: ctx.localUserId,
         companyId: ctx.companyId,
         role: ctx.role
@@ -453,14 +454,14 @@ export function registerSettingsInboxesRoutes(app: Application) {
         .select(INBOX_SELECT)
         .single();
       if (error) {
-        console.error("[POST /settings/inboxes] ❌ Erro ao inserir inbox:", error);
+        logger.error("[POST /settings/inboxes] ❌ Erro ao inserir inbox:", error);
         return res.status(500).json({ error: error.message });
       }
 
-      console.log("[POST /settings/inboxes] ✅ Inbox criada com ID:", inbox.id);
+      logger.info("[POST /settings/inboxes] ✅ Inbox criada com ID:", inbox.id);
 
       if (meta) {
-        console.log("[POST /settings/inboxes] 🔐 Salvando secrets da Meta");
+        logger.info("[POST /settings/inboxes] 🔐 Salvando secrets da Meta");
         const secretPayload: Record<string, any> = { inbox_id: inbox.id };
         const assignSecret = (
           key: "access_token" | "refresh_token" | "provider_api_key",
@@ -477,10 +478,10 @@ export function registerSettingsInboxesRoutes(app: Application) {
         await supabaseAdmin
           .from("inbox_secrets")
           .upsert([secretPayload], { onConflict: "inbox_id" });
-        console.log("[POST /settings/inboxes] ✅ Secrets da Meta salvos");
+        logger.info("[POST /settings/inboxes] ✅ Secrets da Meta salvos");
       }
       if (waha?.api_key !== undefined) {
-        console.log("[POST /settings/inboxes] 🔐 Salvando API key da WAHA");
+        logger.info("[POST /settings/inboxes] 🔐 Salvando API key da WAHA");
         await supabaseAdmin
           .from("inbox_secrets")
           .upsert(
@@ -492,7 +493,7 @@ export function registerSettingsInboxesRoutes(app: Application) {
             ],
             { onConflict: "inbox_id" },
           );
-        console.log("[POST /settings/inboxes] ✅ API key da WAHA salva");
+        logger.info("[POST /settings/inboxes] ✅ API key da WAHA salva");
       }
       if (resolvedMetaWebhook) {
         console.log("[POST /settings/inboxes] 🔗 Atualizando webhook URL da Meta");

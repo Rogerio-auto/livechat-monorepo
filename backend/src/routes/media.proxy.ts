@@ -174,6 +174,30 @@ router.get("/proxy", async (req: Request, res: Response) => {
 
     // Method 4: HTTP/HTTPS URL (proxy via axios)
     if (originalUrl.startsWith("http://") || originalUrl.startsWith("https://")) {
+      // 🔒 SEGURANÇA: Proteção contra SSRF - Validar domínios permitidos
+      try {
+        const parsedUrl = new URL(originalUrl);
+        const allowedDomains = [
+          "fbcdn.net",
+          "whatsapp.net",
+          "supabase.co",
+          "7sion.com",
+          "googleusercontent.com",
+          "amazonaws.com"
+        ];
+
+        const isAllowed = allowedDomains.some(domain => 
+          parsedUrl.hostname === domain || parsedUrl.hostname.endsWith("." + domain)
+        );
+
+        if (!isAllowed) {
+          console.warn("[media.proxy] ⚠️  Blocked SSRF attempt to domain:", parsedUrl.hostname);
+          return res.status(403).json({ error: "Domain not allowed for proxy" });
+        }
+      } catch (urlError) {
+        return res.status(400).json({ error: "Invalid URL format" });
+      }
+
       const response = await axios.get(originalUrl, {
         responseType: "stream",
         timeout: 30000, // 30 seconds

@@ -31,7 +31,7 @@ export async function requireCalendarOwner(req: Request, res: Response, next: Ne
     const userRole = (urow as any)?.role;
 
     // ADMIN/MANAGER bypass - full access
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
+    if (userRole === "ADMIN" || userRole === "MANAGER" || userRole === "SUPER_ADMIN") {
       const { data: calendar } = await supabaseAdmin
         .from(TABLE_CALENDARS)
         .select("*")
@@ -92,7 +92,7 @@ export async function requireCalendarView(req: Request, res: Response, next: Nex
     const userRole = (urow as any)?.role;
 
     // ADMIN/MANAGER bypass - full access to view any calendar
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
+    if (userRole === "ADMIN" || userRole === "MANAGER" || userRole === "SUPER_ADMIN") {
       const { data: calendar } = await supabaseAdmin
         .from(TABLE_CALENDARS)
         .select("*")
@@ -185,7 +185,7 @@ export async function requireCalendarEdit(req: Request, res: Response, next: Nex
     const userRole = (urow as any)?.role;
 
     // ADMIN/MANAGER bypass - full edit access
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
+    if (userRole === "ADMIN" || userRole === "MANAGER" || userRole === "SUPER_ADMIN") {
       const { data: calendar } = await supabaseAdmin
         .from(TABLE_CALENDARS)
         .select("*")
@@ -284,7 +284,7 @@ export async function requireCalendarCreateEvent(req: Request, res: Response, ne
 
     // ADMIN bypass - full access
     const userRole = (urow as any)?.role;
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
+    if (userRole === "ADMIN" || userRole === "MANAGER" || userRole === "SUPER_ADMIN") {
       console.log("[requireCalendarCreateEvent] ✅ ADMIN/MANAGER bypass");
       (req as any).calendarPermission = { 
         isOwner: true, 
@@ -385,7 +385,7 @@ export async function requireEventOwner(req: Request, res: Response, next: NextF
     const userRole = (urow as any).role;
 
     // ADMIN/MANAGER can edit any event
-    if (userRole === "ADMIN" || userRole === "MANAGER") {
+    if (userRole === "ADMIN" || userRole === "MANAGER" || userRole === "SUPER_ADMIN") {
       const { data: event, error } = await supabaseAdmin
         .from(TABLE_EVENTS)
         .select("id, created_by_id, calendar_id")

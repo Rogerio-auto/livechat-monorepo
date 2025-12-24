@@ -36,7 +36,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
     if (errU) return res.status(500).json({ error: errU.message });
     if (!urow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
     const role = (urow as any).role as string | null;
-    const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
+    const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR" || role === "SUPER_ADMIN";
     if (!allowed) return res.status(403).json({ error: "Sem permissão para criar labels" });
 
     const { data: tag, error: errTag } = await supabaseAdmin

@@ -2,6 +2,8 @@ import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { logger } from "../lib/logger.js";
+import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.ts";
 
 export function registerLivechatContactsRoutes(app: express.Application) {
   // List contacts of current user's company
@@ -240,7 +242,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
  });
  
  // Create contact
- app.post("/livechat/contacts", requireAuth, async (req: any, res) => {
+ app.post("/livechat/contacts", requireAuth, async (req: any, res, next) => {
    try {
      const authUserId = req.user.id as string;
      const { data: urow, error: errU } = await supabaseAdmin
@@ -250,12 +252,12 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        .maybeSingle();
      if (errU) return res.status(500).json({ error: errU.message });
      if (!urow?.company_id)
-       return res.status(404).json({ error: "Usu?rio sem company_id" });
+       return res.status(404).json({ error: "Usuário sem company_id" });
  
-     const body = req.body || {};
+     const body = ContactSchema.parse(req.body);
      const payload = {
        company_id: (urow as any).company_id,
-       name: body.name ?? null,
+       name: body.name,
        phone: body.phone ?? null,
        email: body.email ?? null,
        instagram: body.instagram ?? null,
@@ -277,7 +279,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        // fallback legacy table with column mapping
        const legacy = {
          company_id: (urow as any).company_id,
-         name: body.name ?? null,
+         name: body.name,
          celular: body.phone ?? null,
          telefone: null,
          email: body.email ?? null,
@@ -297,39 +299,37 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
          if (error) throw error;
          return res.status(201).json({ id: (data as any).id });
        } catch (err: any) {
-         return res
-           .status(500)
-           .json({ error: err?.message || "contact create error" });
+         logger.error("[contacts:create] fatal", { error: err.message });
+         next(err);
        }
      }
    } catch (e: any) {
-     return res
-       .status(500)
-       .json({ error: e?.message || "contact create error" });
+     next(e);
    }
  });
  
  // Update contact
- app.put("/livechat/contacts/:id", requireAuth, async (req: any, res) => {
+ app.put("/livechat/contacts/:id", requireAuth, async (req: any, res, next) => {
    const { id } = req.params as { id: string };
    const companyId = req.user?.company_id;
    if (!companyId) {
      return res.status(400).json({ error: "Missing company context" });
    }
    
-   const body = req.body || {};
-   const payload = {
-     name: body.name ?? undefined,
-     phone: body.phone ?? undefined,
-     email: body.email ?? undefined,
-     instagram: body.instagram ?? undefined,
-     facebook: body.facebook ?? undefined,
-     twitter: body.twitter ?? undefined,
-     telegram: body.telegram ?? undefined,
-     website: body.website ?? undefined,
-     notes: body.notes ?? undefined,
-   } as any;
    try {
+     const body = ContactUpdateSchema.parse(req.body);
+     const payload = {
+       name: body.name,
+       phone: body.phone,
+       email: body.email,
+       instagram: body.instagram,
+       facebook: body.facebook,
+       twitter: body.twitter,
+       telegram: body.telegram,
+       website: body.website,
+       notes: body.notes,
+     } as any;
+     
      const { data, error } = await supabaseAdmin
        .from("customers")
        .update(payload)
@@ -337,33 +337,35 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        .eq("company_id", companyId)
        .select("id")
        .maybeSingle();
+       
      if (!error) return res.json({ id: (data as any)?.id ?? id });
-   } catch { }
-   try {
+     
+     // fallback legacy table with column mapping
      const legacy = {
-       name: body.name ?? undefined,
-       celular: body.phone ?? undefined,
-       email: body.email ?? undefined,
-       instagram: body.instagram ?? undefined,
-       facebook: body.facebook ?? undefined,
-       twitter: body.twitter ?? undefined,
-       telegram: body.telegram ?? undefined,
-       site: body.website ?? undefined,
-       observacoes: body.notes ?? undefined,
+       name: body.name,
+       celular: body.phone,
+       email: body.email,
+       instagram: body.instagram,
+       facebook: body.facebook,
+       twitter: body.twitter,
+       telegram: body.telegram,
+       site: body.website,
+       observacoes: body.notes,
      } as any;
-     const { data, error } = await supabaseAdmin
+     
+     const { data: dataLegacy, error: errorLegacy } = await supabaseAdmin
        .from("customers")
        .update(legacy)
        .eq("id", id)
        .eq("company_id", companyId)
        .select("id")
        .maybeSingle();
-     if (error) return res.status(500).json({ error: error.message });
-     return res.json({ id: (data as any)?.id ?? id });
+       
+     if (errorLegacy) throw errorLegacy;
+     return res.json({ id: (dataLegacy as any)?.id ?? id });
    } catch (e: any) {
-     return res
-       .status(500)
-       .json({ error: e?.message || "contact update error" });
+     logger.error("[contacts:update] fatal", { error: e.message, id });
+     next(e);
    }
  });
 }

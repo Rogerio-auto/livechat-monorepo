@@ -56,7 +56,7 @@ function formatRouteError(error: unknown) {
 export function registerAgentTemplatesRoutes(app: Application) {
   function ensureCanConfigure(req: any) {
     const role = String(req?.profile?.role || "").toUpperCase();
-    const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
+    const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR" || role === "SUPER_ADMIN";
     if (!allowed) {
       throw Object.assign(new Error("Acesso negado. Apenas manager/supervisor ou admin."), { status: 403 });
     }

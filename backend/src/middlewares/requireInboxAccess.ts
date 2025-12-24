@@ -32,7 +32,7 @@ export async function requireInboxAccess(req: any, res: Response, next: NextFunc
     const role = (userRow.role || "").toString().toUpperCase();
 
     // ADMIN e MANAGER sempre tem acesso (bypass)
-    if (role === "ADMIN" || role === "MANAGER") {
+    if (role === "ADMIN" || role === "MANAGER" || role === "SUPER_ADMIN") {
       req.hasInboxAccess = true;
       return next();
     }

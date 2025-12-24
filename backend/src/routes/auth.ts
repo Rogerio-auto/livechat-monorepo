@@ -7,35 +7,63 @@ import { getIO } from "../lib/io.js";
 import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
 import crypto, { randomUUID } from "crypto";
 import { redis } from "../lib/redis.js";
+import { logger } from "../lib/logger.js";
+
+const AuthSchema = z.object({
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+});
 
 export function registerAuthRoutes(app: express.Application) {
   console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');
   
   // Sign up
-  app.post("/signup", async (req, res) => {
-    const { email, password } = req.body ?? {};
-    if (!email || !password) return res.status(400).json({ error: "Email e senha são obrigatórios" });
-    const { data, error } = await supabaseAnon.auth.signUp({ email, password });
-    if (error) return res.status(400).json({ error: error.message });
-    return res.status(201).json({ ok: true, user: data.user });
+  app.post("/signup", async (req, res, next) => {
+    try {
+      const { email, password } = AuthSchema.parse(req.body);
+      
+      logger.info(`[AUTH] Tentativa de cadastro: ${email}`);
+      
+      const { data, error } = await supabaseAnon.auth.signUp({ email, password });
+      if (error) {
+        logger.error(`[AUTH] Erro no cadastro: ${email}`, { error: error.message });
+        return res.status(400).json({ error: error.message });
+      }
+      
+      return res.status(201).json({ ok: true, user: data.user });
+    } catch (error) {
+      next(error);
+    }
   });
 
   // Login
-  app.post("/login", async (req, res) => {
-    const { email, password } = req.body ?? {};
-    if (!email || !password) return res.status(400).json({ error: "Email e senha são obrigatórios" });
-    const { data, error } = await supabaseAnon.auth.signInWithPassword({ email, password });
-    if (error || !data?.session) return res.status(401).json({ error: "Credenciais inválidas" });
-    const accessToken = data.session.access_token;
-    res.cookie(JWT_COOKIE_NAME, accessToken, {
-      httpOnly: true,
-      secure: JWT_COOKIE_SECURE,
-      sameSite: "lax",
-      domain: JWT_COOKIE_DOMAIN,
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
-    return res.json({ ok: true, user: data.user });
+  app.post("/login", async (req, res, next) => {
+    try {
+      const { email, password } = AuthSchema.parse(req.body);
+      
+      logger.info(`[AUTH] Tentativa de login: ${email}`);
+      
+      const { data, error } = await supabaseAnon.auth.signInWithPassword({ email, password });
+      if (error || !data?.session) {
+        logger.warn(`[AUTH] Falha no login: ${email}`);
+        return res.status(401).json({ error: "Credenciais inválidas" });
+      }
+      
+      const accessToken = data.session.access_token;
+      res.cookie(JWT_COOKIE_NAME, accessToken, {
+        httpOnly: true,
+        secure: JWT_COOKIE_SECURE,
+        sameSite: "lax",
+        domain: JWT_COOKIE_DOMAIN,
+        path: "/",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+      
+      logger.info(`[AUTH] Login bem-sucedido: ${email}`);
+      return res.json({ ok: true, user: data.user });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.post("/logout", (_req, res) => {

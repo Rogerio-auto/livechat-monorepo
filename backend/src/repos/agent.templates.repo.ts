@@ -13,6 +13,7 @@ export type AgentTemplateRow = {
   default_tools: unknown[];
   created_at: string;
   updated_at: string | null;
+  tools?: any[]; // Adicionado para otimização
 };
 
 export type AgentTemplateQuestionRow = {
@@ -77,13 +78,48 @@ function mapTool(row: any): AgentTemplateToolRow {
 }
 
 export async function listAgentTemplates(companyId: string): Promise<AgentTemplateRow[]> {
-  const { data, error } = await supabaseAdmin
+  const { data: templates, error: tError } = await supabaseAdmin
     .from("agent_templates")
     .select("*")
     .or(`company_id.is.null,company_id.eq.${companyId}`)
     .order("name", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data || []).map(mapTemplate);
+
+  if (tError) throw new Error(tError.message);
+  if (!templates || templates.length === 0) return [];
+
+  // Buscar ferramentas separadamente para evitar erro de relacionamento no PostgREST
+  const templateIds = templates.map(t => t.id);
+  const { data: attData, error: attError } = await supabaseAdmin
+    .from("agent_template_tools")
+    .select("*")
+    .in("template_id", templateIds);
+
+  if (attError) throw new Error(attError.message);
+
+  // Buscar catálogo separadamente
+  const toolIds = [...new Set((attData || []).map(att => att.tool_id))];
+  let catalogMap = new Map();
+  
+  if (toolIds.length > 0) {
+    const { data: catalogData, error: catError } = await supabaseAdmin
+      .from("tools_catalog")
+      .select("*")
+      .in("id", toolIds);
+    
+    if (catError) throw new Error(catError.message);
+    catalogMap = new Map((catalogData || []).map(c => [c.id, c]));
+  }
+
+  return templates.map(row => {
+    const template = mapTemplate(row);
+    const toolsForThisTemplate = (attData || []).filter(att => att.template_id === row.id);
+    template.tools = toolsForThisTemplate.map(att => ({
+      ...(catalogMap.get(att.tool_id) || {}),
+      required: att.required,
+      overrides: att.overrides
+    }));
+    return template;
+  });
 }
 
 export async function getAgentTemplateById(companyId: string, id: string): Promise<AgentTemplateRow | null> {
@@ -107,11 +143,28 @@ export async function getAgentTemplateQuestions(templateId: string): Promise<Age
   return (data || []).map(mapQuestion);
 }
 
-export async function getAgentTemplateTools(templateId: string): Promise<AgentTemplateToolRow[]> {
-  const { data, error } = await supabaseAdmin
+export async function getAgentTemplateTools(templateId: string): Promise<any[]> {
+  const { data: attData, error: attError } = await supabaseAdmin
     .from("agent_template_tools")
     .select("*")
     .eq("template_id", templateId);
-  if (error) throw new Error(error.message);
-  return (data || []).map(mapTool);
+
+  if (attError) throw new Error(attError.message);
+  if (!attData || attData.length === 0) return [];
+
+  const toolIds = attData.map(att => att.tool_id);
+  const { data: catalogData, error: catError } = await supabaseAdmin
+    .from("tools_catalog")
+    .select("*")
+    .in("id", toolIds);
+
+  if (catError) throw new Error(catError.message);
+
+  const catalogMap = new Map((catalogData || []).map(c => [c.id, c]));
+
+  return attData.map(att => ({
+    ...(catalogMap.get(att.tool_id) || {}),
+    required: att.required,
+    overrides: att.overrides
+  }));
 }

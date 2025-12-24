@@ -155,7 +155,7 @@ router.post("/tools", async (req: any, res: any) => {
 router.put("/tools/:id", async (req: any, res: any) => {
   try {
     const companyId = req.profile.company_id;
-    const isAdmin = req.profile.role === "ADMIN";
+    const isAdmin = req.profile.role === "ADMIN" || req.profile.role === "SUPER_ADMIN";
     const tool = await getToolById(req.params.id);
     if (!tool) return res.status(404).json({ error: "Tool not found" });
     

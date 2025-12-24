@@ -51,7 +51,7 @@ export function registerCalendarRoutes(app: express.Application) {
       
       const ownerId = (urow as any)?.id || null;
       const userRole = (urow as any)?.role || null;
-      const isAdmin = userRole === "ADMIN";
+      const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
       if (!ownerId && !isAdmin) return res.json([]);
 
@@ -94,7 +94,7 @@ export function registerCalendarRoutes(app: express.Application) {
       
       const userId = (urow as any)?.id || null;
       const userRole = (urow as any)?.role || null;
-      const isAdmin = userRole === "ADMIN";
+      const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
 
       let items: any[] = [];
       let viewFailed = false;

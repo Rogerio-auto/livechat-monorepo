@@ -44,19 +44,17 @@ export function AgentTemplateSelector({ onSelectTemplate, onBack }: Props) {
       const templatesArray = Array.isArray(data) ? data : [];
       setTemplates(templatesArray);
 
-      // Carregar ferramentas para cada template
+      // Mapear ferramentas que já vieram no template (otimizado)
       const toolsMap: Record<string, ToolCapability[]> = {};
       for (const template of templatesArray) {
-        try {
-          const tools = await fetchJson<any[]>(`${API}/api/agent-templates/${template.id}/tools`);
-          toolsMap[template.id] = tools.map((t) => ({
+        if (template.tools && Array.isArray(template.tools)) {
+          toolsMap[template.id] = template.tools.map((t: any) => ({
             key: t.key,
             name: t.name,
             description: t.description,
             userFriendlyLabel: TOOL_FRIENDLY_NAMES[t.key] || t.name,
           }));
-        } catch (err) {
-          console.warn(`Erro ao carregar ferramentas do template ${template.id}`, err);
+        } else {
           toolsMap[template.id] = [];
         }
       }
@@ -124,9 +122,9 @@ export function AgentTemplateSelector({ onSelectTemplate, onBack }: Props) {
                     Capacidades inclusas:
                   </p>
                   <div className="flex flex-wrap gap-2">
-                    {templateTools[template.id].map((tool) => (
+                    {templateTools[template.id].map((tool, index) => (
                       <div
-                        key={tool.key}
+                        key={tool.key || `tool-${index}`}
                         className="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 rounded-lg text-xs text-gray-600 dark:text-gray-400"
                       >
                         <Zap className="w-3 h-3 text-amber-500" />

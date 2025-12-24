@@ -26,17 +26,17 @@ import type {
 
 // ======= PALETA (SION) =======
 const SECTIONS = [
-  { id: "empresa", title: "Empresa", subtitle: "Dados e plano ativo", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
+  { id: "empresa", title: "Empresa", subtitle: "Dados e plano ativo", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN", "SUPER_ADMIN"] },
   { id: "perfil", title: "Perfil", subtitle: "Seu nome, avatar e senha" },
-  { id: "inboxes", title: "Caixas de entrada", subtitle: "Canais conectados", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
-  { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN"] },
-  { id: "billing", title: "Faturamento", subtitle: "Uso de IA e faturas", restrictTo: ["ADMIN", "MANAGER"] },
+  { id: "inboxes", title: "Caixas de entrada", subtitle: "Canais conectados", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN", "SUPER_ADMIN"] },
+  { id: "integracoes", title: "Integracoes", subtitle: "Loja de integracoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "TECHNICIAN", "SUPER_ADMIN"] },
+  { id: "billing", title: "Faturamento", subtitle: "Uso de IA e faturas", restrictTo: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
   { id: "ia", title: "IA", subtitle: "Agentes e modelos" },
-  { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
-  { id: "departamentos", title: "Departamentos", subtitle: "Organizar em departamentos", restrictTo: ["ADMIN", "MANAGER"] },
-  { id: "times", title: "Times", subtitle: "Gerenciar equipes e horários", restrictTo: ["ADMIN", "MANAGER"] },
-  { id: "calendarios", title: "Calendários", subtitle: "Gerenciar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
-  { id: "permissoes-calendario", title: "Permissões de Calendário", subtitle: "Compartilhar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR"] },
+  { id: "colaborador", title: "Colaborador", subtitle: "Usuarios e permissoes", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "SUPER_ADMIN"] },
+  { id: "departamentos", title: "Departamentos", subtitle: "Organizar em departamentos", restrictTo: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
+  { id: "times", title: "Times", subtitle: "Gerenciar equipes e horários", restrictTo: ["ADMIN", "MANAGER", "SUPER_ADMIN"] },
+  { id: "calendarios", title: "Calendários", subtitle: "Gerenciar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "SUPER_ADMIN"] },
+  { id: "permissoes-calendario", title: "Permissões de Calendário", subtitle: "Compartilhar calendários", restrictTo: ["ADMIN", "MANAGER", "SUPERVISOR", "SUPER_ADMIN"] },
 ] as const;
 
 type TabId = typeof SECTIONS[number]["id"];
@@ -915,7 +915,7 @@ export default function ConfiguracoesPage() {
             
             {tab === "ia" && (() => {
               const role = String(profileRole || "").toUpperCase();
-              const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR";
+              const allowed = role === "ADMIN" || role === "MANAGER" || role === "SUPERVISOR" || role === "SUPER_ADMIN";
               if (!allowed) {
                 return (
                   <div className="p-8 transition-colors duration-300">

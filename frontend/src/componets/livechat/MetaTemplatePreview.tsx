@@ -27,7 +27,15 @@ export const MetaTemplatePreview: React.FC<MetaTemplatePreviewProps> = ({
 
   // Converte formatação WhatsApp para HTML
   const formatWhatsAppText = (text: string) => {
-    return text
+    // 🔒 SEGURANÇA: Escapar HTML antes de aplicar formatação para evitar XSS
+    const escapedText = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+
+    return escapedText
       .replace(/\*([^*]+)\*/g, '<strong>$1</strong>') // *negrito*
       .replace(/_([^_]+)_/g, '<em>$1</em>') // _itálico_
       .replace(/~([^~]+)~/g, '<del>$1</del>') // ~tachado~

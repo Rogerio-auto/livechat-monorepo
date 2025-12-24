@@ -202,6 +202,7 @@ export type AgentTemplate = {
   default_tools?: unknown[];
   created_at: string;
   updated_at?: string | null;
+  tools?: any[]; // Adicionado para otimização
 };
 
 export type AgentTemplateQuestion = {

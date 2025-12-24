@@ -9,6 +9,8 @@ import { rGet, rSet, rDelMatch } from "../lib/redis.ts";
 import { bumpScopeVersion } from "../lib/cache.ts";
 import { validateCampaignSafety } from "../services/campaigns/validation.js";
 import * as db from "../pg.ts";
+import { logger } from "../lib/logger.js";
+import { CampaignSchema, CampaignUpdateSchema } from "../schemas/campaign.schema.ts";
 
 // Multer for file uploads (max 5MB for recipient lists)
 const upload = multer({ 
@@ -88,10 +90,10 @@ async function resolveCompanyId(req: any): Promise<string> {
   // -------------------------------
   // CRIAR CAMPANHA
   // -------------------------------
-app.post("/livechat/campaigns", requireAuth, checkResourceLimit("campaigns_per_month"), async (req: any, res) => {
+app.post("/livechat/campaigns", requireAuth, checkResourceLimit("campaigns_per_month"), async (req: any, res, next) => {
   try {
     const companyId = await resolveCompanyId(req);
-    const b = req.body || {};
+    const b = CampaignSchema.parse(req.body);
 
     // Se não vier inbox_id e a coluna for NOT NULL, tenta pegar a primeira inbox da empresa
     let inboxId = b.inbox_id ?? null;
@@ -113,18 +115,15 @@ app.post("/livechat/campaigns", requireAuth, checkResourceLimit("campaigns_per_m
 const insert = {
   company_id: companyId,
   inbox_id: inboxId,
-  name: String(b.name || "Campanha"),
-  type: String(b.type || "BROADCAST"),
+  name: b.name,
+  type: b.type,
   status: "DRAFT",
-  rate_limit_per_minute: Number(b.rate_limit_per_minute || 30),
-  auto_handoff: !!b.auto_handoff,
-  // scheduling (opcional). Se vier string de data, normaliza para ISO; caso contrário, mantém null
-  start_at: b.start_at ? new Date(b.start_at).toISOString() : null,
-  end_at: b.end_at ? new Date(b.end_at).toISOString() : null,
-  // janela diária opcional
-  send_windows: b.send_windows ?? { enabled: false },
-  timezone: b.timezone || "America/Sao_Paulo",
-  // use a PK real da tabela users. Se o seu FK apontar para users.user_id, troque para user_uid.
+  rate_limit_per_minute: b.rate_limit_per_minute,
+  auto_handoff: b.auto_handoff,
+  start_at: b.start_at,
+  end_at: b.end_at,
+  send_windows: b.send_windows,
+  timezone: b.timezone,
   created_by: req.user.db_user_id ?? req.user.user_uid,
 };
     const { data, error } = await supabaseAdmin
@@ -140,7 +139,8 @@ const insert = {
 
     return res.status(201).json(data);
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || "Erro ao criar campanha" });
+    logger.error("[campaigns:create] error", { error: e.message, companyId: req.user?.company_id });
+    next(e);
   }
 });
 
@@ -179,11 +179,11 @@ const insert = {
   // -------------------------------
   // ATUALIZAR CAMPANHA
   // -------------------------------
-  app.patch("/livechat/campaigns/:id", requireAuth, async (req: any, res) => {
+  app.patch("/livechat/campaigns/:id", requireAuth, async (req: any, res, next) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;
-      const b = req.body || {};
+      const b = CampaignUpdateSchema.parse(req.body);
 
       // Se está tentando ativar campanha (mudando status para RUNNING ou SCHEDULED), validar segurança
       if (b.status && (b.status === "RUNNING" || b.status === "SCHEDULED")) {
@@ -217,16 +217,7 @@ const insert = {
       }
 
       // Permite atualizar status opcionalmente
-      const patch: any = {};
-      if (b.name !== undefined) patch.name = b.name;
-      if (b.inbox_id !== undefined) patch.inbox_id = b.inbox_id ?? null;
-      if (b.rate_limit_per_minute !== undefined) patch.rate_limit_per_minute = b.rate_limit_per_minute ?? 30;
-      if (b.auto_handoff !== undefined) patch.auto_handoff = !!b.auto_handoff;
-  if (b.status !== undefined) patch.status = b.status; // EXPECT: DRAFT|RUNNING|PAUSED|SCHEDULED|COMPLETED|CANCELLED
-  if (b.start_at !== undefined) patch.start_at = b.start_at ? new Date(b.start_at).toISOString() : null;
-  if (b.end_at !== undefined) patch.end_at = b.end_at ? new Date(b.end_at).toISOString() : null;
-  if (b.send_windows !== undefined) patch.send_windows = b.send_windows;
-  if (b.timezone !== undefined) patch.timezone = b.timezone;
+      const patch: any = { ...b };
 
       const { data, error } = await supabaseAdmin
         .from("campaigns")
@@ -243,7 +234,8 @@ const insert = {
 
       return res.json(data);
     } catch (e: any) {
-      return res.status(500).json({ error: e?.message || "Erro ao atualizar campanha" });
+      logger.error("[campaigns:patch] error", { error: e.message, id: req.params.id });
+      next(e);
     }
   });
 

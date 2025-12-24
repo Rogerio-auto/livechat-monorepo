@@ -4,6 +4,8 @@ import session from "express-session";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import cors from "cors";
+import helmet from "helmet";
+import { rateLimit } from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import path from "node:path";                 // ✅ use node:path
 import { createClient } from "@supabase/supabase-js";
@@ -82,6 +84,8 @@ import { registerProjectTemplateRoutes } from "./routes/project-templates.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { startScheduler } from "./jobs/scheduler.js";
+import { logger } from "./lib/logger.js";
+import { errorHandler } from "./middlewares/errorHandler.ts";
 
 // Feature flag para (des)ativar a sincronização automática com WAHA
 // Ativado somente quando WAHA_SYNC_ENABLED=true no ambiente
@@ -142,6 +146,23 @@ app.use(cors({
 // Garantir que preflight (OPTIONS) responda corretamente para todas as rotas
 app.options(/(.*)/, cors());
 
+// ===== SEGURANÇA (HELMET & RATE LIMIT) =====
+app.use(helmet({
+  contentSecurityPolicy: false, // Desativado para não quebrar o frontend SPA em dev
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 1000, // limite de 1000 requisições por janela por IP
+  message: "Muitas requisições vindas deste IP, tente novamente mais tarde.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === "development" && req.ip === "127.0.0.1"
+});
+
+app.use("/api/", limiter);
+
 // ===== WEBHOOKS (RAW BODY) =====
 // Must be before express.json() to preserve signature
 app.use("/api/webhooks", webhookRouter);
@@ -149,12 +170,12 @@ app.use("/api/webhooks", webhookRouter);
 // ===== PARSERS =====
 app.use(cookieParser());
 app.use(express.json({
-  limit: "100mb",
+  limit: "2mb", // 🔒 SEGURANÇA: Limite reduzido para evitar DoS (era 100mb)
   verify: (req: any, res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" })); // 🔒 SEGURANÇA: Limite reduzido (era 100mb)
 
 // Configurar express-session para onboarding
 app.use(session({
@@ -1041,7 +1062,7 @@ io.on("connection", async (socket) => {
   const userId = await socketAuthUserId(socket);
   if (userId) {
     socket.join(`user:${userId}`);
-    console.log(`[Socket] 🔌 User connected and joined room user:${userId}`, { socketId: socket.id });
+    logger.info(`[Socket] 🔌 User connected and joined room user:${userId}`, { socketId: socket.id });
     
     // Join company room for multi-tenancy isolation
     try {
@@ -1053,18 +1074,18 @@ io.on("connection", async (socket) => {
       
       if (user?.company_id) {
         socket.join(`company:${user.company_id}`);
-        console.log(`[Socket] ✅ User joined company room: company:${user.company_id}`, { 
+        logger.info(`[Socket] ✅ User joined company room: company:${user.company_id}`, { 
           socketId: socket.id, 
           userId 
         });
       } else {
-        console.warn("[Socket] ⚠️  User has no company_id in profile", { socketId: socket.id, userId });
+        logger.warn("[Socket] ⚠️  User has no company_id in profile", { socketId: socket.id, userId });
       }
     } catch (error) {
-      console.error("[RT] ❌ failed to join company room", { socketId: socket.id, userId, error });
+      logger.error("[RT] ❌ failed to join company room", { socketId: socket.id, userId, error });
     }
   } else {
-    console.warn("[Socket] ⚠️  Connection without valid userId", { socketId: socket.id });
+    logger.warn("[Socket] ⚠️  Connection without valid userId", { socketId: socket.id });
   }
 
   socket.on("join", async (payload: { chatId?: string; companyId?: string }) => {
@@ -1104,15 +1125,36 @@ io.on("connection", async (socket) => {
     
     // ✅ JOIN specific chat room (messages for specific chat)
     if (chatId) {
-      socket.join(`chat:${chatId}`);
-      
-      // Track user presence for smart notifications
+      // 🔒 SEGURANÇA: Verificar se o usuário tem acesso a este chat
       const userId = await socketAuthUserId(socket);
       if (userId) {
-        if (!chatViewers.has(chatId)) {
-          chatViewers.set(chatId, new Set());
+        try {
+          // Buscar company_id do usuário e do chat para validar acesso
+          const access = await db.oneOrNone<{ chat_id: string }>(
+            `SELECT c.id as chat_id 
+             FROM public.chats c
+             JOIN public.users u ON u.company_id = c.company_id
+             WHERE c.id = $1 AND u.id = $2`,
+            [chatId, userId]
+          );
+
+          if (access) {
+            socket.join(`chat:${chatId}`);
+            
+            // Track user presence for smart notifications
+            if (!chatViewers.has(chatId)) {
+              chatViewers.set(chatId, new Set());
+            }
+            chatViewers.get(chatId)!.add(userId);
+            console.log(`[RT] ✅ User ${userId} joined chat room: chat:${chatId}`);
+          } else {
+            console.warn(`[RT] ⚠️  User ${userId} tried to join unauthorized chat: ${chatId}`);
+          }
+        } catch (error) {
+          console.error("[RT] ❌ Error verifying chat access:", error);
         }
-        chatViewers.get(chatId)!.add(userId);
+      } else {
+        console.warn("[RT] ⚠️  Anonymous join attempt blocked for chat:", chatId);
       }
     }
   });
@@ -3675,6 +3717,9 @@ registerCustomerOptInRoutes(app);
 
 // Media proxy for encrypted URLs (CORS-safe)
 app.use("/media", mediaProxyRouter);
+
+// Global Error Handler (Must be after all routes)
+app.use(errorHandler);
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", time: new Date().toISOString() });

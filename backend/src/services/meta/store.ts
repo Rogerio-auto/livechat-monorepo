@@ -1407,10 +1407,10 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
       );
       if (chat?.customer_id && chat?.company_id) {
         // 1. Resume flows waiting for response
-        resumeFlowWithResponse(args.chatId, { content: args.content, type: args.type })
-          .catch(err => console.error("[FlowEngine] Failed to resume flow", err));
+        const resumed = await resumeFlowWithResponse(args.chatId, { content: args.content, type: args.type })
+          .catch(err => { console.error("[FlowEngine] Failed to resume flow", err); return false; });
 
-        // 2. Trigger Keyword
+        // 2. Trigger Keyword (Keywords always trigger, even if resumed)
         triggerFlow({
           companyId: chat.company_id,
           contactId: chat.customer_id,
@@ -1419,18 +1419,20 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           triggerData: { text: args.content }
         }).catch(err => console.error("[FlowEngine] Failed to trigger keyword flow", err));
 
-        // 3. Trigger New Message (with filters)
-        triggerFlow({
-          companyId: chat.company_id,
-          contactId: chat.customer_id,
-          chatId: args.chatId,
-          triggerType: 'NEW_MESSAGE',
-          triggerData: { 
-            text: args.content, 
-            type: args.type || 'TEXT',
-            inbox_id: chat.inbox_id
-          }
-        }).catch(err => console.error("[FlowEngine] Failed to trigger new message flow", err));
+        // 3. Trigger New Message (Only if not resumed by an existing flow)
+        if (!resumed) {
+          triggerFlow({
+            companyId: chat.company_id,
+            contactId: chat.customer_id,
+            chatId: args.chatId,
+            triggerType: 'NEW_MESSAGE',
+            triggerData: { 
+              text: args.content, 
+              type: args.type || 'TEXT',
+              inbox_id: chat.inbox_id
+            }
+          }).catch(err => console.error("[FlowEngine] Failed to trigger new message flow", err));
+        }
       }
     } catch (err) {
       console.error("[FlowEngine] Error fetching chat for flow trigger", err);

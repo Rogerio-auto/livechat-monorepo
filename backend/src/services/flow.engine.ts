@@ -55,7 +55,7 @@ export async function triggerFlow(params: {
     }
 
     if (shouldTrigger) {
-      await startFlowExecution(flow, contactId, triggerData, chatId);
+      await startFlowExecution(flow, contactId, triggerData, chatId, triggerType);
     }
   }
 }
@@ -132,25 +132,53 @@ export async function triggerManualFlow(params: {
     }).catch(err => logger.error("[FlowEngine] Notification error:", err));
   }
 
-  await startFlowExecution(flow, contactId, finalVariables, chatId);
+  await startFlowExecution(flow, contactId, finalVariables, chatId, 'MANUAL');
 }
 
 /**
  * Start a new execution of a flow for a contact
  */
-async function startFlowExecution(flow: any, contactId: string, triggerData: any, chatId?: string) {
-  // Check if contact is already in this flow (optional: allow multiple or not)
+async function startFlowExecution(
+  flow: any, 
+  contactId: string, 
+  triggerData: any, 
+  chatId?: string, 
+  triggerType?: string
+) {
+  // Check if contact is already in this flow
   const { data: existing } = await supabaseAdmin
     .from("flow_executions")
-    .select("id")
+    .select("id, status, updated_at")
     .eq("flow_id", flow.id)
     .eq("contact_id", contactId)
     .in("status", ["RUNNING", "WAITING"])
     .maybeSingle();
 
   if (existing) {
-    logger.info(`[FlowEngine] Contact ${contactId} already in flow ${flow.id}. Skipping.`);
-    return;
+    const updatedAt = new Date(existing.updated_at);
+    const now = new Date();
+    const diffMinutes = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+    
+    // Production Logic:
+    // 1. Keywords ALWAYS restart the flow (high priority)
+    // 2. Manual triggers ALWAYS restart
+    // 3. If the flow is stuck for more than 15 minutes, restart it
+    const shouldRestart = triggerType === 'KEYWORD' || triggerType === 'MANUAL' || diffMinutes > 15;
+
+    if (shouldRestart) {
+      logger.info(`[FlowEngine] Restarting flow ${flow.id} for contact ${contactId}. Reason: ${triggerType || 'Stuck'}`);
+      await supabaseAdmin
+        .from("flow_executions")
+        .update({ 
+          status: 'CANCELLED', 
+          last_error: `Superseded by ${triggerType} trigger` 
+        })
+        .eq("id", existing.id);
+    } else {
+      // For NEW_MESSAGE or LEAD_CREATED, if already running, we skip to avoid duplicates
+      logger.info(`[FlowEngine] Contact ${contactId} already active in flow ${flow.id}. Skipping new ${triggerType} trigger.`);
+      return;
+    }
   }
 
   // Find the start node
@@ -168,10 +196,12 @@ async function startFlowExecution(flow: any, contactId: string, triggerData: any
     current_node_id: startNode.id,
     variables: { 
       ...triggerData, 
-      chat_id: chatId,
+      chat_id: chatId || contactId,
       inbox_id: triggerData?.inbox_id || flow.trigger_config?.inbox_id 
     }
   });
+
+  logger.info(`[FlowEngine] Started execution ${execution.id} for flow ${flow.id} (Trigger: ${triggerType})`);
 
   // Queue the first step
   await queueNextStep(execution.id);
@@ -187,7 +217,7 @@ export async function queueNextStep(executionId: string) {
 /**
  * Resume flows that are waiting for a customer response
  */
-export async function resumeFlowWithResponse(chatId: string, message: any) {
+export async function resumeFlowWithResponse(chatId: string, message: any): Promise<boolean> {
   const { data: executions } = await supabaseAdmin
     .from("flow_executions")
     .select("id, variables")
@@ -212,7 +242,9 @@ export async function resumeFlowWithResponse(chatId: string, message: any) {
       
       await queueNextStep(exec.id);
     }
+    return true;
   }
+  return false;
 }
 
 /**
@@ -285,10 +317,18 @@ async function sendFlowMessage(args: {
 }) {
   const { nodeData: data, execution, customer } = args;
   const contactId = execution.contact_id;
-  const inboxId = execution.variables?.inbox_id;
+  const inboxId = execution.variables?.inbox_id || execution.variables?.triggerData?.inbox_id;
   const chatId = execution.variables?.chat_id || contactId;
   const customerPhone = customer?.phone;
   const companyId = execution.automation_flows?.company_id;
+
+  logger.info(`[FlowEngine] Sending message for execution ${execution.id}`, {
+    inboxId,
+    chatId,
+    customerPhone,
+    companyId,
+    nodeType: data.type
+  });
 
   // Fetch inbox to check provider for Smart Fallback
   let inboxProvider = 'META';
@@ -305,6 +345,7 @@ async function sendFlowMessage(args: {
 
   if (data.buttons?.length > 0 && inboxId && customerPhone && isMeta) {
     try {
+      logger.info(`[FlowEngine] Attempting to send Meta buttons to ${customerPhone}`);
       const { message } = await sendInteractiveButtons({
         inboxId,
         chatId,
@@ -349,6 +390,7 @@ async function sendFlowMessage(args: {
   
   if (data.list_sections && inboxId && customerPhone && isMeta) {
     try {
+      logger.info(`[FlowEngine] Attempting to send Meta list to ${customerPhone}`);
       const { message } = await sendInteractiveList({
         inboxId,
         chatId,
@@ -390,6 +432,7 @@ async function sendFlowMessage(args: {
   }
 
   if (data.media_url) {
+    logger.info(`[FlowEngine] Sending media message to ${chatId}`);
     await publish(EX_APP, "outbound.request", {
       jobType: "meta.sendMedia",
       chatId,
@@ -413,6 +456,7 @@ async function sendFlowMessage(args: {
       finalContent += "\n\n" + options;
     }
 
+    logger.info(`[FlowEngine] Sending text message to ${chatId}`);
     await publish(EX_APP, "outbound.request", {
       jobType: "message.send",
       customerId: contactId,

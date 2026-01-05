@@ -79,7 +79,7 @@ export function MessageBubble({
   const messageType = useMemo(() => {
     const type = (m.type || "TEXT").toUpperCase();
     const body = (m.body || m.content || "").toUpperCase();
-    const hasMedia = !!(m.media_public_url || m.media_url);
+    const hasMedia = !!(m.media_public_url || m.media_url || m.media_storage_path);
     
     if (type === "TEXT" && hasMedia) {
       if (body.startsWith("[DOCUMENT]") || body.startsWith("[DOCUMENTO]") || body.startsWith("[FILE]") || body.includes("📄 DOCUMENTO")) {
@@ -91,7 +91,7 @@ export function MessageBubble({
       if (body.startsWith("[STICKER]") || body.includes("💟 FIGURINHA")) return "STICKER";
     }
     return type;
-  }, [m.type, m.body, m.content, m.media_public_url, m.media_url]);
+  }, [m.type, m.body, m.content, m.media_public_url, m.media_url, m.media_storage_path]);
 
   if (messageType === "SYSTEM") {
     return (

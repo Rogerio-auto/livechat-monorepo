@@ -440,9 +440,9 @@ async function sendFlowMessage(args: {
       companyId,
       public_url: data.media_url,
       caption: data.text,
-      mime_type: data.media_type === 'IMAGE' ? 'image/png' : (data.media_type === 'VOICE' ? 'audio/ogg; codecs=opus' : 'application/octet-stream'), // Simplified
-      filename: data.media_name || 'file',
-      is_voice: data.media_type === 'VOICE'
+      mime_type: data.media_type === 'IMAGE' ? 'image/png' : undefined,
+      filename: data.media_name || (data.media_type === 'IMAGE' ? 'image.png' : (data.media_type === 'AUDIO' || data.media_type === 'VOICE' ? 'audio.ogg' : 'file')),
+      is_voice: data.media_type === 'VOICE' || data.media_type === 'AUDIO'
     });
   } else {
     // Smart Fallback: Convert buttons/lists to text if not Meta or if Meta failed

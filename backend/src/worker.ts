@@ -48,6 +48,9 @@ import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 import { incrementUsage, checkLimit } from "../src/services/subscriptions.ts";
 import { NotificationService } from "./services/NotificationService.ts";
 import { registerFlowWorker } from "./worker.flows.ts";
+import ffmpegPath from "ffmpeg-static";
+import { spawn } from "node:child_process";
+import os from "node:os";
 import { registerCampaignWorker } from "./worker.campaigns.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
@@ -4558,6 +4561,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         // Download da mídia - de Supabase Storage ou URL pública
         let mediaBuffer: Buffer;
         let effectiveMime = mimeType || "application/octet-stream";
+        let resolvedPublicUrl = publicUrl;
 
         if (storageKey) {
           // Download do Supabase Storage
@@ -4573,6 +4577,12 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           // Se não temos mimeType, tentar obter do arquivo
           if (!mimeType) {
             effectiveMime = data.type || "application/octet-stream";
+          }
+
+          // Resolve public URL for persistence
+          if (!resolvedPublicUrl) {
+            const { data: pubData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storageKey);
+            resolvedPublicUrl = pubData.publicUrl;
           }
         } else if (publicUrl) {
           // Download de URL pública
@@ -4590,6 +4600,34 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           throw new Error("media_source_missing");
         }
 
+        // Se for VOICE, garantir que é ogg/opus usando ffmpeg se necessário
+        const isVoice = !!job.is_voice;
+        if (isVoice && !effectiveMime.includes("ogg")) {
+          try {
+            if (ffmpegPath) {
+              console.log("[meta.sendMedia] 🎙️ Converting audio to ogg/opus for voice note");
+              const tmpIn = path.join(os.tmpdir(), `meta-voice-in-${randomUUID()}`);
+              const tmpOut = path.join(os.tmpdir(), `meta-voice-out-${randomUUID()}.ogg`);
+              await fs.writeFile(tmpIn, mediaBuffer);
+              
+              await new Promise<void>((resolve, reject) => {
+                const args = ["-y", "-i", tmpIn, "-c:a", "libopus", "-b:a", "64k", "-vn", tmpOut];
+                const cp = spawn(ffmpegPath as string, args, { stdio: "ignore" });
+                cp.on("error", reject);
+                cp.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
+              });
+
+              mediaBuffer = await fs.readFile(tmpOut);
+              effectiveMime = "audio/ogg";
+              // Cleanup
+              fs.unlink(tmpIn).catch(() => {});
+              fs.unlink(tmpOut).catch(() => {});
+            }
+          } catch (err) {
+            console.warn("[meta.sendMedia] Audio conversion failed, sending original", err);
+          }
+        }
+
         // Salvar temporariamente no disco para upload ao Meta (Meta API exige arquivo)
         const tmpDir = path.join(MEDIA_DIR, "tmp");
         await fs.mkdir(tmpDir, { recursive: true });
@@ -4604,7 +4642,6 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         });
 
         const filename = String(job.filename || `media.${ext}`);
-        const isVoice = !!job.is_voice;
         const mediaType = isVoice ? "AUDIO" : (effectiveMime.startsWith("image/")
           ? "IMAGE"
           : effectiveMime.startsWith("video/")
@@ -4681,6 +4718,10 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           senderId: job.senderId || job.senderUserSupabaseId || null,
           messageId,
           viewStatus: "Sent",
+          mediaUrl: resolvedPublicUrl || null,
+          mediaPublicUrl: resolvedPublicUrl || null,
+          mediaStoragePath: storageKey || null,
+          mediaSource: "META",
         });
 
         // avisa o front SEMPRE

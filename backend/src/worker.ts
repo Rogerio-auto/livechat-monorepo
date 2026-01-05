@@ -991,15 +991,8 @@ async function graphSendMedia(
     payload.image = { id: mediaId, caption: caption ?? undefined };
   } else if (kind === "VIDEO") {
     payload.video = { id: mediaId, caption: caption ?? undefined };
-  } else if (kind === "AUDIO") {
+  } else if (kind === "AUDIO" || isVoice) {
     payload.audio = { id: mediaId };
-  }
-
-  // Voice note support
-  if (kind === "AUDIO" && (payload as any).is_voice) {
-    // Meta API uses 'audio' type for voice notes, but some providers/versions 
-    // might need specific flags. For standard Cloud API, an ogg/opus file 
-    // sent as 'audio' is often enough, but we can explicitly set the type if needed.
   }
 
   const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${creds.phone_number_id}/messages`;
@@ -4498,6 +4491,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
               job.mime_type = p.mimeType || "";
               job.filename = p.filename || null;
               job.caption = p.caption || null;
+              job.is_voice = p.isVoice || p.kind === "voice" || false;
             } else {
               jobKind = "message.send";
               meta.jobType = jobKind;

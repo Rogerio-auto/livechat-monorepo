@@ -94,67 +94,30 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateVolume = () => {
-        if (!analyserRef.current || !mediaRecorderRef.current) return;
-
-        // Se ainda não começou a gravar, tentamos novamente no próximo frame
-        if (mediaRecorderRef.current.state !== 'recording') {
-          animationFrameRef.current = requestAnimationFrame(updateVolume);
-          return;
-        }
-        
+        if (!analyserRef.current) return;
         analyserRef.current.getByteFrequencyData(dataArray);
-        
-        let max = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          if (dataArray[i] > max) max = dataArray[i];
-        }
-        
-        // Aumentar a sensibilidade para garantir movimento
-        const vol = Math.min((max / 128) * 100, 100); 
-        setVolume(vol);
-        
-        if (vol > 5) {
-          // console.log("Volume detectado:", vol);
-        }
-        
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const average = sum / dataArray.length;
+        setVolume(Math.min(average * 2, 100));
         animationFrameRef.current = requestAnimationFrame(updateVolume);
       };
 
-      const candidates = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm", "audio/mp4"];
+      const candidates = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"];
       const pick = (t: string) => (window as any).MediaRecorder?.isTypeSupported?.(t);
       const mimeType = candidates.find(t => pick(t)) || "audio/webm";
-      
-      console.log("MimeType selecionado:", mimeType);
 
-      const mr = new MediaRecorder(stream, { 
-        mimeType,
-        audioBitsPerSecond: 128000 
-      });
+      const mr = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
-      
       mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          console.log("Dados de áudio recebidos:", e.data.size, "bytes");
-          audioChunksRef.current.push(e.data);
-        }
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
       };
-
       mr.onstop = () => {
-        console.log("Gravação finalizada. Total de chunks:", audioChunksRef.current.length);
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        console.log("Blob final:", blob.size, "bytes", blob.type);
-        
-        if (blob.size < 100) {
-          console.error("Aviso: O blob gerado é muito pequeno, pode estar vazio.");
-        }
-
         setAudioBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setAudioUrl(url);
-        
+        setAudioUrl(URL.createObjectURL(blob));
         streamRef.current?.getTracks().forEach(t => t.stop());
         streamRef.current = null;
-
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
           audioContextRef.current.close();
         }
@@ -163,20 +126,16 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
       };
 
       mediaRecorderRef.current = mr;
-      mr.start(200); 
+      mr.start();
       setIsRecording(true);
-      
-      setTimeout(() => {
-        updateVolume();
-      }, 100);
-
+      updateVolume();
       setRecordingTime(0);
       setAudioBlob(null);
       setAudioUrl(null);
       setError(null);
     } catch (err) {
-      console.error("Erro crítico na gravação:", err);
-      setError("Não foi possível acessar o microfone. Verifique as permissões do navegador.");
+      console.error("Erro ao iniciar gravação:", err);
+      setError("Permita acesso ao microfone para gravar.");
     }
   };
 

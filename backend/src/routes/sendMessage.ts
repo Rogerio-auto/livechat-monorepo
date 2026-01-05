@@ -156,6 +156,7 @@ export function registerSendMessageRoutes(app: Application) {
         await fs.writeFile(absPath, incomingBuffer);
 
         const mime = incomingMime;
+        const isVoice = mime === "audio/ogg" || mime === "audio/opus";
         const type = mime.startsWith("image/")
           ? "IMAGE"
           : mime.startsWith("video/")
@@ -278,6 +279,7 @@ export function registerSendMessageRoutes(app: Application) {
           storage_key: relativeKey,
           filename: safeName,
           mime_type: mime,
+          is_voice: isVoice,
           caption: caption || null,
           senderId: localSenderId ?? null,
           senderUserSupabaseId: (req as any)?.user?.id ?? null,

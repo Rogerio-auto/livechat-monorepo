@@ -260,6 +260,12 @@ export default function LiveChatPage() {
   const [isFetchingOlderMessages, setIsFetchingOlderMessages] = useState(false);
   const [messagesHasMore, setMessagesHasMore] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [volume, setVolume] = useState(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const timerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -3642,13 +3648,30 @@ const scrollToBottom = useCallback(
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const candidates = [
-        "audio/ogg;codecs=opus",
-        "audio/webm;codecs=opus",
-        "audio/webm",
-      ];
+      // Setup Audio Analysis for volume visualization
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      
+      audioContextRef.current = audioContext;
+      analyserRef.current = analyser;
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const updateVolume = () => {
+        if (!analyserRef.current) return;
+        analyserRef.current.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const average = sum / dataArray.length;
+        setVolume(Math.min(average * 2, 100));
+        animationFrameRef.current = requestAnimationFrame(updateVolume);
+      };
+
+      const candidates = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"];
       const pick = (t: string) => (window as any).MediaRecorder?.isTypeSupported?.(t);
-      const mimeType = pick(candidates[0]) ? candidates[0] : pick(candidates[1]) ? candidates[1] : candidates[2];
+      const mimeType = candidates.find(t => pick(t)) || "audio/webm";
 
       const mr = new MediaRecorder(stream, { mimeType });
       audioChunksRef.current = [];
@@ -3656,6 +3679,9 @@ const scrollToBottom = useCallback(
         if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       mr.onstop = async () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        
         try {
           const blob = new Blob(audioChunksRef.current, { type: mimeType });
           const ext = mimeType.startsWith("audio/ogg") ? "ogg" : (mimeType.includes("webm") ? "webm" : "bin");
@@ -3663,30 +3689,34 @@ const scrollToBottom = useCallback(
           await uploadFile(file);
         } catch (e) {
           console.error("Falha ao enviar audio", e);
-          alert("Nao foi possivel enviar o audio. Tente outro navegador (suporte a OGG/AAC).");
+          alert("Não foi possível enviar o áudio.");
         } finally {
-          try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { }
+          streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
           mediaRecorderRef.current = null;
           audioChunksRef.current = [];
           setIsRecording(false);
+          setRecordingTime(0);
+          setVolume(0);
+          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            audioContextRef.current.close();
+          }
         }
       };
 
       mediaRecorderRef.current = mr;
       mr.start();
       setIsRecording(true);
-      setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-          mediaRecorderRef.current.stop();
-        }
-      }, 60_000);
-    } catch {
-      alert("Permita acesso ao microfone ou tente novamente.");
-      try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { }
-      streamRef.current = null;
-      mediaRecorderRef.current = null;
-      audioChunksRef.current = [];
+      setRecordingTime(0);
+      updateVolume();
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1);
+      }, 1000);
+
+    } catch (err) {
+      console.error("Erro ao iniciar gravação:", err);
+      alert("Permita acesso ao microfone para gravar.");
       setIsRecording(false);
     }
   };
@@ -4349,15 +4379,29 @@ const scrollToBottom = useCallback(
                     <FiPaperclip className="h-5 w-5" />
                   </Button>
 
-                  <Button
-                    size="sm"
-                    variant={isRecording ? "danger" : "ghost"}
-                    onClick={toggleRecording}
-                    title="Gravar áudio"
-                    aria-label="Gravar áudio"
-                  >
-                    <FiMic className="h-5 w-5" />
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant={isRecording ? "danger" : "ghost"}
+                      onClick={toggleRecording}
+                      title={isRecording ? "Parar gravação" : "Gravar áudio"}
+                      aria-label={isRecording ? "Parar gravação" : "Gravar áudio"}
+                      className={isRecording ? "relative" : ""}
+                    >
+                      <FiMic className="h-5 w-5 z-10" />
+                      {isRecording && (
+                        <span 
+                          className="absolute inset-0 rounded-md bg-red-500/30 transition-transform duration-75" 
+                          style={{ transform: `scale(${1 + volume / 50})` }}
+                        />
+                      )}
+                    </Button>
+                    {isRecording && (
+                      <span className="text-xs font-mono text-red-500 font-bold">
+                        {Math.floor(recordingTime / 60)}:{(recordingTime % 60).toString().padStart(2, '0')}
+                      </span>
+                    )}
+                  </div>
 
                   <Button
                     size="sm"

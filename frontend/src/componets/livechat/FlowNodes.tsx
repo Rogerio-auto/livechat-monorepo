@@ -38,6 +38,8 @@ export interface FlowNodeData {
     message_types?: string[];
     inbox_id?: string;
     column_id?: string;
+    filter_stage_id?: string;
+    filter_tag_ids?: string[];
   };
   inboxes?: any[];
   columns?: any[];

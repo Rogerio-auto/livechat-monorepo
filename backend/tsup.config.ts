@@ -5,6 +5,7 @@ export default defineConfig({
     index: "src/index.ts",
     worker: "src/worker.ts",
     "worker.campaigns": "src/worker.campaigns.ts",
+    "worker.flows": "src/worker.flows.ts",
   },
   sourcemap: true,
   splitting: false,

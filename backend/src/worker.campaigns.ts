@@ -69,7 +69,7 @@ export async function registerCampaignWorker() {
 }
 
 // Bootstrap
-if (process.argv[1]?.endsWith('worker.campaigns.ts')) {
+if (process.argv[1]?.includes('worker.campaigns')) {
   (async () => {
     try {
       await registerCampaignWorker();

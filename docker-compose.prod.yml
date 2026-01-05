@@ -94,6 +94,20 @@ services:
     networks:
       - internal
 
+  worker-flows:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    env_file:
+      - ./backend/.env.production
+    command: ["node", "dist/worker.flows.js"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - internal
+
   frontend:
     build:
       context: .

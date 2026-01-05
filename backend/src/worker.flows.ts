@@ -28,7 +28,7 @@ export async function registerFlowWorker() {
 }
 
 // Bootstrap
-if (process.argv[1]?.endsWith('worker.flows.ts')) {
+if (process.argv[1]?.includes('worker.flows')) {
   (async () => {
     try {
       await registerFlowWorker();

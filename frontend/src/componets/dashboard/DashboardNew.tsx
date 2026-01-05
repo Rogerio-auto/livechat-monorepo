@@ -252,7 +252,7 @@ function OverviewTab({ days = 7 }: { days?: number }) {
                             <FiUser size={14} />
                           </div>
                           <div>
-                            <div className="text-sm font-medium text-slate-900 dark:text-white">{chat.customer_name || "Sem nome"}</div>
+                            <div className="text-sm font-medium text-slate-900 dark:text-white">{chat.display_name || chat.customer_name || "Sem nome"}</div>
                             <div className="text-[10px] text-slate-500">{chat.customer_phone}</div>
                           </div>
                         </div>
@@ -268,7 +268,7 @@ function OverviewTab({ days = 7 }: { days?: number }) {
                       </td>
                       <td className="px-6 py-4">
                         <button 
-                          onClick={() => navigate(`/livechat?chat=${chat.id}`)} 
+                          onClick={() => navigate(`/livechat/${chat.id}`)} 
                           className="text-xs font-bold text-[#2fb463] hover:text-[#1f8b49] dark:text-[#74e69e] uppercase tracking-wider"
                         >
                           Abrir

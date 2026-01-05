@@ -1343,7 +1343,7 @@ const insert = {
         if ((tpl.kind || "").toUpperCase() === "TEXT") {
           const content = String(payload?.text || "");
           if (!content) continue;
-          await publish(EX_APP, "outbound", {
+          await publish(EX_APP, "outbound.request", {
             jobType: "message.send",
             inboxId: camp.inbox_id,
             content,
@@ -1355,7 +1355,7 @@ const insert = {
           });
           enqueued++;
         } else {
-          await publish(EX_APP, "outbound", {
+          await publish(EX_APP, "outbound.request", {
             jobType: "meta.sendMedia",
             inboxId: camp.inbox_id,
             media: payload,

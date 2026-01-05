@@ -114,16 +114,16 @@ services:
       - internal
     restart: unless-stopped
 
-  onboarding:
+  cadastro:
     build:
       context: .
-      dockerfile: ./onboarding/Dockerfile
+      dockerfile: ./cadastro/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-https://api-back.7sion.com}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://ghbiigjdvzeoouxaviyz.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYmlpZ2pkdnplb291eGF2aXl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU1Njk3MjQsImV4cCI6MjA3MTE0NTcyNH0.Ze8yBaQB7ZD-k4s6hj63st2xjjah4l9GawyaMjsEi8o}
         VITE_APP_BASE_PATH: ${VITE_APP_BASE_PATH:-/}
-        VITE_PUBLIC_URL: ${VITE_ONBOARDING_PUBLIC_URL:-https://account.7sion.com}
+        VITE_PUBLIC_URL: ${VITE_CADASTRO_PUBLIC_URL:-https://account.7sion.com}
     depends_on:
       - api
     ports:

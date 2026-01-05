@@ -3,6 +3,8 @@ import Icon from "../../assets/icon.png";
 import { useNavigate } from "react-router-dom";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 import { useSubscription } from "../../context/SubscriptionContext";
+import { useAuth } from "../../context/AuthContext";
+import { useCadastro } from "../../context/CadastroContext";
 
 const API =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
@@ -15,23 +17,22 @@ export function CLogin() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
   const { refreshSubscription } = useSubscription();
+  const { user, refreshUser, loading: authLoading } = useAuth();
+  const { checkStatus } = useCadastro();
 
+  // Se já está logado, redireciona baseado no status de onboarding
   useEffect(() => {
-    // se já está logado, pula pro dashboard
-    (async () => {
-      try {
-        const devCompany = (import.meta.env.VITE_DEV_COMPANY_ID as string | undefined)?.trim();
-        const headers = devCompany && import.meta.env.DEV ? { "X-Company-Id": devCompany } : undefined;
-        const res = await fetch(`${API}/auth/me`, { credentials: "include", headers });
-        if (res.ok) {
-          await refreshSubscription();
+    if (!authLoading && user) {
+      (async () => {
+        const status = await checkStatus();
+        if (status && !status.completed) {
+          navigate("/cadastro");
+        } else {
           navigate("/dashboard");
         }
-      } catch {
-        // silencioso
-      }
-    })();
-  }, [navigate, refreshSubscription]);
+      })();
+    }
+  }, [user, authLoading, navigate, checkStatus]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -60,9 +61,21 @@ export function CLogin() {
       if (remember) localStorage.setItem("remember_email", email);
       else localStorage.removeItem("remember_email");
 
-      // Atualizar assinatura antes de ir para o dashboard
+      // 1. Atualizar usuário no contexto
+      const profile = await refreshUser();
+      
+      // 2. Atualizar assinatura
       await refreshSubscription();
-      navigate("/dashboard");
+
+      // 3. Verificar onboarding
+      const status = await checkStatus();
+
+      // 4. Redirecionar
+      if (status && !status.completed) {
+        navigate("/cadastro");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err: any) {
       console.error("Erro no login:", err);
       alert(err?.message || "Falha ao entrar");

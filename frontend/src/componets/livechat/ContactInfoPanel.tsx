@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FiUser, FiMail, FiPhone, FiMapPin, FiCalendar, FiTag, FiX, FiImage, FiFileText, FiLink, FiInfo, FiGlobe, FiEdit2, FiCheck, FiXCircle } from "react-icons/fi";
+import { FiUser, FiMail, FiPhone, FiMapPin, FiCalendar, FiTag, FiX, FiImage, FiFileText, FiLink, FiInfo, FiGlobe, FiEdit2, FiCheck, FiXCircle, FiZap, FiPlay } from "react-icons/fi";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getAccessToken } from "../../utils/api";
@@ -10,6 +10,91 @@ type Props = {
   apiBase?: string;
   onClose: () => void;
 };
+
+function ManualFlowTrigger({ chat, apiBase }: { chat: Chat; apiBase?: string }) {
+  const [flows, setFlows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [triggering, setTriggering] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchFlows = async () => {
+      try {
+        const token = getAccessToken();
+        const res = await fetch(`${apiBase}/api/livechat/flows`, {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include"
+        });
+        const data = await res.json();
+        // Filtrar apenas fluxos ativos e com gatilho manual
+        const manualFlows = data.filter((f: any) => 
+          f.status === 'ACTIVE' && f.trigger_config?.type === 'MANUAL'
+        );
+        setFlows(manualFlows);
+      } catch (err) {
+        console.error("Erro ao buscar fluxos", err);
+      }
+    };
+    fetchFlows();
+  }, [apiBase]);
+
+  const handleTrigger = async (flowId: string) => {
+    if (!window.confirm("Deseja disparar este fluxo para este contato agora?")) return;
+    
+    setTriggering(flowId);
+    try {
+      const token = getAccessToken();
+      const res = await fetch(`${apiBase}/api/livechat/flows/${flowId}/trigger`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          contactId: chat.customer_id,
+          chatId: chat.id
+        })
+      });
+
+      if (res.ok) {
+        alert("Fluxo disparado com sucesso!");
+      } else {
+        throw new Error("Falha ao disparar");
+      }
+    } catch (err) {
+      alert("Erro ao disparar fluxo");
+    } finally {
+      setTriggering(null);
+    }
+  };
+
+  if (flows.length === 0) return null;
+
+  return (
+    <div className="space-y-2 pt-4 border-t border-(--color-border)">
+      <label className="text-[10px] font-bold text-(--color-text-muted) uppercase tracking-wider flex items-center gap-2">
+        <FiZap className="text-yellow-500" /> Automações Manuais
+      </label>
+      <div className="space-y-1">
+        {flows.map(flow => (
+          <button
+            key={flow.id}
+            onClick={() => handleTrigger(flow.id)}
+            disabled={!!triggering}
+            className="w-full flex items-center justify-between p-2 text-xs rounded-lg bg-(--color-surface-muted) border border-(--color-border) hover:border-yellow-500/50 hover:bg-yellow-500/5 transition-all group"
+          >
+            <span className="font-medium text-(--color-text)">{flow.name}</span>
+            {triggering === flow.id ? (
+              <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <FiPlay size={12} className="text-(--color-text-muted) group-hover:text-yellow-500" />
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function EditableField({ 
   label, 
@@ -248,9 +333,6 @@ export function ContactInfoPanel({ chat, apiBase, onClose }: Props) {
       // we'll try to update the chat's customer info if possible, or just log it for now.
       // In a real scenario: await fetch(`${apiBase}/contacts/${localChat.customer_id}`, { method: 'PUT', body: JSON.stringify({ [field]: value }) ... })
       
-      // For now, we'll simulate a success to keep the UI responsive as requested
-      console.log(`Updating contact ${localChat.customer_id} field ${field} to ${value}`);
-      
       // If there was a real endpoint, we would call it here.
       // await fetch(`${apiBase}/livechat/contacts/${localChat.customer_id}`, ...);
       
@@ -392,6 +474,9 @@ export function ContactInfoPanel({ chat, apiBase, onClose }: Props) {
                 )}
               </div>
             </div>
+
+            {/* Manual Flows Section */}
+            {localChat && <ManualFlowTrigger chat={localChat} apiBase={apiBase} />}
           </div>
         )}
 

@@ -65,7 +65,8 @@ import { registerLeadRoutes } from "./routes/leads.js";
 import { registerProductRoutes } from "./routes/products.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerLivechatTagsRoutes } from "./routes/livechat.tags.js";
-import { registerOnboardingRoutes } from "./routes/onboarding.js";
+import { registerFlowRoutes } from "./routes/livechat.flows.js";
+import { registerCadastroRoutes } from "./routes/cadastro.js";
 import { registerAdminRoutes } from "./routes/admin.js";
 import { registerAdminStatsRoutes } from "./routes/admin.stats.js";
 import adminAgentsRouter from "./routes/admin/agents.js";
@@ -177,9 +178,9 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" })); // 🔒 SEGURANÇA: Limite reduzido (era 100mb)
 
-// Configurar express-session para onboarding
+// Configurar express-session para cadastro
 app.use(session({
-  secret: process.env.SESSION_SECRET || "onboarding-secret-change-in-production",
+  secret: process.env.SESSION_SECRET || "cadastro-secret-change-in-production",
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -1129,24 +1130,40 @@ io.on("connection", async (socket) => {
       const userId = await socketAuthUserId(socket);
       if (userId) {
         try {
+          // Limpar o chatId de possíveis caracteres estranhos (como o -- mencionado pelo usuário)
+          const cleanChatId = String(chatId).trim().replace(/--+/g, '-');
+          
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanChatId)) {
+            console.warn(`[RT] ⚠️  Invalid UUID format for chat: ${chatId}`);
+            return;
+          }
+
           // Buscar company_id do usuário e do chat para validar acesso
+          // Usamos LEFT JOIN com inboxes para garantir que o acesso seja validado mesmo que inbox_id seja nulo
+          // Também permitimos acesso se o usuário for ADMIN, SUPER_ADMIN ou MANAGER
           const access = await db.oneOrNone<{ chat_id: string }>(
             `SELECT c.id as chat_id 
              FROM public.chats c
-             JOIN public.users u ON u.company_id = c.company_id
-             WHERE c.id = $1 AND u.id = $2`,
-            [chatId, userId]
+             LEFT JOIN public.inboxes i ON i.id = c.inbox_id
+             JOIN public.users u ON u.user_id = $2
+             WHERE c.id = $1 
+               AND (
+                 u.role IN ('ADMIN', 'SUPER_ADMIN', 'MANAGER') 
+                 OR u.company_id = c.company_id 
+                 OR u.company_id = i.company_id
+               )`,
+            [cleanChatId, userId]
           );
 
           if (access) {
-            socket.join(`chat:${chatId}`);
+            socket.join(`chat:${cleanChatId}`);
             
             // Track user presence for smart notifications
-            if (!chatViewers.has(chatId)) {
-              chatViewers.set(chatId, new Set());
+            if (!chatViewers.has(cleanChatId)) {
+              chatViewers.set(cleanChatId, new Set());
             }
-            chatViewers.get(chatId)!.add(userId);
-            console.log(`[RT] ✅ User ${userId} joined chat room: chat:${chatId}`);
+            chatViewers.get(cleanChatId)!.add(userId);
+            console.log(`[RT] ✅ User ${userId} joined chat room: chat:${cleanChatId}`);
           } else {
             console.warn(`[RT] ⚠️  User ${userId} tried to join unauthorized chat: ${chatId}`);
           }
@@ -3047,6 +3064,7 @@ registerKanbanRoutes(app, { requireAuth, supabaseAdmin, io });
 
 registerLivechatChatRoutes(app);
 registerLivechatTagsRoutes(app);
+registerFlowRoutes(app);
 
 async function socketAuthUserId(socket: any): Promise<string | null> {
   try {
@@ -3658,8 +3676,8 @@ app.post("/documents", requireAuth, async (req: any, res) => {
 app.get("/integrations/meta/webhook", metaWebhookGet);
 app.post("/integrations/meta/webhook", metaWebhookPost);
 
-// ONBOARDING (precisa vir ANTES dos routers globais /api que tem requireAuth)
-registerOnboardingRoutes(app);
+// CADASTRO (precisa vir ANTES dos routers globais /api que tem requireAuth)
+registerCadastroRoutes(app);
 registerAdminRoutes(app);
 registerAdminStatsRoutes(app);
 app.use("/api/admin", adminAgentsRouter);
@@ -3695,7 +3713,7 @@ registerProjectTemplateRoutes(app);
 registerProjectRoutes(app);
 registerNotificationRoutes(app);
 // ATENÇÃO: Esses routers aplicam requireAuth globalmente em /api/*
-// Por isso o onboarding precisa estar registrado ANTES
+// Por isso o cadastro precisa estar registrado ANTES
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
 registerSettingsInboxesRoutes(app);

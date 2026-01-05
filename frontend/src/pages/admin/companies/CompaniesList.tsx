@@ -10,7 +10,7 @@ import {
   FiSearch,
   FiUsers,
 } from 'react-icons/fi';
-import type { Industry } from '../../../types/onboarding';
+import type { Industry } from '../../../types/cadastro';
 import { INDUSTRY_OPTIONS } from '../../../config/industry-config';
 import { IndustryBadge } from '../../../componets/admin/IndustryBadge';
 import type { AdminCompany } from '../types';

@@ -13,6 +13,8 @@ import {
 	FiUserMinus,
 	FiUsers,
 	FiHash,
+	FiZap,
+	FiPlay,
 } from "react-icons/fi";
 import { getAccessToken } from "../../utils/api";
 import type { Chat, Tag } from "./types";
@@ -73,7 +75,7 @@ type ChatHeaderProps = {
   onToggleInfo?: () => void;
 };
 
-type Panel = "tags" | "agents" | "stage" | "status" | "department" | "ai-agents" | null;
+type Panel = "tags" | "agents" | "stage" | "status" | "department" | "ai-agents" | "flows" | null;
 
 export function ChatHeader({
 	apiBase,
@@ -118,6 +120,12 @@ export function ChatHeader({
 	const [aiAgentsLoading, setAIAgentsLoading] = useState(false);
 	const [aiAgentsError, setAIAgentsError] = useState<string | null>(null);
 	const [assigningAIAgent, setAssigningAIAgent] = useState<string | null>(null);
+
+	const [flows, setFlows] = useState<any[]>([]);
+	const [flowsLoading, setFlowsLoading] = useState(false);
+	const [flowsError, setFlowsError] = useState<string | null>(null);
+	const [triggeringFlow, setTriggeringFlow] = useState<string | null>(null);
+
 	const [stageDraft, setStageDraft] = useState<string | null>(currentStageId ?? chat?.stage_id ?? null);
 	const [noteDraft, setNoteDraft] = useState<string>(currentNote ?? chat?.note ?? "");
 	const [stageError, setStageError] = useState<string | null>(null);
@@ -313,6 +321,44 @@ export function ChatHeader({
 		};
 	}, [openPanel, apiBase]);
 
+	// Load Manual Flows when panel opens
+	useEffect(() => {
+		if (openPanel !== "flows") return;
+		let cancelled = false;
+		const loadFlows = async () => {
+			setFlowsLoading(true);
+			setFlowsError(null);
+			try {
+				const url = `${apiBase}/api/livechat/flows`;
+				const headers = new Headers({ "Content-Type": "application/json" });
+				const token = getAccessToken();
+				if (token) headers.set("Authorization", `Bearer ${token}`);
+
+				const response = await fetch(url, { 
+					headers,
+					credentials: "include"
+				});
+				if (!response.ok) throw new Error(`Falha ao carregar fluxos: ${response.statusText}`);
+				
+				const data = await response.json();
+				if (!cancelled) {
+					const manualFlows = (Array.isArray(data) ? data : [])
+						.filter((f: any) => f.status === 'ACTIVE' && f.trigger_config?.type === 'MANUAL');
+					setFlows(manualFlows);
+				}
+			} catch (error) {
+				if (!cancelled) {
+					console.error("[ChatHeader] Falha ao carregar fluxos", error);
+					setFlowsError(error instanceof Error ? error.message : "Erro ao carregar fluxos");
+				}
+			} finally {
+				if (!cancelled) setFlowsLoading(false);
+			}
+		};
+		loadFlows();
+		return () => { cancelled = true; };
+	}, [openPanel, apiBase]);
+
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
@@ -350,6 +396,40 @@ export function ChatHeader({
 			setAIAgentsError(error instanceof Error ? error.message : "Erro ao atribuir agente de IA");
 		} finally {
 			setAssigningAIAgent(null);
+		}
+	};
+
+	const handleTriggerFlow = async (flowId: string) => {
+		if (!chat) return;
+		if (!window.confirm("Deseja disparar este fluxo para este contato agora?")) return;
+
+		setTriggeringFlow(flowId);
+		setFlowsError(null);
+		try {
+			const url = `${apiBase}/api/livechat/flows/${flowId}/trigger`;
+			const headers = new Headers({ "Content-Type": "application/json" });
+			const token = getAccessToken();
+			if (token) headers.set("Authorization", `Bearer ${token}`);
+
+			const response = await fetch(url, {
+				method: "POST",
+				headers,
+				credentials: "include",
+				body: JSON.stringify({
+					contactId: chat.customer_id,
+					chatId: chat.id
+				})
+			});
+
+			if (!response.ok) throw new Error("Falha ao disparar fluxo");
+			
+			setOpenPanel(null);
+			alert("Fluxo disparado com sucesso!");
+		} catch (error) {
+			console.error("[ChatHeader] Falha ao disparar fluxo", error);
+			setFlowsError(error instanceof Error ? error.message : "Erro ao disparar fluxo");
+		} finally {
+			setTriggeringFlow(null);
 		}
 	};
 
@@ -628,6 +708,49 @@ export function ChatHeader({
 						)}
 					</PanelCard>
 				);
+			case "flows":
+				return (
+					<PanelCard title="Automações Manuais">
+						{flowsLoading && (
+							<PanelRow>
+								<Spinner /> Carregando fluxos...
+							</PanelRow>
+						)}
+						{flowsError && (
+							<PanelRow className="text-(--color-danger,#dc2626)">
+								<FiAlertCircle className="mr-2" />
+								{flowsError}
+							</PanelRow>
+						)}
+						{!flowsLoading && !flowsError && (
+							<>
+								{flows.length === 0 && <EmptyMessage>Nenhum fluxo manual ativo.</EmptyMessage>}
+								{flows.length > 0 && (
+									<div className="flex flex-col gap-2">
+										{flows.map((flow) => {
+											const loading = triggeringFlow === flow.id;
+											return (
+												<button
+													key={flow.id}
+													type="button"
+													className="flex items-center justify-between rounded-lg border border-(--color-border) px-3 py-2 text-sm text-(--color-text) transition hover:bg-(--color-surface-muted)/60 hover:border-yellow-500/50 group"
+													onClick={() => handleTriggerFlow(flow.id)}
+													disabled={!!triggeringFlow}
+												>
+													<div className="flex items-center gap-2">
+														<FiZap className="text-yellow-500" />
+														<span className="font-medium">{flow.name}</span>
+													</div>
+													{loading ? <Spinner /> : <FiPlay className="text-(--color-text-muted) group-hover:text-yellow-500" />}
+												</button>
+											);
+										})}
+									</div>
+								)}
+							</>
+						)}
+					</PanelCard>
+				);
 			case "department":
 				return (
 					<PanelCard title="Departamentos">
@@ -792,6 +915,13 @@ export function ChatHeader({
 						active={openPanel === "ai-agents"}
 						disabled={!chat || !onAssignAIAgent}
 						onClick={() => togglePanel("ai-agents")}
+					/>
+					<IconButton
+						icon={<FiZap />}
+						label="Automações Manuais"
+						active={openPanel === "flows"}
+						disabled={!chat}
+						onClick={() => togglePanel("flows")}
 					/>
 				</div>
 			</div>

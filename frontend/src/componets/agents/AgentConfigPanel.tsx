@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { API, fetchJson } from "../../utils/api";
 import { InboxMultiSelect } from "./InboxMultiSelect";
+import { showToast } from "../../hooks/useToast";
 import { 
   ArrowLeft, 
   Save, 
@@ -14,7 +15,8 @@ import {
   Inbox,
   AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Plus
 } from "lucide-react";
 
 type AgentConfig = {
@@ -98,6 +100,7 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
   const [openAIIntegrations, setOpenAIIntegrations] = useState<OpenAIIntegration[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingIntegration, setGeneratingIntegration] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -114,11 +117,54 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
       ]);
       setConfig(agentData);
       setOpenAIIntegrations(integrationsData);
+
+      // Auto-selecionar se houver apenas uma integração e nenhuma estiver selecionada
+      if (integrationsData.length === 1 && !agentData.integration_openai_id) {
+        setConfig(prev => prev ? { ...prev, integration_openai_id: integrationsData[0].id } : null);
+      }
+
+      // Se não houver nenhuma integração, disparar a criação automática silenciosamente
+      if (integrationsData.length === 0) {
+        console.log("Nenhuma integração OpenAI encontrada. Iniciando criação automática...");
+        handleAutoGenerateIntegration();
+      }
     } catch (err) {
       console.error("Erro ao carregar configuração:", err);
       setError("Erro ao carregar configuração do agente");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleAutoGenerateIntegration() {
+    try {
+      setGeneratingIntegration(true);
+      setError("");
+      
+      const res = await fetchJson<OpenAIIntegration>(`${API}/integrations/openai`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "OpenAI Produção",
+          auto_generate: true,
+          default_model: "gpt-4o-mini"
+        })
+      });
+
+      // Recarregar integrações e selecionar a nova
+      const integrationsData = await fetchJson<OpenAIIntegration[]>(`${API}/integrations/openai`);
+      setOpenAIIntegrations(integrationsData);
+      
+      if (config) {
+        setConfig({ ...config, integration_openai_id: res.id });
+      }
+      
+      showToast("Integração gerada com sucesso!", "success");
+    } catch (err: any) {
+      console.error("Erro ao gerar integração:", err);
+      setError(err.message || "Erro ao gerar integração automática");
+      showToast("Falha ao gerar integração automática", "error");
+    } finally {
+      setGeneratingIntegration(false);
     }
   }
 
@@ -235,52 +281,54 @@ export function AgentConfigPanel({ agentId, onBack, onSaved }: Props) {
       )}
 
       <div className="space-y-12 pb-12">
-        {/* Integração OpenAI */}
-        <section className="overflow-hidden">
-          <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
-                <Cpu className="w-6 h-6 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">Integração OpenAI</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">Selecione a chave de API que o agente usará</p>
+        {/* Integração OpenAI - ESCONDIDA (AUTOMÁTICA) */}
+        {(!config.integration_openai_id || error.includes("OpenAI")) && (
+          <section className="overflow-hidden">
+            <div className="pb-6 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+                  <Cpu className="w-6 h-6 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Integração OpenAI</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Configuração automática da inteligência artificial</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="py-6 space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                Integração OpenAI <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={config.integration_openai_id || ""}
-                onChange={(e) => setConfig({ ...config, integration_openai_id: e.target.value || null })}
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-800 rounded-lg px-4 py-2.5 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none dark:[color-scheme:dark]"
-              >
-                <option value="" className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">Selecione uma integração...</option>
-                {openAIIntegrations.map((integration) => (
-                  <option key={integration.id} value={integration.id} className="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
-                    {integration.name}
-                  </option>
-                ))}
-              </select>
-              {!config.integration_openai_id && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-100 dark:border-amber-800">
-                  <AlertCircle className="w-4 h-4" />
-                  O agente não responderá sem uma integração OpenAI configurada
+            <div className="py-6 space-y-4">
+              {generatingIntegration ? (
+                <div className="flex items-center gap-3 text-blue-600 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <p className="font-medium">Configurando inteligência artificial para sua empresa...</p>
                 </div>
-              )}
-              {openAIIntegrations.length === 0 && (
-                <div className="mt-3 flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-100 dark:border-red-800">
-                  <AlertCircle className="w-4 h-4" />
-                  Nenhuma integração OpenAI encontrada. Configure uma integração primeiro.
+              ) : (
+                <div>
+                  {openAIIntegrations.length === 0 ? (
+                    <div className="flex flex-col gap-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-4 rounded-lg border border-red-100 dark:border-red-800">
+                      <div className="flex items-center gap-2 font-bold">
+                        <AlertCircle className="w-4 h-4" />
+                        A IA ainda não foi configurada.
+                      </div>
+                      <button
+                        onClick={handleAutoGenerateIntegration}
+                        className="flex items-center justify-center gap-2 w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium transition-colors shadow-sm"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Configurar IA Agora
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 text-green-600 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-100 dark:border-green-800">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <p className="font-medium">IA configurada e pronta para uso.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Modelo de Atendimento (Chat) */}
         <section className="overflow-hidden">

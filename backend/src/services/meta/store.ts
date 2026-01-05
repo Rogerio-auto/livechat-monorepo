@@ -1,6 +1,8 @@
 // src/services/meta/store.ts
 import db from "../../pg.ts";
+import { triggerFlow, resumeFlowWithResponse } from "../flow.engine.js";
 import { normalizeMsisdn } from "../../util.ts";
+
 import { supabaseAdmin } from "../../lib/supabase.js";
 import { clearMessageCache, clearListCacheIndexes, rDel, rGet, rSet, k } from "../../lib/redis.ts";
 import { decryptSecret, encryptMediaUrl } from "../../lib/crypto.ts";
@@ -949,6 +951,7 @@ export async function ensureLeadCustomerChat(args: {
 
     let lead = leadResult;
     let customer = customerResult;
+    let isNewLead = !lead;
 
     // ========== OPTIMIZATION: Criar lead e customer EM PARALELO se necessário ==========
     if (!lead || !customer) {
@@ -1204,6 +1207,21 @@ export async function ensureLeadCustomerChat(args: {
       externalId: chat.external_id ?? null,
       chatType: chat.chat_type ?? null,
     });
+
+    if (isNewLead) {
+      triggerFlow({
+        companyId: args.companyId,
+        contactId: customer!.id,
+        chatId: chat!.id,
+        triggerType: 'LEAD_CREATED',
+        triggerData: { 
+          phone: args.phone,
+          name: args.name || lead!.name,
+          inbox_id: args.inboxId
+        }
+      }).catch(err => console.error("[FlowEngine] Failed to trigger LEAD_CREATED flow", err));
+    }
+
     return { leadId: lead!.id, customerId: customer!.id, chatId: chat!.id, externalId: chat.external_id ?? null };
   });
 }
@@ -1219,6 +1237,8 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
 
   // Encrypt media URL before storing (legacy field)
   const encryptedMediaUrl = encryptMediaUrl(args.mediaUrl);
+
+  let finalRow: UpsertChatMessageRow | null = null;
 
   if (chatMessagesSupportsRemoteSenderColumns) {
     try {
@@ -1313,8 +1333,9 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
           args.id ?? null,
         ],
       );
-      if (!row) return null;
-      return { message: row, inserted: row.inserted };
+      if (row) {
+        finalRow = row;
+      }
     } catch (error: any) {
       const code = String(error?.code || "");
       if (code === "42703" || code === "42P01") {
@@ -1326,55 +1347,97 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
     }
   }
 
-  const fallbackRow = await db.oneOrNone<UpsertChatMessageRow>(
-    `
-      insert into public.chat_messages
-        (chat_id, sender_id, is_from_customer, external_id, content, type, view_status, media_url, created_at,
-         company_id, inbox_id)
-      values
-        ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamptz, now()),
-         (select company_id from public.chats where id = $1 limit 1),
-         (select inbox_id from public.chats where id = $1 limit 1))
-      on conflict (chat_id, external_id) do update
-        set content     = coalesce(excluded.content,     public.chat_messages.content),
-            type        = coalesce(excluded.type,        public.chat_messages.type),
-            sender_id   = coalesce(excluded.sender_id,   public.chat_messages.sender_id),
-            view_status = coalesce(excluded.view_status, public.chat_messages.view_status),
-            media_url   = coalesce(excluded.media_url,   public.chat_messages.media_url),
-            updated_at  = now()
-      returning id,
-                chat_id,
-                sender_id,
-                content,
-                type,
-                view_status,
-                created_at,
-                is_from_customer,
-                media_url,
-                null::uuid    as remote_participant_id,
-                null::text    as remote_sender_id,
-                null::text    as remote_sender_name,
-                null::text    as remote_sender_phone,
-                null::text    as remote_sender_avatar_url,
-                null::boolean as remote_sender_is_admin,
-                null::uuid    as replied_message_id,
-                (xmax = 0) as inserted
-    `,
-    [
-      args.chatId,
-      args.senderId ?? null,
-      args.isFromCustomer,
-      args.externalId,
-      args.content,
-      args.type ?? "TEXT",
-      args.viewStatus ?? null,
-      encryptedMediaUrl ?? null,
-      createdAtIso,
-    ],
-  );
+  if (!finalRow) {
+    finalRow = await db.oneOrNone<UpsertChatMessageRow>(
+      `
+        insert into public.chat_messages
+          (chat_id, sender_id, is_from_customer, external_id, content, type, view_status, media_url, created_at,
+           company_id, inbox_id)
+        values
+          ($1, $2, $3, $4, $5, $6, $7, $8, coalesce($9::timestamptz, now()),
+           (select company_id from public.chats where id = $1 limit 1),
+           (select inbox_id from public.chats where id = $1 limit 1))
+        on conflict (chat_id, external_id) do update
+          set content     = coalesce(excluded.content,     public.chat_messages.content),
+              type        = coalesce(excluded.type,        public.chat_messages.type),
+              sender_id   = coalesce(excluded.sender_id,   public.chat_messages.sender_id),
+              view_status = coalesce(excluded.view_status, public.chat_messages.view_status),
+              media_url   = coalesce(excluded.media_url,   public.chat_messages.media_url),
+              updated_at  = now()
+        returning id,
+                  chat_id,
+                  sender_id,
+                  content,
+                  type,
+                  view_status,
+                  created_at,
+                  is_from_customer,
+                  media_url,
+                  null::uuid    as remote_participant_id,
+                  null::text    as remote_sender_id,
+                  null::text    as remote_sender_name,
+                  null::text    as remote_sender_phone,
+                  null::text    as remote_sender_avatar_url,
+                  null::boolean as remote_sender_is_admin,
+                  null::uuid    as replied_message_id,
+                  (xmax = 0) as inserted
+      `,
+      [
+        args.chatId,
+        args.senderId ?? null,
+        args.isFromCustomer,
+        args.externalId,
+        args.content,
+        args.type ?? "TEXT",
+        args.viewStatus ?? null,
+        encryptedMediaUrl ?? null,
+        createdAtIso,
+      ],
+    );
+  }
 
-  if (!fallbackRow) return null;
-  return { message: fallbackRow, inserted: fallbackRow.inserted };
+  if (!finalRow) return null;
+
+  // 🤖 Trigger Flow Builder for Inbound Messages
+  if (finalRow.inserted && args.isFromCustomer) {
+    try {
+      const chat = await db.oneOrNone<{ customer_id: string, company_id: string, inbox_id: string }>(
+        `SELECT customer_id, company_id, inbox_id FROM public.chats WHERE id = $1`,
+        [args.chatId]
+      );
+      if (chat?.customer_id && chat?.company_id) {
+        // 1. Resume flows waiting for response
+        resumeFlowWithResponse(args.chatId, { content: args.content, type: args.type })
+          .catch(err => console.error("[FlowEngine] Failed to resume flow", err));
+
+        // 2. Trigger Keyword
+        triggerFlow({
+          companyId: chat.company_id,
+          contactId: chat.customer_id,
+          chatId: args.chatId,
+          triggerType: 'KEYWORD',
+          triggerData: { text: args.content }
+        }).catch(err => console.error("[FlowEngine] Failed to trigger keyword flow", err));
+
+        // 3. Trigger New Message (with filters)
+        triggerFlow({
+          companyId: chat.company_id,
+          contactId: chat.customer_id,
+          chatId: args.chatId,
+          triggerType: 'NEW_MESSAGE',
+          triggerData: { 
+            text: args.content, 
+            type: args.type || 'TEXT',
+            inbox_id: chat.inbox_id
+          }
+        }).catch(err => console.error("[FlowEngine] Failed to trigger new message flow", err));
+      }
+    } catch (err) {
+      console.error("[FlowEngine] Error fetching chat for flow trigger", err);
+    }
+  }
+
+  return { message: finalRow, inserted: finalRow.inserted };
 }
 
 export async function touchChatAfterMessage(args: {

@@ -49,8 +49,6 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   useEffect(() => {
-    console.log("[FirstInboxWizard] Componente montado");
-    return () => console.log("[FirstInboxWizard] Componente desmontado");
   }, []);
 
   const handleProviderSelect = (provider: Provider) => {
@@ -92,14 +90,12 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         const headers = new Headers();
         if (token) headers.set("Authorization", `Bearer ${token}`);
         
-        console.log("[FirstInboxWizard] 🔄 Buscando company_id...");
         const userProfile = await fetch(`${API}/me/profile`, {
           headers,
           credentials: "include"
         }).then(res => res.json());
 
         const companyId = userProfile.companyId || "COMPANY";
-        console.log("[FirstInboxWizard] ✅ Company ID:", companyId);
         
         // Gerar session ID - usar apenas últimos 8 chars do company_id para manter limite de 54 chars
         const safeName = (wahaForm.name || "")
@@ -117,10 +113,7 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         const random = Math.random().toString(36).slice(2, 8).toUpperCase();
         const sessionId = `${safeName}_${safeCompany}_${random}`;
         
-        console.log("[FirstInboxWizard] 🔑 Session ID gerado:", sessionId, "| Tamanho:", sessionId.length);
-        
         // Criar sessão na API WAHA
-        console.log("[FirstInboxWizard] 📡 Criando sessão WAHA...");
         const sessionResponse = await fetch(`${API}/waha/sessions`, {
           method: "POST",
           credentials: "include",
@@ -137,10 +130,8 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         }
 
         const sessionResult = await sessionResponse.json();
-        console.log("[FirstInboxWizard] ✅ Sessão WAHA criada:", sessionResult);
 
         // Obter QR Code
-        console.log("[FirstInboxWizard] 📷 Obtendo QR Code...");
         const qrResponse = await fetch(
           `${API}/waha/sessions/${encodeURIComponent(sessionId)}/auth/qr?format=image`,
           { 
@@ -151,7 +142,6 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
 
         if (qrResponse.ok) {
           const qrData = await qrResponse.json();
-          console.log("[FirstInboxWizard] ✅ QR Code obtido");
           
           if (qrData?.ok && qrData?.result) {
             // Extrair base64 do resultado
@@ -166,13 +156,8 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
             
             if (qrBase64) {
               setQrCode(qrBase64);
-              console.log("[FirstInboxWizard] ✅ QR Code pronto para exibição");
-            } else {
-              console.warn("[FirstInboxWizard] ⚠️ QR Code em formato inesperado:", qrData.result);
             }
           }
-        } else {
-          console.warn("[FirstInboxWizard] ⚠️ Não foi possível obter QR Code");
         }
 
         // Salvar sessionId no estado para usar no Step 3
@@ -197,15 +182,12 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
     try {
       const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
       
-      console.log("[FirstInboxWizard] 💾 Iniciando criação da inbox no banco de dados...");
-      
       let payload: any = {
         channel: "WHATSAPP",
         is_active: true,
       };
 
       if (selectedProvider === "META_CLOUD") {
-        console.log("[FirstInboxWizard] 📋 Preparando payload META_CLOUD");
         payload = {
           ...payload,
           name: metaForm.name,
@@ -225,16 +207,12 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
           }
         };
       } else if (selectedProvider === "WAHA") {
-        console.log("[FirstInboxWizard] 📋 Preparando payload WAHA");
-        
         // Usar o sessionId que já foi criado no Step 2
         const sessionId = wahaForm.sessionId;
         
         if (!sessionId) {
           throw new Error("Session ID não encontrado. A sessão WAHA não foi criada corretamente.");
         }
-
-        console.log("[FirstInboxWizard] 🔑 Usando Session ID:", sessionId);
 
         payload = {
           ...payload,
@@ -250,8 +228,6 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
         };
       }
 
-      console.log("[FirstInboxWizard] 📤 Enviando payload para criação da inbox:", payload);
-
       const response = await fetch(`${API}/settings/inboxes`, {
         method: "POST",
         credentials: "include",
@@ -261,18 +237,15 @@ export function FirstInboxWizard({ onComplete, onSkip }: FirstInboxWizardProps) 
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: "Erro ao criar inbox" }));
-        console.error("[FirstInboxWizard] ❌ Erro na resposta do backend:", error);
         throw new Error(error.error || "Erro ao criar inbox");
       }
 
       const result = await response.json();
-      console.log("[FirstInboxWizard] ✅ Inbox criada com sucesso:", result);
 
       setConnectionStatus("success");
       
       // Aguardar 2 segundos e fechar
       setTimeout(() => {
-        console.log("[FirstInboxWizard] 🎉 Finalizando wizard");
         onComplete();
       }, 2000);
 

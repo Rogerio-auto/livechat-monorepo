@@ -126,7 +126,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     
     try {
       const cached = await rGet<any>(cacheKey);
-      if (cached) {
+      if (cached && cached.user) {
         const authData = cached;
         (req as any).user = authData.user;
         (req as any).profile = authData.profile;

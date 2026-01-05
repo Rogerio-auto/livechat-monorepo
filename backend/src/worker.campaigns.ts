@@ -5,7 +5,7 @@ import "./config/env.ts";
 export async function registerCampaignWorker() {
   console.log("[worker-campaigns] Starting campaign worker...");
 
-  await consume(Q_CAMPAIGN_FOLLOWUP, async (msg: any) => {
+  await consume(Q_CAMPAIGN_FOLLOWUP, async (msg: any, ch: any) => {
     const data = JSON.parse(msg.content?.toString?.() || "{}");
     const { type, campaignId, customerId, customerPhone } = data;
 
@@ -17,7 +17,10 @@ export async function registerCampaignWorker() {
         .eq("id", campaignId)
         .maybeSingle();
 
-      if (!camp) return;
+      if (!camp) {
+        ch.ack(msg);
+        return;
+      }
 
       await supabaseAdmin
         .from("campaign_recipients")
@@ -26,7 +29,7 @@ export async function registerCampaignWorker() {
         .eq("phone", customerPhone);
 
       if (camp.ai_handoff_on_reply) {
-        await publish(EX_APP, "outbound", {
+        await publish(EX_APP, "outbound.request", {
           jobType: "ai.handoff",
           campaignId,
           customerId,
@@ -49,7 +52,7 @@ export async function registerCampaignWorker() {
             .maybeSingle();
 
           setTimeout(async () => {
-            await publish(EX_APP, "outbound", {
+            await publish(EX_APP, "outbound.request", {
               jobType: "message.send",
               inboxId: null,
               content: tpl?.payload?.text,
@@ -59,18 +62,21 @@ export async function registerCampaignWorker() {
         }
       }
     }
+    ch.ack(msg);
   });
 
   console.log("[worker-campaigns] Listening on queue:", Q_CAMPAIGN_FOLLOWUP);
 }
 
 // Bootstrap
-(async () => {
-  try {
-    await registerCampaignWorker();
-    console.log("[worker-campaigns] Worker started successfully");
-  } catch (error) {
-    console.error("[worker-campaigns] Failed to start:", error);
-    process.exit(1);
-  }
-})();
+if (process.argv[1]?.endsWith('worker.campaigns.ts')) {
+  (async () => {
+    try {
+      await registerCampaignWorker();
+      console.log("[worker-campaigns] Worker started successfully");
+    } catch (error) {
+      console.error("[worker-campaigns] Failed to start:", error);
+      process.exit(1);
+    }
+  })();
+}

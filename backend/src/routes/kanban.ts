@@ -2,6 +2,7 @@
 import type { Express, RequestHandler } from "express";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Server as SocketIOServer } from "socket.io";
+import { triggerFlow } from "../services/flow.engine.js";
 
 type Deps = {
     requireAuth: RequestHandler;
@@ -542,8 +543,19 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // PUT atualizar card (titulo, valor, stage, etc.)
-    app.put("/kanban/cards/:id", async (req, res) => {
+    app.put("/kanban/cards/:id", requireAuth, async (req: any, res) => {
         const { id } = req.params;
+        const userId = req.user.id;
+
+        const { data: userRow, error: errUser } = await supabaseAdmin
+            .from("users")
+            .select("company_id")
+            .eq("user_id", userId)
+            .maybeSingle();
+
+        if (errUser) return res.status(500).json({ error: errUser.message });
+        if (!userRow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
+
         const patch = req.body as Partial<{
             title: string; value: number; stage: string; owner: string; source: string;
             notes: string; email: string; contact: string; leadId: string | null;
@@ -780,6 +792,16 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
                         console.error(`[kanban] ❌ erro ao atualizar lead: leadId=${linkedLeadId}`, leadUpdateError);
                     } else {
                         console.log(`[kanban] ✅ lead atualizado: leadId=${linkedLeadId} columnId=${(updatedCard as any).kanban_column_id}`);
+                        
+                        // Trigger Flow Builder if stage changed
+                        if (stageChanged) {
+                            triggerFlow({
+                                companyId: userRow.company_id,
+                                contactId: linkedLeadId,
+                                triggerType: 'STAGE_CHANGE',
+                                triggerData: { column_id: (updatedCard as any).kanban_column_id }
+                            }).catch(err => console.error("[FlowEngine] Trigger error:", err));
+                        }
                     }
                     // Best-effort: sync customers/customers.assigned_agent if customer is linked to this lead
                     try {

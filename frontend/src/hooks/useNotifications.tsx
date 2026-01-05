@@ -54,7 +54,7 @@ export function useNotifications() {
     socketRef.current = socketInstance;
 
     socketInstance.on('connect', () => {
-      console.log('[useNotifications] ✅ Socket connected:', socketInstance.id);
+      // Socket connected
     });
 
     socketInstance.on('connect_error', (err) => {
@@ -62,7 +62,7 @@ export function useNotifications() {
     });
 
     socketInstance.on('disconnect', (reason) => {
-      console.log('[useNotifications] 🔌 Socket disconnected:', reason);
+      // Socket disconnected
     });
 
     return () => {
@@ -80,8 +80,6 @@ export function useNotifications() {
   // Escutar evento de logout e limpar estados
   useEffect(() => {
     const handleLogout = () => {
-      console.log('[useNotifications] 🧹 Cleaning up on logout');
-      
       // Limpar estados
       setNotifications([]);
       setUnreadCount(0);
@@ -95,8 +93,6 @@ export function useNotifications() {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      
-      console.log('[useNotifications] ✅ Cleanup completed');
     };
 
     window.addEventListener('user:logout', handleLogout);

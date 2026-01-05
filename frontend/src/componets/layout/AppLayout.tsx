@@ -66,24 +66,14 @@ export function AppLayout() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[AppLayout] 🔌 Global Socket connected", { socketId: socket.id });
       // Forçar entrada na sala da empresa para receber eventos globais
       if ((profile as any).company_id) {
         socket.emit("join", { companyId: (profile as any).company_id });
-        
-        // Confirmar join após um delay
-        setTimeout(() => {
-          console.log("[AppLayout] ✅ Socket rooms check:", {
-            companyId: (profile as any).company_id,
-            socketId: socket.id,
-          });
-        }, 500);
       }
     });
 
     return () => {
       if (socketRef.current) {
-        console.log("[AppLayout] 🔌 Global Socket disconnecting...");
         socketRef.current.disconnect();
         socketRef.current = null;
       }
@@ -96,15 +86,6 @@ export function AppLayout() {
     if (!socket) return;
 
     const onChatUpdated = (data: any) => {
-      console.log("[AppLayout] 🔔 chat:updated received:", {
-        chatId: data.chatId,
-        last_message: data.last_message?.substring(0, 30),
-        last_message_from: data.last_message_from,
-        customer_name: data.customer_name,
-        currentPath: location.pathname,
-        currentSearch: location.search,
-      });
-      
       // Lógica de Notificação:
       // 1. Usuário NÃO está visualizando ESTE CHAT específico
       // 2. Evento indica nova mensagem de cliente
@@ -116,25 +97,18 @@ export function AppLayout() {
       
       // Se usuário está visualizando exatamente este chat, não notificar
       if (isViewingThisChat) {
-        console.log("[AppLayout] ⏭️  Skipping notification: user is viewing this chat");
         return;
       }
 
       // Verifica se é uma atualização relevante (nova mensagem de cliente)
       // Usa last_message_from ao invés de is_from_me (que não existe no payload)
       if (data && data.last_message && data.last_message_from === "CUSTOMER") {
-         console.log("[AppLayout] 📢 Showing notification for chat:", data.chatId);
-         
          // Tocar som
          try {
            const audio = new Audio(`${import.meta.env.BASE_URL || '/'}sounds/notification-message.mp3`);
            // Tenta tocar (pode falhar se não houve interação do usuário ainda)
-           audio.play().catch((err) => {
-             console.warn("[AppLayout] ⚠️  Audio play failed:", err);
-           }); 
-         } catch (e) {
-           console.warn("[AppLayout] ⚠️  Audio error:", e);
-         }
+           audio.play().catch(() => {}); 
+         } catch (e) {}
 
          // Mostrar notificação nativa do navegador
          if ("Notification" in window && Notification.permission === "granted") {
@@ -159,22 +133,12 @@ export function AppLayout() {
             notif.onclick = () => {
               window.focus();
               // Navegar para o chat quando clicar na notificação
-              window.location.href = `/livechat?chatId=${data.chatId}`;
+              window.location.href = `/livechat/${data.chatId}`;
               notif.close();
             };
-            
-            console.log("[AppLayout] ✅ Browser notification shown");
          } else if ("Notification" in window && Notification.permission === "default") {
-            console.log("[AppLayout] 🔔 Requesting notification permission...");
             Notification.requestPermission();
-         } else {
-            console.log("[AppLayout] ⚠️  Notifications not available or denied");
          }
-      } else {
-        console.log("[AppLayout] ⏭️  Skipping notification: not a customer message", {
-          has_message: !!data?.last_message,
-          from: data?.last_message_from
-        });
       }
     };
 

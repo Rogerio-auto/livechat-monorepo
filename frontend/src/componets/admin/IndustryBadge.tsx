@@ -1,4 +1,4 @@
-import { Industry } from "../../types/onboarding";
+import { Industry } from "../../types/cadastro";
 import { getIndustryConfig } from "../../config/industry-config";
 
 interface IndustryBadgeProps {

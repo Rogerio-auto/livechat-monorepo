@@ -4,6 +4,7 @@ import cron from 'node-cron';
 import { checkProjectDeadlines, checkTaskDeadlines } from './check-project-deadlines.job.ts';
 import { processPendingNotifications } from '../services/notification.service.ts';
 import { supabaseAdmin } from '../lib/supabase.ts';
+import { queueNextStep } from '../services/flow.engine.js';
 
 export function startScheduler() {
   console.log('[Scheduler] Starting notification scheduler...');
@@ -28,6 +29,32 @@ export function startScheduler() {
       await processPendingNotifications();
     } catch (error) {
       console.error('[Scheduler] Error processing notifications:', error);
+    }
+  });
+
+  // ==================== PROCESSAR FLOWS AGUARDANDO (A cada minuto) ====================
+  cron.schedule('* * * * *', async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data: waitingExecutions } = await supabaseAdmin
+        .from('flow_executions')
+        .select('id')
+        .eq('status', 'WAITING')
+        .lte('next_step_at', now);
+
+      if (waitingExecutions && waitingExecutions.length > 0) {
+        console.log(`[Scheduler] Waking up ${waitingExecutions.length} flows...`);
+        for (const exec of waitingExecutions) {
+          await supabaseAdmin
+            .from('flow_executions')
+            .update({ status: 'RUNNING', next_step_at: null })
+            .eq('id', exec.id);
+          
+          await queueNextStep(exec.id);
+        }
+      }
+    } catch (error) {
+      console.error('[Scheduler] Error waking up flows:', error);
     }
   });
 

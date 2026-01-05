@@ -22,7 +22,7 @@ type PagePayload = {
 };
 
 export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
-  const { profile } = useUserProfile();
+  const { profile, loading: profileLoading } = useUserProfile();
   const limit = 20;
   const [items, setItems] = useState<Campaign[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -49,7 +49,7 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
   const fetchingRef = useRef<boolean>(false);
   const loadedCampaignTemplatesRef = useRef<Set<string>>(new Set());
   const loadedCampaignStatsRef = useRef<Set<string>>(new Set());
-  const canManageTemplates = ["ADMIN", "MANAGER", "SUPERVISOR"].includes(profile?.role || "");
+  const canManageTemplates = ["SUPER_ADMIN", "ADMIN", "MANAGER", "SUPERVISOR", "AGENT"].includes(profile?.role || "");
   
   // Template scroll controls
   const templateScrollRef = useRef<HTMLDivElement>(null);
@@ -678,50 +678,76 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
     }
   };
 
+  if (profileLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-2">
+          <FiRefreshCw className="w-8 h-8 text-blue-500 animate-spin" />
+          <span className="text-sm text-gray-500">Carregando perfil...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 flex flex-col gap-3">
+    <div className="flex-1 flex flex-col gap-4 p-1">
       
-      {/* Seção de Templates/Messages no topo - sempre renderiza */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <h3
-            className="text-sm font-semibold"
-            style={{ color: "var(--color-heading)" }}
-          >
-            Templates/Mensagens
-          </h3>
-          <div className="flex items-center gap-2">
+      {/* Barra de Ações Principais - Mais visível */}
+      <div className="bg-linear-to-r from-blue-600/10 to-indigo-600/10 border-2 border-blue-600/20 rounded-2xl p-4 mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Gestão de Campanhas</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Crie, gerencie e monitore suas campanhas de mensagens</p>
+          </div>
+          <div className="flex items-center gap-3">
             {canManageTemplates && (
               <>
                 <button
                   onClick={handleSyncTemplates}
-                  className="text-xs px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium flex items-center gap-1.5"
-                  aria-label="Sincronizar status com Meta"
-                  title="Atualizar status dos templates com a Meta"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:border-blue-500 hover:text-blue-600 transition-all shadow-sm"
+                  title="Sincronizar templates com a Meta"
                 >
-                  <FiRefreshCw className="w-3.5 h-3.5" />
-                  Sync
-                </button>
-                <button
-                  onClick={handleImportFromMeta}
-                  className="text-xs px-3 py-2 rounded-xl border border-green-600/30 bg-green-600/10 text-green-700 dark:text-green-400 hover:bg-green-600/20 transition-all font-medium flex items-center gap-1.5"
-                  aria-label="Importar da Meta"
-                  title="Importar templates aprovados da Meta"
-                >
-                  <FiDownload className="w-3.5 h-3.5" />
-                  Importar
+                  <FiRefreshCw className="w-4 h-4" />
+                  Sincronizar
                 </button>
                 <button
                   onClick={openNewTemplateWizard}
-                  className="text-xs px-4 py-2 rounded-xl border-2 border-blue-600/30 bg-blue-600/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600/20 hover:border-blue-600/50 transition-all font-medium flex items-center gap-1.5"
-                  aria-label="Criar novo template"
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold text-gray-700 dark:text-gray-200 hover:border-green-500 hover:text-green-600 transition-all shadow-sm"
                 >
-                  <FiPlus className="w-3.5 h-3.5" />
+                  <FiPlus className="w-4 h-4" />
                   Novo Template
+                </button>
+                <button
+                  onClick={openNewCampaign}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-500/25 hover:scale-105 active:scale-95"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  Nova Campanha
                 </button>
               </>
             )}
           </div>
+        </div>
+      </div>
+      
+      {/* Seção de Templates/Messages */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between px-1">
+          <h3
+            className="text-sm font-bold uppercase tracking-wider opacity-70"
+            style={{ color: "var(--color-heading)" }}
+          >
+            Meus Templates
+          </h3>
+          {canManageTemplates && (
+            <button
+              onClick={handleImportFromMeta}
+              className="text-[10px] px-2 py-1 rounded-lg border border-green-600/30 bg-green-600/5 text-green-700 dark:text-green-400 hover:bg-green-600/10 transition-all font-medium flex items-center gap-1"
+            >
+              <FiDownload className="w-3 h-3" />
+              Importar da Meta
+            </button>
+          )}
         </div>
 
         {/* quando não houver templates: mostrar CTA central */}
@@ -800,26 +826,13 @@ export default function CampaignsPanel({ apiBase }: { apiBase: string }) {
 
       {/* Seção de Campanhas */}
       <div className="flex-1 grid grid-rows-[auto,1fr] gap-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between px-1">
           <h2
-            className="text-base font-semibold"
+            className="text-sm font-bold uppercase tracking-wider opacity-70"
             style={{ color: "var(--color-heading)" }}
           >
-            Campanhas
+            Minhas Campanhas
           </h2>
-          {canManageTemplates && (
-            <button
-              onClick={openNewCampaign}
-              className="rounded-xl border-2 px-4 py-2 text-xs font-medium transition-colors hover:opacity-90"
-              style={{
-                borderColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
-                backgroundColor: "color-mix(in srgb, var(--color-primary) 10%, transparent)",
-                color: "var(--color-primary)",
-              }}
-            >
-              + Nova campanha
-            </button>
-          )}
         </div>
 
         <div className="overflow-y-auto max-h-[calc(93vh-20rem)] px-1 pb-4">

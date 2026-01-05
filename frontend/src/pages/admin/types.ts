@@ -1,4 +1,4 @@
-import type { Industry } from '../../types/onboarding';
+import type { Industry } from '../../types/cadastro';
 
 export type AdminCompany = {
   id: string;

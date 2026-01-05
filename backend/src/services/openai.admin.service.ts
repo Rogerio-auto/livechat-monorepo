@@ -49,10 +49,8 @@ export async function createOpenAIProject(
     console.log(`[OpenAI Admin] Creating project for:  ${companyName}`);
 
     // 1. Criar o projeto (Projects API - Beta)
-    // NOTA: Esta API pode não estar disponível para todas as contas
-    // Fallback:  retornar erro para criação manual
-    
-    const projectName = `livechat-${companyName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`;
+    // Usamos um nome descritivo para facilitar a identificação no dashboard da OpenAI
+    const projectName = `7SION - ${companyName}`;
     
     // Verificar se a API de projetos está disponível
     if (!process.env.OPENAI_PROJECTS_API_ENABLED) {
@@ -94,15 +92,12 @@ export async function createOpenAIProject(
  * FALLBACK: Se não disponível, instrui criação manual
  */
 async function createProjectViaAPI(name: string, options?: any) {
-  // IMPORTANTE: A Projects API está em beta privada
-  // Se sua conta não tem acesso, este endpoint falhará
-  
   try {
-    // Endpoint ainda não documentado publicamente
+    // Endpoint correto para criação de projetos (Organization API)
     const response = await fetch('https://api.openai.com/v1/organization/projects', {
       method:  'POST',
       headers:  {
-        'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY}`,
+        'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY || process.env.OPENAI_API_KEY}`,
         'OpenAI-Organization': process.env.OPENAI_ORG_ID || '',
         'Content-Type': 'application/json',
       },
@@ -113,43 +108,73 @@ async function createProjectViaAPI(name: string, options?: any) {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || 'Failed to create project');
+      const text = await response.text();
+      let errorDetail = 'Failed to create project';
+      try {
+        const errorJson = JSON.parse(text);
+        errorDetail = errorJson.error?.message || errorDetail;
+      } catch (e) {
+        errorDetail = `${errorDetail} (Status ${response.status})`;
+      }
+      console.error('[OpenAI Admin] Project creation failed:', text);
+      throw new Error(errorDetail);
     }
 
     return await response.json();
   } catch (error) {
-    console.warn('[OpenAI Admin] Projects API not available, falling back to manual mode');
+    console.error('[OpenAI Admin] Error in createProjectViaAPI:', error);
     throw error;
   }
 }
 
 /**
- * Cria API key para um projeto
+ * Cria API key para um projeto via Service Account
+ * O modelo novo da OpenAI recomenda usar Service Accounts para chaves de projeto
  */
 async function createProjectAPIKey(projectId: string, name: string) {
   try {
+    // Criar um Service Account no projeto - isso gera automaticamente uma API Key
     const response = await fetch(
-      `https://api.openai.com/v1/organization/projects/${projectId}/api_keys`,
+      `https://api.openai.com/v1/organization/projects/${projectId}/service_accounts`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY}`,
+          'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY || process.env.OPENAI_API_KEY}`,
           'OpenAI-Organization': process.env.OPENAI_ORG_ID || '',
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name:  `${name} - Auto Generated`,
+          name:  `SA-${name.slice(0, 20)}`,
         }),
       }
     );
 
     if (!response.ok) {
-      throw new Error('Failed to create API key');
+      const text = await response.text();
+      let errorDetail = 'Failed to create service account';
+      try {
+        const errorJson = JSON.parse(text);
+        errorDetail = errorJson.error?.message || errorDetail;
+      } catch (e) {
+        errorDetail = `${errorDetail} (Status ${response.status})`;
+      }
+      console.error('[OpenAI Admin] Service Account creation failed:', text);
+      throw new Error(errorDetail);
     }
 
-    return await response.json();
+    const data = await response.json();
+    
+    // O objeto retornado contém a api_key
+    if (!data.api_key || !data.api_key.value) {
+      throw new Error('Service account created but no API key returned');
+    }
+
+    return {
+      id: data.api_key.id,
+      key: data.api_key.value
+    };
   } catch (error) {
+    console.error('[OpenAI Admin] Error in createProjectAPIKey:', error);
     throw error;
   }
 }
@@ -226,18 +251,23 @@ export async function revokeProjectAPIKey(
   apiKeyId: string
 ): Promise<void> {
   try {
+    // Tentar deletar como chave de projeto ou chave de service account
+    // No modelo de Service Account, a chave pode ser deletada via:
+    // DELETE /v1/organization/projects/{project_id}/api_keys/{key_id}
     const response = await fetch(
       `https://api.openai.com/v1/organization/projects/${projectId}/api_keys/${apiKeyId}`,
       {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY}`,
+          'Authorization': `Bearer ${process.env.OPENAI_ADMIN_API_KEY || process.env.OPENAI_API_KEY}`,
           'OpenAI-Organization':  process.env.OPENAI_ORG_ID || '',
         },
       }
     );
 
     if (!response.ok) {
+      const text = await response.text();
+      console.error('[OpenAI Admin] Error revoking key:', text);
       throw new Error('Failed to revoke API key');
     }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { Industry } from '../types/onboarding';
+import type { Industry } from '../types/cadastro';
 
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:5000';
 

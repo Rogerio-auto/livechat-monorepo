@@ -21,17 +21,12 @@ export function useUserProfile() {
       setError(null);
       try {
         const url = `${import.meta.env.VITE_API_URL}/auth/me`;
-        console.log('[useUserProfile] 📡 Fetching from:', url);
         
         const res = await fetch(url, { credentials: 'include' });
         if (!mounted) return;
         
-        console.log('[useUserProfile] 📊 Response status:', res.status);
-        
         if (res.ok) {
           const data = await res.json();
-          console.log('[useUserProfile] 📋 Raw response:', data);
-          console.log('[useUserProfile] 📋 Role found:', data.role);
           setProfile(data);
         } else {
           setError('Não autenticado');

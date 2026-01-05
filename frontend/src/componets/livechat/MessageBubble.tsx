@@ -377,9 +377,23 @@ export function MessageBubble({
         ) : (
            <div>{textBody || "[Template]"}</div>
         )}
+
+        {/* Render Buttons if present in template components */}
+        {template?.components && Array.isArray(template.components) && (
+          <div className="flex flex-col gap-2 mt-2 border-t border-white/10 pt-2">
+            {template.components
+              .filter((c: any) => c.type === "BUTTONS" || c.type === "buttons")
+              .flatMap((c: any) => c.buttons || [])
+              .map((btn: any, idx: number) => (
+                <div key={idx} className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-90">
+                  {btn.text || btn.reply?.title || "Botão"}
+                </div>
+              ))}
+          </div>
+        )}
       </div>
     );
-  } else if (messageType === "BUTTON") {
+  } else if (messageType === "BUTTON" || messageType === "BUTTONS") {
     const button = m.interactive_content;
     bubbleContent = (
       <div className="flex flex-col gap-2">
@@ -401,6 +415,25 @@ export function MessageBubble({
         {order?.catalog_id && <div className="text-xs opacity-70">Catálogo: {order.catalog_id}</div>}
         {order?.product_items && (
            <div className="text-xs opacity-80">{order.product_items.length} itens</div>
+        )}
+      </div>
+    );
+  } else if (messageType === "POLL") {
+    const poll = m.interactive_content;
+    bubbleContent = (
+      <div className="flex flex-col gap-2 min-w-[200px]">
+        <div className="flex items-center gap-1 text-xs text-purple-400 mb-1">
+          <FiCheck className="w-3.5 h-3.5" /> Enquete
+        </div>
+        <div className="font-medium">{poll?.name || textBody || "Enquete"}</div>
+        {poll?.options && Array.isArray(poll.options) && (
+          <div className="flex flex-col gap-1 mt-1">
+            {poll.options.map((opt: any, idx: number) => (
+              <div key={idx} className="py-1.5 px-3 bg-white/10 rounded text-sm border border-white/5">
+                {opt.option_name || opt.text || `Opção ${idx + 1}`}
+              </div>
+            ))}
+          </div>
         )}
       </div>
     );
@@ -436,14 +469,14 @@ export function MessageBubble({
           
           {footer?.text && <div className="text-xs opacity-70 border-t border-white/10 pt-1 mt-1">{footer.text}</div>}
 
-          {type === "button" && action?.buttons && (
+          {(type === "button" || type === "buttons") && action?.buttons && (
              <div className="flex flex-col gap-2 mt-2">
                {action.buttons.map((btn: any, idx: number) => (
                  <div 
                    key={idx} 
                    className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-90"
                  >
-                   {btn.reply?.title || btn.type}
+                   {btn.reply?.title || btn.text || btn.type}
                  </div>
                ))}
              </div>

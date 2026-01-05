@@ -208,7 +208,7 @@ export function ContactsCRM({ apiBase, socket }: { apiBase: string; socket?: Soc
         `${base}/livechat/contacts/${encodeURIComponent(expanded)}/start-chat`,
         { method: "POST", body: JSON.stringify({ inboxId }) }
       );
-      if (resp?.id) navigate(`/livechat?openChat=${resp.id}`);
+      if (resp?.id) navigate(`/livechat/${resp.id}`);
     } finally {
       setStartingChat(false);
     }

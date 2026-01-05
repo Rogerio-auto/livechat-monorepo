@@ -47,6 +47,8 @@ import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia,
 import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
 import { incrementUsage, checkLimit } from "../src/services/subscriptions.ts";
 import { NotificationService } from "./services/NotificationService.ts";
+import { registerFlowWorker } from "./worker.flows.ts";
+import { registerCampaignWorker } from "./worker.campaigns.ts";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -844,6 +846,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
       remote_sender_avatar_url: string | null;
       remote_sender_is_admin: boolean | null;
       replied_message_id: string | null;
+      interactive_content: any | null;
     }>(
       `select id,
               chat_id,
@@ -863,7 +866,8 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
               remote_sender_phone,
               remote_sender_avatar_url,
               remote_sender_is_admin,
-              replied_message_id
+              replied_message_id,
+              interactive_content
          from public.chat_messages
         where chat_id = $1
         order by created_at desc
@@ -888,6 +892,7 @@ async function warmChatMessagesCache(chatId: string, limit = PAGE_LIMIT_PREWARM)
         is_private: false,
         media_url: row.media_url ?? null,
         caption: row.caption ?? null,
+        interactive_content: row.interactive_content ?? null,
         remote_participant_id: row.remote_participant_id ?? null,
         remote_sender_id: row.remote_sender_id ?? null,
         remote_sender_name: row.remote_sender_name ?? null,
@@ -965,11 +970,12 @@ async function graphSendMedia(
   mediaId: string,
   caption?: string | null,
   filename?: string | null,
+  isVoice?: boolean,
 ): Promise<string | undefined> {
   const payload: any = {
     messaging_product: "whatsapp",
     to,
-    type: kind.toLowerCase(),
+    type: isVoice ? "audio" : kind.toLowerCase(),
   };
 
   if (kind === "DOCUMENT") {
@@ -984,6 +990,13 @@ async function graphSendMedia(
     payload.video = { id: mediaId, caption: caption ?? undefined };
   } else if (kind === "AUDIO") {
     payload.audio = { id: mediaId };
+  }
+
+  // Voice note support
+  if (kind === "AUDIO" && (payload as any).is_voice) {
+    // Meta API uses 'audio' type for voice notes, but some providers/versions 
+    // might need specific flags. For standard Cloud API, an ogg/opus file 
+    // sent as 'audio' is often enough, but we can explicitly set the type if needed.
   }
 
   const url = `https://graph.facebook.com/${META_GRAPH_VERSION}/${creds.phone_number_id}/messages`;
@@ -4052,6 +4065,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
       type: messageRow.type ?? (messageType === "media" ? "DOCUMENT" : "TEXT"),
       is_private: false,
       media_url: buildProxyUrl(messageRow.media_url) ?? null,
+      interactive_content: (messageRow as any).interactive_content ?? null,
       // Preserve reply linkage so frontend can render quoted preview
       replied_message_id: (messageRow as any).replied_message_id ?? null,
       replied_message_external_id: (messageRow as any).replied_message_external_id ?? null,
@@ -4590,13 +4604,14 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         });
 
         const filename = String(job.filename || `media.${ext}`);
-        const mediaType = effectiveMime.startsWith("image/")
+        const isVoice = !!job.is_voice;
+        const mediaType = isVoice ? "AUDIO" : (effectiveMime.startsWith("image/")
           ? "IMAGE"
           : effectiveMime.startsWith("video/")
             ? "VIDEO"
             : effectiveMime.startsWith("audio/")
               ? "AUDIO"
-              : "DOCUMENT";
+              : "DOCUMENT");
 
         // upload para Meta
         const mediaId = await graphUploadMedia(
@@ -4630,6 +4645,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           mediaId,
           job.caption ?? null,
           filename,
+          isVoice
         );
         console.log("[outbound] graphSendMedia ok", { wamid });
 
@@ -4680,6 +4696,48 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           draftId: job?.draftId ?? null,
           reason: null,
         });
+
+        if (upsert?.message && upsert.operation === "insert") {
+          const mapped = {
+            id: upsert.message.id,
+            chat_id: upsert.message.chat_id,
+            body: upsert.message.content,
+            sender_type: (upsert.message as any).is_from_customer ? "CUSTOMER" : ((upsert.message as any).type === "SYSTEM" ? "SYSTEM" : ((upsert.message as any).sender_id ? "AGENT" : "AI")),
+            sender_id: upsert.message.sender_id,
+            sender_name: (upsert.message as any).sender_name ?? null,
+            sender_avatar_url: (upsert.message as any).sender_avatar_url ?? null,
+            created_at: upsert.message.created_at,
+            view_status: upsert.message.view_status ?? "Sent",
+            type: upsert.message.type ?? "TEXT",
+            is_private: false,
+            media_url: upsert.message.media_url ?? null,
+            interactive_content: (upsert.message as any).interactive_content ?? null,
+            client_draft_id: job?.draftId ?? null,
+          };
+          try {
+            const chatSummary = await fetchChatUpdateForSocket(mapped.chat_id);
+            await emitSocketWithRetry("socket.livechat.outbound", {
+              kind: "livechat.outbound.message",
+              chatId: mapped.chat_id,
+              companyId: job.companyId,
+              inboxId,
+              message: mapped,
+              chatUpdate: chatSummary
+                ? { ...chatSummary, last_message_from: mapped.sender_type }
+                : {
+                    chatId: mapped.chat_id,
+                    inboxId,
+                    last_message: mapped.body,
+                    last_message_at: mapped.created_at,
+                    last_message_from: mapped.sender_type,
+                    last_message_type: mapped.type,
+                    last_message_media_url: mapped.media_url,
+                  },
+            });
+          } catch (err) {
+            console.warn("[worker][outbound] failed to publish outbound media event:", err);
+          }
+        }
 
         // Se vier metadados de campanha, atualiza status do delivery
         if (job.campaignId && job.campaignRecipientId && job.campaignStepId) {
@@ -4868,6 +4926,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           type: upsert.message.type ?? "TEXT",
           is_private: false,
           media_url: upsert.message.media_url ?? null,
+          interactive_content: (upsert.message as any).interactive_content ?? null,
           client_draft_id: job?.draftId ?? null,
         };
         try {
@@ -5009,16 +5068,24 @@ async function main(): Promise<void> {
       await startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH);
       startCronJobs();
       break;
+    case "flows":
+      await registerFlowWorker();
+      break;
+    case "campaigns":
+      await registerCampaignWorker();
+      break;
     case "all":
     default:
       await Promise.all([
         startInboundWorkers(INBOUND_WORKERS, INBOUND_PREFETCH),
         startInboundMediaWorkers(INBOUND_MEDIA_WORKERS, INBOUND_MEDIA_PREFETCH),
         startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH),
+        registerFlowWorker(),
+        registerCampaignWorker(),
       ]);
       startCronJobs();
       console.log(
-        `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) running.`,
+        `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) flows campaigns running.`,
       );
       break;
   }
@@ -5699,23 +5766,25 @@ async function tickCampaigns() {
             else if (headerComp?.format === "DOCUMENT") messageType = "DOCUMENT";
             
             // Insere mensagem no chat_messages com template_id
-            const messageRow = await db.oneOrNone<{ id: string; chat_id: string }>(
+            const messageRow = await db.oneOrNone<{ id: string; chat_id: string; interactive_content: any }>(
               `insert into public.chat_messages
-                 (chat_id, is_from_customer, external_id, content, type, view_status, template_id)
-               values ($1, false, $2, $3, $4, 'Sent', $5)
+                 (chat_id, is_from_customer, external_id, content, type, view_status, template_id, interactive_content)
+               values ($1, false, $2, $3, $4, 'Sent', $5, $6)
                on conflict (chat_id, external_id) do update
                  set view_status = excluded.view_status,
                      content = excluded.content,
                      type = excluded.type,
                      template_id = excluded.template_id,
+                     interactive_content = excluded.interactive_content,
                      updated_at = now()
-               returning id, chat_id`,
+               returning id, chat_id, interactive_content`,
               [
                 chatId,
                 wamid,
                 payloadObj.text || payloadObj.meta_template_name,
                 messageType,
                 tpl.id, // template_id from message_templates
+                tpl.payload, // interactive_content
               ]
             );
             
@@ -5780,6 +5849,7 @@ async function tickCampaigns() {
                     type: messageType,
                     is_private: false,
                     media_url: null,
+                    interactive_content: messageRow?.interactive_content ?? tpl.payload ?? null,
                     template_id: tpl.id,
                     client_draft_id: null,
                   },

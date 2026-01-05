@@ -23,6 +23,8 @@ export const Q_SOCKET_LIVECHAT =
   process.env.RABBIT_Q_SOCKET_LIVECHAT || "q.socket.livechat";
 export const Q_CAMPAIGN_FOLLOWUP =
   process.env.RABBIT_Q_CAMPAIGN_FOLLOWUP || "campaign.followup";
+export const Q_FLOW_EXECUTION =
+  process.env.RABBIT_Q_FLOW_EXECUTION || "flow.execution";
 
 // singletons
 let _conn: AmqpConnection | null = null;
@@ -101,6 +103,10 @@ async function setupTopology(ch: AmqpChannel) {
 
   // Campaign follow-ups (worker.campaigns)
   await ch.assertQueue(Q_CAMPAIGN_FOLLOWUP, { durable: true });
+
+  // Flow Builder executions
+  await ch.assertQueue(Q_FLOW_EXECUTION, { durable: true });
+  await ch.bindQueue(Q_FLOW_EXECUTION, EX_APP, "flow.execution");
 
 
   // (Opcional) se quiser publicar com "livechat.startChat", binda também:

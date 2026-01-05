@@ -15,6 +15,7 @@ import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/t
 import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu } from "react-icons/fi";
 import { ContactsCRM } from "../componets/livechat/ContactsCRM";
 import CampaignsPanel from "../componets/livechat/CampaignsPanel";
+import FlowsPanel from "../componets/livechat/FlowsPanel";
 import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
 import { ContactInfoPanel } from "../componets/livechat/ContactInfoPanel";
 import { MentionInput } from "../components/MentionInput";
@@ -122,8 +123,9 @@ import { LimitModal } from "../components/ui/LimitModal";
 
 export default function LiveChatPage() {
   const navigate = useNavigate();
-  const { chatId } = useParams();
+  const { chatId, flowId } = useParams();
   const { setMobileOpen } = useOutletContext<{ setMobileOpen: (open: boolean) => void }>();
+
   const [localMenuOpen, setLocalMenuOpen] = useState(false);
   const [menuCollapsed, setMenuCollapsed] = useState(true);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
@@ -207,6 +209,29 @@ export default function LiveChatPage() {
   const [status, setStatus] = useState<string>("ALL");
   const [chatScope, setChatScope] = useState<"conversations" | "groups">("conversations");
   const [section, setSection] = useState<LivechatSection>("all");
+
+  // Sync section to URL
+  useEffect(() => {
+    if (section === "all") {
+      if (chatId && chatId !== "flows") return;
+      navigate("/livechat", { replace: true });
+    } else if (section === "flows") {
+      if (flowId) {
+        navigate(`/livechat/flows/${flowId}`, { replace: true });
+      } else {
+        navigate("/livechat/flows", { replace: true });
+      }
+    } else if (section === "campaigns") {
+      navigate("/livechat?section=campaigns", { replace: true });
+    } else if (section === "contacts") {
+      navigate("/livechat?section=contacts", { replace: true });
+    } else if (section === "labels") {
+      navigate("/livechat?section=labels", { replace: true });
+    } else if (section === "unanswered") {
+      navigate("/livechat?section=unanswered", { replace: true });
+    }
+  }, [section, flowId, chatId]);
+
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [departments, setDepartments] = useState<Array<{ id: string; name: string; color?: string | null; icon?: string | null }>>([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
@@ -506,19 +531,12 @@ export default function LiveChatPage() {
 
   // [KANBAN-BACKEND] util para atualizar card localmente
   const patchChatLocal = useCallback((chatId: string, partial: Partial<Chat>) => {
-    console.log("[CACHE] 🔄 patchChatLocal", { chatId, partial, hasUnread: 'unread_count' in partial });
-    
     // ✅ ATUALIZAR CHATS STATE (lista normal)
     setChats((prev) => {
       const idx = prev.findIndex((c) => c.id === chatId);
       if (idx === -1) return prev;
       const updated = [...prev];
       updated[idx] = { ...updated[idx], ...partial };
-      console.log("[CACHE] ✅ chatsState updated", { 
-        chatId, 
-        oldUnread: prev[idx].unread_count, 
-        newUnread: updated[idx].unread_count 
-      });
       return updated;
     });
     
@@ -611,12 +629,8 @@ export default function LiveChatPage() {
   // Mark chat as read (send read receipts)
   const markChatAsRead = useCallback(async (chatId: string) => {
     try {
-      console.log("[READ_RECEIPTS] 🔵 Marcando chat como lido (otimista)", { chatId });
-      
       // ✅ CORREÇÃO: Atualizar o estado local IMEDIATAMENTE para feedback visual instantâneo
       patchChatLocal(chatId, { unread_count: 0 } as any);
-      
-      console.log("[READ_RECEIPTS] 📤 Enviando mark-read para API", { chatId });
       
       const headers = new Headers({ "Content-Type": "application/json" });
       const token = getAccessToken();
@@ -630,20 +644,13 @@ export default function LiveChatPage() {
       if (!res.ok) {
         // 404 = chat não existe ou sem permissão - silenciar (comum após logout/troca de empresa)
         if (res.status === 404) {
-          console.debug("[READ_RECEIPTS] Chat não encontrado ou sem permissão", { chatId });
           return;
         }
         const json = await res.json().catch(() => ({}));
-        console.warn("[READ_RECEIPTS] mark-read falhou", {
-          chatId,
-          status: res.status,
-          error: json?.error || res.statusText,
-        });
         // Se falhar, não reverter - melhor manter o estado otimista
         return;
       }
       await res.json().catch(() => ({}));
-      console.log('[READ_RECEIPTS] Chat marcado como lido com sucesso', { chatId });
     } catch (error) {
       console.error("[READ_RECEIPTS] erro inesperado ao marcar como lida", {
         chatId,
@@ -658,7 +665,6 @@ export default function LiveChatPage() {
   }, [chats, chatScope, isGroupChat]);
 
   const chatListItems = useMemo<ChatListItem[]>(() => {
-    console.debug('[livechat] Recalculating chatListItems', { count: filteredChats.length });
     return filteredChats.map((chat) => {
       const normalizedType = (chat.last_message_type || "").toUpperCase();
       const mediaLabel = chat.last_message_media_url
@@ -827,8 +833,6 @@ export default function LiveChatPage() {
     let cancelled = false;
     const loadUsers = async () => {
       try {
-        console.log('[livechat] Loading company users for mentions...', { inboxId: currentChat?.inbox_id });
-        
         const token = getAccessToken();
         const headers = new Headers();
         headers.set("Content-Type", "application/json");
@@ -859,7 +863,6 @@ export default function LiveChatPage() {
               avatar: row.avatar || row.profile_picture || undefined,
             }))
           : [];
-        console.log('[livechat] Company users loaded:', { count: formatted.length, users: formatted });
         setCompanyUsers(formatted);
       } catch (error) {
         console.error("[livechat] Error loading company users:", error);
@@ -1025,8 +1028,6 @@ export default function LiveChatPage() {
         // Opcional: manda observao do modal se voc tiver ela aqui
         // note: noteDraft,
       };
-
-      console.log('[livechat] Payload enviado para /kanban/cards/ensure:', payload);
 
       const headers = new Headers({ "Content-Type": "application/json" });
       const token = getAccessToken();
@@ -1250,7 +1251,6 @@ const bumpChatToTop = useCallback((update: {
     
     // Se chat não existe, criar novo chat
     if (idx === -1) {
-      console.log('[livechat] 🆕 New chat received via socket:', { chatId: update.chatId, customer_name: update.customer_name });
       const newChat: Chat = normalizeChat({
         id: update.chatId,
         inbox_id: update.inboxId ?? null,
@@ -1523,9 +1523,6 @@ const bumpChatToTop = useCallback((update: {
         
         // Debounce de 500ms para garantir que usuário realmente visualizou
         const timer = setTimeout(() => {
-          console.log('[READ_RECEIPTS] Executando mark-read após 500ms', {
-            chatId: currentChat.id,
-          });
           markChatAsRead(currentChat.id);
         }, 500);
         
@@ -1575,7 +1572,6 @@ const bumpChatToTop = useCallback((update: {
 
     // Listener para chat:read (outro usuário/aba/dispositivo marcou como lido)
     const onChatRead = (payload: { chatId: string; inboxId?: string; timestamp: string }) => {
-      console.log('[READ_RECEIPTS][socket] chat:read recebido', payload);
       if (payload?.chatId) {
         // Atualizar unread_count localmente para 0
         patchChatLocal(payload.chatId, { unread_count: 0 } as any);
@@ -1591,8 +1587,6 @@ const bumpChatToTop = useCallback((update: {
       view_status?: string;
       status?: string;
     }) => {
-      console.log('[READ_RECEIPTS][socket] message:status recebido', payload);
-      
       const currentChatId = currentChatIdRef.current;
       if (payload?.chatId === currentChatId && payload?.messageId) {
         // Atualizar view_status da mensagem no histórico local
@@ -1703,6 +1697,7 @@ const scrollToBottom = useCallback(
       delivery_status: deliveryStatus,
       client_draft_id: clientDraftId,
       error_reason: raw?.error_reason ?? null,
+      interactive_content: raw.interactive_content ?? raw.interactiveContent ?? null,
       view_status:
         typeof raw?.view_status === "string" && raw.view_status
           ? raw.view_status.toUpperCase()
@@ -1745,15 +1740,6 @@ const scrollToBottom = useCallback(
       const chatId = normalized.chat_id;
       const existing = messagesCache.get(chatId) ?? [];
       
-      console.log('[appendMessageToCache] Adding message:', {
-        id: normalized.id,
-        chatId,
-        is_private: normalized.is_private,
-        type: normalized.type,
-        body: normalized.body?.substring(0, 30),
-        existingCount: existing.length,
-      });
-      
       const normalizedExternalId = (normalized as any).external_id;
       
       // Find existing message by ID, client_draft_id, or external_id (for draft replacement)
@@ -1778,11 +1764,6 @@ const scrollToBottom = useCallback(
       
       // If normalized is a draft and we found a confirmed message with same external_id, ignore the draft
       if (index >= 0 && normalized.id?.startsWith('draft-') && !existing[index].id?.startsWith('draft-')) {
-        console.log('[LiveChat] Ignoring duplicate draft, confirmed message already exists', {
-          draftId: normalized.id,
-          confirmedId: existing[index].id,
-          externalId: normalizedExternalId
-        });
         return;
       }
       
@@ -1816,12 +1797,6 @@ const scrollToBottom = useCallback(
       messagesCache.set(chatId, updated);
       
       const isCurrent = currentChatIdRef.current === chatId;
-      console.log('[appendMessageToCache] Cache updated:', {
-        chatId,
-        isCurrent,
-        currentChatId: currentChatIdRef.current,
-        count: updated.length
-      });
 
       if (isCurrent) {
         setMessages(updated);
@@ -2002,16 +1977,13 @@ const scrollToBottom = useCallback(
     socketRef.current = s;
 
     s.on("connect", () => {
-      console.log("[livechat] Socket connected!", s.id);
       setSocketReady(true);
       if (company?.id) {
-        console.log("[livechat] Joining company room:", company.id);
         s.emit("join:company", { companyId: company.id });
       }
     });
 
     s.on("disconnect", (reason) => {
-      console.log("[livechat] Socket disconnected!", reason);
       setSocketReady(false);
     });
 
@@ -2021,7 +1993,6 @@ const scrollToBottom = useCallback(
 
     // Listen for mention notifications (static)
     s.on("user:mentioned", (data: any) => {
-      console.log("[Socket] 🔔 You were mentioned!", data);
       if ("Notification" in window && Notification.permission === "granted") {
         new Notification("Você foi mencionado!", {
           body: "Alguém mencionou você em uma conversa privada",
@@ -2031,7 +2002,6 @@ const scrollToBottom = useCallback(
     });
 
     return () => {
-      console.log("[livechat] Cleaning up socket connection");
       s.disconnect();
       socketRef.current = null;
     };
@@ -2043,15 +2013,6 @@ const scrollToBottom = useCallback(
     if (!s) return;
 
     const onMessageNew = (m: Message) => {
-      console.log('[Socket] 📨 message:new received:', {
-        id: m.id,
-        chatId: m.chat_id,
-        body: m.body?.substring(0, 50),
-        sender_type: m.sender_type,
-        currentChatId: currentChatIdRef.current,
-        isMatch: currentChatIdRef.current === m.chat_id
-      });
-      
       appendMessageToCache(m);
       logSendLatency(m.chat_id ?? null, m.id ?? null, m.view_status ?? null);
       
@@ -2070,20 +2031,8 @@ const scrollToBottom = useCallback(
       const isChatOpen = currentChatIdRef.current === m.chat_id;
       const isFromCustomer = m.sender_type === "CUSTOMER";
       
-      console.debug('[READ_RECEIPTS] Nova mensagem recebida', {
-        chatId: m.chat_id,
-        messageId: m.id,
-        isChatOpen,
-        isFromCustomer,
-        currentChatId: currentChatIdRef.current,
-      });
-      
       // Se chat está aberto E mensagem é do cliente, marcar como lida imediatamente
       if (isChatOpen && isFromCustomer) {
-        console.log('[READ_RECEIPTS] ✅ Chat aberto, marcando mensagem como lida automaticamente', {
-          chatId: m.chat_id,
-          messageId: m.id,
-        });
         // Marcar como lida após um pequeno delay para garantir que foi exibida
         setTimeout(() => {
           markChatAsRead(m.chat_id);
@@ -2153,13 +2102,6 @@ const scrollToBottom = useCallback(
     };
 
     const onChatUpdated = (p: any) => {
-      console.log("[SOCKET] 📨 chat:updated received", {
-        chatId: p.chatId,
-        unread_count: p.unread_count,
-        currentChat: currentChatIdRef.current,
-        isChatOpen: currentChatIdRef.current === p.chatId
-      });
-      
       // ✅ CORREÇÃO: Se o chat está aberto, garantir que unread_count seja 0
       const isChatOpen = currentChatIdRef.current === p.chatId;
       
@@ -2206,7 +2148,6 @@ const scrollToBottom = useCallback(
     // Listener para atualiza��o de m�dia em background
     const onMediaReady = (payload: any) => {
       if (!payload?.messageId || (!payload?.media_url && !payload?.media_storage_path && !payload?.media_public_url)) return;
-      console.log('[livechat] Media ready:', payload);
       
       const updateMsg = (msg: Message): Message => {
         if (msg.id !== payload.messageId) return msg;
@@ -2229,7 +2170,6 @@ const scrollToBottom = useCallback(
           const updated = [...msgs];
           updated[index] = updateMsg(updated[index]);
           messagesCache.set(chatId, updated);
-          console.log(`[livechat] Cache updated for message ${payload.messageId} in chat ${chatId}`);
         }
       });
     };
@@ -2291,7 +2231,6 @@ const scrollToBottom = useCallback(
 
     // Listener para envio de mensagens interativas (botões)
     const onInteractiveMessage = async (payload: any) => {
-      console.log("[SOCKET] Received send:interactive_message (handled by backend)", payload);
     };
 
     s.on("message:new", onMessageNew);
@@ -2327,20 +2266,17 @@ const scrollToBottom = useCallback(
   // ✅ JOIN company room when socket is ready AND company is loaded
   useEffect(() => {
     if (!socketReady || !company?.id || !socketRef.current) {
-      console.log("[livechat] Skipping join room:", { socketReady, companyId: company?.id, hasSocket: !!socketRef.current });
       return;
     }
 
     const companyId = company.id;
     const socket = socketRef.current;
     
-    console.log("[livechat] Joining company room:", companyId);
     socket.emit("join", { companyId });
     
     // Cleanup: leave company room on unmount
     return () => {
       if (socket && companyId) {
-        console.log("[livechat] Leaving company room:", companyId);
         socket.emit("leave", { companyId });
       }
     };
@@ -2356,21 +2292,16 @@ const scrollToBottom = useCallback(
 
   useEffect(() => {
     const handleLogout = () => {
-      console.log('[LiveChat] 🧹 Cleaning up on logout');
-      
       // Limpar cache de mensagens
       messagesCache.clear();
-      console.log('[LiveChat] Cleared messagesCache');
       
       // Limpar metadata de cache
       chatsCacheMetaRef.current = {};
       messagesMetaRef.current = {};
-      console.log('[LiveChat] Cleared cache metadata');
       
       // Limpar store de chats
       chatsStoreRef.current = {};
       currentChatsKeyRef.current = null;
-      console.log('[LiveChat] Cleared chats store');
       
       // Resetar estados principais
       setChats([]);
@@ -2384,19 +2315,15 @@ const scrollToBottom = useCallback(
       setChatTags([]);
       setCompanyUsers([]);
       setMentions([]);
-      console.log('[LiveChat] Reset main states');
       
       // Limpar drafts
       draftsRef.current.clear();
-      console.log('[LiveChat] Cleared drafts');
       
       // Desconectar socket (redundante mas seguro)
       if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      
-      console.log('[LiveChat] ✅ Cleanup completed');
     };
 
     window.addEventListener('user:logout', handleLogout);
@@ -2822,11 +2749,6 @@ const scrollToBottom = useCallback(
 
         const isLatest = messagesRequestRef.current === requestId;
         if (isLatest && currentChatIdRef.current === chatId) {
-          console.log('[loadMessages] Setting messages state:', {
-            chatId,
-            count: combined.length,
-            reset
-          });
           setMessages(combined);
           setMessagesHasMore(hasMore);
           if (reset) {
@@ -3112,6 +3034,23 @@ const scrollToBottom = useCallback(
     const params = new URLSearchParams(location.search);
     const targetId = chatId || params.get("openChat");
 
+    // Handle section and filter from URL
+    const sectionParam = params.get("section");
+    if (sectionParam && ["all", "unanswered", "contacts", "campaigns", "flows", "labels"].includes(sectionParam)) {
+      setSection(sectionParam as LivechatSection);
+    }
+
+    if (chatId === "flows") {
+      setSection("flows");
+    }
+
+
+    const filterParam = params.get("filter");
+    if (filterParam === "unresponded") {
+      setSection("unanswered");
+      setStatus("OPEN");
+    }
+
     if (targetId) {
       if (currentChat?.id === targetId) return;
 
@@ -3121,12 +3060,8 @@ const scrollToBottom = useCallback(
       } else {
         const fetchChat = async () => {
           try {
-            const token = getAccessToken();
-            const res = await fetch(`${API}/livechat/chats/${targetId}`, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            if (res.ok) {
-              const data = await res.json();
+            const data = await fetchJson<Chat>(`${API}/livechat/chats/${targetId}`);
+            if (data) {
               const normalized = normalizeChat(data);
               setChats((prev) => {
                 if (prev.some((c) => c.id === normalized.id)) return prev;
@@ -3146,7 +3081,7 @@ const scrollToBottom = useCallback(
       // Actually, if we use navigate(), URL updates first.
       if (currentChat) setCurrentChat(null);
     }
-  }, [chatId, location.search, currentChat, setChats, normalizeChat]);
+  }, [chatId, location.search, currentChat, setChats, normalizeChat, fetchJson]);
 
 
   // Load contacts when contacts section active
@@ -4615,6 +4550,16 @@ const scrollToBottom = useCallback(
           </div>
         )}
 
+        {section === "flows" && (
+          <div className="flex-1 overflow-hidden h-full flex flex-col relative">
+            <div className="flex-1 overflow-hidden relative">
+              <FlowsPanel apiBase={API} initialFlowId={flowId} />
+            </div>
+          </div>
+        )}
+
+
+
       {/* Limit Modal */}
       <LimitModal 
         isOpen={limitModalOpen} 
@@ -4628,21 +4573,16 @@ const scrollToBottom = useCallback(
       {showFirstInboxWizard && (
         <FirstInboxWizard
           onComplete={() => {
-            console.log("[Livechat] Wizard concluído, recarregando inboxes");
             setShowFirstInboxWizard(false);
             fetchJson<Inbox[]>(`${API}/livechat/inboxes/my`)
               .then((rows) => {
                 setInboxes(rows || []);
-                if (rows && rows.length > 0) {
-                  console.log("[Livechat] Inbox criada com sucesso!");
-                }
               })
               .catch((err) => {
                 console.error("[Livechat] Erro ao recarregar inboxes:", err);
               });
           }}
           onSkip={() => {
-            console.log("[Livechat] Wizard pulado");
             setShowFirstInboxWizard(false);
           }}
         />

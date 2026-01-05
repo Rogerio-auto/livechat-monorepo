@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FiX, FiCheck, FiAlertCircle } from "react-icons/fi";
-import { Industry } from "../../types/onboarding";
+import { Industry } from "../../types/cadastro";
 import { INDUSTRY_OPTIONS, getIndustryConfig } from "../../config/industry-config";
 import { IndustryBadge } from "./IndustryBadge";
 

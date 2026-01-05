@@ -1,6 +1,6 @@
 // Configuração do catálogo de produtos/serviços por nicho de empresa
 
-import { Industry } from "../types/onboarding";
+import { Industry } from "../types/cadastro";
 
 export type CatalogFieldKey = 
   | 'name' | 'description' | 'sku' | 'unit' | 'item_type'

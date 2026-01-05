@@ -306,7 +306,7 @@ export function useRecentChats(limit = 10, search = "") {
         setError(null);
         const searchQuery = search ? `&q=${encodeURIComponent(search)}` : "";
         const result = await fetchJson<{ items: any[] }>(
-          `${API_BASE}/livechat/chats?limit=${limit}&sort=last_message_at${searchQuery}`
+          `${API_BASE}/livechat/chats?limit=${limit}&sort=last_message_at&kind=DIRECT${searchQuery}`
         );
         setData(result.items || []);
       } catch (e) {

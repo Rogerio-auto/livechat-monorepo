@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { getIO } from "../lib/io.ts";
+import { triggerFlow } from "../services/flow.engine.js";
 
 export function registerLivechatTagsRoutes(app: express.Application) {
   // List company tags
@@ -154,6 +155,21 @@ export function registerLivechatTagsRoutes(app: express.Application) {
           return res.status(409).json({ error: 'Tag already added to this chat' });
         }
         return res.status(500).json({ error: error.message });
+      }
+
+      // Trigger Flow Builder
+      try {
+        const { data: chat } = await supabaseAdmin.from('chats').select('customer_id').eq('id', id).maybeSingle();
+        if (chat?.customer_id && companyId) {
+          triggerFlow({
+            companyId,
+            contactId: chat.customer_id,
+            triggerType: 'TAG_ADDED',
+            triggerData: { tag_id: tagId }
+          }).catch(err => console.error("[FlowEngine] Trigger error:", err));
+        }
+      } catch (err) {
+        console.error("[FlowEngine] Failed to fetch chat for trigger:", err);
       }
 
       // System message

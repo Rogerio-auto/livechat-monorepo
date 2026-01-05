@@ -43,10 +43,13 @@ import { AutomationRulesPage } from './pages/AutomationRulesPage'
 import PerfilPage from './pages/perfil'
 import AgentDetails from './pages/agents/AgentDetails'
 import AgentPlayground from './pages/agents/AgentPlayground'
+import { CadastroPage } from './pages/cadastro'
 import { SubscriptionSuccessPage } from './pages/subscription-success'
 import { RequireAuth } from './componets/auth/RequireAuth'
 import { ThemeProvider } from './context/ThemeContext'
+import { AuthProvider } from './context/AuthContext'
 import { SubscriptionProvider } from './context/SubscriptionContext'
+import { CadastroProvider } from './context/CadastroContext'
 import { FeatureGuard } from './componets/auth/FeatureGuard'
 import { AppLayout } from './componets/layout/AppLayout'
 import { ToastContainer } from './componets/ToastContainer'
@@ -76,13 +79,16 @@ import NotificationPreferencesPage from './components/notifications/Notification
 function App() {
   return (
     <ThemeProvider>
-      <SubscriptionProvider>
-        <BrowserRouter>
-        <ToastContainer />
-        <Routes>
+      <AuthProvider>
+        <SubscriptionProvider>
+          <CadastroProvider>
+            <BrowserRouter>
+          <ToastContainer />
+          <Routes>
           <Route path='/' element={<Navigate to="/dashboard" replace />}/>
           <Route path='/login' element={<Login/>}/>
           <Route path='/reset-password' element={<ResetPassword/>}/>
+          <Route path='/cadastro' element={<RequireAuth><CadastroPage /></RequireAuth>}/>
           
           {/* Rota de perfil sem sidebar (tela dedicada) */}
           <Route path='/perfil' element={<RequireAuth><PerfilPage /></RequireAuth>}/>
@@ -155,7 +161,10 @@ function App() {
             
             <Route path='/livechat' element={<LiveChatPage/>}/>
             <Route path='/livechat/:chatId' element={<LiveChatPage/>}/>
+            <Route path='/livechat/flows' element={<LiveChatPage/>}/>
+            <Route path='/livechat/flows/:flowId' element={<LiveChatPage/>}/>
             <Route path='/produtos' element={<ProdutosPage/>}/>
+
             <Route path='/produtos/novo' element={<ProductCreate/>}/>
             <Route path='/produtos/:id' element={<ProductView/>}/>
             <Route path='/produtos/:id/editar' element={<ProductEdit/>}/>
@@ -230,7 +239,9 @@ function App() {
 
         </Routes>
         </BrowserRouter>
-      </SubscriptionProvider>
+        </CadastroProvider>
+        </SubscriptionProvider>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

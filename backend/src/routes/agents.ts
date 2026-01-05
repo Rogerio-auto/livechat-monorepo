@@ -11,6 +11,8 @@ import type { ChatTurn } from "../services/agents.runtime.ts";
 import { getAgentTemplateTools } from "../repos/agent.templates.repo.ts";
 import { addToolToAgent, getToolById, listAgentTools, updateAgentTool } from "../repos/tools.repo.ts";
 import { generateAgentToken } from "../services/tokens.ts";
+import { listOpenAIIntegrations, createOpenAIIntegration } from "../repos/integrations.openai.repo.ts";
+import { createOpenAIProject } from "../services/openai.admin.service.ts";
 
 const updateAgentSchema = AgentSchema.partial();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -391,11 +393,55 @@ export function registerAgentsRoutes(app: Application) {
         return res.status(404).json({ error: "Template não encontrado" });
       }
 
+      // 0. Garantir que a empresa tenha uma integração OpenAI
+      let integrationId: string | null = null;
+      const existingIntegrations = await listOpenAIIntegrations(companyId);
+      
+      if (existingIntegrations.length > 0) {
+        integrationId = existingIntegrations[0].id;
+      } else {
+        console.log(`[agents/from-template] No OpenAI integration found for company ${companyId}. Creating one...`);
+        try {
+          // Buscar nome da empresa para o projeto OpenAI
+          const { data: companyData } = await supabaseAdmin
+            .from("companies")
+            .select("name")
+            .eq("id", companyId)
+            .maybeSingle();
+          
+          const companyName = companyData?.name || `Company ${companyId.slice(0, 8)}`;
+          
+          // Criar projeto na OpenAI
+          const projectData = await createOpenAIProject(companyName);
+          
+          // Salvar integração no banco
+          const newIntegration = await createOpenAIIntegration(companyId, {
+            name: "OpenAI Automática",
+            api_key: projectData.apiKey,
+            openai_project_id: projectData.projectId,
+            openai_api_key_id: projectData.apiKeyId,
+            default_model: tpl.default_model || "gpt-4o-mini",
+            is_active: true,
+          } as any);
+          
+          integrationId = newIntegration.id;
+          console.log(`[agents/from-template] ✅ Auto-created integration ${integrationId} for company ${companyId}`);
+        } catch (err: any) {
+          console.error("[agents/from-template] ❌ Failed to auto-create OpenAI integration:", err);
+          // Se falhar a criação automática, continuamos sem integração (o agente ficará sem responder até o usuário configurar)
+        }
+      }
+
       // Gerar description a partir do prompt_template substituindo variáveis
       let description = tpl.prompt_template || "";
       for (const [key, value] of Object.entries(answers)) {
         const placeholder = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "gi");
         description = description.replace(placeholder, String(value ?? ""));
+      }
+
+      // Garantir que a descrição não seja vazia para passar no TrimmedString.min(1)
+      if (!description.trim()) {
+        description = tpl.description || tpl.name || "Agente de IA";
       }
 
       // Garantir limite de 5000 caracteres para atender ao AgentSchema
@@ -407,25 +453,31 @@ export function registerAgentsRoutes(app: Application) {
       }
 
       // Extrair name das respostas ou usar o do template
-      const agentName = String(answers.nome_agente || answers.agent_name || answers.name || tpl.name);
+      let agentName = String(answers.nome_agente || answers.agent_name || answers.name || tpl.name);
+      if (!agentName.trim()) agentName = tpl.name || "Novo Agente";
 
       // Montar payload válido para AgentSchema
       const agentPayload = {
-        name: agentName,
-        description,
+        name: agentName.trim(),
+        description: description.trim(),
         status: "ACTIVE",
+        integration_openai_id: integrationId,
         model: tpl.default_model ?? undefined,
         model_params: tpl.default_model_params ?? undefined,
         aggregation_enabled: true,
         aggregation_window_sec: 20,
         max_batch_messages: 20,
         allow_handoff: true,
-          ignore_group_messages: true,
-          enabled_inbox_ids: [],
+        ignore_group_messages: true,
+        enabled_inbox_ids: [],
       };
 
-  const parsed = AgentSchema.parse(agentPayload);
+      console.log("[agents/from-template] Creating agent with payload:", { ...agentPayload, description: agentPayload.description.slice(0, 50) + "..." });
+
+      const parsed = AgentSchema.parse(agentPayload);
       const created = await createAgent(companyId, parsed);
+
+      console.log("[agents/from-template] Agent created successfully:", created.id);
 
       // Vincular ferramentas do template ao agente criado
       try {

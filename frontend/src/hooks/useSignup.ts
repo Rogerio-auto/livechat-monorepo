@@ -1,6 +1,4 @@
 import { useState } from "react";
-import type { SignupData } from "../pages/onboarding/signup-step";
-import type { CompanyData } from "../pages/onboarding/company-step";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -12,8 +10,8 @@ function withDevCompany(init: RequestInit = {}): RequestInit {
   return { ...init, headers };
 }
 
-interface SignupPayload extends SignupData, CompanyData {
-  plan_id?: string;
+interface SignupPayload {
+  [key: string]: any;
 }
 
 export function useSignup() {
@@ -26,7 +24,7 @@ export function useSignup() {
       setError(null);
 
       const res = await fetch(
-        `${API_BASE}/api/onboarding/signup`,
+        `${API_BASE}/api/cadastro/signup`,
         withDevCompany({
           method: "POST",
           headers: { "Content-Type": "application/json" },

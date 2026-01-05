@@ -78,7 +78,12 @@ export async function fetchJson<T>(url: string, init: RequestInit = {}): Promise
   const res = await fetch(url, { ...init, headers, credentials: "include" });
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch (e) {
+    console.error("Failed to parse JSON response:", text.slice(0, 100));
+  }
 
   if (!res.ok) {
     const msg = (data && (data.error || data.message)) || res.statusText || `HTTP ${res.status}`;

@@ -19,7 +19,7 @@ Sistema completo de atendimento ao cliente com WhatsApp, chat ao vivo e automaç
 - Socket.io Client
 - React Router DOM
 
-### Onboarding
+### Cadastro
 - React 19
 - Aplicação separada para fluxo de cadastro
 
@@ -35,7 +35,7 @@ Sistema completo de atendimento ao cliente com WhatsApp, chat ao vivo e automaç
 │   ├── src/
 │   ├── Dockerfile
 │   └── package.json
-├── onboarding/       # Interface de cadastro
+├── cadastro/         # Interface de cadastro
 │   ├── src/
 │   └── package.json
 ├── docker-compose.prod.yml
@@ -77,8 +77,8 @@ npm run dev:backend
 # Frontend
 npm run dev:frontend
 
-# Onboarding
-npm run dev:onboarding
+# Cadastro
+npm run dev:cadastro
 
 # Todos simultaneamente
 npm run dev
@@ -93,7 +93,7 @@ npm run build
 # Build individual
 npm run build:backend
 npm run build:frontend
-npm run build:onboarding
+npm run build:cadastro
 ```
 
 ## 🐳 Deploy com Docker

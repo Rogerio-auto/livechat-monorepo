@@ -5,7 +5,7 @@
   "workspaces": [
     "frontend",
     "backend",
-    "onboarding"
+    "cadastro"
   ],
   "engines": {
     "node": ">=20.11.0",
@@ -13,14 +13,14 @@
   },
   "scripts": {
     "build": "npm run build:all",
-    "build:all": "npm-run-all build:backend build:frontend build:onboarding",
+    "build:all": "npm-run-all build:backend build:frontend build:cadastro",
     "build:backend": "npm run build --workspace backend",
     "build:frontend": "npm run build --workspace frontend",
-    "build:onboarding": "cd onboarding && npm run build",
+    "build:cadastro": "cd cadastro && npm run build",
     "dev": "npm-run-all --parallel dev:backend dev:frontend",
     "dev:backend": "npm run dev --workspace backend",
     "dev:frontend": "npm run dev --workspace frontend",
-    "dev:onboarding": "cd onboarding && npm run dev",
+    "dev:cadastro": "cd cadastro && npm run dev",
     "start": "npm run start:all",
     "start:all": "npm-run-all --parallel start:backend start:frontend",
     "start:backend": "npm run start --workspace backend",
@@ -31,7 +31,7 @@
     "worker:campaigns": "npm run worker:campaigns --workspace backend",
     "lint": "npm run lint --workspace frontend",
     "lint:fix": "npm run lint --workspace frontend -- --fix",
-    "clean": "rimraf backend/dist frontend/dist onboarding/dist"
+    "clean": "rimraf backend/dist frontend/dist cadastro/dist"
   },
   "devDependencies": {
     "@types/node-cron": "^3.0.11",

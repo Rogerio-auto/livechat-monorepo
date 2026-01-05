@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FiUsers, FiCalendar, FiActivity, FiMail, FiPhone, FiPackage, FiTrash2, FiAlertTriangle, FiEdit2, FiRefreshCw, FiSearch, FiX, FiFilter } from "react-icons/fi";
 import { IndustryBadge } from "./IndustryBadge";
 import { EditIndustryModal } from "./EditIndustryModal";
-import { Industry } from "../../types/onboarding";
+import { Industry } from "../../types/cadastro";
 import { INDUSTRY_OPTIONS } from "../../config/industry-config";
 
 type Company = {

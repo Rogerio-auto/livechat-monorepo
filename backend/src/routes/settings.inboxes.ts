@@ -388,7 +388,7 @@ export function registerSettingsInboxesRoutes(app: Application) {
 
       const wahaSessionId =
         provider === WAHA_PROVIDER
-          ? buildWahaSessionId(body.name, ctx.companyId)
+          ? (body.instance_id || buildWahaSessionId(body.name, ctx.companyId))
           : null;
 
       if (wahaSessionId) {

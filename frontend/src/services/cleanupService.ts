@@ -36,7 +36,6 @@ class CleanupService {
   registerSocket(socket: Socket | null) {
     if (socket) {
       this.socketInstance = socket;
-      console.log('[CleanupService] Socket registered for cleanup');
     }
   }
 
@@ -45,15 +44,12 @@ class CleanupService {
    */
   registerCleanup(callback: () => void) {
     this.cleanupCallbacks.push(callback);
-    console.log('[CleanupService] Cleanup callback registered');
   }
 
   /**
    * Limpa localStorage mantendo apenas chaves permitidas
    */
   private cleanLocalStorage() {
-    console.log('[CleanupService] Cleaning localStorage...');
-    
     // Chaves que podem ser mantidas (preferências globais não sensíveis)
     const keysToKeep = new Set([
       'theme-preference', // Preferência global de tema (opcional)
@@ -76,32 +72,21 @@ class CleanupService {
     }
     
     // Remover chaves específicas (incluindo tokens de autenticação)
-    let removed = 0;
     allKeys.forEach(key => {
       const shouldKeep = keysToKeep.has(key);
-      const isSupabaseAuth = supabaseKeyPatterns.some(pattern => pattern.test(key));
       
-      // Remover se: não está na whitelist E (é token do Supabase OU não está na whitelist)
+      // Remover se: não está na whitelist
       if (!shouldKeep) {
         localStorage.removeItem(key);
-        removed++;
-        if (isSupabaseAuth) {
-          console.log(`[CleanupService] Removed auth token: ${key}`);
-        }
       }
     });
-    
-    console.log(`[CleanupService] Removed ${removed} keys from localStorage`);
   }
 
   /**
    * Limpa sessionStorage completamente
    */
   private cleanSessionStorage() {
-    console.log('[CleanupService] Cleaning sessionStorage...');
-    const count = sessionStorage.length;
     sessionStorage.clear();
-    console.log(`[CleanupService] Cleared ${count} keys from sessionStorage`);
   }
 
   /**
@@ -109,10 +94,8 @@ class CleanupService {
    */
   private disconnectSocket() {
     if (this.socketInstance) {
-      console.log('[CleanupService] Disconnecting Socket.IO...');
       try {
         this.socketInstance.disconnect();
-        console.log('[CleanupService] Socket.IO disconnected');
       } catch (error) {
         console.error('[CleanupService] Error disconnecting socket:', error);
       }
@@ -124,12 +107,9 @@ class CleanupService {
    * Executa todos os callbacks customizados registrados
    */
   private runCustomCleanups() {
-    console.log(`[CleanupService] Running ${this.cleanupCallbacks.length} custom cleanups...`);
-    
     this.cleanupCallbacks.forEach((callback, index) => {
       try {
         callback();
-        console.log(`[CleanupService] Custom cleanup ${index + 1} completed`);
       } catch (error) {
         console.error(`[CleanupService] Error in custom cleanup ${index + 1}:`, error);
       }
@@ -143,7 +123,6 @@ class CleanupService {
    * Emite evento global de logout para componentes escutarem
    */
   private emitLogoutEvent() {
-    console.log('[CleanupService] Emitting user:logout event');
     window.dispatchEvent(new CustomEvent('user:logout', {
       detail: { timestamp: new Date().toISOString() }
     }));
@@ -161,12 +140,6 @@ class CleanupService {
    * @returns Promise<void>
    */
   async cleanup(): Promise<void> {
-    console.log('═══════════════════════════════════════════════════');
-    console.log('[CleanupService] 🧹 STARTING FULL SYSTEM CLEANUP');
-    console.log('═══════════════════════════════════════════════════');
-    
-    const startTime = performance.now();
-    
     try {
       // 1. Desconectar Socket.IO PRIMEIRO (crítico)
       this.disconnectSocket();
@@ -181,16 +154,8 @@ class CleanupService {
       // 4. Emitir evento global
       this.emitLogoutEvent();
       
-      const duration = (performance.now() - startTime).toFixed(2);
-      
-      console.log('═══════════════════════════════════════════════════');
-      console.log(`[CleanupService] ✅ CLEANUP COMPLETED in ${duration}ms`);
-      console.log('═══════════════════════════════════════════════════');
-      
     } catch (error) {
-      console.error('═══════════════════════════════════════════════════');
       console.error('[CleanupService] ❌ CLEANUP ERROR:', error);
-      console.error('═══════════════════════════════════════════════════');
       throw error;
     }
   }
@@ -199,7 +164,6 @@ class CleanupService {
    * Reset do serviço (útil para testes)
    */
   reset() {
-    console.log('[CleanupService] Resetting service');
     this.socketInstance = null;
     this.cleanupCallbacks = [];
   }

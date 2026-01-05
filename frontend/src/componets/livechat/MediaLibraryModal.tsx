@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { FiUpload, FiX, FiImage, FiVideo, FiMusic, FiFile, FiTrash2, FiCheck, FiSearch, FiFolder } from "react-icons/fi";
 import { Button, Card, CardHeader, Input } from "../../components/ui";
+import { getAccessToken } from "../../utils/api";
 
 type MediaItem = {
   id: string;
@@ -34,6 +36,7 @@ export default function MediaLibraryModal({
   mediaType,
   selectionMode = false,
 }: Props) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -43,6 +46,25 @@ export default function MediaLibraryModal({
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [localTypeFilter, setLocalTypeFilter] = useState<"IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT" | undefined>(mediaType);
+
+  // Helper para fetch com auth
+  const fetchWithAuth = useCallback(async (url: string, init?: RequestInit) => {
+    const headers = new Headers(init?.headers || {});
+    const token = getAccessToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    
+    const response = await fetch(url, { 
+      ...init, 
+      headers, 
+      credentials: "include" 
+    });
+
+    if (response.status === 401) {
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    }
+
+    return response;
+  }, []);
 
   // Carregar mídias
   const loadMedia = useCallback(async () => {
@@ -61,18 +83,13 @@ export default function MediaLibraryModal({
       if (localTypeFilter) params.set("type", localTypeFilter);
       if (search) params.set("search", search);
 
-      const res = await fetch(`${apiBase}/livechat/media-library?${params}`, {
+      const baseUrl = (apiBase || "").replace(/\/$/, "");
+      const res = await fetchWithAuth(`${baseUrl}/livechat/media-library?${params}`, {
         method: "GET",
-        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
       });
-      
-      if (res.status === 401) {
-        setError("Sessão expirada. Por favor, faça login novamente.");
-        return;
-      }
       
       if (!res.ok) {
         const errorText = await res.text().catch(() => "");
@@ -89,7 +106,7 @@ export default function MediaLibraryModal({
     } finally {
       setLoading(false);
     }
-  }, [apiBase, open, page, localTypeFilter, search]);
+  }, [apiBase, open, page, localTypeFilter, search, fetchWithAuth]);
 
   useEffect(() => {
     loadMedia();
@@ -104,12 +121,12 @@ export default function MediaLibraryModal({
     setError(null);
 
     try {
-  const formData = new FormData();
+      const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch(`${apiBase}/livechat/media-library/upload`, {
+      const baseUrl = (apiBase || "").replace(/\/$/, "");
+      const res = await fetchWithAuth(`${baseUrl}/livechat/media-library/upload`, {
         method: "POST",
-        credentials: "include",
         body: formData,
       });
 
@@ -120,7 +137,7 @@ export default function MediaLibraryModal({
 
       const data = await res.json();
       
-  // Recarregar lista
+      // Recarregar lista
       await loadMedia();
       
       // Se em modo seleção, auto-seleciona o upload
@@ -133,7 +150,7 @@ export default function MediaLibraryModal({
       setError(err.message || "Falha ao fazer upload");
     } finally {
       setUploading(false);
-      e.target.value = ""; // Reset input
+      if (e.target) e.target.value = ""; // Reset input
     }
   };
 
@@ -142,9 +159,8 @@ export default function MediaLibraryModal({
     if (!confirm("Tem certeza que deseja deletar esta mídia?")) return;
 
     try {
-      const res = await fetch(`${apiBase}/livechat/media-library/${id}`, {
-        method: "DELETE",
-        credentials: "include",
+const baseUrl = (apiBase || "").replace(/\/$/, "");
+    const res = await fetchWithAuth(`${baseUrl}/livechat/media-library/${id}`, {
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -206,18 +222,18 @@ export default function MediaLibraryModal({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-xl shadow-md border overflow-hidden"
+        className="w-[980px] max-w-[96vw] h-[720px] max-h-[92vh] rounded-2xl shadow-2xl border overflow-hidden animate-in fade-in zoom-in duration-200"
         style={{ borderColor: "var(--color-border)" }}
       >
-  <Card gradient className="h-full w-full rounded-xl shadow-none p-0">
+  <Card gradient className="h-full w-full rounded-2xl shadow-none p-0">
           {/* Header */}
           <div
             className="px-6 py-4 border-b flex items-center justify-between bg-linear-to-br from-white to-gray-50 dark:from-[#141414] dark:to-[#0f0f0f]"
@@ -254,9 +270,10 @@ export default function MediaLibraryModal({
           >
             {/* Upload */}
             {allowUpload && (
-              <label className="inline-flex items-center gap-2 cursor-pointer">
+              <div className="inline-flex items-center gap-2">
                 <input
                   type="file"
+                  ref={fileInputRef}
                   className="hidden"
                   onChange={handleUpload}
                   disabled={uploading}
@@ -268,13 +285,18 @@ export default function MediaLibraryModal({
                     undefined
                   }
                 />
-                <Button variant="gradient" size="md" disabled={uploading}>
+                <Button 
+                  variant="gradient" 
+                  size="md" 
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
                   <span className="inline-flex items-center gap-2">
                     <FiUpload className="w-4 h-4" />
                     {uploading ? "Enviando..." : "Upload"}
                   </span>
                 </Button>
-              </label>
+              </div>
             )}
 
             {/* Quick type filters */}
@@ -510,7 +532,8 @@ export default function MediaLibraryModal({
           </div>
         </Card>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

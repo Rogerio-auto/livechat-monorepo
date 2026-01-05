@@ -1686,6 +1686,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const payload: any = {
         inbox_id: inboxId,
         customer_id: customerId,
+        company_id: (req as any).user?.company_id || null,
         external_id: externalId || null,
         status: "OPEN",
       };

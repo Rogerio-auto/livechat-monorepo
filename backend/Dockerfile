@@ -22,6 +22,9 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 
+# Install system dependencies (ffmpeg for audio conversion)
+RUN apk add --no-cache ffmpeg
+
 # Copy root package files (needed for workspace resolution)
 COPY package*.json ./
 

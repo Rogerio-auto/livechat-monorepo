@@ -1291,6 +1291,9 @@ export async function upsertChatMessage(args: UpsertChatMessageArgs): Promise<Up
                     created_at,
                     is_from_customer,
                     media_url,
+                    media_public_url,
+                    media_storage_path,
+                    media_source,
                     remote_participant_id,
                     remote_sender_id,
                     remote_sender_name,
@@ -1840,7 +1843,7 @@ export async function insertOutboundMessage(args: {
                 media_source = coalesce($13, media_source),
                 updated_at = now()
           where id = $1
-          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
+          returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, media_public_url, media_storage_path, media_source, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
         [
           args.messageId,
           args.content,
@@ -1917,7 +1920,7 @@ export async function insertOutboundMessage(args: {
                  media_public_url = excluded.media_public_url,
                  media_source = excluded.media_source,
                  updated_at = now()
-           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
+           returning id, chat_id, content, type, view_status, created_at, external_id, sender_id, sender_name, sender_avatar_url, media_url, media_public_url, media_storage_path, media_source, replied_message_id, replied_message_external_id, interactive_content, is_from_customer`,
           [
             args.chatId,
             senderId,

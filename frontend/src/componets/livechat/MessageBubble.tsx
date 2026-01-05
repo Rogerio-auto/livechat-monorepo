@@ -107,7 +107,7 @@ export function MessageBubble({
   // Fallback para URLs de mídia
   const mediaUrl = m.media_public_url || m.media_url || null;
   const textBody = m.body ?? m.content ?? "";
-  const caption = m.caption ?? null;
+  const caption = m.caption ?? (["IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "FILE", "STICKER"].includes(messageType) ? textBody : null);
 
   const displayFilename = useMemo(() => {
     if (messageType !== "DOCUMENT" && messageType !== "FILE") return null;

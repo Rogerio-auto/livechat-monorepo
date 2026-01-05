@@ -4604,15 +4604,24 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         const isVoice = !!job.is_voice;
         if (isVoice && !effectiveMime.includes("ogg")) {
           try {
-            if (ffmpegPath) {
-              console.log("[meta.sendMedia] 🎙️ Converting audio to ogg/opus for voice note");
+            // Tenta encontrar o ffmpeg: primeiro o do sistema, depois o do ffmpeg-static
+            let finalFfmpeg: string | null = "ffmpeg";
+            try {
+              const { execSync } = require("node:child_process");
+              execSync("ffmpeg -version", { stdio: "ignore" });
+            } catch {
+              finalFfmpeg = ffmpegPath || null;
+            }
+
+            if (finalFfmpeg) {
+              console.log(`[meta.sendMedia] 🎙️ Converting audio to ogg/opus for voice note using ${finalFfmpeg}`);
               const tmpIn = path.join(os.tmpdir(), `meta-voice-in-${randomUUID()}`);
               const tmpOut = path.join(os.tmpdir(), `meta-voice-out-${randomUUID()}.ogg`);
               await fs.writeFile(tmpIn, mediaBuffer);
               
               await new Promise<void>((resolve, reject) => {
                 const args = ["-y", "-i", tmpIn, "-c:a", "libopus", "-b:a", "64k", "-vn", tmpOut];
-                const cp = spawn(ffmpegPath as string, args, { stdio: "ignore" });
+                const cp = spawn(finalFfmpeg as string, args, { stdio: "ignore" });
                 cp.on("error", reject);
                 cp.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
               });
@@ -4622,6 +4631,8 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
               // Cleanup
               fs.unlink(tmpIn).catch(() => {});
               fs.unlink(tmpOut).catch(() => {});
+            } else {
+              console.warn("[meta.sendMedia] ffmpeg not found, sending original audio");
             }
           } catch (err) {
             console.warn("[meta.sendMedia] Audio conversion failed, sending original", err);
@@ -4738,6 +4749,20 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           reason: null,
         });
 
+        // Se tivermos info de mídia, avisamos o front para atualizar o bubble (importante para real-time)
+        if (resolvedPublicUrl || storageKey) {
+          await publishApp("socket.livechat.media-ready", {
+            kind: "livechat.media.ready",
+            chatId: chat_id,
+            companyId: job.companyId,
+            messageId: messageId || (upsert?.message?.id || null),
+            media_url: resolvedPublicUrl || null,
+            media_public_url: resolvedPublicUrl || null,
+            media_storage_path: storageKey || null,
+            caption: job.caption || filename,
+          });
+        }
+
         if (upsert?.message && upsert.operation === "insert") {
           const mapped = {
             id: upsert.message.id,
@@ -4752,6 +4777,8 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
             type: upsert.message.type ?? "TEXT",
             is_private: false,
             media_url: upsert.message.media_url ?? null,
+            media_public_url: (upsert.message as any).media_public_url ?? null,
+            media_storage_path: (upsert.message as any).media_storage_path ?? null,
             interactive_content: (upsert.message as any).interactive_content ?? null,
             client_draft_id: job?.draftId ?? null,
           };

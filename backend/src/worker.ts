@@ -4605,12 +4605,28 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
         if (isVoice && !effectiveMime.includes("ogg")) {
           try {
             // Tenta encontrar o ffmpeg: primeiro o do sistema, depois o do ffmpeg-static
-            let finalFfmpeg: string | null = "ffmpeg";
+            let finalFfmpeg: string | null = null;
+            
+            // 1. Tenta o comando 'ffmpeg' global (instalado via apk no Docker)
             try {
               const { execSync } = require("node:child_process");
               execSync("ffmpeg -version", { stdio: "ignore" });
+              finalFfmpeg = "ffmpeg";
             } catch {
-              finalFfmpeg = ffmpegPath || null;
+              // 2. Tenta caminhos comuns no Linux/Docker
+              const commonPaths = ["/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"];
+              for (const p of commonPaths) {
+                try {
+                  await fs.access(p);
+                  finalFfmpeg = p;
+                  break;
+                } catch {}
+              }
+              
+              // 3. Tenta o caminho do ffmpeg-static se ainda não encontrou
+              if (!finalFfmpeg && ffmpegPath && typeof ffmpegPath === 'string') {
+                finalFfmpeg = ffmpegPath;
+              }
             }
 
             if (finalFfmpeg) {
@@ -4621,9 +4637,24 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
               
               await new Promise<void>((resolve, reject) => {
                 const args = ["-y", "-i", tmpIn, "-c:a", "libopus", "-b:a", "64k", "-vn", tmpOut];
-                const cp = spawn(finalFfmpeg as string, args, { stdio: "ignore" });
-                cp.on("error", reject);
-                cp.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}`))));
+                const cp = spawn(finalFfmpeg as string, args);
+                
+                let stderr = "";
+                cp.stderr?.on("data", (data) => { stderr += data.toString(); });
+                
+                cp.on("error", (err) => {
+                  console.error("[meta.sendMedia] ffmpeg spawn error:", err);
+                  reject(err);
+                });
+                
+                cp.on("exit", (code) => {
+                  if (code === 0) {
+                    resolve();
+                  } else {
+                    console.error("[meta.sendMedia] ffmpeg failed with code", code, "stderr:", stderr);
+                    reject(new Error(`ffmpeg exit ${code}`));
+                  }
+                });
               });
 
               mediaBuffer = await fs.readFile(tmpOut);
@@ -4632,7 +4663,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
               fs.unlink(tmpIn).catch(() => {});
               fs.unlink(tmpOut).catch(() => {});
             } else {
-              console.warn("[meta.sendMedia] ffmpeg not found, sending original audio");
+              console.warn("[meta.sendMedia] ❌ ffmpeg NOT FOUND in system or node_modules. Audio will be sent as is (and might fail).");
             }
           } catch (err) {
             console.warn("[meta.sendMedia] Audio conversion failed, sending original", err);

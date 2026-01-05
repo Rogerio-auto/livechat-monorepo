@@ -17,6 +17,8 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(0);
@@ -29,6 +31,14 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (audioUrl && audioRef.current) {
+      audioRef.current.load();
+      setCurrentTime(0);
+      setDuration(0);
+    }
+  }, [audioUrl]);
 
   useEffect(() => {
     if (isRecording) {
@@ -54,63 +64,119 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("Iniciando captura de áudio...");
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
       streamRef.current = stream;
 
       // Setup Audio Context for volume visualization
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+      const audioContext = new AudioContextClass();
+      
+      // Forçar o resume do context imediatamente após a criação (necessário em alguns navegadores)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+
       const analyser = audioContext.createAnalyser();
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(analyser);
       analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.3; // Torna a wave mais fluida
       
       audioContextRef.current = audioContext;
       analyserRef.current = analyser;
 
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
       const updateVolume = () => {
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        analyser.getByteFrequencyData(dataArray);
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        setVolume(average);
+        if (!analyserRef.current || !mediaRecorderRef.current) return;
+
+        // Se ainda não começou a gravar, tentamos novamente no próximo frame
+        if (mediaRecorderRef.current.state !== 'recording') {
+          animationFrameRef.current = requestAnimationFrame(updateVolume);
+          return;
+        }
+        
+        analyserRef.current.getByteFrequencyData(dataArray);
+        
+        let max = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          if (dataArray[i] > max) max = dataArray[i];
+        }
+        
+        // Aumentar a sensibilidade para garantir movimento
+        const vol = Math.min((max / 128) * 100, 100); 
+        setVolume(vol);
+        
+        if (vol > 5) {
+          // console.log("Volume detectado:", vol);
+        }
+        
         animationFrameRef.current = requestAnimationFrame(updateVolume);
       };
-      updateVolume();
 
-      const candidates = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/webm"];
+      const candidates = ["audio/webm;codecs=opus", "audio/ogg;codecs=opus", "audio/webm", "audio/mp4"];
       const pick = (t: string) => (window as any).MediaRecorder?.isTypeSupported?.(t);
-      const mimeType = pick(candidates[0]) ? candidates[0] : pick(candidates[1]) ? candidates[1] : candidates[2];
+      const mimeType = candidates.find(t => pick(t)) || "audio/webm";
+      
+      console.log("MimeType selecionado:", mimeType);
 
-      const mr = new MediaRecorder(stream, { mimeType });
+      const mr = new MediaRecorder(stream, { 
+        mimeType,
+        audioBitsPerSecond: 128000 
+      });
       audioChunksRef.current = [];
       
       mr.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) {
+          console.log("Dados de áudio recebidos:", e.data.size, "bytes");
+          audioChunksRef.current.push(e.data);
+        }
       };
 
       mr.onstop = () => {
+        console.log("Gravação finalizada. Total de chunks:", audioChunksRef.current.length);
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        console.log("Blob final:", blob.size, "bytes", blob.type);
+        
+        if (blob.size < 100) {
+          console.error("Aviso: O blob gerado é muito pequeno, pode estar vazio.");
+        }
+
         setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
+        const url = URL.createObjectURL(blob);
+        setAudioUrl(url);
         
         streamRef.current?.getTracks().forEach(t => t.stop());
         streamRef.current = null;
 
-        if (audioContextRef.current) {
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
           audioContextRef.current.close();
-          audioContextRef.current = null;
         }
+        audioContextRef.current = null;
+        analyserRef.current = null;
       };
 
       mediaRecorderRef.current = mr;
-      mr.start(1000); // Captura dados a cada 1 segundo para garantir a gravação
+      mr.start(200); 
       setIsRecording(true);
+      
+      setTimeout(() => {
+        updateVolume();
+      }, 100);
+
       setRecordingTime(0);
       setAudioBlob(null);
       setAudioUrl(null);
       setError(null);
     } catch (err) {
-      console.error("Failed to start recording", err);
-      setError("Permita acesso ao microfone para gravar.");
+      console.error("Erro crítico na gravação:", err);
+      setError("Não foi possível acessar o microfone. Verifique as permissões do navegador.");
     }
   };
 
@@ -118,6 +184,7 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     }
   };
 
@@ -130,7 +197,10 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
     try {
       const token = getAccessToken();
       const formData = new FormData();
-      const ext = audioBlob.type.includes('ogg') ? 'ogg' : 'webm';
+      let ext = 'webm';
+      if (audioBlob.type.includes('ogg')) ext = 'ogg';
+      else if (audioBlob.type.includes('mp4')) ext = 'mp4';
+      
       formData.append('file', audioBlob, `recording_${Date.now()}.${ext}`);
 
       const baseUrl = (apiBase || "").replace(/\/$/, "");
@@ -158,12 +228,19 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
 
   const togglePlayback = () => {
     if (!audioRef.current) return;
+    
     if (isPlaying) {
       audioRef.current.pause();
+      setIsPlaying(false);
     } else {
-      audioRef.current.play();
+      console.log("Iniciando playback do áudio...");
+      audioRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(err => {
+          console.error("Erro no playback:", err);
+          setError("Não foi possível reproduzir o áudio.");
+        });
     }
-    setIsPlaying(!isPlaying);
   };
 
   if (!open) return null;
@@ -211,20 +288,37 @@ export default function AudioRecorderModal({ apiBase, open, onClose, onSelect }:
                   >
                     {isPlaying ? <FiPause size={20} /> : <FiPlay size={20} className="ml-1" />}
                   </button>
-                  <div className="flex-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500 w-0" />
+                  <div className="flex-1 flex flex-col gap-1">
+                    <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-blue-500 transition-all duration-100" 
+                        style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-gray-500 font-mono">
+                      <span>{formatTime(Math.floor(currentTime))}</span>
+                      <span>{formatTime(Math.floor(duration))}</span>
+                    </div>
                   </div>
                   <audio 
                     ref={audioRef} 
                     src={audioUrl} 
-                    onEnded={() => setIsPlaying(false)}
+                    onEnded={() => { setIsPlaying(false); setCurrentTime(duration); }}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
+                    onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                    onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
                     className="hidden" 
                   />
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="ghost" onClick={() => { setAudioUrl(null); setAudioBlob(null); }} className="flex-1">
+                  <Button variant="ghost" onClick={() => { 
+                    setAudioUrl(null); 
+                    setAudioBlob(null); 
+                    setCurrentTime(0);
+                    setDuration(0);
+                    setIsPlaying(false);
+                  }} className="flex-1">
                     <FiTrash2 className="mr-2" /> Descartar
                   </Button>
                   <Button variant="primary" onClick={handleUpload} disabled={uploading} className="flex-1">

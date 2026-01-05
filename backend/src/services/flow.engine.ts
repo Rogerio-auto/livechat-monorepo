@@ -26,6 +26,9 @@ export async function triggerFlow(params: {
 
   if (error || !flows) return;
 
+  // Cache for contact context (tags and stage) to avoid multiple DB calls
+  let contactContext: { stageId: string | null, tags: string[] } | null = null;
+
   for (const flow of flows) {
     const config = flow.trigger_config || {};
     let shouldTrigger = false;
@@ -51,6 +54,46 @@ export async function triggerFlow(params: {
                          config.message_types.includes(triggerData.type?.toLowerCase());
 
         if (inboxMatch && typeMatch) shouldTrigger = true;
+      }
+
+      // Apply additional conditions (Stage and Tags) if any
+      if (shouldTrigger) {
+        // Check if we have conditions that require contact context
+        const hasStageCondition = !!config.filter_stage_id;
+        const hasTagsCondition = !!(config.filter_tag_ids && config.filter_tag_ids.length > 0);
+
+        if (hasStageCondition || hasTagsCondition) {
+          // Fetch context if not already cached
+          if (!contactContext) {
+            try {
+              const [tagsRes, cardRes] = await Promise.all([
+                supabaseAdmin.from("customer_tags").select("tag_id").eq("customer_id", contactId),
+                supabaseAdmin.from("kanban_cards").select("kanban_column_id").eq("lead_id", contactId).maybeSingle()
+              ]);
+              contactContext = {
+                stageId: cardRes.data?.kanban_column_id || null,
+                tags: tagsRes.data?.map(t => t.tag_id) || []
+              };
+            } catch (err) {
+              logger.error("[FlowEngine] Error fetching contact context for filters", err);
+              // If we can't fetch context, we fail safe and don't trigger
+              shouldTrigger = false;
+            }
+          }
+
+          if (shouldTrigger && contactContext) {
+            // 1. Stage Filter
+            if (hasStageCondition && config.filter_stage_id !== contactContext.stageId) {
+              shouldTrigger = false;
+            }
+
+            // 2. Tags Filter (OR logic: must have at least one of the specified tags)
+            if (shouldTrigger && hasTagsCondition) {
+              const hasMatch = config.filter_tag_ids.some((tid: string) => contactContext!.tags.includes(tid));
+              if (!hasMatch) shouldTrigger = false;
+            }
+          }
+        }
       }
     }
 

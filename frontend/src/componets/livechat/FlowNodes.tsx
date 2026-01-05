@@ -4,7 +4,7 @@ import {
   FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, 
   FiSettings, FiChevronDown, FiChevronUp, FiTrash2,
   FiFileText, FiImage, FiVideo, FiInbox, FiPlus, FiList, FiLink, FiPhone, FiMessageCircle, FiX,
-  FiUser, FiActivity, FiMic
+  FiUser, FiActivity, FiMic, FiFilter
 } from 'react-icons/fi';
 import MediaLibraryModal from './MediaLibraryModal';
 import AudioRecorderModal from './AudioRecorderModal';
@@ -220,6 +220,50 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
                   </select>
                 </div>
               )}
+
+              {/* Condições Adicionais (Filtros) */}
+              {config.type !== 'MANUAL' && (
+                <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-3">
+                  <label className="text-[10px] font-bold text-blue-500 uppercase">Condições Adicionais</label>
+                  
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Estágio do Lead (Opcional)</label>
+                    <select 
+                      className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                      value={config.filter_stage_id || ''}
+                      onChange={(e) => nodeData.onChange({ trigger_config: { ...config, filter_stage_id: e.target.value || undefined } })}
+                    >
+                      <option value="">Qualquer Estágio</option>
+                      {(nodeData.columns || []).map((c: any) => (
+                        <option key={c.id} value={String(c.id)}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Etiquetas (Opcional - OU)</label>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(nodeData.tags || []).map((t: any) => (
+                        <button
+                          key={t.id}
+                          onClick={() => {
+                            const current = config.filter_tag_ids || [];
+                            const next = current.includes(t.id) ? current.filter((id: string) => id !== t.id) : [...current, t.id];
+                            nodeData.onChange({ trigger_config: { ...config, filter_tag_ids: next } });
+                          }}
+                          className={`px-2 py-0.5 rounded-full text-[9px] border transition-colors ${
+                            (config.filter_tag_ids || []).includes(t.id)
+                              ? 'bg-blue-500 border-blue-600 text-white'
+                              : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'
+                          }`}
+                        >
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )
         }}
@@ -229,6 +273,24 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
           {config.type === 'NEW_MESSAGE' && config.message_types && config.message_types.length > 0 && (
             <div className="mt-1 flex gap-1">
               {config.message_types.map((t: string) => <span key={t} className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-[9px]">{t}</span>)}
+            </div>
+          )}
+          
+          {/* Visualização dos Filtros no Card */}
+          {(config.filter_stage_id || (config.filter_tag_ids && config.filter_tag_ids.length > 0)) && (
+            <div className="mt-2 pt-1 border-t border-gray-100 dark:border-gray-800/50 text-[9px] space-y-0.5">
+              {config.filter_stage_id && (
+                <div className="flex items-center gap-1">
+                  <FiFilter className="text-blue-500" size={8} />
+                  <span className="truncate">Estágio: {(nodeData.columns || []).find(c => String(c.id) === String(config.filter_stage_id))?.name || '...'}</span>
+                </div>
+              )}
+              {config.filter_tag_ids && config.filter_tag_ids.length > 0 && (
+                <div className="flex items-center gap-1">
+                  <FiTag className="text-blue-500" size={8} />
+                  <span>{config.filter_tag_ids.length} etiqueta(s)</span>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -11,6 +11,7 @@ type Deps = {
 };
 
 export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin, io }: Deps) {
+    console.log("[KanbanRoutes] Registrando rotas do Kanban...");
     // ================== COLE SUAS ROTAS AQUI ==================
     // Dica: troque todas as referências diretas a supabaseAdmin/requireAuth/io
     // para usarem as variáveis do escopo (já estão disponíveis).
@@ -169,6 +170,12 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     // GET colunas do board
     app.get("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
         const { boardId } = req.params;
+        console.log(`[Kanban] GET /kanban/boards/${boardId}/columns`);
+
+        if (!boardId || boardId === "undefined" || boardId === "null") {
+            console.error("[Kanban] boardId inválido:", boardId);
+            return res.status(400).json({ error: "boardId inválido" });
+        }
 
         const { data, error } = await supabaseAdmin
             .from("kanban_columns")
@@ -186,6 +193,50 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
             position: c.position,
         }));
         res.json(mapped);
+    });
+
+    // POST criar nova coluna no board
+    app.post("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
+        const { boardId } = req.params;
+        const { name, color } = req.body;
+
+        if (!name) return res.status(400).json({ error: "Nome é obrigatório" });
+
+        try {
+            // 1) Pegar a última posição
+            const { data: cols } = await supabaseAdmin
+                .from("kanban_columns")
+                .select("position")
+                .eq("kanban_board_id", boardId)
+                .order("position", { ascending: false })
+                .limit(1);
+
+            const lastPos = cols?.[0]?.position ?? 0;
+
+            const { data, error } = await supabaseAdmin
+                .from("kanban_columns")
+                .insert({
+                    kanban_board_id: boardId,
+                    name,
+                    color: color || "#6B7280",
+                    position: lastPos + 1
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            return res.status(201).json({
+                id: data.id,
+                name: data.name,
+                title: data.name,
+                color: data.color || "#6B7280",
+                position: data.position
+            });
+        } catch (error: any) {
+            console.error("[Kanban/CreateColumn] Erro:", error);
+            return res.status(500).json({ error: error.message });
+        }
     });
 
     // PUT atualizar coluna (nome, cor, posi??o)

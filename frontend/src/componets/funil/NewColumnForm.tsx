@@ -53,6 +53,20 @@ export function NewColumnForm({ apiBase, boardId, onCreated, onCancel }: Props) 
         </div>
         <div>
           <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5">Cor</label>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {[
+              "#10B981", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", 
+              "#EF4444", "#F59E0B", "#EAB308", "#64748B", "#6B7280"
+            ].map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                className={`w-6 h-6 rounded-full border-2 transition-all ${color === c ? "border-slate-900 dark:border-white scale-110" : "border-transparent hover:scale-110"}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
           <div className="flex items-center gap-3">
             <input
               type="color"

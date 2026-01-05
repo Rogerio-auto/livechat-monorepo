@@ -477,10 +477,11 @@ export function SalesFunnel() {
 
   // 2) colunas + cards
   useEffect(() => {
-    if (!boardId) return;
+    if (!boardId || boardId === "undefined") return;
     (async () => {
       try {
         setLoadingData(true);
+        console.log("[Funil] Buscando colunas e cards para o board:", boardId);
         const [cols, crds] = await Promise.all([
           fetchJson<Column[]>(`${API}/kanban/boards/${boardId}/columns`),
           fetchJson<Card[]>(`${API}/kanban/boards/${boardId}/cards`),
@@ -1570,9 +1571,23 @@ export function SalesFunnel() {
                     onChange={(e) => setColDraft((d) => ({ ...(d as any), title: e.target.value }))}
                   />
                 </div>
-                <div>
+                <div className="col-span-2">
                   <label className="text-xs uppercase tracking-wider text-zinc-500">Cor</label>
-                  <div className="mt-1 flex items-center gap-2">
+                  <div className="flex flex-wrap gap-2 mt-1.5 mb-3">
+                    {[
+                      "#10B981", "#3B82F6", "#6366F1", "#8B5CF6", "#EC4899", 
+                      "#EF4444", "#F59E0B", "#EAB308", "#64748B", "#6B7280"
+                    ].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setColDraft((d) => ({ ...(d as any), color: c }))}
+                        className={`w-6 h-6 rounded-full border-2 transition-all ${colDraft.color === c ? "border-slate-900 scale-110" : "border-transparent hover:scale-110"}`}
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
                     <input
                       type="color"
                       className="h-10 w-16 rounded border border-zinc-200 bg-white"

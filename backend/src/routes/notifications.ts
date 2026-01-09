@@ -66,17 +66,15 @@ export function registerNotificationRoutes(app: Application) {
       }
 
       if (type) {
-        query = query.eq("notification_type", type);
+        query = query.eq("type", type);
       }
 
       const { data, error, count } = await query;
 
       if (error) throw error;
 
-      return res.json({
-        notifications: data || [],
-        total: count || 0,
-      });
+      // Retornar diretamente o array para compatibilidade com o hook atual
+      return res.json(data || []);
     } catch (error) {
       const { status, payload } = handleError(error);
       return res.status(status).json(payload);
@@ -95,7 +93,7 @@ export function registerNotificationRoutes(app: Application) {
         .from("notifications")
         .select("*", { count: "exact", head: true })
         .eq("user_id", userId)
-        .is("read_at", null)
+        .eq("is_read", false)
         .eq("status", "SENT");
 
       if (error) throw error;
@@ -108,10 +106,10 @@ export function registerNotificationRoutes(app: Application) {
   });
 
   /**
-   * PUT /api/notifications/:id/read
-   * Marca notificação como lida
+   * PATCH /api/notifications/:id/read
+   * Marca notificação como lida (Suporta PUT e PATCH)
    */
-  app.put("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
+  const handleMarkRead = async (req: any, res: any) => {
     try {
       const userId = getUserId(req);
       const { id } = req.params;
@@ -134,13 +132,16 @@ export function registerNotificationRoutes(app: Application) {
       const { status, payload } = handleError(error);
       return res.status(status).json(payload);
     }
-  });
+  };
+
+  app.put("/api/notifications/:id/read", requireAuth, handleMarkRead);
+  app.patch("/api/notifications/:id/read", requireAuth, handleMarkRead);
 
   /**
-   * PUT /api/notifications/read-all
+   * POST/PUT /api/notifications/read-all
    * Marca todas as notificações como lidas
    */
-  app.put("/api/notifications/read-all", requireAuth, async (req: any, res) => {
+  const handleMarkAllRead = async (req: any, res: any) => {
     try {
       const userId = getUserId(req);
 
@@ -148,6 +149,7 @@ export function registerNotificationRoutes(app: Application) {
         .from("notifications")
         .update({
           status: "READ",
+          is_read: true,
           read_at: new Date().toISOString(),
         })
         .eq("user_id", userId)
@@ -160,7 +162,10 @@ export function registerNotificationRoutes(app: Application) {
       const { status, payload } = handleError(error);
       return res.status(status).json(payload);
     }
-  });
+  };
+
+  app.put("/api/notifications/read-all", requireAuth, handleMarkAllRead);
+  app.post("/api/notifications/read-all", requireAuth, handleMarkAllRead);
 
   /**
    * DELETE /api/notifications/:id

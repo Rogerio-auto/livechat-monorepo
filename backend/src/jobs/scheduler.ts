@@ -2,6 +2,7 @@
 
 import cron from 'node-cron';
 import { checkProjectDeadlines, checkTaskDeadlines } from './check-project-deadlines.job.ts';
+import { checkGeneralTaskDeadlines } from './check-general-tasks.job.ts';
 import { processPendingNotifications } from '../services/notification.service.ts';
 import { supabaseAdmin } from '../lib/supabase.ts';
 import { queueNextStep } from '../services/flow.engine.js';
@@ -9,18 +10,22 @@ import { queueNextStep } from '../services/flow.engine.js';
 export function startScheduler() {
   console.log('[Scheduler] Starting notification scheduler...');
 
-  // ==================== VERIFICAR PRAZOS (Diariamente às 8h) ====================
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[Scheduler] Running daily deadline check...');
+  // ==================== VERIFICAR PRAZOS (A cada 1 hora para maior responsividade) ====================
+  cron.schedule('0 * * * *', async () => {
+    console.log('[Scheduler] Running hourly deadline check...');
     try {
       await checkProjectDeadlines();
       await checkTaskDeadlines();
+      await checkGeneralTaskDeadlines();
     } catch (error) {
       console.error('[Scheduler] Error in deadline check:', error);
     }
   }, {
-    timezone: 'America/Sao_Paulo' // Ajustar para seu timezone
+    timezone: 'America/Sao_Paulo'
   });
+
+  // Executar uma vez no boot (opcional, para garantir que as notificações do dia sejam enviadas se o server reiniciou)
+  checkGeneralTaskDeadlines().catch(err => console.error('[Scheduler] Initial deadline check failed:', err));
 
   // ==================== PROCESSAR NOTIFICAÇÕES PENDENTES (A cada 5 minutos) ====================
   cron.schedule('*/5 * * * *', async () => {

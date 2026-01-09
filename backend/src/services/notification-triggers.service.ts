@@ -1,7 +1,8 @@
 // backend/src/services/notification-triggers.service.ts
 
-import { createMultiChannelNotification } from "./notification.service.ts";
+import { NotificationService } from "./NotificationService.js";
 import { supabaseAdmin } from "../lib/supabase.ts";
+import * as FlowEngine from "./flow.engine.js";
 
 // ==================== PROJECT NOTIFICATIONS ====================
 
@@ -14,7 +15,8 @@ export async function notifyProjectCreated(
   ownerUserId: string,
   companyId: string
 ): Promise<void> {
-  await createMultiChannelNotification({
+  // 1. Notificação In-App (Padrão)
+  await NotificationService.create({
     userId: ownerUserId,
     companyId,
     type: 'PROJECT_CREATED',
@@ -22,10 +24,27 @@ export async function notifyProjectCreated(
     message: `O projeto "${projectTitle}" foi criado com sucesso!`,
     actionUrl: `/projects/${projectId}`,
     projectId,
-    metadata: {
+    data: {
       project_title: projectTitle,
     },
   });
+
+  // 2. Disparar Fluxo de Automação (Gatilho de Sistema)
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'PROJECT_CREATED',
+        entity_type: 'PROJECT',
+        entity_id: projectId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_CREATED:", err);
+  }
 }
 
 /**
@@ -45,7 +64,7 @@ export async function notifyProjectAssigned(
     .eq('id', assignedByUserId)
     .maybeSingle();
 
-  await createMultiChannelNotification({
+  await NotificationService.create({
     userId: assignedUserId,
     companyId,
     type: 'PROJECT_ASSIGNED',
@@ -53,11 +72,28 @@ export async function notifyProjectAssigned(
     message: `${assignedByUser?.name || 'Alguém'} atribuiu o projeto "${projectTitle}" para você.`,
     actionUrl: `/projects/${projectId}`,
     projectId,
-    metadata: {
+    data: {
       project_title: projectTitle,
       assigned_by: assignedByUser?.name,
     },
   });
+
+  // 2. Disparar Fluxo de Automação
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(assignedUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'PROJECT_ASSIGNED',
+        entity_type: 'PROJECT',
+        entity_id: projectId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_ASSIGNED:", err);
+  }
 }
 
 /**
@@ -71,7 +107,7 @@ export async function notifyProjectStageChanged(
   ownerUserId: string,
   companyId: string
 ): Promise<void> {
-  await createMultiChannelNotification({
+  await NotificationService.create({
     userId: ownerUserId,
     companyId,
     type: 'PROJECT_STAGE_CHANGED',
@@ -79,12 +115,29 @@ export async function notifyProjectStageChanged(
     message: `"${projectTitle}" avançou de "${fromStageName}" para "${toStageName}".`,
     actionUrl: `/projects/${projectId}`,
     projectId,
-    metadata: {
+    data: {
       project_title: projectTitle,
       from_stage: fromStageName,
       to_stage: toStageName,
     },
   });
+
+  // 2. Disparar Fluxo de Automação
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'PROJECT_STAGE_CHANGED',
+        entity_type: 'PROJECT',
+        entity_id: projectId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_STAGE_CHANGED:", err);
+  }
 }
 
 /**
@@ -100,7 +153,7 @@ export async function notifyProjectCompleted(
   const allUsers = [ownerUserId, ...assignedUsers].filter((v, i, a) => a.indexOf(v) === i);
 
   for (const userId of allUsers) {
-    await createMultiChannelNotification({
+    await NotificationService.create({
       userId,
       companyId,
       type: 'PROJECT_COMPLETED',
@@ -108,7 +161,7 @@ export async function notifyProjectCompleted(
       message: `O projeto "${projectTitle}" foi concluído com sucesso!`,
       actionUrl: `/projects/${projectId}`,
       projectId,
-      metadata: {
+      data: {
         project_title: projectTitle,
       },
     });
@@ -140,7 +193,7 @@ export async function notifyProjectCommented(
     .filter(id => id !== commentAuthorId);
 
   for (const userId of usersToNotify) {
-    await createMultiChannelNotification({
+    await NotificationService.create({
       userId,
       companyId,
       type: 'PROJECT_COMMENTED',
@@ -148,7 +201,7 @@ export async function notifyProjectCommented(
       message: `${author?.name || 'Alguém'} comentou em "${projectTitle}": ${commentPreview.substring(0, 100)}...`,
       actionUrl: `/projects/${projectId}?tab=comments`,
       projectId,
-      metadata: {
+      data: {
         project_title: projectTitle,
         author_name: author?.name,
         comment_preview: commentPreview,
@@ -158,6 +211,48 @@ export async function notifyProjectCommented(
 }
 
 // ==================== TASK NOTIFICATIONS ====================
+
+/**
+ * Notifica quando tarefa é criada
+ */
+export async function notifyTaskCreated(
+  taskId: string,
+  taskTitle: string,
+  ownerUserId: string,
+  companyId: string
+): Promise<void> {
+  console.log(`[NotificationTriggers] 🆕 notifyTaskCreated called for task: ${taskTitle} (${taskId})`);
+  // 1. Notificação In-App
+  await NotificationService.create({
+    userId: ownerUserId,
+    companyId,
+    type: 'TASK_CREATED',
+    title: 'Nova Tarefa Criada',
+    message: `A tarefa "${taskTitle}" foi criada com sucesso!`,
+    actionUrl: `/tarefas`,
+    taskId,
+    data: {
+      task_title: taskTitle,
+    },
+  });
+
+  // 2. Disparar Fluxo de Automação
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'TASK_CREATED',
+        entity_type: 'TASK',
+        entity_id: taskId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_CREATED:", err);
+  }
+}
 
 /**
  * Notifica quando tarefa é atribuída
@@ -170,7 +265,7 @@ export async function notifyTaskAssigned(
   assignedUserId: string,
   companyId: string
 ): Promise<void> {
-  await createMultiChannelNotification({
+  await NotificationService.create({
     userId: assignedUserId,
     companyId,
     type: 'TASK_ASSIGNED',
@@ -179,11 +274,28 @@ export async function notifyTaskAssigned(
     actionUrl: `/projects/${projectId}?tab=tasks`,
     projectId,
     taskId,
-    metadata: {
+    data: {
       task_title: taskTitle,
       project_title: projectTitle,
     },
   });
+
+  // 2. Disparar Fluxo de Automação
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(assignedUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'TASK_ASSIGNED',
+        entity_type: 'TASK',
+        entity_id: taskId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_ASSIGNED:", err);
+  }
 }
 
 /**
@@ -197,7 +309,7 @@ export async function notifyTaskCompleted(
   ownerUserId: string,
   companyId: string
 ): Promise<void> {
-  await createMultiChannelNotification({
+  await NotificationService.create({
     userId: ownerUserId,
     companyId,
     type: 'TASK_COMPLETED',
@@ -206,11 +318,229 @@ export async function notifyTaskCompleted(
     actionUrl: `/projects/${projectId}?tab=tasks`,
     projectId,
     taskId,
-    metadata: {
+    data: {
       task_title: taskTitle,
       project_title: projectTitle,
     },
   });
+
+  // 2. Disparar Fluxo de Automação
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    await FlowEngine.triggerFlow({
+      companyId,
+      contactId,
+      triggerType: 'SYSTEM_EVENT',
+      triggerData: {
+        event: 'TASK_COMPLETED',
+        entity_type: 'TASK',
+        entity_id: taskId
+      }
+    });
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_COMPLETED:", err);
+  }
+}
+
+/**
+ * Notifica quando uma tarefa está vencendo hoje
+ */
+export async function notifyTaskDueToday(
+  taskId: string,
+  taskTitle: string,
+  assignedUserId: string,
+  companyId: string,
+  entityType: 'TASK' | 'PROJECT_TASK' = 'TASK'
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(assignedUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'TASK_DUE_TODAY',
+          entity_type: entityType,
+          entity_id: taskId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_DUE_TODAY:", err);
+  }
+}
+
+/**
+ * Notifica quando uma tarefa está atrasada
+ */
+export async function notifyTaskOverdue(
+  taskId: string,
+  taskTitle: string,
+  assignedUserId: string,
+  companyId: string,
+  entityType: 'TASK' | 'PROJECT_TASK' = 'TASK'
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(assignedUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'TASK_OVERDUE',
+          entity_type: entityType,
+          entity_id: taskId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_OVERDUE:", err);
+  }
+}
+
+/**
+ * Notifica quando uma tarefa vence amanhã
+ */
+export async function notifyTaskDueTomorrow(
+  taskId: string,
+  taskTitle: string,
+  assignedUserId: string,
+  companyId: string,
+  entityType: 'TASK' | 'PROJECT_TASK' = 'TASK'
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(assignedUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'TASK_DUE_TOMORROW',
+          entity_type: entityType,
+          entity_id: taskId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para TASK_DUE_TOMORROW:", err);
+  }
+}
+
+/**
+ * Notifica quando um projeto está vencendo hoje
+ */
+export async function notifyProjectDueToday(
+  projectId: string,
+  projectTitle: string,
+  ownerUserId: string,
+  companyId: string
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'PROJECT_DEADLINE_TODAY',
+          entity_type: 'PROJECT',
+          entity_id: projectId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_DEADLINE_TODAY:", err);
+  }
+}
+
+/**
+ * Notifica quando um projeto vence amanhã
+ */
+export async function notifyProjectDueTomorrow(
+  projectId: string,
+  projectTitle: string,
+  ownerUserId: string,
+  companyId: string
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'PROJECT_DEADLINE_TOMORROW',
+          entity_type: 'PROJECT',
+          entity_id: projectId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_DEADLINE_TOMORROW:", err);
+  }
+}
+
+/**
+ * Notifica de aviso de prazo (ex: 3 dias antes)
+ */
+export async function notifyProjectWarning(
+  projectId: string,
+  projectTitle: string,
+  ownerUserId: string,
+  companyId: string,
+  daysRemaining: number
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'PROJECT_DEADLINE_WARNING',
+          entity_type: 'PROJECT',
+          entity_id: projectId,
+          days_remaining: daysRemaining
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_DEADLINE_WARNING:", err);
+  }
+}
+
+/**
+ * Notifica quando um projeto está atrasado
+ */
+export async function notifyProjectOverdue(
+  projectId: string,
+  projectTitle: string,
+  ownerUserId: string,
+  companyId: string
+): Promise<void> {
+  try {
+    const contactId = await FlowEngine.getContactIdForUser(ownerUserId, companyId);
+    if (contactId) {
+      await FlowEngine.triggerFlow({
+        companyId,
+        contactId,
+        triggerType: 'SYSTEM_EVENT',
+        triggerData: {
+          event: 'PROJECT_OVERDUE',
+          entity_type: 'PROJECT',
+          entity_id: projectId
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("[NotificationTriggers] Erro ao disparar fluxo para PROJECT_OVERDUE:", err);
+  }
 }
 
 // ==================== MENTION NOTIFICATIONS ====================
@@ -237,16 +567,16 @@ export async function notifyMentionedUsers(
   for (const userId of mentionedUserIds) {
     if (userId === authorId) continue; // Não notificar o próprio autor
 
-    await createMultiChannelNotification({
+    await NotificationService.create({
       userId,
       companyId,
-      type: 'MENTIONED_IN_COMMENT',
-      title: 'Você Foi Mencionado',
+      type: 'MENTION',
+      title: 'Você foi mencionado',
       message: `${author?.name || 'Alguém'} mencionou você em "${projectTitle}": ${commentText.substring(0, 100)}...`,
       actionUrl: `/projects/${projectId}?tab=comments`,
       projectId,
       commentId,
-      metadata: {
+      data: {
         project_title: projectTitle,
         author_name: author?.name,
         comment_preview: commentText,

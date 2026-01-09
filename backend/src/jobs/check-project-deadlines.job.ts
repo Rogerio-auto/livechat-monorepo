@@ -1,7 +1,8 @@
 // backend/src/jobs/check-project-deadlines.job.ts
 
 import { supabaseAdmin } from "../lib/supabase.ts";
-import { createMultiChannelNotification } from "../services/notification.service.ts";
+import { NotificationService } from "../services/NotificationService.ts";
+import { notifyProjectDueToday, notifyProjectDueTomorrow, notifyProjectWarning, notifyProjectOverdue, notifyTaskDueToday, notifyTaskDueTomorrow, notifyTaskOverdue } from "../services/notification-triggers.service.ts";
 
 /**
  * Job para verificar prazos de projetos
@@ -29,13 +30,23 @@ export async function checkProjectDeadlines() {
 
   if (dueTodayProjects) {
     for (const project of dueTodayProjects) {
+      // Verificar se já notificamos hoje
+      const { count } = await supabaseAdmin
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .eq('type', 'PROJECT_DEADLINE_TODAY')
+        .gte('created_at', today.toISOString().split('T')[0]);
+
+      if (count && count > 0) continue;
+
       const usersToNotify = [
         project.owner_user_id,
         ...(project.assigned_users || [])
       ].filter((v, i, a) => a.indexOf(v) === i);
 
       for (const userId of usersToNotify) {
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId,
           companyId: project.company_id,
           type: 'PROJECT_DEADLINE_TODAY',
@@ -43,11 +54,16 @@ export async function checkProjectDeadlines() {
           message: `O projeto "${project.title}" tem prazo para HOJE (${formatDate(project.estimated_end_date)}).`,
           actionUrl: `/projects/${project.id}`,
           projectId: project.id,
-          metadata: {
+          data: {
             project_title: project.title,
             deadline: project.estimated_end_date,
           },
         });
+      }
+
+      // Disparar Trigger de Automação (Flow Builder) para o dono do projeto
+      if (project.owner_user_id) {
+        await notifyProjectDueToday(project.id, project.title, project.owner_user_id, project.company_id);
       }
     }
     console.log(`[Job] Notified ${dueTodayProjects.length} projects due today`);
@@ -63,13 +79,23 @@ export async function checkProjectDeadlines() {
 
   if (dueTomorrowProjects) {
     for (const project of dueTomorrowProjects) {
+      // Verificar se já notificamos hoje
+      const { count } = await supabaseAdmin
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .eq('type', 'PROJECT_DEADLINE_TOMORROW')
+        .gte('created_at', today.toISOString().split('T')[0]);
+
+      if (count && count > 0) continue;
+
       const usersToNotify = [
         project.owner_user_id,
         ...(project.assigned_users || [])
       ].filter((v, i, a) => a.indexOf(v) === i);
 
       for (const userId of usersToNotify) {
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId,
           companyId: project.company_id,
           type: 'PROJECT_DEADLINE_TOMORROW',
@@ -77,11 +103,16 @@ export async function checkProjectDeadlines() {
           message: `O projeto "${project.title}" tem prazo para AMANHÃ (${formatDate(project.estimated_end_date)}).`,
           actionUrl: `/projects/${project.id}`,
           projectId: project.id,
-          metadata: {
+          data: {
             project_title: project.title,
             deadline: project.estimated_end_date,
           },
         });
+      }
+
+      // Disparar Trigger de Automação (Flow Builder) para o dono do projeto
+      if (project.owner_user_id) {
+        await notifyProjectDueTomorrow(project.id, project.title, project.owner_user_id, project.company_id);
       }
     }
     console.log(`[Job] Notified ${dueTomorrowProjects.length} projects due tomorrow`);
@@ -96,13 +127,23 @@ export async function checkProjectDeadlines() {
 
   if (warningProjects) {
     for (const project of warningProjects) {
+       // Verificar se já notificamos hoje
+      const { count } = await supabaseAdmin
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .eq('type', 'PROJECT_DEADLINE_WARNING')
+        .gte('created_at', today.toISOString().split('T')[0]);
+
+      if (count && count > 0) continue;
+
       const usersToNotify = [
         project.owner_user_id,
         ...(project.assigned_users || [])
       ].filter((v, i, a) => a.indexOf(v) === i);
 
       for (const userId of usersToNotify) {
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId,
           companyId: project.company_id,
           type: 'PROJECT_DEADLINE_WARNING',
@@ -110,12 +151,17 @@ export async function checkProjectDeadlines() {
           message: `O projeto "${project.title}" vence em 3 dias (${formatDate(project.estimated_end_date)}).`,
           actionUrl: `/projects/${project.id}`,
           projectId: project.id,
-          metadata: {
+          data: {
             project_title: project.title,
             deadline: project.estimated_end_date,
             days_remaining: 3,
           },
         });
+      }
+
+      // Disparar Trigger de Automação (Flow Builder) para o dono do projeto
+      if (project.owner_user_id) {
+        await notifyProjectWarning(project.id, project.title, project.owner_user_id, project.company_id, 3);
       }
     }
     console.log(`[Job] Notified ${warningProjects.length} projects with 3-day warning`);
@@ -130,6 +176,16 @@ export async function checkProjectDeadlines() {
 
   if (overdueProjects) {
     for (const project of overdueProjects) {
+      // Verificar se já notificamos hoje
+      const { count } = await supabaseAdmin
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .eq('type', 'PROJECT_OVERDUE')
+        .gte('created_at', today.toISOString().split('T')[0]);
+
+      if (count && count > 0) continue;
+
       const usersToNotify = [
         project.owner_user_id,
         ...(project.assigned_users || [])
@@ -140,20 +196,25 @@ export async function checkProjectDeadlines() {
       );
 
       for (const userId of usersToNotify) {
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId,
           companyId: project.company_id,
           type: 'PROJECT_OVERDUE',
           title: '🚨 Projeto Atrasado!',
-          message: `O projeto "${project.title}" está atrasado há ${daysOverdue} dia(s). Prazo era ${formatDate(project.estimated_end_date)}.`,
+          message: `O projeto "${project.title}" está atrasada há ${daysOverdue} dia(s). Prazo era ${formatDate(project.estimated_end_date)}.`,
           actionUrl: `/projects/${project.id}`,
           projectId: project.id,
-          metadata: {
+          data: {
             project_title: project.title,
             deadline: project.estimated_end_date,
             days_overdue: daysOverdue,
           },
         });
+      }
+
+      // Disparar Trigger de Automação (Flow Builder) para o dono do projeto
+      if (project.owner_user_id) {
+        await notifyProjectOverdue(project.id, project.title, project.owner_user_id, project.company_id);
       }
     }
     console.log(`[Job] Notified ${overdueProjects.length} overdue projects`);
@@ -199,8 +260,18 @@ export async function checkTaskDeadlines() {
   if (dueTodayTasks) {
     for (const task of dueTodayTasks) {
       if (task.assigned_to) {
+        // Verificar se já notificamos hoje
+        const { count } = await supabaseAdmin
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('task_id', task.id)
+          .eq('type', 'TASK_DUE_TODAY')
+          .gte('created_at', today.toISOString().split('T')[0]);
+
+        if (count && count > 0) continue;
+
         const project = task.projects as any;
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId: task.assigned_to,
           companyId: project.company_id,
           type: 'TASK_DUE_TODAY',
@@ -209,12 +280,15 @@ export async function checkTaskDeadlines() {
           actionUrl: `/projects/${task.project_id}?tab=tasks`,
           projectId: task.project_id,
           taskId: task.id,
-          metadata: {
+          data: {
             task_title: task.title,
             project_title: project.title,
             due_date: task.due_date,
           },
         });
+
+        // Disparar Trigger de Automação (Flow Builder)
+        await notifyTaskDueToday(task.id, task.title, task.assigned_to, project.company_id, 'PROJECT_TASK');
       }
     }
     console.log(`[Job] Notified ${dueTodayTasks.length} tasks due today`);
@@ -241,8 +315,18 @@ export async function checkTaskDeadlines() {
   if (dueTomorrowTasks) {
     for (const task of dueTomorrowTasks) {
       if (task.assigned_to) {
+        // Verificar se já notificamos hoje
+        const { count } = await supabaseAdmin
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('task_id', task.id)
+          .eq('type', 'TASK_DUE_TOMORROW')
+          .gte('created_at', today.toISOString().split('T')[0]);
+
+        if (count && count > 0) continue;
+
         const project = task.projects as any;
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId: task.assigned_to,
           companyId: project.company_id,
           type: 'TASK_DUE_TOMORROW',
@@ -251,12 +335,15 @@ export async function checkTaskDeadlines() {
           actionUrl: `/projects/${task.project_id}?tab=tasks`,
           projectId: task.project_id,
           taskId: task.id,
-          metadata: {
+          data: {
             task_title: task.title,
             project_title: project.title,
             due_date: task.due_date,
           },
         });
+
+        // Disparar Trigger de Automação (Flow Builder)
+        await notifyTaskDueTomorrow(task.id, task.title, task.assigned_to, project.company_id, 'PROJECT_TASK');
       }
     }
     console.log(`[Job] Notified ${dueTomorrowTasks.length} tasks due tomorrow`);
@@ -282,12 +369,22 @@ export async function checkTaskDeadlines() {
   if (overdueTasks) {
     for (const task of overdueTasks) {
       if (task.assigned_to) {
+        // Verificar se já notificamos hoje
+        const { count } = await supabaseAdmin
+          .from('notifications')
+          .select('*', { count: 'exact', head: true })
+          .eq('task_id', task.id)
+          .eq('type', 'TASK_OVERDUE')
+          .gte('created_at', today.toISOString().split('T')[0]);
+
+        if (count && count > 0) continue;
+
         const project = task.projects as any;
         const daysOverdue = Math.floor(
           (today.getTime() - new Date(task.due_date).getTime()) / (1000 * 60 * 60 * 24)
         );
 
-        await createMultiChannelNotification({
+        await NotificationService.create({
           userId: task.assigned_to,
           companyId: project.company_id,
           type: 'TASK_OVERDUE',
@@ -296,13 +393,16 @@ export async function checkTaskDeadlines() {
           actionUrl: `/projects/${task.project_id}?tab=tasks`,
           projectId: task.project_id,
           taskId: task.id,
-          metadata: {
+          data: {
             task_title: task.title,
             project_title: project.title,
             due_date: task.due_date,
             days_overdue: daysOverdue,
           },
         });
+
+        // Disparar Trigger de Automação (Flow Builder)
+        await notifyTaskOverdue(task.id, task.title, task.assigned_to, project.company_id, 'PROJECT_TASK');
       }
     }
     console.log(`[Job] Notified ${overdueTasks.length} overdue tasks`);

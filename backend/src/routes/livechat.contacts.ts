@@ -4,6 +4,7 @@ import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import { logger } from "../lib/logger.js";
 import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.ts";
+import { NotificationService } from "../services/NotificationService.ts";
 
 export function registerLivechatContactsRoutes(app: express.Application) {
   // List contacts of current user's company
@@ -274,6 +275,22 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
          .select("id")
          .single();
        if (error) throw error;
+
+       // 🔔 Notificar novo cliente cadastrado
+       try {
+         await NotificationService.create({
+           title: "👤 Novo Cliente Cadastrado",
+           message: `${body.name}${body.phone ? ` - ${body.phone}` : ""}`,
+           type: "NEW_CUSTOMER",
+           userId: authUserId,
+           companyId: (urow as any).company_id,
+           data: { contactId: (data as any).id },
+           actionUrl: `/livechat/contacts/${(data as any).id}`,
+         });
+       } catch (notifErr) {
+         logger.warn("[contacts:create] notification failed", { error: (notifErr as any).message });
+       }
+
        return res.status(201).json({ id: (data as any).id });
      } catch (e) {
        // fallback legacy table with column mapping
@@ -297,6 +314,22 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
            .select("id")
            .single();
          if (error) throw error;
+
+         // 🔔 Notificar novo cliente cadastrado (legacy)
+         try {
+           await NotificationService.create({
+             title: "👤 Novo Cliente Cadastrado",
+             message: `${body.name}${body.phone ? ` - ${body.phone}` : ""}`,
+             type: "NEW_CUSTOMER",
+             userId: authUserId,
+             companyId: (urow as any).company_id,
+             data: { contactId: (data as any).id },
+             actionUrl: `/livechat/contacts/${(data as any).id}`,
+           });
+         } catch (notifErr) {
+           logger.warn("[contacts:create:legacy] notification failed", { error: (notifErr as any).message });
+         }
+
          return res.status(201).json({ id: (data as any).id });
        } catch (err: any) {
          logger.error("[contacts:create] fatal", { error: err.message });

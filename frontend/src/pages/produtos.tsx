@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { FaEdit, FaTrash, FaEye } from "react-icons/fa";
+import { ImageIcon } from "lucide-react";
 import { useCompany } from "../hooks/useCompany";
 import { getCatalogConfig, getFieldLabel, isFieldVisible, isFieldRequired } from "../config/catalog-config";
 import { Product, ProductForm, ItemType } from "./produtos/types";
@@ -77,6 +78,7 @@ export function ProdutosPage() {
   const [loading, setLoading] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total: 0, active: 0, totalValue: 0, categoriesCount: 0 });
   const [fileName, setFileName] = useState<string | null>(null);
   const [importCount, setImportCount] = useState<number | null>(null);
   const [page, setPageNum] = useState(1);
@@ -131,28 +133,28 @@ export function ProdutosPage() {
     {
       key: "total",
       title: `Total de ${config.labels.itemNamePlural}`,
-      primary: total,
+      primary: stats.total,
       secondary: "Itens cadastrados",
       accent: "bg-emerald-500/20",
     },
     {
       key: "active",
       title: "Em Estoque / Ativos",
-      primary: products.filter((p) => p.status !== "Esgotado" && p.status !== "Inativo").length,
+      primary: stats.active,
       secondary: "Disponíveis para venda",
       accent: "bg-blue-500/20",
     },
     {
       key: "value",
       title: "Valor em Catálogo",
-      primary: (products.reduce((acc, p) => acc + (Number(p.sale_price) || 0), 0)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
+      primary: stats.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }),
       secondary: "Soma dos preços de venda",
       accent: "bg-purple-500/20",
     },
     {
       key: "types",
       title: "Categorias",
-      primary: new Set(products.map((p) => p.grouping).filter(Boolean)).size,
+      primary: stats.categoriesCount,
       secondary: "Grupos distintos",
       accent: "bg-amber-500/20",
     },
@@ -178,14 +180,23 @@ export function ProdutosPage() {
   const loadProducts = async () => {
     setLoading(true);
     try {
+      // Carregar estatísticas em paralelo
+      const statsPromise = fetchJson<typeof stats>(`${API}/api/products/stats`);
+      
       const params = new URLSearchParams();
       params.set("limit", String(pageSize));
       params.set("offset", String((page - 1) * pageSize));
       if (query.trim()) params.set("q", query.trim());
       if (statusFilter && statusFilter !== "all") params.set("status", statusFilter);
-      const resp = await fetchJson<{ items: Product[]; total: number }>(`${API}/api/products?${params.toString()}`);
+      
+      const [resp, statsResp] = await Promise.all([
+        fetchJson<{ items: Product[]; total: number }>(`${API}/api/products?${params.toString()}`),
+        statsPromise.catch(() => stats) // Fallback se falhar
+      ]);
+      
       setProducts(resp.items || []);
       setTotal(resp.total || 0);
+      setStats(statsResp);
     } catch (e: any) {
       if (e?.message === "Unauthorized") {
         navigate("/login");
@@ -430,6 +441,7 @@ export function ProdutosPage() {
                           >
                             {config.tableColumns.map((col) => {
                               const isNameColumn = col === "name";
+                              const isImageColumn = col === "image_url";
                               const isDescription = col === "description" || col === "specs";
                               const value = formatFieldValue(product, col);
                               return (
@@ -438,12 +450,24 @@ export function ProdutosPage() {
                                   className={`px-4 py-3 align-top ${
                                     isNameColumn
                                       ? "max-w-[360px]"
+                                      : isImageColumn
+                                      ? "w-16"
                                       : isDescription
                                       ? "max-w-[520px]"
                                       : "max-w-[220px]"
                                   }`}
                                 >
-                                  {isNameColumn ? (
+                                  {isImageColumn ? (
+                                    <div className="w-10 h-10 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center shadow-sm">
+                                      {product.images && product.images.length > 0 ? (
+                                        <img src={product.images[0]} alt="" className="w-full h-full object-cover" />
+                                      ) : product.image_url ? (
+                                        <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+                                      ) : (
+                                        <ImageIcon className="w-4 h-4 text-slate-400" />
+                                      )}
+                                    </div>
+                                  ) : isNameColumn ? (
                                     <span className="block truncate font-semibold text-(--color-text)" title={product.name}>
                                       {product.name}
                                     </span>

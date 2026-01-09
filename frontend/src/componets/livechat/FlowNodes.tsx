@@ -4,10 +4,89 @@ import {
   FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, 
   FiSettings, FiChevronDown, FiChevronUp, FiTrash2,
   FiFileText, FiImage, FiVideo, FiInbox, FiPlus, FiList, FiLink, FiPhone, FiMessageCircle, FiX,
-  FiUser, FiActivity, FiMic, FiFilter
+  FiUser, FiActivity, FiMic, FiFilter, FiBell, FiHelpCircle
 } from 'react-icons/fi';
 import MediaLibraryModal from './MediaLibraryModal';
 import AudioRecorderModal from './AudioRecorderModal';
+
+export const AVAILABLE_VARIABLES = [
+  { 
+    group: 'Tarefa', 
+    variables: [
+      { label: 'Título da Tarefa', value: '{{task_title}}', description: 'O nome da tarefa que disparou o evento' },
+      { label: 'Status da Tarefa', value: '{{task_status}}', description: 'Status atual (ex: PENDING, DONE)' },
+      { label: 'Prioridade', value: '{{task_priority}}', description: 'Nível de prioridade da tarefa' },
+      { label: 'Data de Entrega', value: '{{task_due_date}}', description: 'Prazo final da tarefa' },
+      { label: 'Nome do Responsável', value: '{{responsible_name}}', description: 'Nome do usuário atribuído à tarefa' },
+      { label: 'WhatsApp do Responsável', value: '{{responsible_phone}}', description: 'Número do WhatsApp do responsável' },
+    ]
+  },
+  { 
+    group: 'Projeto', 
+    variables: [
+      { label: 'Nome do Projeto', value: '{{project_title}}', description: 'Nome do projeto da tarefa' },
+      { label: 'Status do Projeto', value: '{{project_status}}', description: 'Status atual do projeto' },
+      { label: 'Número do Projeto', value: '{{project_number}}', description: 'Identificador único do projeto' },
+      { label: 'Nome do Cliente', value: '{{customer_name}}', description: 'Nome do cliente vinculado ao projeto/tarefa' },
+      { label: 'WhatsApp do Cliente', value: '{{customer_phone}}', description: 'WhatsApp do cliente vinculado' },
+    ]
+  },
+  { 
+    group: 'Contato', 
+    variables: [
+      { label: 'Nome do Contato', value: '{{name}}', description: 'Nome do cliente atendido no chat' },
+      { label: 'WhatsApp do Contato', value: '{{phone}}', description: 'WhatsApp do cliente atendido no chat' },
+    ]
+  },
+  { 
+    group: 'Sistema', 
+    variables: [
+      { label: 'Última Resposta', value: '{{last_response}}', description: 'Texto da última resposta recebida ou botão clicado' },
+      { label: 'Criador', value: '{{created_by_name}}', description: 'Nome de quem criou a tarefa/projeto' },
+    ]
+  }
+];
+
+export const VariableGuide = ({ side = 'right', categories }: { side?: 'right' | 'left', categories?: ('Tarefa' | 'Projeto' | 'Contato' | 'Sistema')[] }) => {
+  const filtered = AVAILABLE_VARIABLES.filter(group => !categories || categories.includes(group.group as any));
+  
+  return (
+    <div className={`absolute ${side === 'right' ? 'left-full ml-4' : 'right-full mr-4'} top-0 w-64 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur shadow-2xl border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 z-[100] animate-in fade-in slide-in-from-left-2 duration-200 opacity-0 group-hover/node:opacity-100 hover:!opacity-100 transition-opacity pointer-events-auto`}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="w-6 h-6 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-lg flex items-center justify-center">
+          <FiHelpCircle size={14} />
+        </div>
+        <span className="text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider">Variáveis</span>
+      </div>
+      
+      <div className="space-y-4">
+        {filtered.map(group => (
+          <div key={group.group} className="space-y-2">
+            <p className="text-[10px] text-gray-400 font-bold uppercase border-b border-gray-100 dark:border-gray-800 pb-1">{group.group}</p>
+            <div className="grid grid-cols-1 gap-2">
+              {group.variables.map(v => (
+                <div key={v.value} 
+                  className="flex flex-col group cursor-copy p-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                  title="Clique para copiar"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigator.clipboard.writeText(v.value);
+                  }}
+                >
+                  <code className="text-[10px] text-blue-600 dark:text-blue-400 font-mono font-bold">{v.value}</code>
+                  <span className="text-[9px] text-gray-500 dark:text-gray-400 leading-tight">{v.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
+        <p className="text-[9px] text-gray-400 italic text-center">Clique na variável para copiar.</p>
+      </div>
+    </div>
+  );
+};
 
 export interface FlowNodeData {
   label?: string;
@@ -31,10 +110,13 @@ export interface FlowNodeData {
   variable?: string;
   value?: string;
   field?: string;
+  target?: 'RESPONSIBLE' | 'ENTITY_CUSTOMER' | 'FLOW_CONTACT' | 'CUSTOM';
+  custom_phone?: string;
   cases?: string[];
   timeoutMinutes?: number;
   trigger_config?: {
     type: string;
+    event?: string;
     message_types?: string[];
     inbox_id?: string;
     column_id?: string;
@@ -120,7 +202,8 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
     'STAGE_CHANGE': 'Mudança de Estágio',
     'TAG_ADDED': 'Etiqueta Adicionada',
     'LEAD_CREATED': 'Novo Lead',
-    'NEW_MESSAGE': 'Nova Mensagem'
+    'NEW_MESSAGE': 'Nova Mensagem',
+    'SYSTEM_EVENT': 'Evento de Sistema'
   };
 
   const config = nodeData.trigger_config || { type: 'MANUAL' };
@@ -203,6 +286,32 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
                     {(nodeData.inboxes || []).map((i: any) => (
                       <option key={i.id} value={String(i.id)}>{i.name}</option>
                     ))}
+                  </select>
+                </div>
+              )}
+
+              {config.type === 'SYSTEM_EVENT' && (
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase">Evento de Sistema</label>
+                  <select 
+                    className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                    value={config.event || ''}
+                    onChange={(e) => nodeData.onChange({ trigger_config: { ...config, event: e.target.value } })}
+                  >
+                    <option value="">Todos</option>
+                    <option value="TASK_CREATED">Tarefa Criada</option>
+                    <option value="TASK_ASSIGNED">Tarefa Atribuída</option>
+                    <option value="TASK_COMPLETED">Tarefa Concluída</option>
+                    <option value="TASK_DUE_TODAY">Tarefa Vencendo Hoje</option>
+                    <option value="TASK_DUE_TOMORROW">Tarefa Vence Amanhã</option>
+                    <option value="TASK_OVERDUE">Tarefa Atrasada</option>
+                    <option value="PROJECT_CREATED">Projeto Criado</option>
+                    <option value="PROJECT_ASSIGNED">Projeto Atribuído</option>
+                    <option value="PROJECT_STAGE_CHANGED">Estágio do Projeto Alterado</option>
+                    <option value="PROJECT_DEADLINE_TODAY">Projeto Vencendo Hoje</option>
+                    <option value="PROJECT_DEADLINE_TOMORROW">Projeto Vence Amanhã</option>
+                    <option value="PROJECT_DEADLINE_WARNING">Projeto - Aviso de Prazo (3 dias)</option>
+                    <option value="PROJECT_OVERDUE">Projeto Atrasado</option>
                   </select>
                 </div>
               )}
@@ -309,8 +418,11 @@ export const MessageNode = memo(({ data, selected }: NodeProps) => {
   const [recorderOpen, setRecorderOpen] = useState(false);
   
   return (
-    <div className="relative">
+    <div className="relative group/node">
       <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-blue-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
+
       <NodeWrapper 
         title="Enviar Mensagem" 
         icon={FiMessageSquare} 
@@ -448,8 +560,11 @@ export const InteractiveNode = memo(({ data, selected }: NodeProps) => {
   };
 
   return (
-    <div className="relative">
+    <div className="relative group/node">
       <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-indigo-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
+
       <NodeWrapper 
         title="Interativo (Meta)" 
         icon={FiList} 
@@ -738,8 +853,11 @@ export const ConditionNode = memo(({ data, selected }: NodeProps) => {
   const tagName = nodeData.tags?.find((t: any) => String(t.id) === String(nodeData.tag_id))?.name || '...';
 
   return (
-    <div className="relative">
+    <div className="relative group/node">
       <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-red-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
+
       <NodeWrapper 
         title="Condição" 
         icon={FiZap} 
@@ -1056,8 +1174,11 @@ export const SwitchNode = memo(({ data, selected }: NodeProps) => {
   };
 
   return (
-    <div className="relative">
+    <div className="relative group/node">
       <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-indigo-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
+
       <NodeWrapper 
         title="Switch / Case" 
         icon={FiList} 
@@ -1135,8 +1256,11 @@ export const WaitForResponseNode = memo(({ data, selected }: NodeProps) => {
   const [showSettings, setShowSettings] = useState(false);
   
   return (
-    <div className="relative">
+    <div className="relative group/node">
       <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-orange-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Contato', 'Sistema']} />}
+
       <NodeWrapper 
         title="Aguardar Resposta" 
         icon={FiClock} 
@@ -1196,6 +1320,230 @@ export const WaitForResponseNode = memo(({ data, selected }: NodeProps) => {
         />
         <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-[9px] text-red-600 font-bold uppercase">Timeout</div>
       </div>
+    </div>
+  );
+});
+
+export const ExternalNotifyNode = memo(({ data, selected }: NodeProps) => {
+  const nodeData = data as unknown as FlowNodeData;
+  const [showSettings, setShowSettings] = useState(false);
+  
+  const targets = {
+    'RESPONSIBLE': 'Responsável pela Tarefa',
+    'ENTITY_CUSTOMER': 'Cliente da Tarefa/Projeto',
+    'FLOW_CONTACT': 'Contato do Fluxo (Cliente)',
+    'CUSTOM': 'Número Personalizado'
+  };
+
+  const handleAddButton = () => {
+    const buttons = nodeData.buttons || [];
+    if (buttons.length >= 3) return;
+    nodeData.onChange({ buttons: [...buttons, { type: 'QUICK_REPLY', text: 'Novo Botão' }] });
+  };
+
+  const selectedInbox = nodeData.inboxes?.find((i: any) => String(i.id) === String(nodeData.inbox_id));
+  const provider = selectedInbox?.provider?.toUpperCase();
+  const isMeta = (provider === 'META' || provider === 'META_CLOUD');
+
+  return (
+    <div className="relative group/node">
+      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-blue-600 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Sistema', 'Contato']} />}
+
+      <NodeWrapper 
+        title="Notificar Externo" 
+        icon={FiBell} 
+        color="bg-blue-600" 
+        selected={selected}
+        showSettings={showSettings}
+        onToggleSettings={() => setShowSettings(!showSettings)}
+        data={{
+          ...nodeData,
+          renderSettings: () => (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Destinatário</label>
+                <select 
+                  className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                  value={nodeData.target || 'RESPONSIBLE'}
+                  onChange={(e) => nodeData.onChange({ target: e.target.value as any })}
+                >
+                  {Object.entries(targets).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {nodeData.target === 'CUSTOM' && (
+                <div>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase">Número (Ex: 5569999...)</label>
+                  <input 
+                    type="text"
+                    className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                    value={nodeData.custom_phone || ''}
+                    onChange={(e) => nodeData.onChange({ custom_phone: e.target.value })}
+                    placeholder="{{custom_variable}} ou número"
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                <label className="text-[10px] font-bold text-blue-600 uppercase">Canal de Saída (Inbox)</label>
+                <select 
+                  className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md focus:ring-1 focus:ring-blue-500"
+                  value={nodeData.inbox_id || ''}
+                  onChange={(e) => nodeData.onChange({ inbox_id: e.target.value })}
+                >
+                  <option value="">Selecione a Inbox...</option>
+                  {(nodeData.inboxes || []).map((i: any) => (
+                    <option key={i.id} value={String(i.id)}>{i.name} ({i.provider})</option>
+                  ))}
+                </select>
+                {!isMeta && nodeData.inbox_id && (
+                  <p className="text-[9px] text-amber-600 mt-1 italic">
+                    * Provedor {provider}: Botões serão convertidos em texto numerado.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Mensagem</label>
+                <textarea 
+                  className="w-full mt-1 p-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                  rows={3}
+                  value={nodeData.text || ''}
+                  onChange={(e) => nodeData.onChange({ text: e.target.value })}
+                  placeholder="Use {{task_title}}, {{responsible_name}}..."
+                />
+              </div>
+
+              {/* Botões Interativos */}
+              <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase">Botões (Opcional - Máx 3)</label>
+                  <button 
+                    onClick={handleAddButton}
+                    disabled={(nodeData.buttons || []).length >= 3}
+                    className="text-blue-500 hover:text-blue-600 disabled:text-gray-300"
+                  >
+                    <FiPlus size={14} />
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {(nodeData.buttons || []).map((btn: any, index: number) => (
+                    <div key={index} className="flex gap-1 items-center bg-gray-50 dark:bg-gray-800/50 p-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                      <input 
+                        type="text"
+                        className="flex-1 bg-transparent text-[10px] focus:outline-none"
+                        value={btn.text}
+                        onChange={(e) => {
+                          const newButtons = [...nodeData.buttons];
+                          newButtons[index].text = e.target.value;
+                          nodeData.onChange({ buttons: newButtons });
+                        }}
+                      />
+                      <button 
+                        onClick={() => {
+                          const newButtons = nodeData.buttons.filter((_: any, i: number) => i !== index);
+                          nodeData.onChange({ buttons: newButtons });
+                        }}
+                        className="text-red-500 hover:bg-red-50 p-1 rounded transition-colors"
+                      >
+                        <FiTrash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Aguardar Resposta */}
+              <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox"
+                    id="wait_external"
+                    checked={nodeData.wait_for_response || false}
+                    onChange={(e) => nodeData.onChange({ wait_for_response: e.target.checked })}
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="wait_external" className="text-[10px] font-bold text-gray-600 dark:text-gray-400 cursor-pointer">
+                    AGUARDAR RESPOSTA DO DESTINATÁRIO
+                  </label>
+                </div>
+                
+                {nodeData.wait_for_response && (
+                  <div>
+                    <label className="text-[9px] font-bold text-gray-400 uppercase">Tempo Limite (Minutos)</label>
+                    <input 
+                      type="number"
+                      className="w-full mt-1 p-1 text-[10px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded"
+                      value={nodeData.timeoutMinutes || 60}
+                      onChange={(e) => nodeData.onChange({ timeoutMinutes: parseInt(e.target.value) })}
+                    />
+                    <p className="text-[8px] text-gray-500 mt-1 italic">
+                      O fluxo ficará parado neste nó até que o destinatário responda ou o tempo acabe.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        }}
+      >
+        <div className="space-y-1.5">
+          <div className="text-[10px] text-gray-500">
+            Destino: <span className="font-bold text-blue-600">{targets[nodeData.target || 'RESPONSIBLE']}</span>
+          </div>
+          {nodeData.inbox_id && (
+            <div className="text-[9px] text-gray-400 flex items-center gap-1">
+              <FiInbox size={10} /> {selectedInbox?.name}
+            </div>
+          )}
+          <div className="text-[10px] text-gray-600 dark:text-gray-400 italic line-clamp-1 border-t border-gray-50 pt-1 mt-1">
+            {nodeData.text || 'Sem mensagem...'}
+          </div>
+          {(nodeData.buttons || []).length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {nodeData.buttons.map((b: any, i: number) => (
+                <span key={i} className="text-[8px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-1 rounded border border-blue-100 dark:border-blue-800">
+                  {b.text}
+                </span>
+              ))}
+            </div>
+          )}
+          {nodeData.wait_for_response && (
+            <div className="mt-1 flex items-center gap-1 text-[8px] text-amber-600 dark:text-amber-500 font-bold uppercase border-t border-amber-100 dark:border-amber-900/40 pt-1">
+              <FiClock size={10} /> Aguardando {nodeData.timeoutMinutes || 60}m
+            </div>
+          )}
+        </div>
+      </NodeWrapper>
+
+      {!nodeData.wait_for_response ? (
+        <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-blue-600 border-2 border-gray-200 dark:border-[#0f172a]" />
+      ) : (
+        <div className="flex justify-between px-3 -mt-3">
+          <div className="relative">
+            <Handle 
+              type="source" 
+              position={Position.Bottom} 
+              id="response"
+              className="!w-3 !h-3 !bg-green-500 border-2 border-gray-200 dark:border-[#0f172a]" 
+            />
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-[9px] text-green-600 font-bold uppercase">Resposta</div>
+          </div>
+          <div className="relative">
+            <Handle 
+              type="source" 
+              position={Position.Bottom} 
+              id="timeout"
+              className="!w-3 !h-3 !bg-red-500 border-2 border-gray-200 dark:border-[#0f172a]" 
+            />
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 text-[9px] text-red-600 font-bold uppercase">Timeout</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

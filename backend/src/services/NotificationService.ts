@@ -17,22 +17,37 @@ export type NotificationType =
   | "CHAT_TRANSFERRED"
   | "CHAT_CLOSED"
   | "LEAD_CONVERTED"
+  | "NEW_CUSTOMER"
+  | "TASK_CREATED"
   | "TASK_ASSIGNED"
+  | "TASK_DUE_TODAY"
+  | "TASK_DUE_TOMORROW"
   | "TASK_DUE_SOON"
   | "TASK_OVERDUE"
+  | "TASK_COMPLETED"
   | "CAMPAIGN_COMPLETED"
   | "CAMPAIGN_FAILED"
   | "MENTION"
   | "TEAM_INVITE"
   | "PAYMENT_RECEIVED"
   | "PAYMENT_OVERDUE"
-  | "USER_MESSAGE";
+  | "USER_MESSAGE"
+  | "PROJECT_CREATED"
+  | "PROJECT_ASSIGNED"
+  | "PROJECT_STAGE_CHANGED"
+  | "PROJECT_COMPLETED"
+  | "PROJECT_COMMENTED"
+  | "PROJECT_OVERDUE"
+  | "PROJECT_DEADLINE_TODAY"
+  | "PROJECT_DEADLINE_TOMORROW"
+  | "PROJECT_DEADLINE_WARNING"
+  | "SYSTEM_ALERT";
 
 export type NotificationPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export type SoundType = "default" | "success" | "warning" | "error" | "message" | "urgent" | "silent";
 
-export type NotificationCategory = "chat" | "lead" | "proposal" | "task" | "campaign" | "system" | "payment" | "general";
+export type NotificationCategory = "chat" | "lead" | "proposal" | "task" | "campaign" | "system" | "payment" | "general" | "project";
 
 interface CreateNotificationInput {
   title: string;
@@ -45,6 +60,9 @@ interface CreateNotificationInput {
   soundType?: SoundType;
   actionUrl?: string;
   category?: NotificationCategory;
+  projectId?: string;
+  taskId?: string;
+  commentId?: string;
 }
 
 interface NotificationConfig {
@@ -64,6 +82,7 @@ const NOTIFICATION_CONFIG: Record<NotificationType, NotificationConfig> = {
   // Leads
   NEW_LEAD: { priority: "HIGH", soundType: "success", category: "lead" },
   LEAD_CONVERTED: { priority: "NORMAL", soundType: "success", category: "lead" },
+  NEW_CUSTOMER: { priority: "HIGH", soundType: "success", category: "lead" },
   
   // Propostas
   PROPOSAL_VIEWED: { priority: "NORMAL", soundType: "default", category: "proposal" },
@@ -72,9 +91,13 @@ const NOTIFICATION_CONFIG: Record<NotificationType, NotificationConfig> = {
   PROPOSAL_EXPIRED: { priority: "LOW", soundType: "warning", category: "proposal" },
   
   // Tarefas
+  TASK_CREATED: { priority: "NORMAL", soundType: "default", category: "task" },
   TASK_ASSIGNED: { priority: "NORMAL", soundType: "default", category: "task" },
+  TASK_DUE_TODAY: { priority: "HIGH", soundType: "warning", category: "task" },
   TASK_DUE_SOON: { priority: "HIGH", soundType: "warning", category: "task" },
   TASK_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "task" },
+  TASK_COMPLETED: { priority: "NORMAL", soundType: "success", category: "task" },
+  TASK_DUE_TOMORROW: { priority: "NORMAL", soundType: "warning", category: "task" },
   
   // Campanhas
   MASS_DISPATCH: { priority: "NORMAL", soundType: "success", category: "campaign" },
@@ -94,6 +117,17 @@ const NOTIFICATION_CONFIG: Record<NotificationType, NotificationConfig> = {
   // Financeiro
   PAYMENT_RECEIVED: { priority: "HIGH", soundType: "success", category: "payment" },
   PAYMENT_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "payment" },
+
+  // Projetos
+  PROJECT_CREATED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_ASSIGNED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_STAGE_CHANGED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_COMPLETED: { priority: "HIGH", soundType: "success", category: "project" },
+  PROJECT_COMMENTED: { priority: "NORMAL", soundType: "message", category: "project" },
+  PROJECT_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "project" },
+  PROJECT_DEADLINE_TODAY: { priority: "HIGH", soundType: "warning", category: "project" },
+  PROJECT_DEADLINE_TOMORROW: { priority: "NORMAL", soundType: "warning", category: "project" },
+  PROJECT_DEADLINE_WARNING: { priority: "NORMAL", soundType: "warning", category: "project" },
 };
 
 export class NotificationService {
@@ -111,6 +145,10 @@ export class NotificationService {
     try {
       const config = NOTIFICATION_CONFIG[input.type];
       
+      // Heurística para evitar erros de FK: task_id em notificações geralmente aponta para project_tasks.
+      // Tarefas gerais (tabela 'tasks') não devem ser inseridas na coluna task_id se houver essa restrição.
+      const isProjectTask = !!input.projectId;
+
       const { data: notification, error } = await supabaseAdmin
         .from("notifications")
         .insert({
@@ -120,10 +158,17 @@ export class NotificationService {
           priority: input.priority || config.priority,
           user_id: input.userId,
           company_id: input.companyId,
-          data: input.data || null,
+          data: {
+            ...(input.data || {}),
+            taskId: input.taskId,
+            projectId: input.projectId
+          },
           sound_type: input.soundType || config.soundType,
           action_url: input.actionUrl || null,
           category: input.category || config.category,
+          project_id: input.projectId || null,
+          task_id: isProjectTask ? (input.taskId || null) : null,
+          comment_id: input.commentId || null,
         })
         .select()
         .single();
@@ -137,13 +182,25 @@ export class NotificationService {
       if (hasIO()) {
         try {
           const io = getIO();
+          
+          // 1. Enviar para o usuário específico
           const room = `user:${input.userId}`;
           console.log(`[NotificationService] 📡 Emitting socket event to room: ${room}`);
-          
           io.to(room).emit("notification", {
             ...notification,
             isNew: true,
           });
+
+          // 2. Se for um evento global da empresa (Leads, Clientes), enviar para a sala da empresa
+          const globalTypes: NotificationType[] = ["NEW_LEAD", "NEW_CUSTOMER", "LEAD_CONVERTED", "SYSTEM_ALERT"];
+          if (globalTypes.includes(input.type)) {
+            const companyRoom = `company:${input.companyId}`;
+            console.log(`[NotificationService] 🏢 Emitting global notification to company room: ${companyRoom}`);
+            io.to(companyRoom).emit("notification", {
+              ...notification,
+              isNew: true,
+            });
+          }
         } catch (socketError) {
           console.warn("[NotificationService] ⚠️ Failed to emit socket event (IO error):", socketError);
         }

@@ -8,6 +8,8 @@ export type Product = {
   sku?: string | null;
   unit?: string | null;
   item_type?: ItemType;
+  image_url?: string | null;
+  images?: string[] | null;
   cost_price?: number | null;
   sale_price?: number | null;
   duration_minutes?: number | null;

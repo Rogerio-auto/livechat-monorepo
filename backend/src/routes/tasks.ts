@@ -2,6 +2,11 @@ import express from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getIO } from "../lib/io.js";
 import {
+  notifyTaskAssigned,
+  notifyTaskCreated,
+  notifyTaskCompleted
+} from "../services/notification-triggers.service.js";
+import {
   createTask,
   updateTask,
   deleteTask,
@@ -57,6 +62,18 @@ export function registerTaskRoutes(app: express.Application) {
 
       const task = await createTask(input);
 
+      // Disparar gatilhos de fluxo e notificações
+      try {
+        await notifyTaskCreated(
+          task.id,
+          task.title,
+          task.created_by,
+          companyId
+        );
+      } catch (triggerErr) {
+        console.error("[tasks] Error firing notifyTaskCreated:", triggerErr);
+      }
+
       // Emitir evento Socket.io
       io.to(`company:${companyId}`).emit("task:created", {
         task,
@@ -71,6 +88,20 @@ export function registerTaskRoutes(app: express.Application) {
           task,
           companyId,
         });
+
+        // 🔔 Enviar notificação persistente e multi-canal via Trigger Service
+        try {
+          await notifyTaskAssigned(
+            task.id,
+            task.title,
+            task.project_id || '', // Se houver projeto
+            task.project_title || 'Sem Projeto',
+            task.assigned_to,
+            companyId
+          );
+        } catch (notifErr) {
+          console.error("[tasks] Error sending assignment notifications via trigger:", notifErr);
+        }
       }
 
       return res.status(201).json(task);
@@ -201,6 +232,22 @@ export function registerTaskRoutes(app: express.Application) {
 
       const task = await updateTask(id, companyId, input);
 
+      // Gatilho para tarefa concluída
+      if (input.status === 'COMPLETED' && previousTask.status !== 'COMPLETED') {
+        try {
+          await notifyTaskCompleted(
+            task.id,
+            task.title,
+            previousTask.project_id || '',
+            previousTask.project_title || 'Sem Projeto',
+            task.created_by,
+            companyId
+          );
+        } catch (compErr) {
+          console.error("[tasks] Error firing notifyTaskCompleted:", compErr);
+        }
+      }
+
       // Emitir evento Socket.io
       io.to(`company:${companyId}`).emit("task:updated", {
         task,
@@ -215,6 +262,20 @@ export function registerTaskRoutes(app: express.Application) {
           task,
           companyId,
         });
+
+        // 🔔 Enviar notificação persistente via Trigger Service
+        try {
+          await notifyTaskAssigned(
+            task.id,
+            task.title,
+            previousTask.project_id || '',
+            previousTask.project_title || 'Sem Projeto',
+            task.assigned_to!,
+            companyId
+          );
+        } catch (notifErr) {
+          console.error("[tasks] Error sending assignment notifications via trigger:", notifErr);
+        }
       }
 
       // Se foi marcada como completa, emitir evento específico

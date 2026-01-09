@@ -4,27 +4,108 @@ import { EX_APP, publish, publishApp } from "../queue/rabbit.js";
 import { logger } from "../lib/logger.js";
 import { sendInteractiveButtons, sendInteractiveList } from "./meta/graph.ts";
 import { NotificationService } from "./NotificationService.ts";
+import { normalizeMsisdn } from "../util.ts";
+import * as store from "./meta/store.ts";
+
+/**
+ * Replace variables in a string
+ */
+function replaceVariables(text: string, variables: any): string {
+  if (!text) return "";
+  return text.replace(/{{\s*([\w.-]+)\s*}}/g, (match, key) => {
+    return variables[key] !== undefined ? String(variables[key]) : match;
+  });
+}
+
+/**
+ * Get or create a contact ID for a system user (responsible)
+ */
+export async function getContactIdForUser(userId: string, companyId: string): Promise<string | null> {
+  const { data: user } = await supabaseAdmin
+    .from("users")
+    .select("phone, name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (!user || !user.phone) {
+    logger.warn(`[FlowEngine] User ${userId} has no phone number, cannot create contact`);
+    return null;
+  }
+
+  // Find existing customer with this phone
+  const msisdn = normalizeMsisdn(user.phone);
+  const { data: existing } = await supabaseAdmin
+    .from("customers")
+    .select("id")
+    .eq("company_id", companyId)
+    .eq("phone", msisdn)
+    .maybeSingle();
+
+  if (existing) return existing.id;
+
+  // Create new customer
+  const { data: created, error } = await supabaseAdmin
+    .from("customers")
+    .insert({
+      company_id: companyId,
+      phone: msisdn,
+      name: user.name || "Usuário do Sistema",
+      source: "SYSTEM"
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    logger.error("[FlowEngine] Error creating customer for user", error);
+    return null;
+  }
+
+  return created.id;
+}
 
 /**
  * Trigger a flow for a contact based on an event
  */
 export async function triggerFlow(params: {
   companyId: string;
-  contactId: string;
+  contactId: string | null;
   chatId?: string;
-  triggerType: 'STAGE_CHANGE' | 'TAG_ADDED' | 'KEYWORD' | 'LEAD_CREATED' | 'NEW_MESSAGE';
+  triggerType: 'STAGE_CHANGE' | 'TAG_ADDED' | 'KEYWORD' | 'LEAD_CREATED' | 'NEW_MESSAGE' | 'SYSTEM_EVENT' | 'MANUAL';
   triggerData: any;
 }) {
-  const { companyId, contactId, chatId, triggerType, triggerData } = params;
+  let { companyId, contactId, chatId, triggerType, triggerData } = params;
 
-  // 1. Find active flows for this company
+  logger.info(`[FlowEngine] ⚡ Triggering flow: type=${triggerType}, event=${triggerData?.event}, company=${companyId}`);
+
+  // 1. Resolve Rich context for SYSTEM_EVENT
+  if (triggerType === 'SYSTEM_EVENT') {
+    try {
+      const richContext = await resolveRichSystemContext(companyId, triggerData);
+      triggerData = { ...triggerData, ...richContext };
+      
+      // If we don't have a contactId but we have a responsible phone, we might use that as default contact
+      if (!contactId && triggerData.responsible_phone) {
+        // We will resolve/create contact in a moment or within the loop if needed
+        // For now, let's keep it null and handle it per-flow targeting
+      }
+    } catch (err) {
+      logger.error("[FlowEngine] Error resolving rich system context", err);
+    }
+  }
+
+  // 1.1 Find active flows for this company
   const { data: flows, error } = await supabaseAdmin
     .from("automation_flows")
     .select("*")
     .eq("company_id", companyId)
     .eq("status", "ACTIVE");
 
-  if (error || !flows) return;
+  if (error || !flows) {
+    logger.warn(`[FlowEngine] No active flows found for company ${companyId}`);
+    return;
+  }
+
+  logger.info(`[FlowEngine] Found ${flows.length} active flows. Checking filters...`);
 
   // Cache for contact context (tags and stage) to avoid multiple DB calls
   let contactContext: { stageId: string | null, tags: string[] } | null = null;
@@ -54,15 +135,31 @@ export async function triggerFlow(params: {
                          config.message_types.includes(triggerData.type?.toLowerCase());
 
         if (inboxMatch && typeMatch) shouldTrigger = true;
+      } else if (triggerType === 'SYSTEM_EVENT') {
+        // Match specific system event (e.g. TASK_CREATED)
+        if (!config.event || config.event === triggerData.event) {
+          shouldTrigger = true;
+        } else {
+          logger.debug(`[FlowEngine] Flow ${flow.id} event mismatch: expected ${config.event}, got ${triggerData.event}`);
+        }
       }
 
       // Apply additional conditions (Stage and Tags) if any
       if (shouldTrigger) {
+        if (!contactId && triggerType !== 'MANUAL') {
+          logger.warn(`[FlowEngine] Flow ${flow.id} matched but contactId is NULL. Skipping execution.`);
+          continue;
+        }
+
         // Check if we have conditions that require contact context
         const hasStageCondition = !!config.filter_stage_id;
         const hasTagsCondition = !!(config.filter_tag_ids && config.filter_tag_ids.length > 0);
 
         if (hasStageCondition || hasTagsCondition) {
+          if (!contactId) {
+             logger.warn(`[FlowEngine] Flow ${flow.id} has conditions but contactId is NULL. Skipping.`);
+             continue;
+          }
           // Fetch context if not already cached
           if (!contactContext) {
             try {
@@ -261,33 +358,70 @@ export async function queueNextStep(executionId: string) {
  * Resume flows that are waiting for a customer response
  */
 export async function resumeFlowWithResponse(chatId: string, message: any): Promise<boolean> {
+  // 1. Fetch WAITING executions. 
+  // We fetch all and filter in memory or use complex JSONB queries
   const { data: executions } = await supabaseAdmin
     .from("flow_executions")
     .select("id, variables")
-    .eq("status", "WAITING")
-    .filter("variables->>chat_id", "eq", chatId)
-    .filter("variables->>waiting_for_response", "eq", "true");
+    .eq("status", "WAITING");
 
-  if (executions && executions.length > 0) {
-    for (const exec of executions) {
+  if (!executions || executions.length === 0) return false;
+
+  let resumedAny = false;
+
+  for (const exec of executions) {
+    const vars = exec.variables || {};
+    let shouldResume = false;
+
+    // Check standard wait
+    if (vars.waiting_for_response && vars.chat_id === chatId) {
+      shouldResume = true;
+    } 
+    // Check external wait (manager/responsible)
+    else if (vars.waiting_for_external) {
+      // If we have external_chat_id (phone) or external_chat_uuid
+      if (vars.external_chat_uuid === chatId) {
+        shouldResume = true;
+      } else if (vars.external_chat_id) {
+        // If the message came from exactly the same identifier (e.g. phone)
+        // This is useful for providers where chatId isn't a UUID yet
+        if (vars.external_chat_id === chatId) shouldResume = true;
+      }
+    }
+
+    if (shouldResume) {
+      resumedAny = true;
+      
+      // Map button response if any
+      let lastResponse = message.content;
+      let edgeHandle = undefined;
+
+      // If it's a Meta Button response, it might have a payload
+      if (message.type === 'interactive' || message.payload) {
+        lastResponse = message.payload || message.content;
+        edgeHandle = lastResponse; // For branching
+      }
+
       await supabaseAdmin
         .from("flow_executions")
         .update({ 
           status: 'RUNNING', 
           next_step_at: null,
           variables: { 
-            ...exec.variables, 
+            ...vars, 
             responded: true,
-            last_response: message.content 
+            last_response: lastResponse,
+            last_response_type: message.type,
+            response_edge: edgeHandle
           } 
         })
         .eq("id", exec.id);
       
       await queueNextStep(exec.id);
     }
-    return true;
   }
-  return false;
+
+  return resumedAny;
 }
 
 /**
@@ -365,6 +499,9 @@ async function sendFlowMessage(args: {
   const customerPhone = customer?.phone;
   const companyId = execution.automation_flows?.company_id;
 
+  // Replace variables in text
+  const textContent = replaceVariables(data.text || "", execution.variables || {});
+
   logger.info(`[FlowEngine] Sending message for execution ${execution.id}`, {
     inboxId,
     chatId,
@@ -372,6 +509,8 @@ async function sendFlowMessage(args: {
     companyId,
     nodeType: data.type
   });
+
+  // ... (rest of the content remains but needs to use textContent instead of data.text)
 
   // Fetch inbox to check provider for Smart Fallback
   let inboxProvider = 'META';
@@ -393,7 +532,7 @@ async function sendFlowMessage(args: {
         inboxId,
         chatId,
         customerPhone,
-        message: data.text,
+        message: textContent,
         buttons: data.buttons.map((b: any, i: number) => ({
           id: b.id || `btn_${i}`,
           title: b.text
@@ -438,7 +577,7 @@ async function sendFlowMessage(args: {
         inboxId,
         chatId,
         customerPhone,
-        message: data.text,
+        message: textContent,
         buttonText: data.list_button_text || 'Ver Opções',
         sections: data.list_sections,
         senderSupabaseId: null
@@ -482,14 +621,14 @@ async function sendFlowMessage(args: {
       inboxId,
       companyId,
       public_url: data.media_url,
-      caption: data.text,
+      caption: textContent,
       mime_type: data.media_type === 'IMAGE' ? 'image/png' : undefined,
       filename: data.media_name || (data.media_type === 'IMAGE' ? 'image.png' : (data.media_type === 'AUDIO' || data.media_type === 'VOICE' ? 'audio.ogg' : 'file')),
       is_voice: data.media_type === 'VOICE' || data.media_type === 'AUDIO'
     });
   } else {
     // Smart Fallback: Convert buttons/lists to text if not Meta or if Meta failed
-    let finalContent = data.text;
+    let finalContent = textContent;
     if (data.buttons?.length > 0) {
       finalContent += "\n\n" + data.buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.text}`).join("\n");
     } else if (data.list_sections) {
@@ -510,6 +649,110 @@ async function sendFlowMessage(args: {
     });
   }
   return true;
+}
+
+async function sendNotificationMessages(args: {
+  inbox: any,
+  customer: any,
+  textContent: string,
+  buttons: any[],
+  companyId: string,
+  chatId: string
+}) {
+  const { inbox, customer, textContent, buttons, companyId, chatId } = args;
+  const isMeta = inbox.provider?.startsWith('META');
+
+  // 1. Send Text Message first if BOTH exist, or if only text exists
+  // User requested: "enviando duas mensagem caso os dois campos forem preenchido"
+  if (textContent && buttons?.length > 0) {
+    if (isMeta) {
+      // Send text message first
+      await publish(EX_APP, "outbound.request", {
+        jobType: "message.send",
+        customerId: customer.id,
+        chatId,
+        companyId,
+        content: textContent,
+        inboxId: inbox.id
+      });
+      // Small delay between messages would be nice but publish is async anyway
+      // Now send buttons without text in the body (Meta requires body, so we use a generic header or the title)
+      try {
+        await sendInteractiveButtons({
+          inboxId: inbox.id,
+          chatId,
+          customerPhone: customer.phone,
+          message: "Escolha uma opção:", // Generic title for buttons when text was already sent
+          buttons: buttons.map((b: any, i: number) => ({
+            id: b.id || `btn_${i}`,
+            title: b.text
+          })),
+          senderSupabaseId: null
+        });
+      } catch (err) {
+        logger.error("[FlowEngine] Error sending buttons after text", err);
+      }
+    } else {
+      // Non-Meta: Combine both in one message
+      const finalContent = textContent + "\n\n" + buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.text}`).join("\n");
+      await publish(EX_APP, "outbound.request", {
+        jobType: "message.send",
+        customerId: customer.id,
+        chatId,
+        companyId,
+        content: finalContent,
+        inboxId: inbox.id
+      });
+    }
+  } else if (buttons?.length > 0) {
+    // Only buttons
+    if (isMeta) {
+      try {
+        await sendInteractiveButtons({
+          inboxId: inbox.id,
+          chatId,
+          customerPhone: customer.phone,
+          message: "Selecione uma opção:",
+          buttons: buttons.map((b: any, i: number) => ({
+            id: b.id || `btn_${i}`,
+            title: b.text
+          })),
+          senderSupabaseId: null
+        });
+      } catch (err) {
+        // Fallback to text
+        const finalContent = buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.text}`).join("\n");
+        await publish(EX_APP, "outbound.request", {
+          jobType: "message.send",
+          customerId: customer.id,
+          chatId,
+          companyId,
+          content: finalContent,
+          inboxId: inbox.id
+        });
+      }
+    } else {
+      const finalContent = buttons.map((b: any, i: number) => `${i + 1}️⃣ ${b.text}`).join("\n");
+      await publish(EX_APP, "outbound.request", {
+        jobType: "message.send",
+        customerId: customer.id,
+        chatId,
+        companyId,
+        content: finalContent,
+        inboxId: inbox.id
+      });
+    }
+  } else if (textContent) {
+    // Only text
+    await publish(EX_APP, "outbound.request", {
+      jobType: "message.send",
+      customerId: customer.id,
+      chatId,
+      companyId,
+      content: textContent,
+      inboxId: inbox.id
+    });
+  }
 }
 
 async function executeNode(node: any, execution: any): Promise<{ status: string, next_step_at?: string, variables?: any, edgeHandle?: string }> {
@@ -596,6 +839,151 @@ async function executeNode(node: any, execution: any): Promise<{ status: string,
       // Move stage logic
       if (data.column_id) {
         await supabaseAdmin.from("kanban_cards").update({ kanban_column_id: data.column_id }).eq("lead_id", contactId);
+      }
+      return { status: 'SUCCESS' };
+
+    case 'external_notify':
+      const target = data.target || 'RESPONSIBLE'; // RESPONSIBLE, ENTITY_CUSTOMER, FLOW_CONTACT, CUSTOM
+      let targetPhone = '';
+      let targetName = '';
+
+      if (target === 'RESPONSIBLE') {
+        targetPhone = execution.variables?.responsible_phone;
+        targetName = execution.variables?.responsible_name || 'Responsável';
+      } else if (target === 'ENTITY_CUSTOMER') {
+        targetPhone = execution.variables?.customer_phone;
+        targetName = execution.variables?.customer_name || 'Cliente';
+      } else if (target === 'FLOW_CONTACT') {
+        targetPhone = customer?.phone;
+        targetName = customer?.name || 'Contato';
+      } else if (target === 'CUSTOM') {
+        targetPhone = replaceVariables(data.custom_phone || '', execution.variables);
+        targetName = 'Destinatário';
+      }
+
+      if (targetPhone) {
+        const companyId = execution.automation_flows?.company_id;
+        const phone = normalizeMsisdn(targetPhone);
+        
+        // 1. Find or Create Customer for the target
+        let { data: finalCustomer } = await supabaseAdmin
+          .from("customers")
+          .select("*")
+          .eq("company_id", companyId)
+          .eq("phone", phone)
+          .maybeSingle();
+
+        if (!finalCustomer) {
+          const { data: created } = await supabaseAdmin
+            .from("customers")
+            .insert({
+              company_id: companyId,
+              phone: phone,
+              name: targetName,
+              source: "SYSTEM_FLOW"
+            })
+            .select("*")
+            .single();
+          finalCustomer = created;
+        }
+
+        if (finalCustomer) {
+          // 2. Determine Inbox
+          let selectedInboxId = data.inbox_id;
+          
+          if (!selectedInboxId) {
+            // Fallback: Find first active non-META inbox
+            const { data: fallbackInbox } = await supabaseAdmin
+              .from("inboxes")
+              .select("id")
+              .eq("company_id", companyId)
+              .eq("is_active", true)
+              .not("provider", "ilike", "META%")
+              .limit(1)
+              .maybeSingle();
+            selectedInboxId = fallbackInbox?.id;
+          }
+
+          if (selectedInboxId) {
+            const { data: inbox } = await supabaseAdmin
+              .from("inboxes")
+              .select("*")
+              .eq("id", selectedInboxId)
+              .maybeSingle();
+
+            if (inbox) {
+              const textContent = replaceVariables(data.text || "", execution.variables);
+              const isMeta = inbox.provider?.startsWith('META');
+              const chatJid = `${phone}@c.us`; 
+              const waChatId = isMeta ? phone : chatJid;
+
+              // Check if we should wait for response
+              if (data.wait_for_response && !execution.variables?.waiting_for_external) {
+                // Try to find if a chat already exists to get the UUID (more reliable for resume)
+                const { data: existingChat } = await supabaseAdmin
+                  .from("chats")
+                  .select("id")
+                  .eq("customer_id", finalCustomer.id)
+                  .eq("inbox_id", inbox.id)
+                  .maybeSingle();
+
+                // First time: Send message and set wait state
+                await sendNotificationMessages({
+                  inbox,
+                  customer: finalCustomer,
+                  textContent,
+                  buttons: data.buttons,
+                  companyId,
+                  chatId: waChatId
+                });
+
+                const timeout = data.timeoutMinutes || 60;
+                const timeoutAt = new Date();
+                timeoutAt.setMinutes(timeoutAt.getMinutes() + timeout);
+
+                return { 
+                  status: 'WAITING', 
+                  next_step_at: timeoutAt.toISOString(),
+                  variables: { 
+                    ...execution.variables, 
+                    waiting_for_external: true,
+                    external_customer_id: finalCustomer.id,
+                    external_chat_id: waChatId,
+                    external_chat_uuid: existingChat?.id
+                  } 
+                };
+              } else if (execution.variables?.waiting_for_external) {
+                // We are resuming
+                const hasResponded = execution.variables?.responded;
+                const edgeHandle = execution.variables?.response_edge;
+
+                const cleanVars = { ...execution.variables };
+                delete cleanVars.waiting_for_external;
+                delete cleanVars.external_customer_id;
+                delete cleanVars.external_chat_id;
+                delete cleanVars.external_chat_uuid;
+                delete cleanVars.responded;
+                delete cleanVars.response_edge;
+
+                if (hasResponded) {
+                  return { status: 'SUCCESS', edgeHandle: edgeHandle || 'response', variables: cleanVars };
+                } else {
+                  return { status: 'SUCCESS', edgeHandle: 'timeout', variables: cleanVars };
+                }
+              }
+
+              // Normal fire-and-forget send
+              await sendNotificationMessages({
+                inbox,
+                customer: finalCustomer,
+                textContent,
+                buttons: data.buttons,
+                companyId,
+                chatId: waChatId
+              });
+            }
+          }
+        }
       }
       return { status: 'SUCCESS' };
 
@@ -689,5 +1077,78 @@ async function executeNode(node: any, execution: any): Promise<{ status: string,
     default:
       return { status: 'SUCCESS' };
   }
+}
+
+/**
+ * Resolves rich data for system events (tasks, projects)
+ */
+async function resolveRichSystemContext(companyId: string, triggerData: any): Promise<any> {
+  const result: any = {};
+  const entityType = triggerData.entity_type;
+  const entityId = triggerData.entity_id;
+
+  if (!entityId) return result;
+
+  if (entityType === 'TASK') {
+    const { data: task } = await supabaseAdmin
+      .from("tasks")
+      .select(`
+        *,
+        assigned_to_user:users!tasks_assigned_to_fkey(name, phone),
+        lead:leads(name, phone),
+        customer:customers(name, phone)
+      `)
+      .eq("id", entityId)
+      .maybeSingle();
+
+    if (task) {
+      result.task_title = task.title;
+      result.task_status = task.status;
+      result.task_priority = task.priority;
+      result.task_due_date = task.due_date;
+      
+      if (task.assigned_to_user) {
+        result.responsible_name = task.assigned_to_user.name;
+        result.responsible_phone = task.assigned_to_user.phone;
+      }
+      
+      const client = task.customer || task.lead;
+      if (client) {
+        result.customer_name = client.name;
+        result.customer_phone = client.phone;
+      }
+    }
+  } else if (entityType === 'PROJECT') {
+    const { data: project } = await supabaseAdmin
+      .from("projects")
+      .select(`
+        *,
+        owner:users!projects_owner_user_id_fkey(name, phone),
+        customer:customers(id, name, phone)
+      `)
+      .eq("id", entityId)
+      .maybeSingle();
+
+    if (project) {
+      result.project_title = project.title;
+      result.project_status = project.status;
+      result.project_number = project.project_number;
+      
+      if (project.owner) {
+        result.responsible_name = project.owner.name;
+        result.responsible_phone = project.owner.phone;
+      }
+      
+      if (project.customer) {
+        result.customer_name = project.customer.name;
+        result.customer_phone = project.customer.phone;
+      } else {
+        result.customer_name = project.customer_name;
+        result.customer_phone = project.customer_phone;
+      }
+    }
+  }
+
+  return result;
 }
 

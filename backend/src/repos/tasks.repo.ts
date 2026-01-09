@@ -29,7 +29,6 @@ export interface Task {
   recurrence_end_date?: string | null;
   parent_task_id?: string | null;
   metadata?: Record<string, any> | null;
-  is_auto_generated?: boolean | null;
 }
 
 export interface TaskWithContext extends Task {
@@ -75,7 +74,6 @@ export interface CreateTaskInput {
   recurrence_end_date?: string;
   parent_task_id?: string;
   metadata?: Record<string, any>;
-  is_auto_generated?: boolean;
 }
 
 export interface UpdateTaskInput {

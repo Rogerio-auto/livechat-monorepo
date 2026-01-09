@@ -8,12 +8,14 @@ import {
   useEdgesState,
   addEdge,
   Panel,
+  ReactFlowProvider,
+  useReactFlow,
   type Node,
   type Edge,
   type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { FiX, FiSave, FiPlus, FiTrash2, FiChevronRight, FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, FiList, FiActivity, FiEdit2 } from 'react-icons/fi';
+import { FiX, FiSave, FiPlus, FiTrash2, FiChevronRight, FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, FiList, FiActivity, FiEdit2, FiBell, FiHelpCircle, FiBookOpen } from 'react-icons/fi';
 
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -31,6 +33,8 @@ import {
   StatusNode,
   SwitchNode,
   WaitForResponseNode,
+  ExternalNotifyNode,
+  AVAILABLE_VARIABLES,
   type FlowNodeData
 } from './FlowNodes';
 
@@ -46,6 +50,7 @@ const nodeTypes = {
   change_status: StatusNode,
   switch: SwitchNode,
   wait_for_response: WaitForResponseNode,
+  external_notify: ExternalNotifyNode,
 };
 
 
@@ -66,7 +71,16 @@ type Props = {
   onClose: () => void;
 };
 
-export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
+export default function FlowBuilder(props: Props) {
+  return (
+    <ReactFlowProvider>
+      <FlowBuilderContent {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function FlowBuilderContent({ apiBase, flowId, onClose }: Props) {
+  const { getViewport } = useReactFlow();
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [name, setName] = useState('Novo Fluxo');
@@ -226,6 +240,25 @@ export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
 
   const addNode = (type: string) => {
     const id = `node_${Date.now()}`;
+    const viewport = getViewport();
+    
+    // Calculate center of the current viewport
+    const x = (-viewport.x + 300) / viewport.zoom; // Offset a bit from left sidebar
+    const y = (-viewport.y + (window.innerHeight / 2)) / viewport.zoom;
+
+    // Check for overlap and offset if needed
+    let finalX = x;
+    let finalY = y;
+    const padding = 40;
+    
+    const hasOverlap = (px: number, py: number) => 
+      nodes.some(n => Math.abs(n.position.x - px) < padding && Math.abs(n.position.y - py) < padding);
+
+    while (hasOverlap(finalX, finalY)) {
+      finalX += padding;
+      finalY += padding;
+    }
+
     const newNode: Node = {
       id,
       type,
@@ -239,7 +272,7 @@ export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
         onChange: (newData: Partial<FlowNodeData>) => updateNodeData(id, newData),
         onDelete: () => deleteNode(id)
       },
-      position: { x: 400, y: 200 },
+      position: { x: finalX, y: finalY },
     };
 
     // Default data based on type
@@ -274,7 +307,7 @@ export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
         {/* Sidebar - Blocks */}
         <div className="w-64 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-[#0f172a]/50 p-4 flex flex-col gap-6 overflow-y-auto">
           <div>
-            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Componentes</h3>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Mensageria</h3>
             <div className="space-y-2">
               <button onClick={() => addNode('message')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
                 <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -288,17 +321,53 @@ export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
                 </div>
                 Interativo (Meta)
               </button>
+              <button onClick={() => addNode('wait_for_response')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-400 dark:hover:border-orange-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
+                <div className="w-8 h-8 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FiMessageSquare size={16} />
+                </div>
+                Aguardar Resposta
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Sistema & Alertas</h3>
+            <div className="space-y-2">
+              <button onClick={() => addNode('external_notify')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-blue-500 dark:hover:border-blue-600 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
+                <div className="w-8 h-8 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-500 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FiBell size={16} />
+                </div>
+                Notificar Externo
+              </button>
               <button onClick={() => addNode('ai_action')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
                 <div className="w-8 h-8 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                   <FiActivity size={16} />
                 </div>
                 Ações de IA
               </button>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Lógica & CRM</h3>
+            <div className="space-y-2">
+              <button onClick={() => addNode('condition')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-red-400 dark:hover:border-red-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
+                <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FiZap size={16} />
+                </div>
+                Condição (Se/Então)
+              </button>
+              <button onClick={() => addNode('switch')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
+                <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FiList size={16} />
+                </div>
+                Switch (Cases)
+              </button>
               <button onClick={() => addNode('wait')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-400 dark:hover:border-orange-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
                 <div className="w-8 h-8 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
                   <FiClock size={16} />
                 </div>
-                Aguardar
+                Aguardar Tempo
               </button>
               <button onClick={() => addNode('add_tag')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-purple-400 dark:hover:border-purple-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
                 <div className="w-8 h-8 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -317,24 +386,6 @@ export default function FlowBuilder({ apiBase, flowId, onClose }: Props) {
                   <FiActivity size={16} />
                 </div>
                 Alterar Status
-              </button>
-              <button onClick={() => addNode('condition')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-red-400 dark:hover:border-red-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
-                <div className="w-8 h-8 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <FiZap size={16} />
-                </div>
-                Condição (Se/Então)
-              </button>
-              <button onClick={() => addNode('switch')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-indigo-400 dark:hover:border-indigo-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
-                <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <FiList size={16} />
-                </div>
-                Switch (Múltiplos Caminhos)
-              </button>
-              <button onClick={() => addNode('wait_for_response')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-400 dark:hover:border-orange-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
-                <div className="w-8 h-8 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <FiClock size={16} />
-                </div>
-                Aguardar Resposta
               </button>
             </div>
           </div>

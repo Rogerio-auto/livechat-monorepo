@@ -1,6 +1,7 @@
 // backend/src/services/notification.service.ts
 
 import { supabaseAdmin } from "../lib/supabase.ts";
+import { publish, EX_APP } from "../queue/rabbit.js";
 
 // ==================== TYPES ====================
 
@@ -56,7 +57,7 @@ export async function createNotification(input: CreateNotificationInput): Promis
     .insert({
       user_id: input.userId,
       company_id: input.companyId,
-      notification_type: input.type,
+      type: input.type,
       channel: input.channel || 'IN_APP',
       title: input.title,
       message: input.message,
@@ -178,36 +179,49 @@ async function sendWhatsAppNotification(notification: any): Promise<void> {
     throw new Error('User has no phone number');
   }
 
-  // INTEGRAÇÃO COM SUA API DE WHATSAPP (Exemplo genérico)
-  // Ajustar para sua implementação (WAHA, Meta Business, Twilio, etc)
-  
+  const companyId = notification.company_id;
   const whatsappMessage = formatWhatsAppMessage(notification);
   
   try {
-    // Exemplo com WAHA (ajustar para sua API)
-    const response = await fetch(`${process.env.WAHA_API_URL}/api/sendText`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.WAHA_API_KEY}`,
-      },
-      body: JSON.stringify({
-        chatId: `${phone}@c.us`,
-        text: whatsappMessage,
-      }),
-    });
+    // Buscar a primeira inbox ativa de WhatsApp que não seja META/META_CLOUD para esta empresa
+    const { data: inbox } = await supabaseAdmin
+      .from('inboxes')
+      .select('id, provider')
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .not('provider', 'ilike', 'META%')
+      .limit(1)
+      .maybeSingle();
 
-    if (!response.ok) {
-      throw new Error(`WhatsApp API error: ${response.statusText}`);
+    if (!inbox) {
+      throw new Error(`No active non-META WhatsApp inbox found for company ${companyId}`);
     }
 
-    const result = await response.json();
+    // Formatar telefone para JID
+    let cleanPhone = phone.replace(/\D/g, "");
+    if (!cleanPhone.startsWith("55")) cleanPhone = "55" + cleanPhone;
+    const chatJid = `${cleanPhone}@s.whatsapp.net`;
 
-    // Log de entrega
-    await logDelivery(notification.id, 'WHATSAPP', 'SENT', phone, result);
+    console.log(`[Notification] 📤 Enfileirando WhatsApp para ${chatJid} via inbox ${inbox.id} (provider: ${inbox.provider})`);
+    
+    await publish(EX_APP, "outbound.request", {
+      jobType: "message.send",
+      provider: inbox.provider || "WAHA", // Usa o provider da inbox, fallback para WAHA
+      inboxId: inbox.id,
+      payload: {
+        chatId: chatJid,
+        content: whatsappMessage,
+      },
+      companyId: companyId,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Log de entrega (SENT aqui significa que foi para a fila)
+    await logDelivery(notification.id, 'WHATSAPP', 'SENT', phone, { inboxId: inbox.id });
     await markAsSent(notification.id);
 
   } catch (error: any) {
+    console.error(`[Notification] ❌ WhatsApp delivery failed for notification ${notification.id}:`, error);
     await logDelivery(notification.id, 'WHATSAPP', 'FAILED', phone, null, error.message);
     throw error;
   }
@@ -237,13 +251,14 @@ async function sendSMSNotification(notification: any): Promise<void> {
  * Formata mensagem para WhatsApp
  */
 function formatWhatsAppMessage(notification: any): string {
-  const emoji = getEmojiForType(notification.notification_type);
+  const emoji = getEmojiForType(notification.type);
   
   let message = `${emoji} *${notification.title}*\n\n`;
   message += notification.message;
   
   if (notification.action_url) {
-    message += `\n\n🔗 Ver detalhes: ${process.env.FRONTEND_URL}${notification.action_url}`;
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    message += `\n\n🔗 Ver detalhes:\n${frontendUrl}${notification.action_url}`;
   }
   
   return message;
@@ -266,6 +281,8 @@ function getEmojiForType(type: string): string {
     TASK_DUE_SOON: '⏰',
     TASK_OVERDUE: '🚨',
     TASK_COMPLETED: '✅',
+    NEW_LEAD: '🎯',
+    NEW_CUSTOMER: '🤝',
     MENTIONED_IN_COMMENT: '💬',
     SYSTEM_ALERT: '🔔',
   };
@@ -300,7 +317,11 @@ async function markAsFailed(notificationId: string, reason: string): Promise<voi
 export async function markAsRead(notificationId: string): Promise<void> {
   await supabaseAdmin
     .from('notifications')
-    .update({ status: 'READ', read_at: new Date().toISOString() })
+    .update({ 
+      status: 'READ', 
+      is_read: true,
+      read_at: new Date().toISOString() 
+    })
     .eq('id', notificationId);
 }
 
@@ -331,15 +352,35 @@ async function getUserNotificationPreferences(userId: string): Promise<any> {
     .from('notification_preferences')
     .select('*')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle();
 
-  // Retornar preferências padrão se não existir
-  return data || {
-    whatsapp_enabled: true,
-    email_enabled: false,
-    quiet_hours_enabled: false,
-    preferences: {},
-  };
+  // Se não existir, retornar padrão com WhatsApp habilitado para as tarefas principais
+  if (!data) {
+    return {
+      whatsapp_enabled: true,
+      email_enabled: false,
+      quiet_hours_enabled: false,
+      preferences: {
+        TASK_ASSIGNED: { app: true, whatsapp: true, email: false },
+        TASK_DUE_TODAY: { app: true, whatsapp: true, email: false },
+        TASK_OVERDUE: { app: true, whatsapp: true, email: false },
+        PROJECT_ASSIGNED: { app: true, whatsapp: true, email: false },
+      },
+    };
+  }
+
+  // Se existir mas preferences estiver vazio, preencher com os mesmos padrões
+  const prefs = data.preferences || {};
+  if (Object.keys(prefs).length === 0) {
+    data.preferences = {
+      TASK_ASSIGNED: { app: true, whatsapp: true, email: false },
+      TASK_DUE_TODAY: { app: true, whatsapp: true, email: false },
+      TASK_OVERDUE: { app: true, whatsapp: true, email: false },
+      PROJECT_ASSIGNED: { app: true, whatsapp: true, email: false },
+    };
+  }
+
+  return data;
 }
 
 function checkQuietHours(prefs: any): boolean {

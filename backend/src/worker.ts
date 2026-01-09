@@ -3847,11 +3847,6 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
   }
 
   const externalId = extractWahaMessageId(response);
-  console.log("[WAHA OUTBOUND] Extracted external_id from WAHA response:", { 
-    externalId, 
-    messageId: payload?.draftId || job?.messageId,
-    hasResponse: !!response 
-  });
   
   const contentForChat =
     messageType === "media"
@@ -6069,7 +6064,6 @@ async function tickCampaigns() {
 
 // Task reminders - roda a cada 1 minuto (DEBUG)
 import { checkAndSendReminders } from "./jobs/taskReminders.js";
-import { runAutoTaskCreation } from "./jobs/autoTaskCreation.js";
 import { runAutoAgentFollowup } from "./jobs/autoAgentFollowup.js";
 import { dailyConsolidationJob, weeklyOpenAISyncJob, monthlyCleanupJob, stripeSyncJob } from "./jobs/sync-openai-usage.job.js";
 
@@ -6080,10 +6074,6 @@ function startCronJobs() {
     console.log("[worker] ⏰ Triggering task reminder check...");
     runWithDistributedLock("task:reminders", checkAndSendReminders, 50);
   }, 60_000);
-
-  // Auto-criação de tarefas - roda a cada 6 horas
-  setInterval(() => runWithDistributedLock("auto:task", runAutoTaskCreation, 21000), 6 * 60 * 60_000);
-  runAutoTaskCreation(); // Executar imediatamente na inicialização
 
   // Auto-follow-up de agentes - roda a cada 2 minutos
   setInterval(() => runWithDistributedLock("auto:followup", runAutoAgentFollowup, 100), 2 * 60_000);

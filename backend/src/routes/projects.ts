@@ -6,8 +6,15 @@ import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 import {
+  notifyProjectCreated,
+  notifyProjectAssigned,
+  notifyProjectStageChanged,
+  notifyTaskCreated,
+  notifyTaskAssigned,
+  notifyTaskCompleted
+} from "../services/notification-triggers.service.js";
+import {
   listProjects,
-  getProjectWithDetails,
   createProject,
   updateProject,
   deleteProject,
@@ -202,6 +209,18 @@ export function registerProjectRoutes(app: Application) {
       const validated = CreateProjectSchema.parse(req.body);
       const project = await createProject(companyId, userId, validated);
 
+      // Disparar Trigger de Notificação e Fluxo
+      try {
+        await notifyProjectCreated(
+          project.id,
+          project.title,
+          project.owner_user_id || userId,
+          companyId
+        );
+      } catch (triggerErr) {
+        console.warn("[projects] Error firing notifyProjectCreated trigger:", triggerErr);
+      }
+
       return res.status(201).json(project);
     } catch (error) {
       const { status, payload } = handleError(error);
@@ -273,6 +292,20 @@ export function registerProjectRoutes(app: Application) {
 
       console.log(`[DEBUG] Project moved successfully`);
 
+      // Disparar Trigger de Mudança de Estágio
+      try {
+        await notifyProjectStageChanged(
+          project.id,
+          project.title,
+          'Estágio Anterior', // Poderia buscar o nome real se necessário
+          project.stage_name || stage_id,
+          project.owner_user_id || userId,
+          companyId
+        );
+      } catch (triggerErr) {
+        console.warn("[projects] Error firing notifyProjectStageChanged trigger:", triggerErr);
+      }
+
       return res.json(project);
     } catch (error) {
       console.error(`[DEBUG] Error moving project:`, error);
@@ -343,6 +376,30 @@ export function registerProjectRoutes(app: Application) {
       const validated = CreateTaskSchema.parse(req.body);
       const task = await addTask(companyId, id, userId, validated);
 
+      // Disparar Trigger de Criação de Tarefa
+      try {
+        await notifyTaskCreated(
+          task.id,
+          task.title,
+          userId,
+          companyId
+        );
+
+        // Se estiver atribuída
+        if (task.assigned_to) {
+          await notifyTaskAssigned(
+            task.id,
+            task.title,
+            id,
+            'Projeto', // Simplificado
+            task.assigned_to,
+            companyId
+          );
+        }
+      } catch (triggerErr) {
+        console.warn("[projects] Error firing task triggers:", triggerErr);
+      }
+
       return res.status(201).json(task);
     } catch (error) {
       const { status, payload } = handleError(error);
@@ -355,6 +412,25 @@ export function registerProjectRoutes(app: Application) {
       const { taskId } = req.params;
       const validated = UpdateTaskSchema.parse(req.body);
       const task = await updateTask(taskId, validated);
+
+      // Gatilho para tarefa concluída
+      if (validated.status === 'completed' || validated.is_completed) {
+        try {
+          // No contexto de projeto, o front pode não ter todos os detalhes
+          // notifyTaskCompleted lidará com o que puder
+          await notifyTaskCompleted(
+            task.id,
+            task.title,
+            task.project_id || '',
+            'Projeto',
+            task.created_by || '',
+            getCompanyId(req)
+          );
+        } catch (compErr) {
+          console.warn("[projects] Error firing notifyTaskCompleted:", compErr);
+        }
+      }
+
       return res.json(task);
     } catch (error) {
       const { status, payload } = handleError(error);

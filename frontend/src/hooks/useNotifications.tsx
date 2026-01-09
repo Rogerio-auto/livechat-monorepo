@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { cleanupService } from '../services/cleanupService';
+import { toast } from './useToast';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -34,6 +35,7 @@ export function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const socketRef = useRef<Socket | null>(null);
   const audioCache = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const receivedIds = useRef<Set<string>>(new Set());
 
   // Inicializar Socket.IO
   useEffect(() => {
@@ -331,17 +333,38 @@ export function useNotifications() {
     const onNotification = (notification: Notification & { isNew?: boolean }) => {
       console.log('[useNotifications] 🔔 New notification received:', notification);
 
+      if (receivedIds.current.has(notification.id)) {
+        console.log('[useNotifications] ⚠️ Duplicate notification ignored (ref):', notification.id);
+        return;
+      }
+      
+      receivedIds.current.add(notification.id);
+
       setNotifications(prev => {
-        // Evitar duplicatas
-        if (prev.some(n => n.id === notification.id)) {
-          console.log('[useNotifications] ⚠️ Duplicate notification ignored:', notification.id);
-          return prev;
-        }
+        if (prev.some(n => n.id === notification.id)) return prev;
         return [notification, ...prev];
       });
 
       if (!notification.is_read) {
         setUnreadCount(prev => prev + 1);
+      }
+
+      // Mostrar toast dentro do app
+      if (notification.isNew !== false) {
+        // Tentar obter o tipo do toast baseado no sound_type ou na prioridade
+        let toastType: 'success' | 'error' | 'info' | 'warning' = 'info';
+        
+        if (notification.sound_type === 'success') toastType = 'success';
+        else if (notification.sound_type === 'error') toastType = 'error';
+        else if (notification.sound_type === 'warning') toastType = 'warning';
+        else if (notification.priority === 'URGENT' || notification.priority === 'HIGH') toastType = 'error';
+        else if (notification.type === 'SYSTEM_ALERT') toastType = 'warning';
+        
+        toast[toastType](
+          notification.message,
+          notification.action_url,
+          notification.title
+        );
       }
 
       // Reproduzir som

@@ -4,8 +4,10 @@ export type ToastType = "success" | "error" | "info" | "warning";
 
 export type Toast = {
   id: string;
+  title?: string;
   message: string;
   type: ToastType;
+  actionUrl?: string; // Link opcional para redirecionamento
 };
 
 let toastIdCounter = 0;
@@ -19,10 +21,10 @@ export function useToast() {
     const listener = (toast: Toast) => {
       setToasts((prev) => [...prev, toast]);
       
-      // Auto-remove após 3 segundos
+      // Auto-remove após 5 segundos para notificações mais longas
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-      }, 3000);
+      }, 5000);
     };
 
     toastListeners.push(listener);
@@ -40,11 +42,13 @@ export function useToast() {
 }
 
 // Função global para disparar toast de qualquer lugar
-export function showToast(message: string, type: ToastType = 'info') {
+export function showToast(message: string, type: ToastType = 'info', actionUrl?: string, title?: string) {
   const toastObj: Toast = {
     id: `toast-${++toastIdCounter}`,
+    title,
     message,
     type,
+    actionUrl
   };
   
   toastListeners.forEach((listener) => listener(toastObj));
@@ -52,8 +56,8 @@ export function showToast(message: string, type: ToastType = 'info') {
 
 // Helpers
 export const toast = {
-  success: (message: string) => showToast(message, 'success'),
-  error: (message: string) => showToast(message, 'error'),
-  info: (message: string) => showToast(message, 'info'),
-  warning: (message: string) => showToast(message, 'warning'),
+  success: (message: string, actionUrl?: string, title?: string) => showToast(message, 'success', actionUrl, title),
+  error: (message: string, actionUrl?: string, title?: string) => showToast(message, 'error', actionUrl, title),
+  info: (message: string, actionUrl?: string, title?: string) => showToast(message, 'info', actionUrl, title),
+  warning: (message: string, actionUrl?: string, title?: string) => showToast(message, 'warning', actionUrl, title),
 };

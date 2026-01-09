@@ -100,6 +100,9 @@ export function NotificationBell({ placement = 'bottom', onOpenChange }: Notific
     return true;
   });
 
+  const chatUnreadCount = notifications.filter(n => !n.is_read && n.category === 'chat').length;
+  const systemUnreadCount = notifications.filter(n => !n.is_read && n.category !== 'chat').length;
+
   return (
     <div className="relative" ref={dropdownRef}>
       {/* Botão do sino */}
@@ -156,33 +159,48 @@ export function NotificationBell({ placement = 'bottom', onOpenChange }: Notific
             <div className="flex gap-2 border-b border-gray-100 dark:border-gray-700 pb-2">
               <button
                 onClick={() => setActiveTab('all')}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`px-3 py-1 text-sm rounded-full transition-colors flex items-center gap-2 ${
                   activeTab === 'all'
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                     : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
                 }`}
               >
                 Todas
+                {unreadCount > 0 && (
+                  <span className="bg-blue-200 dark:bg-blue-800 px-1.5 rounded text-[10px] font-bold">
+                    {unreadCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setActiveTab('chat')}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`px-3 py-1 text-sm rounded-full transition-colors flex items-center gap-2 ${
                   activeTab === 'chat'
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                     : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
                 }`}
               >
                 Mensagens
+                {chatUnreadCount > 0 && (
+                  <span className="bg-blue-200 dark:bg-blue-800 px-1.5 rounded text-[10px] font-bold">
+                    {chatUnreadCount}
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => setActiveTab('system')}
-                className={`px-3 py-1 text-sm rounded-full transition-colors ${
+                className={`px-3 py-1 text-sm rounded-full transition-colors flex items-center gap-2 ${
                   activeTab === 'system'
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
                     : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700'
                 }`}
               >
                 Sistema
+                {systemUnreadCount > 0 && (
+                  <span className="bg-blue-200 dark:bg-blue-800 px-1.5 rounded text-[10px] font-bold">
+                    {systemUnreadCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>

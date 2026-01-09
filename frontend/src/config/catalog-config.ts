@@ -3,7 +3,7 @@
 import { Industry } from "../types/cadastro";
 
 export type CatalogFieldKey = 
-  | 'name' | 'description' | 'sku' | 'unit' | 'item_type'
+  | 'name' | 'description' | 'sku' | 'unit' | 'item_type' | 'image_url'
   | 'cost_price' | 'sale_price' | 'duration_minutes' | 'billing_type'
   | 'brand' | 'grouping' | 'power' | 'size' | 'supplier' 
   | 'status' | 'specs';
@@ -55,11 +55,11 @@ export interface CatalogConfig {
 export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
   solar_energy: {
     visibleFields: [
-      'name', 'item_type', 'brand', 'power', 'size', 'supplier', 
+      'image_url', 'name', 'item_type', 'brand', 'power', 'size', 'supplier', 
       'unit', 'sku', 'cost_price', 'sale_price', 'grouping', 'status', 'specs'
     ],
     requiredFields: ['name', 'item_type'],
-    tableColumns: ['name', 'brand', 'power', 'specs', 'sale_price', 'cost_price'],
+    tableColumns: ['image_url', 'name', 'brand', 'power', 'specs', 'sale_price', 'cost_price'],
     itemTypeOptions: [
       { value: 'PRODUCT', label: 'Produto' }
     ],
@@ -127,11 +127,11 @@ export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
   
   real_estate: {
     visibleFields: [
-      'name', 'item_type', 'size', 'billing_type', 
+      'image_url', 'name', 'item_type', 'size', 'billing_type', 
       'sale_price', 'grouping', 'status', 'specs'
     ],
     requiredFields: ['name', 'size', 'billing_type', 'sale_price'],
-    tableColumns: ['name', 'size', 'billing_type', 'specs', 'sale_price'],
+    tableColumns: ['image_url', 'name', 'size', 'billing_type', 'specs', 'sale_price'],
     itemTypeOptions: [
       { value: 'PRODUCT', label: 'Imóvel' }
     ],
@@ -327,11 +327,11 @@ export const CATALOG_CONFIGS: Record<Industry, CatalogConfig> = {
   
   retail: {
     visibleFields: [
-      'name', 'item_type', 'brand', 'unit', 'sku', 
+      'image_url', 'name', 'item_type', 'brand', 'unit', 'sku', 
       'cost_price', 'sale_price', 'grouping', 'status', 'specs'
     ],
     requiredFields: ['name', 'item_type', 'sale_price'],
-    tableColumns: ['name', 'brand', 'sku', 'sale_price', 'status'],
+    tableColumns: ['image_url', 'name', 'brand', 'sku', 'sale_price', 'status'],
     itemTypeOptions: [
       { value: 'PRODUCT', label: 'Produto' }
     ],

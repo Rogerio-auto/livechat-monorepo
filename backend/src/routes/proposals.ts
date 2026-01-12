@@ -1,8 +1,8 @@
 import express from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
-import { NotificationService } from "../services/NotificationService.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { NotificationService } from "../services/notification.service.js";
 
 export function registerProposalRoutes(app: express.Application) {
   // List proposals

@@ -1,8 +1,8 @@
 import type { Application } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN, FRONTEND_URL } from "../config/env.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN, FRONTEND_URL } from "../config/env.js";
 
 // Tipos e schemas
 const IndustryEnum = z.enum(["education", "accounting", "clinic", "solar_energy", "construction", "real_estate", "events", "law"]);

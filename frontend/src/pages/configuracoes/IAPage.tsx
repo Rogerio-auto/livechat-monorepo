@@ -1,5 +1,5 @@
 import { Bot } from "lucide-react";
-import { SimplifiedAgentPanel } from "../../componets/agents/SimplifiedAgentPanel";
+import { SimplifiedAgentPanel } from "../../components/agents/SimplifiedAgentPanel";
 
 export default function IAPage() {
   return (

@@ -1,15 +1,15 @@
 import { useState, useEffect, FormEvent } from "react";
 import { ArrowLeft, ChevronRight, Calendar, User as UserIcon, Tag, Bell, Info } from "lucide-react";
 import { showToast } from "../../hooks/useToast";
-import type {
+import {
   Task,
   TaskStatus,
   TaskPriority,
   TaskType,
-  CreateTaskInput,
-  UpdateTaskInput,
+  CreateTaskDTO as CreateTaskInput,
+  UpdateTaskDTO as UpdateTaskInput,
   ReminderChannel,
-} from "../../types/tasks";
+} from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 
@@ -119,7 +119,7 @@ export function TaskForm({
       setCustomerId(initialData.related_customer_id || initialData.related_lead_id || "");
       setReminderEnabled(initialData.reminder_enabled || false);
       setReminderTime(initialData.reminder_time ? initialData.reminder_time.slice(0, 16) : "");
-      setReminderChannels(initialData.reminder_channels || ["IN_APP"]);
+      setReminderChannels((initialData.reminder_channels as ReminderChannel[]) || ["IN_APP"]);
     } else if (prefilledData) {
       setTitle(prefilledData.title || "");
       setDescription(prefilledData.description || "");
@@ -131,7 +131,7 @@ export function TaskForm({
       setCustomerId(prefilledData.related_customer_id || prefilledData.related_lead_id || "");
       setReminderEnabled(prefilledData.reminder_enabled || false);
       setReminderTime(prefilledData.reminder_time ? prefilledData.reminder_time.slice(0, 16) : "");
-      setReminderChannels(prefilledData.reminder_channels || ["IN_APP"]);
+      setReminderChannels((prefilledData.reminder_channels as ReminderChannel[]) || ["IN_APP"]);
     }
   }, [initialData, prefilledData]);
 

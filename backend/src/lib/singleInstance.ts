@@ -1,5 +1,5 @@
 // src/lib/singleInstance.ts
-import { redis } from "./redis.ts";
+import { redis } from "./redis.js";
 import process from "node:process";
 
 /**

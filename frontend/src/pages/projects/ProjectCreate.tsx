@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ProjectForm from "../../components/projects/ProjectForm";
-import type { TemplateWithDetails, ProjectWithDetails } from "../../types/projects";
+import type { TemplateWithDetails, ProjectWithDetails } from "@livechat/shared";
 import { useUserProfile } from "../../hooks/useUserProfile";
 import { Breadcrumbs } from "../../components/Breadcrumbs";
 import { ArrowLeft } from "lucide-react";

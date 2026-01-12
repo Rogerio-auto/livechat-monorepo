@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Task, TaskStatus } from "../../types/tasks";
+import { Task, TaskStatus } from "@livechat/shared";
 import { TaskCard } from "./TaskCard";
 
 interface TaskKanbanViewProps {

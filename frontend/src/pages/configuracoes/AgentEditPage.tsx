@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { AgentTemplateSelector } from "../../componets/agents/AgentTemplateSelector";
-import { AgentConfigPanel } from "../../componets/agents/AgentConfigPanel";
+import { AgentTemplateSelector } from "../../components/agents/AgentTemplateSelector";
+import { AgentConfigPanel } from "../../components/agents/AgentConfigPanel";
 import { fetchJson, API } from "../../utils/api";
-import type { AgentTemplate, AgentTemplateQuestion } from "../../types/types";
+import type { AgentTemplate, AgentTemplateQuestion } from "@livechat/shared";
 import { Button } from "../../components/ui/Button";
 import { ArrowLeft, Save, Bot, Sparkles, Loader2 } from "lucide-react";
 

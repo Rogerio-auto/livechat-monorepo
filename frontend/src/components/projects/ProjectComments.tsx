@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { ProjectComment } from "../../types/projects";
+import type { ProjectComment } from "@livechat/shared";
 import { Send, Trash2, MessageSquare } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL;

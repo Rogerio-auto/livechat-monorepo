@@ -1,5 +1,5 @@
 import express, { Response } from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   getSubscription,
   getActivePlans,
@@ -11,7 +11,7 @@ import {
   changePlan,
   type PlanLimits,
   type SubscriptionWithPlan,
-} from "../services/subscriptions.ts";
+} from "../services/subscriptions.service.js";
 
 export function registerSubscriptionRoutes(app: express.Application) {
   // ========== GET /api/subscriptions/current ==========

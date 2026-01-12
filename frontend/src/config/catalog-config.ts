@@ -1,6 +1,6 @@
 // Configuração do catálogo de produtos/serviços por nicho de empresa
 
-import { Industry } from "../types/cadastro";
+import { Industry } from "@livechat/shared";
 
 export type CatalogFieldKey = 
   | 'name' | 'description' | 'sku' | 'unit' | 'item_type' | 'image_url'
@@ -405,5 +405,6 @@ export const FIELD_LABELS: Record<CatalogFieldKey, string> = {
   size: 'Tamanho/Área',
   supplier: 'Fornecedor',
   status: 'Status',
-  specs: 'Especificações'
+  specs: 'Especificações',
+  image_url: 'URL da Imagem'
 };

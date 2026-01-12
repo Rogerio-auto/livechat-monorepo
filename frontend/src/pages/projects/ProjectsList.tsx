@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { Project, ProjectTemplate, ProjectStage } from "../../types/projects";
+import type { Project, ProjectTemplate, ProjectStage } from "@livechat/shared";
 import { useConfirmation } from "../../hooks/useConfirmation";
 import { ConfirmationModal } from "../../components/ui/ConfirmationModal";
 import { Breadcrumbs } from "../../components/Breadcrumbs";

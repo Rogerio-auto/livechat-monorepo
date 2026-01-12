@@ -1,6 +1,6 @@
 import '../style.css';
-import { CLogin } from '../componets/login/compo-login';
-import { InfLogin } from '../componets/login/infor-login';
+import { CLogin } from '../components/login/compo-login';
+import { InfLogin } from '../components/login/infor-login';
 
 export function Login() {
   return (

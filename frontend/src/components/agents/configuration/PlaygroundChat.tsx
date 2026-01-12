@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { FiSend, FiTrash2, FiUser, FiCpu, FiTerminal, FiChevronRight, FiBox } from 'react-icons/fi';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 

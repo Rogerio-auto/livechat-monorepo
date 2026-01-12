@@ -2,8 +2,8 @@
 // Rotas para gerenciar ferramentas dos templates (admin only)
 
 import { Router } from "express";
-import { requireAuth } from "../middlewares/requireAuth";
-import { db } from "../pg";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { db } from "../pg.js";
 
 const router = Router();
 

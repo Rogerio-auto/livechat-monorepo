@@ -10,7 +10,7 @@ import {
 import { useCadastro } from "../../hooks/useCadastro";
 import { useCadastroStatus } from "../../hooks/useCadastroStatus";
 import { useSubscription } from "../../context/SubscriptionContext";
-import { Industry } from "../../types/cadastro";
+import { Industry } from "@livechat/shared";
 import { toast } from "../../hooks/useToast";
 
 // Steps

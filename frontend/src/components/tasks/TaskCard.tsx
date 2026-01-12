@@ -1,4 +1,4 @@
-import type { Task } from "../../types/tasks";
+import type { Task } from "@livechat/shared";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 

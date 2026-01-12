@@ -1,7 +1,7 @@
 import type { Application } from "express";
 import { ZodError, z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import {
   createWhatsAppTemplate,
   listWhatsAppTemplates,
@@ -9,8 +9,8 @@ import {
   deleteWhatsAppTemplate,
   sendTemplateMessage,
   uploadMediaToMeta,
-} from "../services/meta/templates.js";
-import { sendInteractiveButtons } from "../services/meta/graph.js";
+} from "../services/meta/templates.service.js";
+import { sendInteractiveButtons } from "../services/meta/graph.service.js";
 
 async function resolveCompanyId(req: any) {
   const companyId = req?.user?.company_id || null;

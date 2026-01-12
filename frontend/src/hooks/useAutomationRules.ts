@@ -1,11 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../utils/api";
-import type {
-  AutomationRule,
-  CreateAutomationRuleInput,
-  UpdateAutomationRuleInput,
-  AutomationLog,
-} from "../types/automationRules";
+import { AutomationRule, CreateAutomationRuleInput, UpdateAutomationRuleInput, AutomationLog } from "@livechat/shared";
 
 export function useAutomationRules(activeOnly = false) {
   const [rules, setRules] = useState<AutomationRule[]>([]);

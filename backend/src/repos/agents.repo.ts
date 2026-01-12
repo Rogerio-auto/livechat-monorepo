@@ -1,10 +1,9 @@
-Ôªøimport { supabaseAdmin } from "../lib/supabase.ts";
-import type { AgentInput } from "../types/integrations.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import type { AgentInput } from "../types/integrations.types.js";
+import type { Agent, CreateAgentDTO, UpdateAgentDTO } from "../types/index.js";
 
 const TABLE = "agents";
 const SELECT_COLUMNS = "id, company_id, name, description, status, integration_openai_id, model, model_params, aggregation_enabled, aggregation_window_sec, max_batch_messages, reply_if_idle_sec, media_config, tools_policy, allow_handoff, ignore_group_messages, enabled_inbox_ids, transcription_model, vision_model, api_token, created_at, updated_at";
-
-type JsonRecord = Record<string, unknown>;
 
 type AgentRowInternal = {
   id: string;
@@ -14,13 +13,13 @@ type AgentRowInternal = {
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED" | null;
   integration_openai_id: string | null;
   model: string | null;
-  model_params: JsonRecord | null;
+  model_params: Record<string, unknown> | null;
   aggregation_enabled: boolean | null;
   aggregation_window_sec: number | null;
   max_batch_messages: number | null;
   reply_if_idle_sec: number | null;
-  media_config: JsonRecord | null;
-  tools_policy: JsonRecord | null;
+  media_config: Record<string, unknown> | null;
+  tools_policy: Record<string, unknown> | null;
   allow_handoff: boolean | null;
   ignore_group_messages: boolean | null;
   enabled_inbox_ids: string[] | null;
@@ -31,32 +30,7 @@ type AgentRowInternal = {
   updated_at: string | null;
 };
 
-export type AgentRow = {
-  id: string;
-  company_id: string;
-  name: string;
-  description: string | null;
-  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
-  integration_openai_id: string | null;
-  model: string | null;
-  model_params: JsonRecord | null;
-  aggregation_enabled: boolean;
-  aggregation_window_sec: number | null;
-  max_batch_messages: number | null;
-  reply_if_idle_sec: number | null;
-  media_config: JsonRecord | null;
-  tools_policy: JsonRecord | null;
-  allow_handoff: boolean;
-  ignore_group_messages: boolean;
-  enabled_inbox_ids: string[];
-  transcription_model?: string | null;
-  vision_model?: string | null;
-  api_token?: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-function mapAgent(row: AgentRowInternal): AgentRow {
+function mapAgent(row: AgentRowInternal): Agent {
   return {
     id: row.id,
     company_id: row.company_id,
@@ -87,7 +61,7 @@ function nullable<T>(value: T | undefined | null): T | null {
   return value === undefined ? null : value ?? null;
 }
 
-export async function createAgent(companyId: string, input: AgentInput): Promise<AgentRow> {
+export async function createAgent(companyId: string, input: AgentInput): Promise<Agent> {
   const payload = {
     company_id: companyId,
     name: input.name,
@@ -122,7 +96,7 @@ export async function createAgent(companyId: string, input: AgentInput): Promise
   return mapAgent(data as AgentRowInternal);
 }
 
-export async function listAgents(companyId: string): Promise<AgentRow[]> {
+export async function listAgents(companyId: string): Promise<Agent[]> {
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select(SELECT_COLUMNS)
@@ -139,7 +113,7 @@ export async function listAgents(companyId: string): Promise<AgentRow[]> {
 export async function listAgentsFiltered(
   companyId: string,
   opts?: { q?: string; active?: boolean | undefined },
-): Promise<AgentRow[]> {
+): Promise<Agent[]> {
   let query = supabaseAdmin
     .from(TABLE)
     .select(SELECT_COLUMNS)
@@ -161,7 +135,7 @@ export async function listAgentsFiltered(
   return (data as AgentRowInternal[]).map(mapAgent);
 }
 
-export async function getAgent(companyId: string, id: string): Promise<AgentRow | null> {
+export async function getAgent(companyId: string, id: string): Promise<Agent | null> {
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select(SELECT_COLUMNS)
@@ -175,7 +149,7 @@ export async function getAgent(companyId: string, id: string): Promise<AgentRow 
 export async function getActiveAgentForInbox(
   companyId: string,
   inboxId?: string,
-): Promise<AgentRow | null> {
+): Promise<Agent | null> {
   // Busca todos os agentes ativos da empresa
   const { data, error } = await supabaseAdmin
     .from(TABLE)
@@ -198,7 +172,7 @@ export async function getActiveAgentForInbox(
     );
     if (specificAgent) return specificAgent;
 
-    // 2. Fallback: Agente GLOBAL (sem restri√ß√£o de inbox)
+    // 2. Fallback: Agente GLOBAL (sem restriÁ„o de inbox)
     // Consideramos global se a lista de inboxes estiver vazia
     const globalAgent = agents.find(a => 
       !a.enabled_inbox_ids || a.enabled_inbox_ids.length === 0
@@ -206,8 +180,8 @@ export async function getActiveAgentForInbox(
     if (globalAgent) return globalAgent;
   }
 
-  // Se n√£o foi pedido inbox espec√≠fico ou n√£o achou nenhum compat√≠vel,
-  // retorna o primeiro da lista (comportamento legado/padr√£o)
+  // Se n„o foi pedido inbox especÌfico ou n„o achou nenhum compatÌvel,
+  // retorna o primeiro da lista (comportamento legado/padr„o)
   return agents[0];
 }
 
@@ -215,7 +189,7 @@ export async function updateAgent(
   companyId: string,
   id: string,
   patch: Partial<AgentInput>,
-): Promise<AgentRow> {
+): Promise<Agent> {
   const update: Record<string, unknown> = {};
 
   if (patch.name !== undefined) update.name = patch.name;

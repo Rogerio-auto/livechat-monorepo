@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
-import { logger } from "../lib/logger.ts";
+import { logger } from "../lib/logger.js";
 
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction) {
   if (err instanceof ZodError) {

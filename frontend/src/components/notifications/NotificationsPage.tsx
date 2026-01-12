@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchJson } from "../../lib/fetch";
-import type { Notification } from "../../types/notifications";
+import type { Notification } from "@livechat/shared";
 import { Button } from "../ui";
 
 const API = import.meta.env.VITE_API_URL;

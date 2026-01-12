@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X, ArrowRight, ArrowLeft, Sparkles, Zap, Calendar, Target, Check } from "lucide-react";
 import { useAutomationRules } from "../../hooks/useAutomationRules";
-import type { TriggerType } from "../../types/automationRules";
+import { TriggerType } from "@livechat/shared";
 
 interface RuleWizardProps {
   onClose: () => void;

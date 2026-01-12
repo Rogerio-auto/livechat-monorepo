@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import Sidebar from "../componets/Sidbars/sidebar";
-import { LeadPicker } from "../componets/funil/LeadPicker";
-import { ClienteForm } from "../componets/clientes/ClienteForm";
+import Sidebar from "../components/sidebars/sidebar";
+import { LeadPicker } from "../components/funil/LeadPicker";
+import { ClienteForm } from "../components/clientes/ClienteForm";
 import { useLocation, useNavigate } from "react-router-dom";
 
 type Lead = {

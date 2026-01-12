@@ -1,5 +1,6 @@
 // src/routes/customers.optin.ts
 import express from "express";
+import { AuthRequest } from "../types/express.js";
 import type { Application } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
@@ -9,7 +10,7 @@ import {
   getOptInStatus,
   getOptInStatusByPhone,
   bulkRegisterOptIn,
-} from "../services/customers/optIn.js";
+} from "../services/customers/opt-in.service.js";
 import { z } from "zod";
 
 const OptInSchema = z.object({
@@ -24,11 +25,11 @@ const BulkOptInSchema = z.object({
 });
 
 export function registerCustomerOptInRoutes(app: Application) {
-  async function resolveCompanyId(req: any): Promise<string> {
+  async function resolveCompanyId(req: AuthRequest): Promise<string> {
     const { data, error } = await supabaseAdmin
       .from("users")
       .select("id, user_id, company_id")
-      .eq("user_id", req.user.id)
+      .eq("user_id", req.user?.id)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
@@ -36,9 +37,11 @@ export function registerCustomerOptInRoutes(app: Application) {
     const companyId = row?.company_id;
     if (!companyId) throw new Error("Usuário sem company_id");
 
-    req.user.company_id ||= companyId;
-    req.user.db_user_id = row?.id ?? null;
-    req.user.user_uid = row?.user_id ?? null;
+    if (req.user) {
+      req.user.company_id ||= companyId;
+      req.user.db_user_id = row?.id ?? null;
+      req.user.user_uid = row?.user_id ?? null;
+    }
 
     return companyId;
   }

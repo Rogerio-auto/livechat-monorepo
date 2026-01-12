@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import type {
+import {
   Task,
   TaskFilters,
   TaskStats,
@@ -12,7 +12,7 @@ import type {
   TaskCompletedPayload,
   TaskDeletedPayload,
   TaskReminderPayload,
-} from "../types/tasks";
+} from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 

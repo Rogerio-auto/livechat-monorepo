@@ -1,12 +1,12 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { FiEdit2, FiCheck, FiX, FiPlay, FiPause, FiClock } from 'react-icons/fi';
-import type { CompanyOutletContext } from '../types';
+import { CompanyOutletContext, Plan } from '@livechat/shared';
 
 export function CompanyOverview() {
   const { company, analytics, isLoading, refresh } = useOutletContext<CompanyOutletContext>();
   const [isEditingPlan, setIsEditingPlan] = useState(false);
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [savingPlan, setSavingPlan] = useState(false);
   const [extendingDays, setExtendingDays] = useState('');
@@ -50,6 +50,7 @@ export function CompanyOverview() {
       await refresh();
       setIsEditingPlan(false);
     } catch (err) {
+      console.error('Erro ao atualizar plano:', err);
       alert('Erro ao atualizar plano');
     } finally {
       setSavingPlan(false);
@@ -68,6 +69,7 @@ export function CompanyOverview() {
       });
       await refresh();
     } catch (err) {
+      console.error('Erro ao alterar status:', err);
       alert('Erro ao alterar status');
     }
   };
@@ -86,9 +88,23 @@ export function CompanyOverview() {
       setIsExtending(false);
       setExtendingDays('');
     } catch (err) {
+      console.error('Erro ao estender assinatura:', err);
       alert('Erro ao estender assinatura');
     }
   };
+
+  const cards = useMemo(
+    () =>
+      analytics
+        ? [
+            { label: 'Usuários', value: analytics.counts.users },
+            { label: 'Inboxes', value: analytics.counts.inboxes },
+            { label: 'Agentes', value: analytics.counts.agents },
+            { label: 'Mensagens', value: analytics.usage.messages },
+          ]
+        : [],
+    [analytics]
+  );
 
   if (isLoading && !analytics) {
     return (
@@ -105,19 +121,6 @@ export function CompanyOverview() {
       </div>
     );
   }
-
-  const cards = useMemo(
-    () =>
-      analytics
-        ? [
-            { label: 'Usuários', value: analytics.counts.users },
-            { label: 'Inboxes', value: analytics.counts.inboxes },
-            { label: 'Agentes', value: analytics.counts.agents },
-            { label: 'Mensagens', value: analytics.usage.messages },
-          ]
-        : [],
-    [analytics]
-  );
 
   const lastMessageLabel = analytics?.usage.lastMessageAt
     ? new Date(analytics.usage.lastMessageAt).toLocaleString('pt-BR', {

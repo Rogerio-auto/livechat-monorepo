@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+temp
+.venv
+.vs
+*.config.js
+*.config.cjs
+*.config.ts
+scripts
+repo_docs

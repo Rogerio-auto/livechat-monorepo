@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { TaskForm } from "../../components/tasks/TaskForm";
-import type { CreateTaskInput, UpdateTaskInput } from "../../types/tasks";
+import { CreateTaskInput, UpdateTaskInput } from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 

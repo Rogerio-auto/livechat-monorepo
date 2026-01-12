@@ -1,6 +1,6 @@
 // Tipos e constantes para gerenciamento de Industry no Admin
 
-import { Industry } from "../types/cadastro";
+import { Industry } from "@livechat/shared";
 import { FaSolarPanel, FaHardHat, FaHome, FaGraduationCap, FaCalculator, FaStethoscope, FaGlassCheers, FaBalanceScale, FaStore } from "react-icons/fa";
 import { IconType } from "react-icons";
 

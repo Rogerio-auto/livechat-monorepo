@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { ProjectAttachment } from "../../types/projects";
+import type { ProjectAttachment } from "@livechat/shared";
 import { Upload, File, Trash2, Download, ExternalLink, FileText, Image as ImageIcon, Film, Paperclip } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL;

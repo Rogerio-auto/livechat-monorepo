@@ -3,7 +3,7 @@
  * Testa o fluxo completo sem precisar do servidor HTTP
  */
 
-import { generateWithPython } from "../services/python-generator.js";
+import { generateWithPython } from "../services/python-generator.service.js";
 import path from "path";
 import { fileURLToPath } from "url";
 

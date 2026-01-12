@@ -1,5 +1,5 @@
 import { Database } from "lucide-react";
-import { KnowledgeBasePanel } from "../../componets/knowledge/KnowledgeBasePanel";
+import { KnowledgeBasePanel } from "../../components/knowledge/KnowledgeBasePanel";
 
 export default function KnowledgeBasePage() {
   return (

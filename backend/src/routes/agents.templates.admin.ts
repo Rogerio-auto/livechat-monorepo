@@ -1,7 +1,7 @@
 import type { Application } from "express";
 import { ZodError, z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 async function getUserRole(userId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin

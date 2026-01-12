@@ -1,4 +1,4 @@
-import EmpresaPanel from "../../componets/company/EmpresaPanel";
+import EmpresaPanel from "../../components/company/EmpresaPanel";
 import { useCompanySettings } from "../../hooks/useCompanySettings";
 
 export default function EmpresaPage() {

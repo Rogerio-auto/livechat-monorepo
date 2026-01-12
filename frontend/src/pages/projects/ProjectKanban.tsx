@@ -38,7 +38,7 @@ import {
   LayoutTemplate,
   ArrowLeft
 } from "lucide-react";
-import type { ProjectTemplate, ProjectStage } from "../../types/projects";
+import type { ProjectTemplate, ProjectStage } from "@livechat/shared";
 import { Breadcrumbs } from "../../components/Breadcrumbs";
 
 const API = import.meta.env.VITE_API_URL;

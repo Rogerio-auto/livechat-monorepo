@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type {
+import {
   OnboardingStatus,
   OnboardingStep1Data,
   OnboardingStep2Data,
   OnboardingStep3Data,
   OnboardingCompleteResponse,
-} from "../types/cadastro";
+} from "@livechat/shared";
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
 

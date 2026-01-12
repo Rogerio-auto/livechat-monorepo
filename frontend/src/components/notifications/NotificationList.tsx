@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { fetchJson } from '@/lib/fetch';
-import { Notification } from '@/types/notifications';
+import { Notification } from '@livechat/shared';
 import { NotificationItem } from '@/components/notifications/NotificationItem';
 import { Button } from '@/components/ui/Button';
 import { ScrollArea } from '@/components/ui/scroll-area';

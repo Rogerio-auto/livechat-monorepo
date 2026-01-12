@@ -1,7 +1,8 @@
-import express from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { rGet, rSet } from "../lib/redis.ts";
+import { Response } from "express";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { rGet, rSet } from "../lib/redis.js";
+import { AuthRequest } from "../types/express.js";
 
 interface DashboardOverview {
   activeChats: number;
@@ -47,8 +48,8 @@ interface TopCustomer {
   avatar?: string;
 }
 
-export function registerDashboardRoutes(app: express.Application) {
-  async function resolveCompanyId(req: any): Promise<string> {
+export function registerDashboardRoutes(app: any) {
+  async function resolveCompanyId(req: AuthRequest): Promise<string> {
     const authUserId = req.user?.id;
     if (!authUserId) throw new Error("User not authenticated");
 
@@ -66,7 +67,7 @@ export function registerDashboardRoutes(app: express.Application) {
   }
 
   // GET /api/dashboard/overview - KPIs consolidados
-  app.get("/api/dashboard/overview", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/overview", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const cacheKey = `dashboard:overview:${companyId}`;
@@ -220,7 +221,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/messages/volume - Volume de mensagens por período
-  app.get("/api/dashboard/messages/volume", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/messages/volume", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const days = parseInt(req.query.days as string) || 7;
@@ -274,7 +275,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/response-time - Tempo médio de resposta
-  app.get("/api/dashboard/response-time", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/response-time", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const days = parseInt(req.query.days as string) || 7;
@@ -354,7 +355,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/alerts - Alertas e pendências
-  app.get("/api/dashboard/alerts", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/alerts", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const alerts: Alert[] = [];
@@ -458,7 +459,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/top-customers - Top clientes por interação
-  app.get("/api/dashboard/top-customers", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/top-customers", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const days = parseInt(req.query.days as string) || 30;
@@ -535,7 +536,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/funnel - Funil de vendas (kanban)
-  app.get("/api/dashboard/funnel", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/funnel", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const cacheKey = `dashboard:funnel:${companyId}`;
@@ -597,7 +598,7 @@ export function registerDashboardRoutes(app: express.Application) {
   });
 
   // GET /api/dashboard/campaigns/stats - Estatísticas de campanhas
-  app.get("/api/dashboard/campaigns/stats", requireAuth, async (req: any, res) => {
+  app.get("/api/dashboard/campaigns/stats", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const cacheKey = `dashboard:campaigns:${companyId}`;

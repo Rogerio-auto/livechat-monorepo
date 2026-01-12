@@ -25,62 +25,56 @@ export const LimitModal: React.FC<LimitModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleUpgrade = () => {
-    onClose();
-    navigate('/subscription');
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md max-w-md w-full overflow-hidden transform transition-all scale-100">
-        {/* Header */}
-        <div className="bg-linear-to-r from-amber-500 to-orange-600 p-6 text-white relative">
-          <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
-          >
-            <FiX size={24} />
-          </button>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-              <FiAlertTriangle size={24} className="text-white" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="p-6">
+          <div className="flex justify-between items-start mb-4">
+            <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+              <FiAlertTriangle size={24} />
             </div>
-            <h2 className="text-xl font-bold">{title}</h2>
-          </div>
-          <p className="text-white/90 text-sm">
-            Seu plano atual atingiu o limite de uso.
-          </p>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-4">
-          <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 border border-gray-100 dark:border-gray-700">
-            <p className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed">
-              {message || `Você atingiu o limite de ${resource === 'messages_per_month' ? 'mensagens' : resource === 'campaigns_per_month' ? 'campanhas' : 'recursos'} do seu plano atual.`}
-            </p>
-            
-            {limit !== undefined && current !== undefined && (
-              <div className="mt-3 flex items-center justify-between text-xs font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-200 dark:border-gray-700">
-                <span>Uso Atual: {current}</span>
-                <span>Limite: {limit}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={handleUpgrade}
-              className="w-full flex items-center justify-center gap-2 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl transition-all transform hover:scale-[1.02] shadow-lg shadow-blue-500/20"
+            <button 
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
             >
-              <FiArrowUpCircle size={20} />
-              Fazer Upgrade Agora
+              <FiX size={20} />
             </button>
-            
+          </div>
+
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            {title}
+          </h3>
+          
+          <div className="text-gray-600 dark:text-gray-300 mb-6">
+            {message || (
+              <>
+                Você atingiu o limite de <strong>{resource}</strong> permitido no seu plano atual
+                {limit && (
+                  <span> ({current || limit}/{limit})</span>
+                )}.
+              </>
+            )}
+            <p className="mt-2">
+              Faça o upgrade para continuar utilizando todos os recursos sem interrupções.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => {
+                onClose();
+                navigate('/configuracoes/assinatura');
+              }}
+              className="w-full py-3 px-4 bg-primary text-white rounded-lg font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors shadow-lg shadow-primary/20"
+            >
+              <FiArrowUpCircle size={18} />
+              Ver Planos e Upgrade
+            </button>
             <button
               onClick={onClose}
-              className="w-full py-3 px-4 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium transition-colors"
+              className="w-full py-2 px-4 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 font-medium transition-colors"
             >
-              Talvez depois
+              Agora não
             </button>
           </div>
         </div>
@@ -88,4 +82,3 @@ export const LimitModal: React.FC<LimitModalProps> = ({
     </div>
   );
 };
-

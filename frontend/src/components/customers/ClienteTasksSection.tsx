@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTasksByEntity } from "../../hooks/useTasks";
 import { TaskModal } from "../tasks/TaskModal";
-import type { Task, CreateTaskInput, UpdateTaskInput } from "../../types/tasks";
+import type { Task, CreateTaskDTO as CreateTaskInput, UpdateTaskDTO as UpdateTaskInput } from "@livechat/shared";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { FaPlus, FaTimes, FaCheckCircle, FaClock, FaExclamationTriangle } from "react-icons/fa";

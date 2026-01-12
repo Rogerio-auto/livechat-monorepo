@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type {
+import {
   DashboardOverview,
   MessageVolumeData,
   ResponseTimeData,
@@ -11,7 +11,7 @@ import type {
   AgentMetrics,
   LeadStats,
   DashboardFilters,
-} from "../types/dashboard";
+} from "@livechat/shared";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 

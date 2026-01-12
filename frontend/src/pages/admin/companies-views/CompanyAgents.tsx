@@ -8,7 +8,7 @@ import { AgentConfigEditor } from '@/components/agents/configuration/AgentConfig
 import { AgentTraining } from '@/components/agents/training/AgentTraining';
 import { AgentAnalytics } from '@/components/agents/analytics/AgentAnalytics';
 import { AgentSelector } from '@/components/agents/shared/AgentSelector';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 
 type TabId = 'monitoring' | 'configuration' | 'training' | 'analytics';
 

@@ -1,6 +1,6 @@
 // backend/src/repos/projects.repo.ts
 
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
 import {
   notifyProjectCreated,
   notifyProjectAssigned,
@@ -9,90 +9,17 @@ import {
   notifyProjectCommented,
   notifyTaskCompleted,
   notifyTaskAssigned,
-} from '../services/notification-triggers.service.ts';
-
-// ==================== TYPES ====================
-
-export type Project = {
-  id: string;
-  company_id: string;
-  template_id: string;
-  current_stage_id: string | null;
-  project_number: string;
-  title: string;
-  description: string | null;
-  customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
-  customer_address: string | null;
-  customer_id: string | null;
-  estimated_value: number | null;
-  final_value: number | null;
-  currency: string;
-  start_date: string | null;
-  estimated_end_date: string | null;
-  actual_end_date: string | null;
-  progress_percentage: number;
-  owner_user_id: string | null;
-  assigned_users: string[];
-  custom_fields: Record<string, any>;
-  status: string;
-  priority: string;
-  tags: string[];
-  is_archived: boolean;
-  is_favorite: boolean;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type ProjectComment = {
-  id: string;
-  project_id: string;
-  user_id: string;
-  comment_text: string;
-  is_internal: boolean;
-  parent_id: string | null;
-  created_at: string;
-  user?: {
-    id: string;
-    name: string;
-    avatar_url: string | null;
-  };
-};
-
-export type CreateProjectInput = {
-  template_id: string;
-  title: string;
-  description?: string | null;
-  customer_name?: string | null;
-  customer_email?: string | null;
-  customer_phone?: string | null;
-  customer_address?: string | null;
-  estimated_value?: number | null;
-  start_date?: string | null;
-  estimated_end_date?: string | null;
-  owner_user_id?: string | null;
-  assigned_users?: string[] | null;
-  custom_fields?: Record<string, any> | null;
-  priority?: string | null;
-  tags?: string[] | null;
-};
-
-export type UpdateProjectInput = Partial<Omit<Project, "id" | "company_id" | "created_at" | "created_by" | "project_number">>;
-
-export type ProjectFilters = {
-  status?: string;
-  stage_id?: string;
-  template_id?: string;
-  owner_user_id?: string;
-  assigned_to?: string;
-  priority?: string;
-  search?: string;
-  is_archived?: boolean;
-  start_date_from?: string;
-  start_date_to?: string;
-};
+} from '../services/notification-triggers.service.js';
+import {
+  Project,
+  ProjectComment,
+  CreateProjectDTO,
+  UpdateProjectDTO,
+  ProjectFilters,
+  ProjectActivity,
+  ProjectAttachment,
+  ProjectTask
+} from "@livechat/shared";
 
 // ==================== CRUD ====================
 
@@ -197,7 +124,7 @@ export async function getProject(
 export async function createProject(
   companyId: string,
   userId: string,
-  input: CreateProjectInput
+  input: CreateProjectDTO
 ): Promise<Project> {
   // Buscar estágio inicial do template
   const { data: template, error: tError } = await supabaseAdmin
@@ -250,7 +177,7 @@ export async function updateProject(
   companyId: string,
   projectId: string,
   userId: string,
-  input: UpdateProjectInput
+  input: UpdateProjectDTO
 ): Promise<Project> {
   const project = await getProject(companyId, projectId);
   if (!project) throw new Error("Project not found");
@@ -425,19 +352,6 @@ export async function deleteProject(
 
 // ==================== ACTIVITIES ====================
 
-export type ProjectActivity = {
-  id: string;
-  project_id: string;
-  activity_type: string;
-  title: string | null;
-  description: string | null;
-  metadata: Record<string, any> | null;
-  from_stage_id: string | null;
-  to_stage_id: string | null;
-  created_by: string | null;
-  created_at: string;
-};
-
 /**
  * Registra atividade no projeto
  */
@@ -565,22 +479,6 @@ export async function deleteComment(commentId: string): Promise<void> {
 }
 // ==================== ATTACHMENTS ====================
 
-export type ProjectAttachment = {
-  id: string;
-  project_id: string;
-  file_name: string;
-  file_url: string;
-  file_type: string | null;
-  file_size:  number | null;
-  file_category: string | null;
-  folder:  string | null;
-  description: string | null;
-  tags: string[];
-  is_public: boolean;
-  uploaded_by: string;
-  created_at: string;
-};
-
 /**
  * Adiciona anexo ao projeto
  */
@@ -683,21 +581,6 @@ export async function getProjectStats(companyId: string, templateId?: string): P
 }
 // ==================== TASKS ====================
 
-export type ProjectTask = {
-  id: string;
-  project_id: string;
-  title: string;
-  description: string | null;
-  is_completed: boolean;
-  completed_at: string | null;
-  completed_by: string | null;
-  assigned_to: string | null;
-  order_index: number;
-  created_by: string | null;
-  created_at:  string;
-  updated_at:  string | null;
-};
-
 /**
  * Adiciona tarefa ao projeto
  */
@@ -750,7 +633,7 @@ export async function addTask(
 
   // 🆕 NOTIFICAR atribuição
   if (data.assigned_to && data.assigned_to !== userId) {
-    const { notifyTaskAssigned } = await import('../services/notification-triggers.service.ts');
+    const { notifyTaskAssigned } = await import('../services/notification-triggers.service.js');
     await notifyTaskAssigned(
       data.id,
       data.title,

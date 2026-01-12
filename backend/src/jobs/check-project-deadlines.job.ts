@@ -1,8 +1,8 @@
 // backend/src/jobs/check-project-deadlines.job.ts
 
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { NotificationService } from "../services/NotificationService.ts";
-import { notifyProjectDueToday, notifyProjectDueTomorrow, notifyProjectWarning, notifyProjectOverdue, notifyTaskDueToday, notifyTaskDueTomorrow, notifyTaskOverdue } from "../services/notification-triggers.service.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { NotificationService } from "../services/notification.service.js";
+import { notifyProjectDueToday, notifyProjectDueTomorrow, notifyProjectWarning, notifyProjectOverdue, notifyTaskDueToday, notifyTaskDueTomorrow, notifyTaskOverdue } from "../services/notification-triggers.service.js";
 
 /**
  * Job para verificar prazos de projetos

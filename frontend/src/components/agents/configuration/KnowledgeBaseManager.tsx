@@ -1,4 +1,4 @@
-import { Agent } from '../../../types/agent';
+import { Agent } from '@livechat/shared';
 import { FiBook, FiPlus, FiFileText } from 'react-icons/fi';
 
 export function KnowledgeBaseManager({ agent }: { agent: Agent }) {

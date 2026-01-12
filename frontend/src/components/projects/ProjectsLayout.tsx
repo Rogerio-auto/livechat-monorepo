@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { fetchJson } from "../../lib/fetch";
-import type { TemplateWithDetails } from "../../types/projects";
+import type { TemplateWithDetails } from "@livechat/shared";
 import ProjectKanbanBoard from "./ProjectKanbanBoard";
 import ProjectStats from "./ProjectStats";
 import TemplateWizard from "./TemplateWizard";

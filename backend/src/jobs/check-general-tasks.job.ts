@@ -1,8 +1,8 @@
 // backend/src/jobs/check-general-tasks.job.ts
 
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { NotificationService } from "../services/NotificationService.ts";
-import { notifyTaskDueToday, notifyTaskDueTomorrow, notifyTaskOverdue } from "../services/notification-triggers.service.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { NotificationService } from "../services/notification.service.js";
+import { notifyTaskDueToday, notifyTaskDueTomorrow, notifyTaskOverdue } from "../services/notification-triggers.service.js";
 
 /**
  * Job para verificar prazos de tarefas gerais (tabela 'tasks')

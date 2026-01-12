@@ -1,7 +1,8 @@
-import type { Application } from "express";
+import type { Application, Response } from "express";
+import { AuthRequest } from "../types/express.js";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 const DepartmentSchema = z.object({
   name: z.string().min(1).max(100),
@@ -15,7 +16,7 @@ export function registerDepartmentsRoutes(app: Application) {
   console.log("[DEPARTMENTS] 🏢 Registering departments routes");
   
   // 📋 GET /api/departments - Listar departamentos da empresa
-  app.get("/api/departments", requireAuth, async (req: any, res) => {
+  app.get("/api/departments", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       console.log("[GET /api/departments] Request received");
       console.log("[GET /api/departments] req.user:", req.user);
@@ -49,10 +50,10 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // 🔍 GET /api/departments/:id - Buscar departamento específico
-  app.get("/api/departments/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/departments/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       
       const { data, error } = await supabaseAdmin
         .from("departments")
@@ -74,9 +75,9 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // ➕ POST /api/departments - Criar departamento
-  app.post("/api/departments", requireAuth, async (req: any, res) => {
+  app.post("/api/departments", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       if (!companyId) {
         return res.status(401).json({ error: "Empresa não identificada" });
       }
@@ -123,10 +124,10 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // ✏️ PUT /api/departments/:id - Atualizar departamento
-  app.put("/api/departments/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/departments/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       const parsed = DepartmentSchema.partial().parse(req.body);
       
       // Verificar propriedade
@@ -181,10 +182,10 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // 🗑️ DELETE /api/departments/:id - Deletar departamento
-  app.delete("/api/departments/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/departments/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       
       // Verificar propriedade
       const { data: dept } = await supabaseAdmin
@@ -248,10 +249,10 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // 📊 GET /api/departments/:id/metrics - Métricas do departamento
-  app.get("/api/departments/:id/metrics", requireAuth, async (req: any, res) => {
+  app.get("/api/departments/:id/metrics", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       
       // Verificar propriedade
       const { data: dept } = await supabaseAdmin
@@ -310,9 +311,9 @@ export function registerDepartmentsRoutes(app: Application) {
   });
 
   // 📊 GET /api/departments/stats/summary - Resumo de todos os departamentos
-  app.get("/api/departments/stats/summary", requireAuth, async (req: any, res) => {
+  app.get("/api/departments/stats/summary", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const companyId = req.user.company_id;
+      const companyId = req.user?.company_id;
       if (!companyId) {
         return res.status(401).json({ error: "Empresa não identificada" });
       }

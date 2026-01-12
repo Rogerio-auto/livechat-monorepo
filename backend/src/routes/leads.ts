@@ -1,11 +1,12 @@
-import express from "express";
+import express, { Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { NotificationService } from "../services/NotificationService.ts";
-import { getBoardIdForCompany } from "../services/meta/store.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { NotificationService } from "../services/notification.service.js";
+import { getBoardIdForCompany } from "../services/meta/store.service.js";
+import type { Lead, CreateLeadDTO, UpdateLeadDTO, AuthRequest } from "../types/index.js";
 
-type LeadForm = {
+interface LeadForm {
   tipoPessoa?: string; cpf?: string; nome?: string; rg?: string; orgao?: string;
   dataNascimento?: string; mae?: string; pai?: string; sexo?: string; naturalidade?: string;
   estadoCivil?: string; conjuge?: string; cep?: string; rua?: string; numero?: string;
@@ -13,9 +14,9 @@ type LeadForm = {
   celularAlternativo?: string; telefone?: string; telefoneAlternativo?: string; email?: string;
   site?: string; observacoes?: string; status?: string; etapa?: string; kanban_column_id?: string;
   customer_id?: string; chat_id?: string; kanban_board_id?: string;
-};
+}
 
-export function mapLead(form: LeadForm) {
+export function mapLead(form: LeadForm): Partial<Lead> {
   const mapped: any = {
     cpf: form.cpf ?? null,
     name: form.nome ?? null,
@@ -64,9 +65,20 @@ export function mapLead(form: LeadForm) {
   return mapped;
 }
 
+import { Request, Response } from "express";
+
+interface AuthRequest extends Request {
+  user: {
+    id: string;
+    email?: string;
+    company_id: string;
+    role?: string;
+  };
+}
+
 export function registerLeadRoutes(app: express.Application) {
   // Check phone existence
-  app.get("/leads/check-phone/:phone", requireAuth, async (req: any, res) => {
+  app.get("/leads/check-phone/:phone", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { phone } = req.params;
       const companyId = req.user?.company_id;
@@ -103,16 +115,16 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // List
-  app.get("/leads", requireAuth, async (req: any, res) => {
+  app.get("/leads", requireAuth, async (req: AuthRequest, res: Response) => {
     const companyId = req.user?.company_id;
-    console.log('[GET /leads] 🔍 Request from user:', {
+    console.log('[GET /leads] \u{1F50D} Request from user:', {
       userId: req.user?.id,
       email: req.user?.email,
       companyId: companyId,
     });
     
     if (!companyId) {
-      console.log('[GET /leads] ❌ Missing company_id');
+      console.log('[GET /leads] \u274C Missing company_id');
       return res.status(400).json({ error: "Missing company context" });
     }
     
@@ -122,30 +134,30 @@ export function registerLeadRoutes(app: express.Application) {
       .eq("company_id", companyId)
       .order("created_at", { ascending: false });
     
-    console.log('[GET /leads] 📊 Query result:', {
+    console.log('[GET /leads] \u{1F4CA} Query result:', {
       companyId,
       count: data?.length || 0,
       error: error?.message,
     });
     
     if (error) return res.status(500).json({ error: error.message });
-    const mapped = (data ?? []).map((r: any) => ({
+    const mapped = (data ?? []).map((r: Lead) => ({
       id: r.id,
       nome: r.name,
       name: r.name,
       cpf: r.cpf,
       email: r.email,
-      status: (r.statusClient ?? r.status_client ?? "Ativo").toLowerCase(),
+      status: (r.statusClient ?? (r as any).status_client ?? "Ativo").toLowerCase(),
       kanban_column_id: r.kanban_column_id,
-      tipoPessoa: r.personType ?? r.person_type,
+      tipoPessoa: r.personType ?? (r as any).person_type,
       rg: r.rg,
-      orgao: r.rgOrgao ?? r.rg_orgao,
-      dataNascimento: r.birthDate ?? r.birth_date,
+      orgao: r.rgOrgao ?? (r as any).rg_orgao,
+      dataNascimento: r.birthDate ?? (r as any).birth_date,
       mae: r.mother,
       pai: r.father,
       sexo: r.gender,
-      naturalidade: r.birthPlace ?? r.birth_place,
-      estadoCivil: r.maritalStatus ?? r.marital_status,
+      naturalidade: r.birthPlace ?? (r as any).birth_place,
+      estadoCivil: r.maritalStatus ?? (r as any).marital_status,
       conjuge: r.spouse,
       cep: r.cep,
       rua: r.street,
@@ -155,9 +167,9 @@ export function registerLeadRoutes(app: express.Application) {
       uf: r.state,
       cidade: r.city,
       celular: r.cellphone,
-      celularAlternativo: r.altCellphone ?? r.alt_cellphone,
+      celularAlternativo: r.altCellphone ?? (r as any).alt_cellphone,
       telefone: r.telephone,
-      telefoneAlternativo: r.altTelephone ?? r.alt_telephone,
+      telefoneAlternativo: r.altTelephone ?? (r as any).alt_telephone,
       site: r.site,
       observacoes: r.notes,
       createdAt: r.created_at,
@@ -167,7 +179,7 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Statistics endpoint
-  app.get("/api/leads/stats", requireAuth, async (req: any, res) => {
+  app.get("/api/leads/stats", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = req.user?.company_id;
       if (!companyId) {
@@ -182,7 +194,7 @@ export function registerLeadRoutes(app: express.Application) {
       
       if (leadsError) throw leadsError;
 
-      const leads = allLeads || [];
+      const leads = (allLeads || []) as Lead[];
       const now = new Date();
       const firstDayThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -190,23 +202,23 @@ export function registerLeadRoutes(app: express.Application) {
 
       // Calculate basic metrics
       const total = leads.length;
-      const active = leads.filter((l: any) => {
-        const status = (l.statusClient || l.status_client || "").toLowerCase();
+      const active = leads.filter((l: Lead) => {
+        const status = (l.statusClient || (l as any).status_client || "").toLowerCase();
         return status === "ativo";
       }).length;
       const inactive = total - active;
 
-      const newThisMonth = leads.filter((l: any) => 
+      const newThisMonth = leads.filter((l: Lead) => 
         new Date(l.created_at) >= firstDayThisMonth
       ).length;
-      const newLastMonth = leads.filter((l: any) => {
+      const newLastMonth = leads.filter((l: Lead) => {
         const created = new Date(l.created_at);
         return created >= firstDayLastMonth && created <= lastDayLastMonth;
       }).length;
 
       // Distribution by kanban stage
       const byStage: Record<string, number> = {};
-      const stageIds = [...new Set(leads.map((l: any) => l.kanban_column_id).filter(Boolean))];
+      const stageIds = [...new Set(leads.map((l: Lead) => l.kanban_column_id).filter((id): id is string => !!id))];
       
       // Get stage names
       const { data: columns } = await supabaseAdmin
@@ -214,7 +226,7 @@ export function registerLeadRoutes(app: express.Application) {
         .select("id, name, title")
         .in("id", stageIds);
 
-      const stageMap = new Map((columns || []).map((c: any) => [c.id, c.name || c.title || "Sem título"]));
+      const stageMap = new Map((columns || []).map((c: any) => [c.id, c.name || c.title || "Sem tÃtulo"]));
 
       for (const lead of leads) {
         if (lead.kanban_column_id) {
@@ -226,7 +238,7 @@ export function registerLeadRoutes(app: express.Application) {
       }
 
       // Count leads with proposals
-      const leadIds = leads.map((l: any) => l.id);
+      const leadIds = leads.map((l: Lead) => l.id);
       const { data: proposals } = await supabaseAdmin
         .from("proposals")
         .select("lead_id, total_value")
@@ -256,7 +268,7 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Minimal by id (for receipts)
-  app.get("/leads/:id", requireAuth, async (req: any, res) => {
+  app.get("/leads/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params as { id: string };
       const companyId = req.user?.company_id;
@@ -282,14 +294,14 @@ export function registerLeadRoutes(app: express.Application) {
         .maybeSingle();
       if (error) return res.status(500).json({ error: error.message });
       if (!data) return res.status(404).json({ error: "Lead não encontrado" });
-      return res.json(data);
+      return res.json(data as Lead);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || "leads get error" });
     }
   });
 
   // Minimal by customer
-  app.get("/leads/by-customer/:customerId", requireAuth, async (req: any, res) => {
+  app.get("/leads/by-customer/:customerId", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { customerId } = req.params as { customerId: string };
       const companyId = req.user?.company_id;
@@ -308,7 +320,7 @@ export function registerLeadRoutes(app: express.Application) {
         .limit(1)
         .maybeSingle();
       if (leadByCustomerErr) return res.status(500).json({ error: leadByCustomerErr.message });
-      if (leadByCustomer) return res.json(leadByCustomer);
+      if (leadByCustomer) return res.json(leadByCustomer as Lead);
 
       const { data: leadById, error: leadByIdErr } = await supabaseAdmin
         .from("leads")
@@ -317,7 +329,7 @@ export function registerLeadRoutes(app: express.Application) {
         .eq("company_id", companyId)
         .maybeSingle();
       if (leadByIdErr) return res.status(500).json({ error: leadByIdErr.message });
-      if (leadById) return res.json(leadById);
+      if (leadById) return res.json(leadById as Lead);
 
       const { data: customer, error: customerErr } = await supabaseAdmin
         .from("customers")
@@ -330,10 +342,10 @@ export function registerLeadRoutes(app: express.Application) {
         return res.json({
           id: customer.id,
           customer_id: customer.id,
-          name: (customer as any).name,
-          email: (customer as any).email || null,
-          phone: (customer as any).phone || null,
-        });
+          name: customer.name ?? "",
+          email: customer.email || null,
+          phone: customer.phone || null,
+        } as Partial<Lead>);
       }
       return res.json(null);
     } catch (e: any) {
@@ -342,16 +354,16 @@ export function registerLeadRoutes(app: express.Application) {
   });
 
   // Create lead
-  app.post("/leads", requireAuth, async (req: any, res) => {
+  app.post("/leads", requireAuth, async (req: AuthRequest, res: Response) => {
     const companyId = req.user?.company_id;
     if (!companyId) {
       return res.status(400).json({ error: "Missing company context" });
     }
     
-    const payload = mapLead(req.body);
-    if (!payload.name) return res.status(400).json({ error: "Campo 'nome' é obrigatório" });
+    const payload = mapLead(req.body as LeadForm);
+    if (!payload.name) return res.status(400).json({ error: "Campo 'nome' Ã© obrigatÃ³rio" });
     
-    // Garantir que o lead pertence à empresa do usuário
+    // Garantir que o lead pertence Ã  empresa do usuÃ¡rio
     payload.company_id = companyId;
     
     // Garantir que o lead tenha um kanban_board_id (NOT NULL no banco)
@@ -374,7 +386,7 @@ export function registerLeadRoutes(app: express.Application) {
         .maybeSingle();
 
       if (leadExists) {
-        return res.status(400).json({ error: "Já existe um lead cadastrado com este número de telefone." });
+        return res.status(400).json({ error: "JÃ¡ existe um lead cadastrado com este nÃºmero de telefone." });
       }
 
       // 2. Verificar na tabela customers
@@ -386,7 +398,7 @@ export function registerLeadRoutes(app: express.Application) {
         .maybeSingle();
 
       if (customerExists) {
-        return res.status(400).json({ error: "Já existe um cliente cadastrado com este número de telefone." });
+        return res.status(400).json({ error: "JÃ¡ existe um cliente cadastrado com este nÃºmero de telefone." });
       }
     }
     
@@ -398,27 +410,29 @@ export function registerLeadRoutes(app: express.Application) {
       return res.status(500).json({ error: error.message });
     }
 
-    // 🔔 Enviar notificação de novo lead
+    const lead = data as Lead;
+
+    // 🔔 Enviar notificaÃ§Ã£o de novo lead
     try {
       await NotificationService.create({
         title: "🎯 Novo Lead Capturado",
-        message: `${data.name}${data.phone ? ` - ${data.phone}` : ""}`,
+        message: `${lead.name}${lead.phone ? ` - ${lead.phone}` : ""}`,
         type: "NEW_LEAD",
         userId: req.user.id,
         companyId: companyId,
-        data: { leadId: data.id, leadName: data.name, leadPhone: data.phone },
-        actionUrl: `/dashboard/leads/${data.id}`,
+        data: { leadId: lead.id, leadName: lead.name, leadPhone: lead.phone },
+        actionUrl: `/dashboard/leads/${lead.id}`,
       });
-      console.log("[POST /leads] 🔔 Notificação NEW_LEAD enviada");
+      console.log("[POST /leads] 🔔 NotificaÃ§Ã£o NEW_LEAD enviada");
     } catch (notifError) {
-      console.warn("[POST /leads] ⚠️ Erro ao enviar notificação:", notifError);
+      console.warn("[POST /leads] ⚠️ Erro ao enviar notificaÃ§Ã£o:", notifError);
     }
 
-    return res.status(201).json(data);
+    return res.status(201).json(lead);
   });
 
   // Update lead
-  app.put("/leads/:id", requireAuth, async (req: any, res) => {
+  app.put("/leads/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const companyId = req.user?.company_id;
     if (!companyId) {
@@ -427,7 +441,7 @@ export function registerLeadRoutes(app: express.Application) {
     
     console.log("[PUT /leads/:id] Received payload:", JSON.stringify(req.body, null, 2));
     
-    const payload = mapLead(req.body);
+    const payload = mapLead(req.body as LeadForm);
     
     console.log("[PUT /leads/:id] Mapped payload:", JSON.stringify(payload, null, 2));
     
@@ -445,11 +459,12 @@ export function registerLeadRoutes(app: express.Application) {
       return res.status(500).json({ error: error.message });
     }
     
-    console.log("[PUT /leads/:id] Updated successfully:", { id, name: data?.name });
+    const lead = data as Lead;
+    console.log("[PUT /leads/:id] Updated successfully:", { id, name: lead?.name });
     
-    // Se o lead tem customer_id, atualizar também a tabela customers
+    // Se o lead tem customer_id, atualizar tambÃ©m a tabela customers
     // (excluindo phone, msisdn e lid conforme solicitado)
-    if (data?.customer_id) {
+    if (lead?.customer_id) {
       const customerPayload: any = {};
       
       // Dados gerais permitidos
@@ -458,7 +473,7 @@ export function registerLeadRoutes(app: express.Application) {
       if (payload.cpf !== undefined) customerPayload.cpf_cnpj = payload.cpf;
       if (payload.birthDate !== undefined) customerPayload.birth_date = payload.birthDate;
       
-      // Endereço
+      // EndereÃ§o
       const addressParts = [
         payload.street,
         payload.number,
@@ -477,21 +492,21 @@ export function registerLeadRoutes(app: express.Application) {
         const { error: custError } = await supabaseAdmin
           .from("customers")
           .update(customerPayload)
-          .eq("id", data.customer_id)
+          .eq("id", lead.customer_id)
           .eq("company_id", companyId);
           
         if (custError) {
           console.error("[leads/:id PUT] Failed to sync customer:", custError);
-          // Não retorna erro, apenas loga
+          // NÃ£o retorna erro, apenas loga
         }
       }
     }
     
-    return res.json(data);
+    return res.json(lead);
   });
 
   // Delete lead
-  app.delete("/leads/:id", requireAuth, async (req: any, res) => {
+  app.delete("/leads/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const companyId = req.user?.company_id;
     if (!companyId) {
@@ -512,7 +527,7 @@ export function registerLeadRoutes(app: express.Application) {
   // ==========================================
 
   // Get customer by ID (busca na tabela leads pelo customer_id)
-  app.get("/customers/:id", requireAuth, async (req: any, res) => {
+  app.get("/customers/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params as { id: string };
       const companyId = req.user?.company_id;
@@ -543,10 +558,10 @@ export function registerLeadRoutes(app: express.Application) {
       }
       
       if (!data || data.length === 0) {
-        return res.status(404).json({ error: "Cliente não encontrado" });
+        return res.status(404).json({ error: "Cliente nÃ£o encontrado" });
       }
       
-      return res.json(data[0]);
+      return res.json(data[0] as Lead);
     } catch (e: any) {
       console.error("[customers/:id] Exception:", e);
       return res.status(500).json({ error: e?.message || "customers get error" });

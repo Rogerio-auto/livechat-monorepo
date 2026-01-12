@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useCompany } from "../../hooks/useCompany";
 import { getCatalogConfig, getFieldLabel, isFieldVisible, isFieldRequired } from "../../config/catalog-config";
-import { Product, ProductForm, ItemType } from "./types";
+import { Product, ProductForm, ItemType } from "@livechat/shared";
 import { ArrowLeft, Save, X, ImageIcon, Package, Info, DollarSign, Settings, Trash2 } from "lucide-react";
-import MediaLibraryModal from "../../componets/livechat/MediaLibraryModal";
+import MediaLibraryModal from "../../components/livechat/MediaLibraryModal";
 
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";
 

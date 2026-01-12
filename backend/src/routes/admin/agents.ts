@@ -4,7 +4,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { requireAuth } from '../../middlewares/requireAuth.js';
 import { supabaseAdmin } from '../../lib/supabase.js';
-import { runAgentReply } from '../../services/agents.runtime.js';
+import { runAgentReply } from '../../services/agents-runtime.service.js';
 import { db } from '../../pg.js';
 
 const router = Router();

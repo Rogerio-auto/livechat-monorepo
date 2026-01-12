@@ -1,9 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { JWT_COOKIE_NAME } from "../config/env.ts";
-import { rGet, rSet } from "../lib/redis.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { JWT_COOKIE_NAME } from "../config/env.js";
+import { rGet, rSet } from "../lib/redis.js";
 
 const isDev = process.env.NODE_ENV !== "production";
 const AUTH_CACHE_TTL = 300; // 5 minutos
@@ -144,7 +144,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     if (error || !data?.user) {
       try {
         const jwt = await import("jsonwebtoken");
-        const { SUPABASE_JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY } = await import("../config/env.ts");
+        const { SUPABASE_JWT_SECRET, SUPABASE_SERVICE_ROLE_KEY } = await import("../config/env.js");
         const secret = SUPABASE_JWT_SECRET || SUPABASE_SERVICE_ROLE_KEY;
         
         if (secret) {

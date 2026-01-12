@@ -14,7 +14,7 @@ import {
   FaCheck,
   FaTasks,
 } from "react-icons/fa";
-import { Task } from "../types/tasks";
+import { Task } from "@livechat/shared";
 import { TaskModal } from "../components/tasks/TaskModal";
 import { io, Socket } from "socket.io-client";
 import { toast } from "../hooks/useToast";

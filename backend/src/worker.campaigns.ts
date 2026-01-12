@@ -1,6 +1,6 @@
-import { consume, publish, EX_APP, Q_CAMPAIGN_FOLLOWUP } from "./queue/rabbit.ts";
-import { supabaseAdmin } from "./lib/supabase.ts";
-import "./config/env.ts";
+import { consume, publish, EX_APP, Q_CAMPAIGN_FOLLOWUP } from "./queue/rabbit.js";
+import { supabaseAdmin } from "./lib/supabase.js";
+import "./config/env.js";
 
 export async function registerCampaignWorker() {
   console.log("[worker-campaigns] Starting campaign worker...");

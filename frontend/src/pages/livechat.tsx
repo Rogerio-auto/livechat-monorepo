@@ -6,18 +6,18 @@ import { useNavigate, useLocation, useParams, useOutletContext } from "react-rou
 import { cleanupService } from "../services/cleanupService";
 import { useCompany } from "../hooks/useCompany";
 import ChatList, { type Chat as ChatListItem } from "../components/livechat/ChatList";
-import LivechatMenu, { type LivechatSection } from "../componets/livechat/LivechatMenu";
-import { ChatHeader } from "../componets/livechat/ChatHeader";
-import { MessageBubble } from "../componets/livechat/MessageBubble";
-import { LabelsManager } from "../componets/livechat/LabelsManager";
+import LivechatMenu, { type LivechatSection } from "../components/livechat/LivechatMenu";
+import { ChatHeader } from "../components/livechat/ChatHeader";
+import { MessageBubble } from "../components/livechat/MessageBubble";
+import { LabelsManager } from "../components/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
-import type { Chat, Message, Inbox, Tag, Contact } from "../componets/livechat/types";
+import type { Chat, Message, Inbox, Tag, Contact } from "@livechat/shared";
 import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu } from "react-icons/fi";
-import { ContactsCRM } from "../componets/livechat/ContactsCRM";
-import CampaignsPanel from "../componets/livechat/CampaignsPanel";
-import FlowsPanel from "../componets/livechat/FlowsPanel";
-import { FirstInboxWizard } from "../componets/livechat/FirstInboxWizard";
-import { ContactInfoPanel } from "../componets/livechat/ContactInfoPanel";
+import { ContactsCRM } from "../components/livechat/ContactsCRM";
+import CampaignsPanel from "../components/livechat/CampaignsPanel";
+import FlowsPanel from "../components/livechat/FlowsPanel";
+import { FirstInboxWizard } from "../components/livechat/FirstInboxWizard";
+import { ContactInfoPanel } from "../components/livechat/ContactInfoPanel";
 import { MentionInput } from "../components/MentionInput";
 import { Button, Card } from "../components/ui";
 import { format, isToday, isYesterday, isSameDay } from "date-fns";
@@ -3485,7 +3485,7 @@ const scrollToBottom = useCallback(
       } catch (e) {
         console.error("Falha ao editar mensagem", e);
         // Soft revert marker
-        updateMessageStatusInCache({ chatId, messageId: message.id, merge: { view_status: message.view_status || null } });
+        updateMessageStatusInCache({ chatId, messageId: message.id, merge: { view_status: (message.view_status || undefined) as any } });
         alert("Falha ao editar mensagem");
       }
     },

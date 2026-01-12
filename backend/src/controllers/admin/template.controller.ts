@@ -1,7 +1,7 @@
 // backend/src/controllers/admin/template.controller.ts
 
 import { Request, Response } from 'express';
-import { TemplateManagementService } from '../../services/admin/templateManagement.service.ts';
+import { TemplateManagementService } from '../../services/admin/template-management.service.js';
 
 export class TemplateController {
   

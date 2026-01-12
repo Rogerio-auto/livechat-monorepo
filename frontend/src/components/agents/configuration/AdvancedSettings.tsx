@@ -1,4 +1,4 @@
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 import { FiCpu, FiMessageSquare, FiClock, FiShield } from 'react-icons/fi';
 
 interface Props {

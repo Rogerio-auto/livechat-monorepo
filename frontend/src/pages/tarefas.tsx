@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useTasks, useTaskStats } from "../hooks/useTasks";
 import { TaskCard } from "../components/tasks/TaskCard";
 import { TaskKanbanView } from "../components/tasks/TaskKanbanView";
-import type {
+import {
   Task,
   TaskFilters,
   CreateTaskInput,
@@ -12,7 +12,7 @@ import type {
   TaskStatus,
   TaskPriority,
   TaskType,
-} from "../types/tasks";
+} from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 

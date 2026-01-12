@@ -1,10 +1,10 @@
 import type { Application } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
-import { APP_URL } from "../config/env.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { APP_URL } from "../config/env.js";
 
 const ROLE_VALUES = ["AGENT", "SUPERVISOR", "TECHNICIAN", "MANAGER"] as const;
 const ROLE_ARRAY = [...ROLE_VALUES];

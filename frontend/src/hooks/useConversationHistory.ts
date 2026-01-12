@@ -1,6 +1,6 @@
 // frontend/src/hooks/useConversationHistory.ts
 import { useState, useEffect } from 'react';
-import { Conversation } from '../types/agent';
+import { Conversation } from '@livechat/shared';
 
 export function useConversationHistory(agentId: string, limit: number = 10) {
   const [conversations, setConversations] = useState<Conversation[]>([]);

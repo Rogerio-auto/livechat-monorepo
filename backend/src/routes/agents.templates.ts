@@ -1,14 +1,14 @@
 import type { Application } from "express";
 import { ZodError, z } from "zod";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   listAgentTemplates,
   getAgentTemplateById,
   getAgentTemplateQuestions,
   getAgentTemplateTools,
-} from "../repos/agent.templates.repo.ts";
-import { previewTemplate } from "../services/agentTemplates.ts";
+} from "../repos/agent-templates.repo.js";
+import { previewTemplate } from "../services/agent-templates.service.js";
 
 async function resolveCompanyId(req: any) {
   const authId = String(req?.user?.id || "");

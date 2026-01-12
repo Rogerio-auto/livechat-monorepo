@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useCompany } from "../../hooks/useCompany";
 import { getCatalogConfig, getFieldLabel, isFieldVisible } from "../../config/catalog-config";
-import { Product } from "./types";
+import { Product } from "@livechat/shared";
 import { ArrowLeft, Edit2, Package, Tag, Info, DollarSign, Clock, Truck, Shield } from "lucide-react";
 
 const API = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:5000";

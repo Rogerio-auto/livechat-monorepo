@@ -1,4 +1,4 @@
-import IntegracoesPanel from "../../componets/integrations/IntegracoesPanel";
+import IntegracoesPanel from "../../components/integrations/IntegracoesPanel";
 
 export default function IntegracoesPage() {
   return (

@@ -1,4 +1,4 @@
-import { DepartmentsManager } from "../../componets/admin/DepartmentsManager";
+import { DepartmentsManager } from "../../components/admin/DepartmentsManager";
 
 export default function DepartamentosPage() {
   return (

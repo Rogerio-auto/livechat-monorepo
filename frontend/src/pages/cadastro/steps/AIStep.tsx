@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { FaRobot, FaMagic, FaCheckCircle, FaSpinner, FaChevronRight, FaChevronLeft } from "react-icons/fa";
 import { API, fetchJson } from "../../../utils/api";
-import type { AgentTemplate, AgentTemplateQuestion } from "../../../types/types";
+import type { AgentTemplate, AgentTemplateQuestion } from "@livechat/shared";
 
 interface Props {
   onSave: (aiConfig: { template: string; training: string; answers?: Record<string, any>; isComplete?: boolean }) => void;

@@ -1,13 +1,15 @@
 // backend/src/routes/admin/tools.ts
 
 import { Router } from 'express';
-import { ToolController } from '../../controllers/admin/tool.controller.ts';
+import type { Response, NextFunction } from 'express';
+import { ToolController } from '../../controllers/admin/tool.controller.js';
 import { requireAuth } from '../../middlewares/requireAuth.js';
+import { AuthRequest } from '../../types/express.js';
 
 const router = Router();
 
 // Middleware para verificar se é ADMIN
-const requireAdmin = async (req: any, res: any, next: any) => {
+const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const role = String(req.profile?.role || "").toUpperCase();
     if (role !== "ADMIN" && role !== "SUPER_ADMIN") {

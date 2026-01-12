@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import ProposalForm from "../componets/propostas/ProposalForm";
+import ProposalForm from "../components/propostas/ProposalForm";
 import { toast } from "../hooks/useToast";
 import { io } from "socket.io-client";
 import { 
@@ -408,8 +408,8 @@ export default function DocumentosPage() {
           try { lead = await fetchJson<any>(`${API}/leads/by-customer/${proposal.customer_id}`); } catch {}
         }
         let payerName = lead?.name || '';
-        let payerCpf = lead?.cpf || '';
-        let payerRg = lead?.rg || '';
+        const payerCpf = lead?.cpf || '';
+        const payerRg = lead?.rg || '';
         if (!payerName) {
           try { const c = await fetchJson<any>(`${API}/livechat/contacts/${proposal.customer_id}`); payerName = c?.name || ''; } catch {}
         }

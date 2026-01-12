@@ -1,6 +1,6 @@
 // src/socket/bridge.livechat.ts
-import { getIO } from "../lib/io.ts";
-import { consume } from "../queue/rabbit.ts";
+import { getIO } from "../lib/io.js";
+import { consume } from "../queue/rabbit.js";
 
 const Q_SOCKET = "q.socket.livechat";
 

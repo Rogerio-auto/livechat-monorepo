@@ -10,10 +10,9 @@ import {
   FiSearch,
   FiUsers,
 } from 'react-icons/fi';
-import type { Industry } from '../../../types/cadastro';
+import { Industry, AdminCompany } from '@livechat/shared';
 import { INDUSTRY_OPTIONS } from '../../../config/industry-config';
-import { IndustryBadge } from '../../../componets/admin/IndustryBadge';
-import type { AdminCompany } from '../types';
+import { IndustryBadge } from '../../../components/admin/IndustryBadge';
 
 export function CompaniesList() {
   const navigate = useNavigate();

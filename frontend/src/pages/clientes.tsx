@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClienteDetailsModal } from "../components/customers/ClienteDetailsModal";
-import { formatCPF } from "../utils/format";
+import { formatCPF } from "@livechat/shared";
 import { API } from "../utils/api";
 import { showToast } from "../hooks/useToast";
 

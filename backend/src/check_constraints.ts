@@ -1,5 +1,5 @@
 
-import db from './pg.ts';
+import { db } from './pg.js';
 
 async function checkConstraints() {
   try {

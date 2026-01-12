@@ -1,4 +1,4 @@
-import { TeamsManager } from "../../componets/admin/TeamsManager";
+import { TeamsManager } from "../../components/admin/TeamsManager";
 
 export default function TimesPage() {
   return (

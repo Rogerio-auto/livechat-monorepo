@@ -1,7 +1,7 @@
 import { getIO } from "../lib/io.js";
-import { NotificationService } from "../services/NotificationService.js";
+import { NotificationService } from "../services/notification.service.js";
 import { getTasksWithPendingReminders, markReminderAsSent, type TaskWithContext } from "../repos/tasks.repo.js";
-import { sendTaskReminderEmail } from "../services/emailService.js";
+import { sendTaskReminderEmail } from "../services/email.service.js";
 import { publish, EX_APP } from "../queue/rabbit.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react";
 import { useAutomationRules } from "../../hooks/useAutomationRules";
-import type { AutomationRule, AutomationLog } from "../../types/automationRules";
+import { AutomationRule, AutomationLog } from "@livechat/shared";
 
 interface RuleLogsModalProps {
   rule: AutomationRule;

@@ -1,24 +1,25 @@
-import express from "express";
+import { Request, Response, Application } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAnon, supabaseAdmin } from "../lib/supabase.js";
 import { JWT_COOKIE_NAME, JWT_COOKIE_SECURE, JWT_COOKIE_DOMAIN } from "../config/env.js";
 import { getIO } from "../lib/io.js";
-import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/emailService.js";
+import { sendPasswordResetEmail, sendPasswordChangedEmail } from "../services/email.service.js";
 import crypto, { randomUUID } from "crypto";
 import { redis } from "../lib/redis.js";
 import { logger } from "../lib/logger.js";
+import { AuthRequest } from "../types/express.js";
 
 const AuthSchema = z.object({
   email: z.string().email("Email inválido"),
   password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
 });
 
-export function registerAuthRoutes(app: express.Application) {
+export function registerAuthRoutes(app: Application) {
   console.log('[AUTH ROUTES] 🚀 Registering auth routes - VERSION 2.0');
   
   // Sign up
-  app.post("/signup", async (req, res, next) => {
+  app.post("/signup", async (req: Request, res: Response, next) => {
     try {
       const { email, password } = AuthSchema.parse(req.body);
       
@@ -37,7 +38,7 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Login
-  app.post("/login", async (req, res, next) => {
+  app.post("/login", async (req: Request, res: Response, next) => {
     try {
       const { email, password } = AuthSchema.parse(req.body);
       
@@ -66,7 +67,7 @@ export function registerAuthRoutes(app: express.Application) {
     }
   });
 
-  app.post("/logout", (_req, res) => {
+  app.post("/logout", (_req: Request, res: Response) => {
     console.log('[AUTH] 🚪 Logout request received');
     
     // Limpar cookie principal de autenticação
@@ -86,13 +87,13 @@ export function registerAuthRoutes(app: express.Application) {
     return res.json({ ok: true, message: 'Logged out successfully' });
   });
 
-  app.get("/auth/me", requireAuth, async (req: any, res) => {
+  app.get("/auth/me", requireAuth, async (req: AuthRequest, res: Response) => {
     console.log('[/auth/me] 🎯 ENDPOINT CALLED - NEW VERSION');
     console.log('[/auth/me] 📦 req.user:', req.user);
     console.log('[/auth/me] 👤 req.profile:', req.profile);
     
-    const user = req.user || {};
-    const profile = req.profile || {};
+    const user = req.user || ({} as any);
+    const profile = req.profile || ({} as any);
     const companyId = user.company_id || profile.company_id;
 
     // Buscar indústria da empresa
@@ -125,9 +126,9 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Update theme preference
-  app.patch("/auth/me/theme", requireAuth, async (req: any, res) => {
+  app.patch("/auth/me/theme", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
       const { theme_preference } = req.body || {};
       
       if (!theme_preference || !["light", "dark", "system"].includes(theme_preference)) {
@@ -179,9 +180,9 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Update phone number
-  app.patch("/auth/me/phone", requireAuth, async (req: any, res) => {
+  app.patch("/auth/me/phone", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
       const { phone } = req.body || {};
       
       if (!phone || typeof phone !== "string" || phone.trim().length === 0) {
@@ -239,12 +240,12 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Profile of authenticated user + company basics
-  app.get("/me/profile", requireAuth, async (req: any, res) => {
-    const userId = req.user.id;
+  app.get("/me/profile", requireAuth, async (req: AuthRequest, res: Response) => {
+    const userId = req.user?.id;
     const { data: urow, error: uerr } = await supabaseAdmin
       .from("users")
       .select("user_id, name, role, avatar, company_id")
-      .eq("user_id", userId)
+      .eq("user_id", userId as string)
       .maybeSingle();
     if (uerr) return res.status(500).json({ error: uerr.message });
 
@@ -261,21 +262,21 @@ export function registerAuthRoutes(app: express.Application) {
     } catch {}
 
     return res.json({
-      id: req.user.id,
-      email: req.user.email,
-      name: urow?.name || req.user.name || "",
+      id: req.user?.id,
+      email: req.user?.email,
+      name: urow?.name || req.user?.name || "",
       role: urow?.role || null,
-      avatarUrl: urow?.avatar || req.user.avatar || null,
+      avatarUrl: urow?.avatar || req.user?.avatar || null,
       companyId: urow?.company_id || null,
       companyName,
     });
   });
 
   // Update authenticated user's profile
-  app.put("/me/profile", requireAuth, async (req: any, res) => {
+  app.put("/me/profile", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const authUserId = req.user.id as string;
-      const authEmail = (req.user.email || req.profile?.email) as string;
+      const authUserId = req.user?.id as string;
+      const authEmail = (req.user?.email || req.profile?.email) as string;
       
       console.log(`[PUT /me/profile] Request from user: ${authUserId} (${authEmail})`);
 
@@ -373,9 +374,9 @@ export function registerAuthRoutes(app: express.Application) {
       const resp = {
         id: authUserId,
         email: authEmail,
-        name: updatedRow?.name ?? req.user.name ?? "",
+        name: updatedRow?.name ?? req.user?.name ?? "",
         role: updatedRow?.role ?? null,
-        avatarUrl: updatedRow?.avatar ?? req.user.avatar ?? null,
+        avatarUrl: updatedRow?.avatar ?? req.user?.avatar ?? null,
         companyId: updatedRow?.company_id ?? null,
         passwordChanged,
       };
@@ -415,7 +416,7 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Request password reset
-  app.post("/auth/forgot-password", async (req, res) => {
+  app.post("/auth/forgot-password", async (req: Request, res: Response) => {
     try {
       const { email } = req.body || {};
       
@@ -493,7 +494,7 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Verify reset token
-  app.get("/auth/verify-reset-token/:token", async (req, res) => {
+  app.get("/auth/verify-reset-token/:token", async (req: Request, res: Response) => {
     try {
       const { token } = req.params;
 
@@ -530,7 +531,7 @@ export function registerAuthRoutes(app: express.Application) {
   });
 
   // Reset password with token
-  app.post("/auth/reset-password", async (req, res) => {
+  app.post("/auth/reset-password", async (req: Request, res: Response) => {
     try {
       const { token, newPassword, confirmPassword, phone } = req.body || {};
 
@@ -620,7 +621,7 @@ export function registerAuthRoutes(app: express.Application) {
         sendPasswordChangedEmail(
           authUser.user.email,
           userData?.name || authUser.user.email.split('@')[0]
-        ).catch((e) => console.error('[reset-password] Error sending confirmation email:', e));
+        ).catch((e: any) => console.error('[reset-password] Error sending confirmation email:', e));
       }
 
       return res.json({ 

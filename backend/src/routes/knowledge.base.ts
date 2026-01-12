@@ -1,6 +1,6 @@
-import type { Application } from "express";
+import { Application, Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   listKnowledgeBase,
   searchKnowledgeBase,
@@ -11,7 +11,8 @@ import {
   getKnowledgeBaseCategories,
   getKnowledgeBaseStats,
   recordKnowledgeBaseFeedback,
-} from "../repos/knowledge.repo.ts";
+} from "../repos/knowledge.repo.js";
+import { AuthRequest } from "../types/express.js";
 
 const createSchema = z.object({
   title: z.string().min(1).max(200),
@@ -31,13 +32,13 @@ const createSchema = z.object({
 
 const updateSchema = createSchema.partial();
 
-async function resolveCompanyId(req: any): Promise<string> {
+async function resolveCompanyId(req: AuthRequest): Promise<string> {
   const companyId = req.profile?.company_id || req.user?.company_id;
   if (!companyId) throw new Error("CompanyId não encontrado no token");
   return companyId;
 }
 
-async function resolveUserId(req: any): Promise<string> {
+async function resolveUserId(req: AuthRequest): Promise<string> {
   const userId = req.user?.id || req.profile?.id;
   if (!userId) throw new Error("UserId não encontrado no token");
   return userId;
@@ -45,10 +46,10 @@ async function resolveUserId(req: any): Promise<string> {
 
 export function registerKnowledgeBaseRoutes(app: Application) {
   // GET /api/knowledge-base - Lista todas as entradas
-  app.get("/api/knowledge-base", requireAuth, async (req: any, res) => {
+  app.get("/api/knowledge-base", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
-      const { status, category, search, visible_to_agents } = req.query;
+      const { status, category, search, visible_to_agents } = req.query as Record<string, any>;
 
       const filters: any = {};
       if (status) filters.status = status;
@@ -67,10 +68,10 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // GET /api/knowledge-base/search - Busca semântica
-  app.get("/api/knowledge-base/search", requireAuth, async (req: any, res) => {
+  app.get("/api/knowledge-base/search", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
-      const { q, category, max_results } = req.query;
+      const { q, category, max_results } = req.query as Record<string, any>;
 
       if (!q) {
         return res.status(400).json({ error: "Parâmetro 'q' é obrigatório" });
@@ -89,7 +90,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // GET /api/knowledge-base/categories - Lista categorias únicas
-  app.get("/api/knowledge-base/categories", requireAuth, async (req: any, res) => {
+  app.get("/api/knowledge-base/categories", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const categories = await getKnowledgeBaseCategories(companyId);
@@ -101,7 +102,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // GET /api/knowledge-base/stats - Estatísticas
-  app.get("/api/knowledge-base/stats", requireAuth, async (req: any, res) => {
+  app.get("/api/knowledge-base/stats", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const stats = await getKnowledgeBaseStats(companyId);
@@ -113,7 +114,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // GET /api/knowledge-base/:id - Obtém uma entrada específica
-  app.get("/api/knowledge-base/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/knowledge-base/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;
@@ -131,7 +132,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // POST /api/knowledge-base - Cria nova entrada
-  app.post("/api/knowledge-base", requireAuth, async (req: any, res) => {
+  app.post("/api/knowledge-base", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const userId = await resolveUserId(req);
@@ -150,7 +151,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // PUT /api/knowledge-base/:id - Atualiza entrada
-  app.put("/api/knowledge-base/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/knowledge-base/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const userId = await resolveUserId(req);
@@ -170,7 +171,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // DELETE /api/knowledge-base/:id - Deleta entrada
-  app.delete("/api/knowledge-base/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/knowledge-base/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;
@@ -184,7 +185,7 @@ export function registerKnowledgeBaseRoutes(app: Application) {
   });
 
   // POST /api/knowledge-base/:id/feedback - Registra feedback
-  app.post("/api/knowledge-base/:id/feedback", requireAuth, async (req: any, res) => {
+  app.post("/api/knowledge-base/:id/feedback", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;

@@ -2,21 +2,21 @@
 
 import type { Application } from "express";
 import { ZodError, z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import {
   createOpenAIIntegration,
   deleteOpenAIIntegration,
   listOpenAIIntegrations,
   updateOpenAIIntegration,
   getOpenAIIntegration,
-} from "../repos/integrations.openai.repo.ts";
-import { OpenAIIntegrationSchema } from "../types/integrations.ts";
+} from "../repos/integrations-openai.repo.js";
+import { OpenAIIntegrationSchema } from "../types/integrations.types.js";
 import { 
   createOpenAIProject, 
   validateAPIKey,
   checkProjectsAPIAvailability 
-} from "../services/openai.admin.service.ts";
+} from "../services/openai-admin.service.js";
 
 // ==================== SCHEMAS ====================
 

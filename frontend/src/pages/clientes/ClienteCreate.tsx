@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { ClienteForm } from "../../componets/clientes/ClienteForm";
+import { ClienteForm } from "../../components/clientes/ClienteForm";
 import { fetchJson } from "../../lib/fetch";
 import { showToast } from "../../hooks/useToast";
 

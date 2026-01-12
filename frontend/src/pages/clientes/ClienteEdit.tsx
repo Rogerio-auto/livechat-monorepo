@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ClienteForm } from "../../componets/clientes/ClienteForm";
+import { ClienteForm } from "../../components/clientes/ClienteForm";
 import { API } from "../../utils/api";
 import { fetchJson } from "../../lib/fetch";
 import { showToast } from "../../hooks/useToast";

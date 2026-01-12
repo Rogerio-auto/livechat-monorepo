@@ -1,35 +1,5 @@
 import { supabaseAdmin } from "../lib/supabase.js";
-
-export interface Task {
-  id: string;
-  company_id: string;
-  title: string;
-  description?: string | null;
-  assigned_to?: string | null;
-  created_by: string;
-  related_lead_id?: string | null;
-  related_customer_id?: string | null;
-  related_chat_id?: string | null;
-  related_event_id?: string | null;
-  related_campaign_id?: string | null;
-  kanban_column_id?: string | null;
-  status: TaskStatus;
-  priority: TaskPriority;
-  type: TaskType;
-  due_date?: string | null;
-  completed_at?: string | null;
-  created_at: string;
-  updated_at: string;
-  reminder_enabled: boolean;
-  reminder_time?: string | null;
-  reminder_sent: boolean;
-  reminder_channels?: string[] | null;
-  recurrence_type?: string | null;
-  recurrence_interval?: number | null;
-  recurrence_end_date?: string | null;
-  parent_task_id?: string | null;
-  metadata?: Record<string, any> | null;
-}
+import type { Task, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, TaskType } from "../types/index.js";
 
 export interface TaskWithContext extends Task {
   assigned_to_name?: string | null;
@@ -44,56 +14,6 @@ export interface TaskWithContext extends Task {
   event_title?: string | null;
   event_start_time?: string | null;
   due_status?: "completed" | "overdue" | "due_today" | "due_this_week" | "upcoming";
-}
-
-export type TaskStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
-export type TaskPriority = "LOW" | "MEDIUM" | "HIGH" | "URGENT";
-export type TaskType = "FOLLOW_UP" | "CALL" | "EMAIL" | "MEETING" | "WHATSAPP" | "PROPOSAL" | "GENERAL" | "VISIT";
-
-export interface CreateTaskInput {
-  company_id: string;
-  title: string;
-  description?: string;
-  assigned_to?: string;
-  created_by: string;
-  related_lead_id?: string;
-  related_customer_id?: string;
-  related_chat_id?: string;
-  related_event_id?: string;
-  related_campaign_id?: string;
-  kanban_column_id?: string;
-  status?: TaskStatus;
-  priority?: TaskPriority;
-  type?: TaskType;
-  due_date?: string;
-  reminder_enabled?: boolean;
-  reminder_time?: string;
-  reminder_channels?: string[];
-  recurrence_type?: string;
-  recurrence_interval?: number;
-  recurrence_end_date?: string;
-  parent_task_id?: string;
-  metadata?: Record<string, any>;
-}
-
-export interface UpdateTaskInput {
-  title?: string;
-  description?: string;
-  assigned_to?: string;
-  related_lead_id?: string;
-  related_customer_id?: string;
-  related_chat_id?: string;
-  related_event_id?: string;
-  related_campaign_id?: string;
-  kanban_column_id?: string;
-  status?: TaskStatus;
-  priority?: TaskPriority;
-  type?: TaskType;
-  due_date?: string;
-  reminder_enabled?: boolean;
-  reminder_time?: string;
-  reminder_channels?: string[];
-  metadata?: Record<string, any>;
 }
 
 export interface TaskFilters {
@@ -146,7 +66,7 @@ export interface TaskStats {
 /**
  * Cria uma nova tarefa
  */
-export async function createTask(input: CreateTaskInput): Promise<Task> {
+export async function createTask(input: CreateTaskDTO): Promise<Task> {
   const { data, error } = await supabaseAdmin
     .from("tasks")
     .insert([
@@ -186,8 +106,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task> {
 /**
  * Atualiza uma tarefa existente
  */
-export async function updateTask(id: string, companyId: string, input: UpdateTaskInput): Promise<Task> {
-  const updates: any = {};
+export async function updateTask(id: string, companyId: string, input: UpdateTaskDTO): Promise<Task> {
+  const updates: Partial<Task> = {};
 
   if (input.title !== undefined) updates.title = input.title;
   if (input.description !== undefined) updates.description = input.description;

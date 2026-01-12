@@ -2,15 +2,15 @@ import express, { Request, Response } from "express";
 import type { Express } from "express";
 import { z } from "zod";
 import { randomUUID } from "crypto";
-import { requireAuth } from "../middlewares/requireAuth";
-import { publish, publishMeta, publishApp, EX_APP } from "../queue/rabbit";
-import { getIO } from "../lib/io";
-import { clearCompanyListCaches, rGet, rSet, k, rememberListCacheKey } from "../lib/redis";
-import { supabaseAdmin } from "../lib/supabase";
-import { getDecryptedCredsForInbox } from "../services/meta/store";
-import { WAHA_BASE_URL, WAHA_PROVIDER, wahaFetch, WahaHttpError } from "../services/waha/client";
-import { normalizeMsisdn } from "../util";
-import db from "../pg";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { publish, publishMeta, publishApp, EX_APP } from "../queue/rabbit.js";
+import { getIO } from "../lib/io.js";
+import { clearCompanyListCaches, rGet, rSet, k, rememberListCacheKey } from "../lib/redis.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getDecryptedCredsForInbox } from "../services/meta/store.service.js";
+import { WAHA_BASE_URL, WAHA_PROVIDER, wahaFetch, WahaHttpError } from "../services/waha/client.service.js";
+import { normalizeMsisdn } from "../utils/util.util.js";
+import db from "../pg.js";
 
 // ====== CONFIG ======
 const WAHA_WEBHOOK_SECRET = process.env.WAHA_WEBHOOK_SECRET || ""; // opcional

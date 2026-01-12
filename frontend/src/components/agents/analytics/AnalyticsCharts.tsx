@@ -1,4 +1,4 @@
-import { Agent } from '../../../types/agent';
+import { Agent } from '@livechat/shared';
 import { 
   LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, BarChart, Bar, Cell 

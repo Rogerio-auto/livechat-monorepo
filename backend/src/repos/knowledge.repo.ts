@@ -1,48 +1,10 @@
-import { supabaseAdmin } from "../lib/supabase.ts";
-
-export type KnowledgeBaseRow = {
-  id: string;
-  company_id: string;
-  title: string;
-  content: string;
-  category: string | null;
-  tags: string[];
-  keywords: string[];
-  priority: number;
-  language: string;
-  status: "ACTIVE" | "DRAFT" | "ARCHIVED";
-  version: number;
-  parent_id: string | null;
-  usage_count: number;
-  helpful_count: number;
-  unhelpful_count: number;
-  last_used_at: string | null;
-  related_urls: string[];
-  attachments: unknown[];
-  internal_notes: string | null;
-  visible_to_agents: boolean;
-  requires_approval: boolean;
-  created_by: string | null;
-  updated_by: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type KnowledgeBaseInput = {
-  title: string;
-  content: string;
-  category?: string | null;
-  tags?: string[];
-  keywords?: string[];
-  priority?: number;
-  language?: string;
-  status?: "ACTIVE" | "DRAFT" | "ARCHIVED";
-  related_urls?: string[];
-  attachments?: unknown[];
-  internal_notes?: string | null;
-  visible_to_agents?: boolean;
-  requires_approval?: boolean;
-};
+import { supabaseAdmin } from "../lib/supabase.js";
+import { 
+  KnowledgeBaseEntry, 
+  KnowledgeStatus, 
+  CreateKnowledgeDTO, 
+  UpdateKnowledgeDTO 
+} from "@livechat/shared";
 
 const TABLE = "knowledge_base";
 
@@ -52,12 +14,12 @@ const TABLE = "knowledge_base";
 export async function listKnowledgeBase(
   companyId: string,
   filters?: {
-    status?: "ACTIVE" | "DRAFT" | "ARCHIVED";
+    status?: KnowledgeStatus;
     category?: string;
     search?: string;
     visible_to_agents?: boolean;
   }
-): Promise<KnowledgeBaseRow[]> {
+): Promise<KnowledgeBaseEntry[]> {
   let query = supabaseAdmin
     .from(TABLE)
     .select("*")
@@ -103,7 +65,7 @@ export async function searchKnowledgeBase(
     category?: string;
     maxResults?: number;
   }
-): Promise<KnowledgeBaseRow[]> {
+): Promise<KnowledgeBaseEntry[]> {
   const { data, error } = await supabaseAdmin.rpc("search_knowledge_base", {
     p_company_id: companyId,
     p_query: queryText,
@@ -131,7 +93,7 @@ export async function searchKnowledgeBase(
 export async function getKnowledgeBase(
   companyId: string,
   id: string
-): Promise<KnowledgeBaseRow | null> {
+): Promise<KnowledgeBaseEntry | null> {
   const { data, error } = await supabaseAdmin
     .from(TABLE)
     .select("*")
@@ -154,8 +116,8 @@ export async function getKnowledgeBase(
 export async function createKnowledgeBase(
   companyId: string,
   userId: string,
-  input: KnowledgeBaseInput
-): Promise<KnowledgeBaseRow> {
+  input: CreateKnowledgeDTO
+): Promise<KnowledgeBaseEntry> {
   const payload = {
     company_id: companyId,
     title: input.title,
@@ -196,8 +158,8 @@ export async function updateKnowledgeBase(
   companyId: string,
   userId: string,
   id: string,
-  input: Partial<KnowledgeBaseInput>
-): Promise<KnowledgeBaseRow> {
+  input: UpdateKnowledgeDTO
+): Promise<KnowledgeBaseEntry> {
   const update: Record<string, unknown> = {
     updated_by: userId,
     updated_at: new Date().toISOString(),
@@ -352,32 +314,32 @@ export async function getKnowledgeBaseStats(
   };
 }
 
-function mapRow(row: any): KnowledgeBaseRow {
+function mapRow(row: Record<string, unknown>): KnowledgeBaseEntry {
   return {
-    id: row.id,
-    company_id: row.company_id,
-    title: row.title,
-    content: row.content,
-    category: row.category || null,
-    tags: Array.isArray(row.tags) ? row.tags : [],
-    keywords: Array.isArray(row.keywords) ? row.keywords : [],
+    id: row.id as string,
+    company_id: row.company_id as string,
+    title: row.title as string,
+    content: row.content as string,
+    category: (row.category as string) || null,
+    tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
+    keywords: Array.isArray(row.keywords) ? (row.keywords as string[]) : [],
     priority: Number(row.priority ?? 0),
-    language: row.language || "pt-BR",
-    status: row.status || "ACTIVE",
+    language: (row.language as string) || "pt-BR",
+    status: (row.status as any) || "ACTIVE",
     version: Number(row.version ?? 1),
-    parent_id: row.parent_id || null,
+    parent_id: (row.parent_id as string) || null,
     usage_count: Number(row.usage_count ?? 0),
     helpful_count: Number(row.helpful_count ?? 0),
     unhelpful_count: Number(row.unhelpful_count ?? 0),
-    last_used_at: row.last_used_at || null,
+    last_used_at: (row.last_used_at as string) || null,
     related_urls: Array.isArray(row.related_urls) ? row.related_urls : [],
     attachments: Array.isArray(row.attachments) ? row.attachments : [],
-    internal_notes: row.internal_notes || null,
+    internal_notes: (row.internal_notes as string) || null,
     visible_to_agents: Boolean(row.visible_to_agents ?? true),
     requires_approval: Boolean(row.requires_approval ?? false),
-    created_by: row.created_by || null,
-    updated_by: row.updated_by || null,
-    created_at: row.created_at,
-    updated_at: row.updated_at || null,
+    created_by: (row.created_by as string) || null,
+    updated_by: (row.updated_by as string) || null,
+    created_at: row.created_at as string,
+    updated_at: (row.updated_at as string) || null,
   };
 }

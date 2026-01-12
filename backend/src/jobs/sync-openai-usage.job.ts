@@ -1,11 +1,11 @@
 // backend/src/jobs/sync-openai-usage.job.ts
 
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { 
   consolidateMonthlyBill, 
   syncUsageFromOpenAI,
   syncBillToStripe
-} from "../services/openai.usage.service.ts";
+} from "../services/openai-usage.service.js";
 
 /**
  * Job para consolidar faturas mensais

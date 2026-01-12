@@ -27,7 +27,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { ProjectWithDetails, TemplateWithDetails } from "../../types/projects";
+import type { ProjectWithDetails, TemplateWithDetails } from "@livechat/shared";
 import ProjectTasks from "../../components/projects/ProjectTasks";
 import ProjectComments from "../../components/projects/ProjectComments";
 import ProjectAttachments from "../../components/projects/ProjectAttachments";

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
-import { requireAuth } from "../middlewares/requireAuth";
-import { supabaseAdmin } from "../lib/supabase";
-import type { Tool, AgentTool } from "../repos/tools.repo";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import type { Tool, AgentTool } from "../repos/tools.repo.js";
 import {
   listTools,
   getToolById,
@@ -14,7 +14,7 @@ import {
   updateAgentTool,
   removeToolFromAgent,
   getToolLogs,
-} from "../repos/tools.repo";
+} from "../repos/tools.repo.js";
 
 const router = Router();
 

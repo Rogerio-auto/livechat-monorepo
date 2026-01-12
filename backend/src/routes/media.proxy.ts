@@ -1,8 +1,8 @@
 // backend/src/routes/media.proxy.ts
 import { Router, Request, Response } from "express";
-import { decryptUrl } from "../lib/crypto.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getMediaBucket } from "../lib/storage.ts";
+import { decryptUrl } from "../lib/crypto.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getMediaBucket } from "../lib/storage.js";
 import axios from "axios";
 import fs from "node:fs";
 import path from "node:path";

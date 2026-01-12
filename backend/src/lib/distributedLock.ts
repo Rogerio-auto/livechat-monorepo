@@ -1,5 +1,5 @@
 // src/lib/distributedLock.ts
-import { redis } from "./redis.ts";
+import { redis } from "./redis.js";
 
 /**
  * Lock distribuído simples usando Redis SET NX

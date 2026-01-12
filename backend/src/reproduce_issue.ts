@@ -11,7 +11,7 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 async function run() {
   // Import pg.ts dynamically after loading env vars
-  const db = (await import("./pg.ts")).default;
+  const db = (await import("./pg.js")).default;
   
   const companyId = 'd56a5396-22df-486a-8fea-a82138e1f614';
   console.log("Testing getSubscription for company:", companyId);

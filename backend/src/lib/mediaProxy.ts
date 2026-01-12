@@ -1,5 +1,5 @@
 // backend/src/lib/mediaProxy.ts
-import { encryptUrl } from "./crypto.ts";
+import { encryptUrl } from "./crypto.js";
 
 const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || `http://localhost:${process.env.PORT_BACKEND || 5000}`;
 

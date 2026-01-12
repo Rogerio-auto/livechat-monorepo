@@ -1,15 +1,17 @@
 import express from "express";
+import type { Application, Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import * as flowsRepo from "../repos/flows.repo.js";
-import { triggerManualFlow } from "../services/flow.engine.js";
+import { triggerManualFlow } from "../services/flow-engine.service.js";
+import { AuthRequest } from "../types/express.js";
 
-export function registerFlowRoutes(app: express.Application) {
+export function registerFlowRoutes(app: Application) {
   /**
    * GET /api/livechat/flows - Listar fluxos da empresa
    */
-  app.get("/api/livechat/flows", requireAuth, async (req: any, res) => {
+  app.get("/api/livechat/flows", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = req.user?.company_id;
       if (!companyId) return res.status(400).json({ error: "Company ID is required" });
@@ -24,7 +26,7 @@ export function registerFlowRoutes(app: express.Application) {
   /**
    * GET /api/livechat/flows/:id - Buscar fluxo por ID
    */
-  app.get("/api/livechat/flows/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/livechat/flows/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const flow = await flowsRepo.getFlowById(id);
@@ -41,7 +43,7 @@ export function registerFlowRoutes(app: express.Application) {
   /**
    * POST /api/livechat/flows - Criar novo fluxo
    */
-  app.post("/api/livechat/flows", requireAuth, async (req: any, res) => {
+  app.post("/api/livechat/flows", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = req.user?.company_id;
       if (!companyId) return res.status(400).json({ error: "Company ID is required" });
@@ -73,7 +75,7 @@ export function registerFlowRoutes(app: express.Application) {
   /**
    * PUT /api/livechat/flows/:id - Atualizar fluxo
    */
-  app.put("/api/livechat/flows/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/livechat/flows/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const flow = await flowsRepo.getFlowById(id);
@@ -103,7 +105,7 @@ export function registerFlowRoutes(app: express.Application) {
   /**
    * DELETE /api/livechat/flows/:id - Deletar fluxo
    */
-  app.delete("/api/livechat/flows/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/livechat/flows/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const flow = await flowsRepo.getFlowById(id);
@@ -121,13 +123,13 @@ export function registerFlowRoutes(app: express.Application) {
   /**
    * POST /api/livechat/flows/:id/trigger - Disparar fluxo manualmente
    */
-  app.post("/api/livechat/flows/:id/trigger", requireAuth, async (req: any, res) => {
+  app.post("/api/livechat/flows/:id/trigger", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
       const { contactId, chatId, variables } = req.body;
       const companyId = req.user?.company_id;
 
-      if (!contactId) return res.status(400).json({ error: "Contact ID is required" });
+      if (!contactId || !companyId) return res.status(400).json({ error: "Contact ID and Company ID are required" });
 
       await triggerManualFlow({
         companyId,

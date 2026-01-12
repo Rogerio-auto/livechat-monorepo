@@ -1,16 +1,16 @@
 import type { Application } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { logger } from "../lib/logger.ts";
-import { getIO } from "../lib/io.ts";
-import { decryptSecret, encryptSecret, isEncryptedSecret } from "../lib/crypto.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { logger } from "../lib/logger.js";
+import { getIO } from "../lib/io.js";
+import { decryptSecret, encryptSecret, isEncryptedSecret } from "../lib/crypto.js";
 import type { PostgrestError } from "@supabase/supabase-js";
 import {
   buildWahaSessionId,
   ensureWahaSession,
-} from "../services/waha/client.ts";
+} from "../services/waha/client.service.js";
 
 type ActorContext = {
   companyId: string;

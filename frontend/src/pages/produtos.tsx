@@ -5,7 +5,7 @@ import { FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import { ImageIcon } from "lucide-react";
 import { useCompany } from "../hooks/useCompany";
 import { getCatalogConfig, getFieldLabel, isFieldVisible, isFieldRequired } from "../config/catalog-config";
-import { Product, ProductForm, ItemType } from "./produtos/types";
+import { Product, ProductForm, ItemType } from "@livechat/shared";
 
 // =============================
 // Tipos

@@ -16,8 +16,7 @@ import { useAutomationRules } from "../hooks/useAutomationRules";
 import { RuleModal } from "../components/automation/RuleModal";
 import { RuleWizard } from "../components/automation/RuleWizard";
 import { RuleLogsModal } from "../components/automation/RuleLogsModal";
-import type { AutomationRule } from "../types/automationRules";
-import { TRIGGER_LABELS } from "../types/automationRules";
+import { AutomationRule, TRIGGER_LABELS } from "@livechat/shared";
 
 export function AutomationRulesPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);

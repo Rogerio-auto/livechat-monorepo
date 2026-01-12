@@ -1,8 +1,9 @@
 // src/routes/kanban.routes.ts
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Response } from "express";
+import { AuthRequest } from "../types/express.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Server as SocketIOServer } from "socket.io";
-import { triggerFlow } from "../services/flow.engine.js";
+import { triggerFlow } from "../services/flow-engine.service.js";
 
 type Deps = {
     requireAuth: RequestHandler;
@@ -17,8 +18,8 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     // para usarem as variáveis do escopo (já estão disponíveis).
     //
     // EXEMPLO DE CABEÇALHO PADRÃO:
-    // app.get("/kanban/my-board", requireAuth, async (req: any, res) => {
-    //   const userId = req.user.id;
+    // app.get("/kanban/my-board", requireAuth, async (req: AuthRequest, res: Response) => {
+    //   const userId = req.user?.id;
     //   const { data: userRow, error: errUser } = await supabaseAdmin
     //     .from("users")
     //     .select("company_id")
@@ -30,8 +31,8 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     // ⬇️⬇️⬇️ COLE TODO O BLOCO QUE VOCÊ MANDOU AQUI ⬇️⬇️⬇️
 
     // POST /kanban/initialize-board - Criar board + colunas padrão para primeira vez
-    app.post("/kanban/initialize-board", requireAuth, async (req: any, res) => {
-        const userId = req.user.id;
+    app.post("/kanban/initialize-board", requireAuth, async (req: AuthRequest, res: Response) => {
+        const userId = req.user?.id;
         
         try {
             // Buscar company_id do usuário
@@ -132,8 +133,8 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
         }
     });
 
-    app.get("/kanban/my-board", requireAuth, async (req: any, res) => {
-        const userId = req.user.id;
+    app.get("/kanban/my-board", requireAuth, async (req: AuthRequest, res: Response) => {
+        const userId = req.user?.id;
 
         // Busca a empresa do Usu rio autenticado na tabela public.users
         const { data: userRow, error: errUser } = await supabaseAdmin
@@ -168,7 +169,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // GET colunas do board
-    app.get("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
+    app.get("/kanban/boards/:boardId/columns", requireAuth, async (req: AuthRequest, res: Response) => {
         const { boardId } = req.params;
         console.log(`[Kanban] GET /kanban/boards/${boardId}/columns`);
 
@@ -196,7 +197,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // POST criar nova coluna no board
-    app.post("/kanban/boards/:boardId/columns", requireAuth, async (req, res) => {
+    app.post("/kanban/boards/:boardId/columns", requireAuth, async (req: AuthRequest, res: Response) => {
         const { boardId } = req.params;
         const { name, color } = req.body;
 
@@ -240,7 +241,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // PUT atualizar coluna (nome, cor, posi??o)
-    app.put("/kanban/columns/:id", requireAuth, async (req, res) => {
+    app.put("/kanban/columns/:id", requireAuth, async (req: AuthRequest, res: Response) => {
         const { id } = req.params as { id: string };
         const { name, color, position } = (req.body || {}) as {
             name?: string;
@@ -274,7 +275,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
         });
     });
 
-    app.put("/kanban/boards/:boardId/columns/reorder", requireAuth, async (req, res) => {
+    app.put("/kanban/boards/:boardId/columns/reorder", requireAuth, async (req: AuthRequest, res: Response) => {
         const { boardId } = req.params as { boardId: string };
         const { columnIds } = (req.body || {}) as { columnIds?: string[] };
 
@@ -348,7 +349,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // GET cards do board
-    app.get("/kanban/boards/:boardId/cards", requireAuth, async (req, res) => {
+    app.get("/kanban/boards/:boardId/cards", requireAuth, async (req: AuthRequest, res: Response) => {
         const { boardId } = req.params;
 
         const { data, error } = await supabaseAdmin
@@ -383,7 +384,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
 
 
     // POST criar card
-    app.post("/kanban/cards", async (req, res) => {
+    app.post("/kanban/cards", async (req: AuthRequest, res: Response) => {
         const { boardId, columnId, title, value = 0, source = null, owner = null, email = null, contact = null, leadId = null } = req.body;
 
         if (!boardId || !columnId || !title) {
@@ -594,9 +595,9 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // PUT atualizar card (titulo, valor, stage, etc.)
-    app.put("/kanban/cards/:id", requireAuth, async (req: any, res) => {
+    app.put("/kanban/cards/:id", requireAuth, async (req: AuthRequest, res: Response) => {
         const { id } = req.params;
-        const userId = req.user.id;
+        const userId = req.user?.id;
 
         const { data: userRow, error: errUser } = await supabaseAdmin
             .from("users")
@@ -1036,10 +1037,10 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // DELETE excluir card do kanban
-    app.delete("/kanban/cards/:id", requireAuth, async (req: any, res) => {
+    app.delete("/kanban/cards/:id", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const { id } = req.params;
-            const userId = req.user.id;
+            const userId = req.user?.id;
 
             // 1) Buscar o card e verificar se existe
             const { data: card, error: errCard } = await supabaseAdmin
@@ -1112,9 +1113,9 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // Util: backfill sync from kanban_cards -> leads for current company
-    app.post("/kanban/sync-leads", requireAuth, async (req: any, res) => {
+    app.post("/kanban/sync-leads", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
-            const userId = req.user.id;
+            const userId = req.user?.id;
             const { data: userRow, error: errUser } = await supabaseAdmin
                 .from("users")
                 .select("company_id")
@@ -1159,8 +1160,8 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // GET users with role AGENT or SUPERVISOR in same company
-    app.get("/users/agents-supervisors", requireAuth, async (req: any, res) => {
-        const userId = req.user.id;
+    app.get("/users/agents-supervisors", requireAuth, async (req: AuthRequest, res: Response) => {
+        const userId = req.user?.id;
 
         const { data: userRow, error: errUser } = await supabaseAdmin
             .from("users")
@@ -1187,7 +1188,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // DELETE excluir coluna do kanban
-    app.delete("/kanban/columns/:id", requireAuth, async (req: any, res) => {
+    app.delete("/kanban/columns/:id", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const columnId = String(req.params.id);
             const moveTo = (req.query.moveTo as string | undefined)?.trim() || null;
@@ -1321,7 +1322,7 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
 
     // POST /kanban/cards/ensure
     // Body: { boardId, columnId, title, leadId?, explicitLeadId?, email?, phone?, note? }
-    app.post("/kanban/cards/ensure", requireAuth, async (req: any, res) => {
+    app.post("/kanban/cards/ensure", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const authUserId = String(req.user?.id || "");
             const { data: urow, error: errU } = await supabaseAdmin
@@ -1660,10 +1661,10 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     // ==================== ROTAS DE FOTOS DOS CARDS ====================
 
     // GET - Listar fotos de um card
-    app.get("/kanban/cards/:cardId/photos", requireAuth, async (req: any, res) => {
+    app.get("/kanban/cards/:cardId/photos", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const { cardId } = req.params;
-            const userId = req.user.id;
+            const userId = req.user?.id;
 
             // Verifica se o usuário tem acesso ao card
             const { data: userRow } = await supabaseAdmin
@@ -1696,10 +1697,10 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // POST - Upload de foto para um card
-    app.post("/kanban/cards/:cardId/photos", requireAuth, async (req: any, res) => {
+    app.post("/kanban/cards/:cardId/photos", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const { cardId } = req.params;
-            const userId = req.user.id;
+            const userId = req.user?.id;
             const { imageData, metadata } = req.body;
 
             if (!imageData) {
@@ -1792,10 +1793,10 @@ export function registerKanbanRoutes(app: Express, { requireAuth, supabaseAdmin,
     });
 
     // DELETE - Remover foto
-    app.delete("/kanban/photos/:photoId", requireAuth, async (req: any, res) => {
+    app.delete("/kanban/photos/:photoId", requireAuth, async (req: AuthRequest, res: Response) => {
         try {
             const { photoId } = req.params;
-            const userId = req.user.id;
+            const userId = req.user?.id;
 
             // Busca a foto e verifica permissão
             const { data: photo, error: fetchError } = await supabaseAdmin

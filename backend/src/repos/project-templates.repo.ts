@@ -1,6 +1,6 @@
 // backend/src/repos/project-templates.repo.ts
 
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 // ==================== TYPES ====================
 

@@ -3,8 +3,8 @@
 import type { Application } from "express";
 import { z } from "zod";
 import multer from "multer";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import {
   notifyProjectCreated,
   notifyProjectAssigned,
@@ -31,55 +31,17 @@ import {
   deleteAttachment,
   getProjectActivities,
   getProjectStats,
-} from "../repos/projects.repo.ts";
+  getProjectWithDetails,
+} from "../repos/projects.repo.js";
 
-// ==================== SCHEMAS ====================
-
-const CreateProjectSchema = z.object({
-  template_id: z.string().uuid("Template ID inválido"),
-  title: z.string().min(1, "Nome é obrigatório"),
-  description: z.string().nullable().optional(),
-  customer_name: z.string().nullable().optional(),
-  customer_email: z.string().nullable().optional(),
-  customer_phone: z.string().nullable().optional(),
-  owner_user_id: z.string().uuid().nullable().optional(),
-  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-  start_date: z.string().nullable().optional(),
-  estimated_end_date: z.string().nullable().optional(),
-  estimated_value: z.number().nullable().optional(),
-  custom_fields: z.record(z.string(), z.any()).optional(),
-  tags: z.array(z.string()).optional(),
-});
-
-const UpdateProjectSchema = CreateProjectSchema.partial().omit({ template_id: true }).extend({
-  status: z.string().optional(),
-});
-
-const CreateCommentSchema = z.object({
-  content: z.string().min(1, "Comentário não pode ser vazio"),
-  is_internal: z.boolean().optional(),
-  parent_id: z.string().uuid().optional(),
-});
-
-const CreateTaskSchema = z.object({
-  title: z.string().min(1, "Título é obrigatório"),
-  description: z.string().optional(),
-  due_date: z.string().optional(),
-  assigned_to: z.string().uuid().optional(),
-  priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-});
-
-const UpdateTaskSchema = CreateTaskSchema.partial().extend({
-  status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
-  is_completed: z.boolean().optional(),
-});
-
-const CreateAttachmentSchema = z.object({
-  file_name: z.string().min(1),
-  file_url: z.string().url(),
-  file_type: z.string().optional(),
-  file_size: z.number().optional(),
-});
+import {
+  CreateProjectSchema,
+  UpdateProjectSchema,
+  CreateCommentSchema,
+  CreateTaskSchema,
+  UpdateTaskSchema,
+  CreateAttachmentSchema
+} from "@livechat/shared";
 
 // ==================== MULTER CONFIG ====================
 
@@ -291,20 +253,6 @@ export function registerProjectRoutes(app: Application) {
       const project = await moveProjectStage(companyId, id, userId, stage_id);
 
       console.log(`[DEBUG] Project moved successfully`);
-
-      // Disparar Trigger de Mudança de Estágio
-      try {
-        await notifyProjectStageChanged(
-          project.id,
-          project.title,
-          'Estágio Anterior', // Poderia buscar o nome real se necessário
-          project.stage_name || stage_id,
-          project.owner_user_id || userId,
-          companyId
-        );
-      } catch (triggerErr) {
-        console.warn("[projects] Error firing notifyProjectStageChanged trigger:", triggerErr);
-      }
 
       return res.json(project);
     } catch (error) {

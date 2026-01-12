@@ -1,7 +1,7 @@
 import express from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { rDelMatch } from "../lib/redis.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { rDelMatch } from "../lib/redis.js";
 
 export function registerCampaignSegmentsRoutes(app: express.Application) {
   async function resolveCompanyId(req: any): Promise<string> {

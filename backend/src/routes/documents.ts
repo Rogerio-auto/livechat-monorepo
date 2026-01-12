@@ -1,7 +1,7 @@
 import express from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { DOCS_BUCKET } from "../config/env.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { DOCS_BUCKET } from "../config/env.js";
 
 export function registerDocumentRoutes(app: express.Application) {
   // List documents for current user's company

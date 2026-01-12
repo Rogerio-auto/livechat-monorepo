@@ -1,4 +1,4 @@
-import OpenAIBillingPanel from "../../componets/billing/OpenAIBillingPanel";
+import OpenAIBillingPanel from "../../components/billing/OpenAIBillingPanel";
 
 export default function BillingPage() {
   return (

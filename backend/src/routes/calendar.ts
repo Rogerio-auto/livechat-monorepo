@@ -38,6 +38,130 @@ async function checkAvailability(userId: string, startISO: string, endISO: strin
 }
 
 export function registerCalendarRoutes(app: express.Application) {
+  // Alias for /settings/calendars used by some frontend components
+  app.get("/settings/calendars", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id, role, company_id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      
+      const ownerId = (urow as any)?.id || null;
+      const userRole = (urow as any)?.role || null;
+      const companyId = (urow as any)?.company_id || null;
+      const isAdmin = userRole === "ADMIN" || userRole === "SUPER_ADMIN";
+
+      if (!ownerId && !isAdmin) return res.json([]);
+
+      let query = supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .select("*")
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true });
+      
+      // Filter by company if present, otherwise fallback to legacy logic
+      if (companyId) {
+        query = query.eq("company_id", companyId);
+      } else if (!isAdmin && ownerId) {
+        query = query.eq("owner_id", ownerId);
+      }
+
+      const { data, error } = await query;
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data || []);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Calendars list error" });
+    }
+  });
+
+  app.post("/settings/calendars", requireAuth, async (req: any, res) => {
+    try {
+      const authUserId = req.user.id as string;
+      const companyId = req.user.company_id as string;
+
+      const { data: urow, error: uerr } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", authUserId)
+        .maybeSingle();
+      if (uerr) return res.status(500).json({ error: uerr.message });
+      const ownerId = (urow as any)?.id || null;
+      if (!ownerId) return res.status(400).json({ error: "User not found" });
+
+      const { name, type, color, description, is_default, timezone } = req.body;
+      if (!name) return res.status(400).json({ error: "Name is required" });
+
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .insert([{
+          name,
+          type: type || "PERSONAL",
+          color: color || "#3B82F6",
+          description,
+          owner_id: ownerId,
+          company_id: companyId,
+          is_default: !!is_default,
+          timezone: timezone || "UTC"
+        }])
+        .select("*")
+        .single();
+
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(201).json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Create calendar error" });
+    }
+  });
+
+  app.delete("/settings/calendars/:id", requireAuth, requireCalendarOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .delete()
+        .eq("id", id);
+      if (error) return res.status(500).json({ error: error.message });
+      return res.status(204).send();
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Delete calendar error" });
+    }
+  });
+
+  app.put("/settings/calendars/:id", requireAuth, requireCalendarOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .update(req.body)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update calendar error" });
+    }
+  });
+
+  app.patch("/settings/calendars/:id", requireAuth, requireCalendarOwner, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      const { data, error } = await supabaseAdmin
+        .from(TABLE_CALENDARS)
+        .update(req.body)
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json(data);
+    } catch (e: any) {
+      return res.status(500).json({ error: e?.message || "Update calendar error" });
+    }
+  });
+
   // GET calendars of current user (ADMIN sees all calendars)
   app.get("/calendar/calendars", requireAuth, async (req: any, res) => {
     try {

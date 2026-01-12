@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import express from "express";
-import db from "../pg.ts";
+import db from "../pg.js";
 
 const router = express.Router();
 const MEDIA_DIR =

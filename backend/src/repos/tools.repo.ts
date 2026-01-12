@@ -1,52 +1,20 @@
 // repos/tools.repo.ts
 // Repositório para CRUD de tools_catalog e agent_tools
 
-import { db } from "../pg";
-
-export type Tool = {
-  id: string;
-  key: string;
-  name: string;
-  category: string | null;
-  description: string | null;
-  schema: Record<string, any>;
-  handler_type: "INTERNAL_DB" | "HTTP" | "WORKFLOW" | "SOCKET";
-  handler_config: Record<string, any>;
-  is_active: boolean;
-  company_id: string | null;
-  created_at: string;
-  updated_at: string | null;
-};
-
-export type AgentTool = {
-  id: string;
-  agent_id: string;
-  tool_id: string;
-  is_enabled: boolean;
-  overrides: Record<string, any>;
-  created_at: string;
-};
-
-export type ToolLog = {
-  id: string;
-  agent_id: string;
-  tool_id: string;
-  chat_id: string | null;
-  contact_id: string | null;
-  action: string;
-  table_name: string | null;
-  columns_accessed: string[];
-  params: Record<string, any>;
-  result: Record<string, any> | null;
-  error: string | null;
-  executed_at: string;
-};
+import { db } from "../pg.js";
+import { 
+  Tool, 
+  AgentTool, 
+  ToolLog, 
+  CreateToolDTO, 
+  UpdateToolDTO 
+} from "@livechat/shared";
 
 // ====== tools_catalog CRUD ======
 
-export async function listTools(filters?: { category?: string; is_active?: boolean }) {
+export async function listTools(filters?: { category?: string; is_active?: boolean }): Promise<Tool[]> {
   let sql = "SELECT * FROM public.tools_catalog WHERE 1=1";
-  const params: any[] = [];
+  const params: unknown[] = [];
   let idx = 1;
   
   if (filters?.category) {
@@ -62,21 +30,21 @@ export async function listTools(filters?: { category?: string; is_active?: boole
   return await db.any<Tool>(sql, params);
 }
 
-export async function getToolById(id: string) {
+export async function getToolById(id: string): Promise<Tool | null> {
   return await db.oneOrNone<Tool>(
     "SELECT * FROM public.tools_catalog WHERE id = $1",
     [id]
   );
 }
 
-export async function getToolByKey(key: string) {
+export async function getToolByKey(key: string): Promise<Tool | null> {
   return await db.oneOrNone<Tool>(
     "SELECT * FROM public.tools_catalog WHERE key = $1",
     [key]
   );
 }
 
-export async function createTool(payload: Omit<Tool, "id" | "created_at" | "updated_at">) {
+export async function createTool(payload: CreateToolDTO): Promise<Tool> {
   return await db.one<Tool>(
     `INSERT INTO public.tools_catalog(key, name, category, description, schema, handler_type, handler_config, is_active, company_id)
      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -95,9 +63,9 @@ export async function createTool(payload: Omit<Tool, "id" | "created_at" | "upda
   );
 }
 
-export async function updateTool(id: string, payload: Partial<Omit<Tool, "id" | "created_at" | "updated_at">>) {
+export async function updateTool(id: string, payload: UpdateToolDTO): Promise<Tool> {
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: unknown[] = [];
   let idx = 1;
   
   if (payload.key !== undefined) {
@@ -140,13 +108,13 @@ export async function updateTool(id: string, payload: Partial<Omit<Tool, "id" | 
   return await db.one<Tool>(sql, values);
 }
 
-export async function deleteTool(id: string) {
+export async function deleteTool(id: string): Promise<void> {
   await db.none("DELETE FROM public.tools_catalog WHERE id = $1", [id]);
 }
 
 // ====== agent_tools CRUD ======
 
-export async function listAgentTools(filters: { agent_id?: string; is_enabled?: boolean }) {
+export async function listAgentTools(filters: { agent_id?: string; is_enabled?: boolean }): Promise<Array<AgentTool & { tool: Tool }>> {
   let sql = `
     SELECT at.*, 
            row_to_json(tc.*) as tool
@@ -154,7 +122,7 @@ export async function listAgentTools(filters: { agent_id?: string; is_enabled?: 
     INNER JOIN public.tools_catalog tc ON at.tool_id = tc.id
     WHERE 1=1
   `;
-  const params: any[] = [];
+  const params: unknown[] = [];
   let idx = 1;
   
   if (filters.agent_id) {
@@ -166,11 +134,11 @@ export async function listAgentTools(filters: { agent_id?: string; is_enabled?: 
     params.push(filters.is_enabled);
   }
   
-  const rows = await db.any<any>(sql, params);
-  return rows.map((r) => ({ ...r, tool: r.tool as Tool })) as Array<AgentTool & { tool: Tool }>;
+  const rows = await db.any<AgentTool & { tool: Tool }>(sql, params);
+  return rows.map((r: any) => ({ ...r, tool: r.tool as Tool }));
 }
 
-export async function getAgentTool(agentId: string, toolId: string) {
+export async function getAgentTool(agentId: string, toolId: string): Promise<(AgentTool & { tool: Tool }) | null> {
   const sql = `
     SELECT at.*, 
            row_to_json(tc.*) as tool
@@ -186,8 +154,8 @@ export async function getAgentTool(agentId: string, toolId: string) {
 export async function addToolToAgent(
   agentId: string,
   toolId: string,
-  options?: { is_enabled?: boolean; overrides?: Record<string, any> }
-) {
+  options?: { is_enabled?: boolean; overrides?: Record<string, unknown> }
+): Promise<AgentTool> {
   return await db.one<AgentTool>(
     `INSERT INTO public.agent_tools(agent_id, tool_id, is_enabled, overrides)
      VALUES($1, $2, $3, $4)
@@ -199,10 +167,10 @@ export async function addToolToAgent(
 export async function updateAgentTool(
   agentId: string,
   toolId: string,
-  payload: { is_enabled?: boolean; overrides?: Record<string, any> }
-) {
+  payload: { is_enabled?: boolean; overrides?: Record<string, unknown> }
+): Promise<AgentTool | null> {
   const fields: string[] = [];
-  const values: any[] = [];
+  const values: unknown[] = [];
   let idx = 1;
   
   if (payload.is_enabled !== undefined) {
@@ -219,13 +187,13 @@ export async function updateAgentTool(
   return await db.oneOrNone<AgentTool>(sql, values);
 }
 
-export async function removeToolFromAgent(agentId: string, toolId: string) {
+export async function removeToolFromAgent(agentId: string, toolId: string): Promise<void> {
   await db.none("DELETE FROM public.agent_tools WHERE agent_id = $1 AND tool_id = $2", [agentId, toolId]);
 }
 
 // ====== tool logs ======
 
-export async function logToolExecution(log: Omit<ToolLog, "id" | "executed_at">) {
+export async function logToolExecution(log: Omit<ToolLog, "id" | "executed_at">): Promise<ToolLog> {
   const paramsJson = JSON.stringify(log.params ?? {});
   const resultJson = log.result != null ? JSON.stringify(log.result) : null;
   return await db.one<ToolLog>(
@@ -254,7 +222,7 @@ export async function getToolLogs(filters: {
   limit?: number;
 }) {
   let sql = "SELECT * FROM public.agent_tool_logs WHERE 1=1";
-  const params: any[] = [];
+  const params: unknown[] = [];
   let idx = 1;
   
   if (filters.agent_id) {

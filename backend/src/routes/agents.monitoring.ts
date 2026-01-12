@@ -1,8 +1,8 @@
 import { Router, Express } from "express";
-import { AgentMonitoringService } from "../services/agentMonitoring.ts";
-import { AgentMetricsRepository } from "../repos/agent_metrics.repo.ts";
-import { runAgentReply } from "../services/agents.runtime.ts";
-import { db } from "../pg.ts";
+import { AgentMonitoringService } from "../services/agent-monitoring.service.js";
+import { AgentMetricsRepository } from "../repos/agent-metrics.repo.js";
+import { runAgentReply } from "../services/agents-runtime.service.js";
+import { db } from "../pg.js";
 
 const router = Router();
 

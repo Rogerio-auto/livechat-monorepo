@@ -1,6 +1,6 @@
 import express from "express";
-import { requireAuth } from "../middlewares/requireAuth";
-import { supabaseAdmin } from "../lib/supabase";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 const router = express.Router();
 

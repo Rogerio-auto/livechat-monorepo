@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { fetchJson } from "../../lib/fetch";
-import type { TemplateWithDetails, Project, ProjectStage } from "../../types/projects";
+import type { TemplateWithDetails, Project, ProjectStage } from "@livechat/shared";
 import ProjectCard from "./ProjectCard";
 import ProjectDetailsModal from "./ProjectDetailsModal";
 import ProjectForm from "./ProjectForm";

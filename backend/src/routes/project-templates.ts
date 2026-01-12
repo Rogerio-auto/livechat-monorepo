@@ -2,7 +2,7 @@
 
 import type { Application } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import {
   listTemplates,
   getTemplateWithDetails,
@@ -15,7 +15,7 @@ import {
   addCustomFieldToTemplate,
   updateCustomField,
   deleteCustomField,
-} from "../repos/project-templates.repo.ts";
+} from "../repos/project-templates.repo.js";
 
 // ==================== SCHEMAS ====================
 
@@ -354,7 +354,7 @@ export function registerProjectTemplateRoutes(app: Application) {
       const { industry } = req.params;
 
       // Importar seeds pré-configurados
-      const { seedTemplateByIndustry } = await import("../seeds/project-templates.seed.ts");
+      const { seedTemplateByIndustry } = await import("../seeds/project-templates.seed.js");
       
       const template = await seedTemplateByIndustry(companyId, userId, industry);
 

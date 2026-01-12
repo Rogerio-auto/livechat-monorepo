@@ -23,7 +23,7 @@ import {
   Mail,
   Phone
 } from "lucide-react";
-import type { TemplateWithDetails, ProjectStage, ProjectCustomField } from "../../types/projects";
+import type { TemplateWithDetails, ProjectStage, ProjectCustomField } from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL;
 

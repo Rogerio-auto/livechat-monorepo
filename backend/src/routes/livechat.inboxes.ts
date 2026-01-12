@@ -1,13 +1,14 @@
-import express from "express";
+import express, { Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { requireInboxAccess } from "../middlewares/requireInboxAccess.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { AuthRequest, Inbox, CreateInboxDTO, UpdateInboxDTO } from "../types/index.js";
 
 export function registerLivechatInboxesRoutes(app: express.Application) {
   // Verificar se deve mostrar wizard de primeira inbox
-  app.get("/livechat/inboxes/should-show-wizard", requireAuth, async (req: any, res) => {
+  app.get("/livechat/inboxes/should-show-wizard", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin
         .from('users')
@@ -16,8 +17,8 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         .maybeSingle();
       
       if (uerr) return res.status(500).json({ error: uerr.message });
-      const companyId = (urow as any)?.company_id;
-      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
+      const companyId = urow?.company_id;
+      if (!companyId) return res.status(404).json({ error: 'UsuÃ¡rio sem company_id' });
 
       // Verificar flag first_inbox_setup da empresa
       const { data: company, error: companyErr } = await supabaseAdmin
@@ -28,12 +29,12 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
       
       if (companyErr) return res.status(500).json({ error: companyErr.message });
       
-      // Se a flag já é true, não mostrar wizard
+      // Se a flag jÃ¡ Ã© true, nÃ£o mostrar wizard
       if (company?.first_inbox_setup === true) {
         return res.json({ showWizard: false });
       }
 
-      // Se a flag é false/null, verificar se tem inboxes
+      // Se a flag Ã© false/null, verificar se tem inboxes
       const { data: inboxes, error: inboxErr } = await supabaseAdmin
         .from('inboxes')
         .select('id')
@@ -42,7 +43,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
       
       if (inboxErr) return res.status(500).json({ error: inboxErr.message });
       
-      // Se tem inbox mas flag não está setada, atualizar flag
+      // Se tem inbox mas flag nÃ£o estÃ¡ setada, atualizar flag
       if (inboxes && inboxes.length > 0) {
         await supabaseAdmin
           .from('companies')
@@ -51,15 +52,15 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         return res.json({ showWizard: false });
       }
 
-      // Não tem inbox e flag não está setada, mostrar wizard
+      // NÃ£o tem inbox e flag nÃ£o estÃ¡ setada, mostrar wizard
       return res.json({ showWizard: true });
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'wizard check error' });
     }
   });
 
-  // Inboxes do usuário autenticado
-  app.get("/livechat/inboxes/my", requireAuth, async (req: any, res) => {
+  // Inboxes do usuÃ¡rio autenticado
+  app.get("/livechat/inboxes/my", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const authUserId = req.user.id as string;
 
@@ -86,7 +87,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         } catch {}
       }
 
-      const ids = Array.from(new Set((links || []).map((r: any) => r.inbox_id))).filter(Boolean);
+      const ids = Array.from(new Set((links || []).map((r: any) => r.inbox_id))).filter((id): id is string => !!id);
       if (ids.length === 0) return res.json([]);
 
       const { data, error } = await supabaseAdmin
@@ -108,12 +109,12 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // List all inboxes of current user's company with stats
-  app.get('/livechat/inboxes/stats', requireAuth, requireInboxAccess, async (req: any, res) => {
+  app.get('/livechat/inboxes/stats', requireAuth, requireInboxAccess, async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
-      const companyId = (urow as any)?.company_id;
-      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
+      const companyId = urow?.company_id;
+      if (!companyId) return res.status(404).json({ error: 'UsuÃ¡rio sem company_id' });
       
       const { data: inboxes, error } = await supabaseAdmin
         .from('inboxes')
@@ -155,32 +156,32 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // List all inboxes of current user's company
-  app.get('/livechat/inboxes', requireAuth, requireInboxAccess, async (req: any, res) => {
+  app.get('/livechat/inboxes', requireAuth, requireInboxAccess, async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
-      const companyId = (urow as any)?.company_id;
-      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
+      const companyId = urow?.company_id;
+      if (!companyId) return res.status(404).json({ error: 'UsuÃ¡rio sem company_id' });
       const { data, error } = await supabaseAdmin
         .from('inboxes')
         .select('id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, created_at, updated_at, waha_db_name')
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
       if (error) return res.status(500).json({ error: error.message });
-      return res.json(data || []);
+      return res.json((data || []) as Inbox[]);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'inboxes list error' });
     }
   });
 
   // Create a new inbox in current company
-  app.post('/livechat/inboxes', requireAuth, async (req: any, res) => {
+  app.post('/livechat/inboxes', requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role, id').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
-      const companyId = (urow as any)?.company_id as string | null;
-      if (!companyId) return res.status(404).json({ error: 'Usuário sem company_id' });
-      const actorLocalUserId = (urow as any)?.id || null;
+      const companyId = urow?.company_id as string | null;
+      if (!companyId) return res.status(404).json({ error: 'UsuÃ¡rio sem company_id' });
+      const actorLocalUserId = urow?.id || null;
 
       const schema = z.object({
         name: z.string().min(1),
@@ -198,11 +199,11 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         add_current_as_manager: z.boolean().optional().default(true),
       });
       const parsed = schema.safeParse(req.body || {});
-      if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos', details: parsed.error.format() });
-      const b = parsed.data as any;
+      if (!parsed.success) return res.status(400).json({ error: 'Dados invÃ¡lidos', details: parsed.error.format() });
+      const b = parsed.data;
 
       const nowIso = new Date().toISOString();
-      const insert = {
+      const insert: CreateInboxDTO = {
         name: b.name,
         phone_number: b.phone_number,
         webhook_url: b.webhook_url ?? null,
@@ -214,9 +215,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         waba_id: b.waba_id ?? null,
         instance_id: b.instance_id ?? null,
         company_id: companyId,
-        created_at: nowIso,
-        updated_at: nowIso,
-      } as any;
+      };
 
       const { data: inbox, error } = await supabaseAdmin
         .from('inboxes')
@@ -225,15 +224,17 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         .single();
       if (error) return res.status(500).json({ error: error.message });
 
+      const newInbox = inbox as Inbox;
+
       if (b.webhook_verify_token || b.app_secret) {
         await supabaseAdmin
           .from('inbox_secrets')
-          .upsert([{ inbox_id: (inbox as any).id, access_token: null, refresh_token: null, provider_api_key: null, updated_at: nowIso }], { onConflict: 'inbox_id' });
+          .upsert([{ inbox_id: newInbox.id, access_token: null, refresh_token: null, provider_api_key: null, updated_at: nowIso }], { onConflict: 'inbox_id' });
         const patch: any = {};
         if (b.webhook_verify_token !== undefined) patch.webhook_verify_token = b.webhook_verify_token;
         if (b.app_secret !== undefined) patch.app_secret = b.app_secret;
         if (Object.keys(patch).length > 0) {
-          await supabaseAdmin.from('inboxes').update(patch).eq('id', (inbox as any).id);
+          await supabaseAdmin.from('inboxes').update(patch).eq('id', newInbox.id);
         }
       }
 
@@ -241,7 +242,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         if (b.add_current_as_manager && actorLocalUserId) {
           await supabaseAdmin
             .from('inbox_users')
-            .upsert([{ user_id: actorLocalUserId, inbox_id: (inbox as any).id, can_read: true, can_write: true, can_manage: true }], { onConflict: 'user_id,inbox_id' });
+            .upsert([{ user_id: actorLocalUserId, inbox_id: newInbox.id, can_read: true, can_write: true, can_manage: true }], { onConflict: 'user_id,inbox_id' });
         }
       } catch {}
 
@@ -255,8 +256,8 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         console.error('Error updating first_inbox_setup:', e);
       }
 
-      try { getIO()?.emit('inbox:created', { companyId, inbox }); } catch {}
-      return res.status(201).json(inbox);
+      try { getIO()?.emit('inbox:created', { companyId, inbox: newInbox }); } catch {}
+      return res.status(201).json(newInbox);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'inbox create error' });
     }
@@ -300,11 +301,12 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
       const parsed = schema.safeParse(req.body || {});
       if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos', details: parsed.error.format() });
       const b = parsed.data as any;
-      const update: any = {};
-      const fields = ['name','phone_number','is_active','webhook_url','channel','provider','base_url','api_version','phone_number_id','waba_id','instance_id','webhook_verify_token','app_secret'];
-      for (const k of fields) if (Object.prototype.hasOwnProperty.call(b, k)) update[k] = b[k];
-      update.updated_at = new Date().toISOString();
-      if (Object.keys(update).length === 1) return res.status(400).json({ error: 'Nada para atualizar' });
+      const update: UpdateInboxDTO = {};
+      const fields = ['name','phone_number','is_active','webhook_url','channel','provider','base_url','api_version','phone_number_id','waba_id','instance_id','webhook_verify_token','app_secret'] as (keyof UpdateInboxDTO)[];
+      for (const k of fields) if (Object.prototype.hasOwnProperty.call(b, k)) (update as any)[k] = b[k];
+      
+      if (Object.keys(update).length === 0) return res.status(400).json({ error: 'Nada para atualizar' });
+      
       const { data: updated, error } = await supabaseAdmin
         .from('inboxes')
         .update(update)
@@ -312,15 +314,17 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
         .select('id, name, phone_number, is_active, webhook_url, channel, provider, base_url, api_version, phone_number_id, waba_id, instance_id, created_at, updated_at, company_id, waha_db_name')
         .single();
       if (error) return res.status(500).json({ error: error.message });
-      try { getIO()?.emit('inbox:updated', { inboxId: id, companyId: (updated as any).company_id, changes: update, inbox: updated }); } catch {}
-      return res.json(updated);
+      
+      const updatedInbox = updated as Inbox;
+      try { getIO()?.emit('inbox:updated', { inboxId: id, companyId: updatedInbox.company_id, changes: update, inbox: updatedInbox }); } catch {}
+      return res.json(updatedInbox);
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'inbox update error' });
     }
   });
 
   // Delete inbox
-  app.delete('/livechat/inboxes/:id', requireAuth, async (req: any, res) => {
+  app.delete('/livechat/inboxes/:id', requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params as { id: string };
       const { data: inbox, error: inboxErr } = await supabaseAdmin.from('inboxes').select('id, company_id').eq('id', id).maybeSingle();
@@ -329,17 +333,17 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
 
       const { data: actor, error: actorErr } = await supabaseAdmin.from('users').select('id, role, company_id').eq('user_id', req.user.id).maybeSingle();
       if (actorErr) return res.status(500).json({ error: actorErr.message });
-      if (!actor || (actor as any).company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
+      if (!actor || actor.company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
 
       let allowed = false;
-      const role = ((actor as any).role || '').toString().toUpperCase();
+      const role = (actor.role || '').toString().toUpperCase();
       if (role && role !== 'AGENT') allowed = true;
       if (!allowed) {
         const { data: link, error: linkErr } = await supabaseAdmin
           .from('inbox_users')
           .select('can_manage')
           .eq('inbox_id', id)
-          .eq('user_id', (actor as any).id)
+          .eq('user_id', actor.id)
           .maybeSingle();
         if (linkErr) return res.status(500).json({ error: linkErr.message });
         if (link?.can_manage) allowed = true;
@@ -347,10 +351,10 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
       if (!allowed) return res.status(403).json({ error: 'Sem permissao para excluir inbox' });
 
       const { data: chats } = await supabaseAdmin.from('chats').select('id').eq('inbox_id', id);
-      const chatIds = (chats || []).map((row: any) => row.id).filter(Boolean);
+      const chatIds = (chats || []).map((row: any) => row.id).filter((cid): cid is string => !!cid);
       if (chatIds.length > 0) {
-        const chunk = (arr: any[], size = 100) => {
-          const parts: any[][] = [];
+        const chunk = <T>(arr: T[], size = 100) => {
+          const parts: T[][] = [];
           for (let i = 0; i < arr.length; i += size) parts.push(arr.slice(i, i + size));
           return parts;
         };
@@ -379,24 +383,24 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // Manage inbox users: add/update permissions
-  app.post('/livechat/inboxes/:id/users', requireAuth, async (req: any, res) => {
+  app.post('/livechat/inboxes/:id/users', requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params as { id: string };
       const schema = z.object({ userId: z.string().min(1), can_read: z.boolean().optional().default(true), can_write: z.boolean().optional().default(true), can_manage: z.boolean().optional().default(false) });
       const parsed = schema.safeParse(req.body || {});
-      if (!parsed.success) return res.status(400).json({ error: 'Dados inválidos', details: parsed.error.format() });
-      const b = parsed.data as any;
+      if (!parsed.success) return res.status(400).json({ error: 'Dados invÃ¡lidos', details: parsed.error.format() });
+      const b = parsed.data;
       const { data: inbox } = await supabaseAdmin.from('inboxes').select('id, company_id').eq('id', id).maybeSingle();
-      if (!inbox) return res.status(404).json({ error: 'Inbox não encontrada' });
+      if (!inbox) return res.status(404).json({ error: 'Inbox nÃ£o encontrada' });
       const { data: actor } = await supabaseAdmin.from('users').select('id, role, company_id').eq('user_id', req.user.id).maybeSingle();
-      if (!actor || (actor as any).company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
-      const role = ((actor as any).role || '').toString().toUpperCase();
+      if (!actor || actor.company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
+      const role = (actor.role || '').toString().toUpperCase();
       if (role === 'AGENT') {
-        const { data: link } = await supabaseAdmin.from('inbox_users').select('can_manage').eq('inbox_id', id).eq('user_id', (actor as any).id).maybeSingle();
-        if (!link?.can_manage) return res.status(403).json({ error: 'Sem permissão para gerenciar usuários da inbox' });
+        const { data: link } = await supabaseAdmin.from('inbox_users').select('can_manage').eq('inbox_id', id).eq('user_id', actor.id).maybeSingle();
+        if (!link?.can_manage) return res.status(403).json({ error: 'Sem permissÃ£o para gerenciar usuÃ¡rios da inbox' });
       }
       const { data: target } = await supabaseAdmin.from('users').select('id, company_id').eq('id', b.userId).maybeSingle();
-      if (!target || (target as any).company_id !== (inbox as any).company_id) return res.status(400).json({ error: 'Usuário inválido para esta empresa' });
+      if (!target || target.company_id !== (inbox as any).company_id) return res.status(400).json({ error: 'UsuÃ¡rio invÃ¡lido para esta empresa' });
       const { data, error } = await supabaseAdmin
         .from('inbox_users')
         .upsert([{ user_id: b.userId, inbox_id: id, can_read: b.can_read, can_write: b.can_write, can_manage: b.can_manage }], { onConflict: 'user_id,inbox_id' })
@@ -410,17 +414,17 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
     }
   });
 
-  app.delete('/livechat/inboxes/:id/users/:userId', requireAuth, async (req: any, res) => {
+  app.delete('/livechat/inboxes/:id/users/:userId', requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id, userId } = req.params as { id: string; userId: string };
       const { data: inbox } = await supabaseAdmin.from('inboxes').select('id, company_id').eq('id', id).maybeSingle();
-      if (!inbox) return res.status(404).json({ error: 'Inbox não encontrada' });
+      if (!inbox) return res.status(404).json({ error: 'Inbox nÃ£o encontrada' });
       const { data: actor } = await supabaseAdmin.from('users').select('id, role, company_id').eq('user_id', req.user.id).maybeSingle();
-      if (!actor || (actor as any).company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
-      const role = ((actor as any).role || '').toString().toUpperCase();
+      if (!actor || actor.company_id !== (inbox as any).company_id) return res.status(403).json({ error: 'Proibido' });
+      const role = (actor.role || '').toString().toUpperCase();
       if (role === 'AGENT') {
-        const { data: link } = await supabaseAdmin.from('inbox_users').select('can_manage').eq('inbox_id', id).eq('user_id', (actor as any).id).maybeSingle();
-        if (!link?.can_manage) return res.status(403).json({ error: 'Sem permissão para gerenciar usuários da inbox' });
+        const { data: link } = await supabaseAdmin.from('inbox_users').select('can_manage').eq('inbox_id', id).eq('user_id', actor.id).maybeSingle();
+        if (!link?.can_manage) return res.status(403).json({ error: 'Sem permissÃ£o para gerenciar usuÃ¡rios da inbox' });
       }
       const { error } = await supabaseAdmin.from('inbox_users').delete().eq('inbox_id', id).eq('user_id', userId);
       if (error) return res.status(500).json({ error: error.message });

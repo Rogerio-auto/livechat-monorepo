@@ -1,7 +1,7 @@
 // backend/src/controllers/admin/tool.controller.ts
 
 import { Request, Response } from 'express';
-import { ToolManagementService } from '../../services/admin/toolManagement.service.ts';
+import { ToolManagementService } from '../../services/admin/tool-management.service.js';
 
 export class ToolController {
   

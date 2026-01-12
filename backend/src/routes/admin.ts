@@ -1,9 +1,10 @@
-import type { Application } from "express";
+import type { Application, Response, NextFunction } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { AuthRequest } from "../types/express.js";
 
 // Middleware para verificar se é ADMIN
-const requireAdmin = async (req: any, res: any, next: any) => {
+const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     // O role está em req.profile.role, não em req.user.role
     const role = String(req.profile?.role || "").toUpperCase();
@@ -118,7 +119,7 @@ export function registerAdminRoutes(app: Application) {
   
   // PUT /api/admin/companies/:companyId/industry
   // Editar industry de uma empresa e aplicar configurações automaticamente
-  app.put("/api/admin/companies/:companyId/industry", requireAuth, requireAdmin, async (req: any, res) => {
+  app.put("/api/admin/companies/:companyId/industry", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { companyId } = req.params;
       const { industry } = req.body;
@@ -206,7 +207,7 @@ export function registerAdminRoutes(app: Application) {
 
   // POST /api/admin/companies/:companyId/apply-industry-config
   // Re-aplicar configurações do nicho (sem alterar a industry)
-  app.post("/api/admin/companies/:companyId/apply-industry-config", requireAuth, requireAdmin, async (req: any, res) => {
+  app.post("/api/admin/companies/:companyId/apply-industry-config", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
     try {
       const { companyId } = req.params;
 

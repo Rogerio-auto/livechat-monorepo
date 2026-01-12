@@ -4,7 +4,7 @@
 
 import path from "path";
 import { fileURLToPath } from "url";
-import { convertDocxToPdf } from "../services/python-generator.js";
+import { convertDocxToPdf } from "../services/python-generator.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

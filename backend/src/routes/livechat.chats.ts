@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { performance } from "node:perf_hooks";
-import express from "express";
+import { Request, Response, Application } from "express";
+import { AuthRequest } from "../types/express.js";
 import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO } from "../lib/io.js";
-import { NotificationService } from "../services/NotificationService.js";
+import { NotificationService } from "../services/notification.service.js";
 import { EX_APP, publish } from "../queue/rabbit.js"; // <??" padroniza ??oqueue???
 import {
   redis,
@@ -19,9 +20,9 @@ import {
   rememberListCacheKey,
   clearListCacheIndexes,
 } from "../lib/redis.js";
-import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.js";
-import { normalizeMsisdn } from "../util.js";
-import { getAgent as getRuntimeAgent } from "../services/agents.runtime.js";
+import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.service.js";
+import { normalizeMsisdn } from "../utils/util.util.js";
+import { getAgent as getRuntimeAgent } from "../services/agents-runtime.service.js";
 import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.js";
 import messagesRouter from "./livechat.messages.js";
 import { logger } from "../lib/logger.js";
@@ -30,7 +31,8 @@ import {
   CreateChatSchema, 
   UpdateChatStatusSchema, 
   TransferChatSchema 
-} from "../schemas/chat.schema.ts";
+} from "../schemas/chat.schema.js";
+import { Chat, Message as ChatMessage, Contact } from "../types/index.js";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -153,12 +155,12 @@ async function warmChatMessagesCache(chatId: string, limit = 20): Promise<void> 
   }
 }
 
-function applyConditionalHeaders(res: express.Response, envelope: CacheEnvelope<any>) {
+function applyConditionalHeaders(res: Response, envelope: CacheEnvelope<any>) {
   res.setHeader("ETag", envelope.meta.etag);
   res.setHeader("Last-Modified", new Date(envelope.meta.lastModified).toUTCString());
 }
 
-function isFreshRequest(req: express.Request, envelope: CacheEnvelope<any>): boolean {
+function isFreshRequest(req: Request, envelope: CacheEnvelope<any>): boolean {
   const ifNoneMatch = req.headers["if-none-match"];
   if (typeof ifNoneMatch === "string" && ifNoneMatch.length > 0) {
     if (ifNoneMatch.split(",").map((part) => part.trim()).includes(envelope.meta.etag)) {
@@ -248,22 +250,6 @@ function normalizeSupabaseError(error: any, fallbackMessage = "Unexpected error"
     hint,
     code,
   };
-}
-
-declare global {
-  namespace Express {
-    interface User {
-      id: string;
-      email?: string | null;
-      name?: string | null;
-      role?: string | null;
-      company_id?: string | null;
-    }
-
-    interface Request {
-      user?: User; // agora req.user existe no tipo
-    }
-  }
 }
 
 const UUID_RE =
@@ -356,12 +342,12 @@ function flattenChatRow(row: any) {
 }
 
 
-export function registerLivechatChatRoutes(app: express.Application) {
+export function registerLivechatChatRoutes(app: Application) {
   // Mount messages sub-router for GET /livechat/messages/:id
   app.use("/livechat/messages", messagesRouter);
 
   // Listar chats (com cache)
-  app.get("/livechat/chats", requireAuth, requireInboxAccess, async (req: any, res) => {
+  app.get("/livechat/chats", requireAuth, requireInboxAccess, async (req: AuthRequest, res: Response) => {
     const reqLabel = `livechat.chats#${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     console.time(reqLabel);
     const handlerStart = performance.now();
@@ -429,7 +415,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
           await supabaseAdmin
             .from("users")
             .select("company_id")
-            .eq("user_id", req.user.id)
+            .eq("user_id", req.user?.id as string)
             .maybeSingle(),
       );
       if (actorResp.error) {
@@ -442,7 +428,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         endTimer({ error: "no_company", queries: queryLog });
         return res.status(404).json({ error: "Usuario sem company_id" });
       }
-      if (companyId && !req.user?.company_id) (req.user as any).company_id = companyId;
+      if (companyId && !req.user?.company_id) req.user!.company_id = companyId;
 
       const cacheKey = k.list(
         companyId,
@@ -674,7 +660,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
               "leads",
               queryLog,
               async () => {
-                let query = supabaseAdmin
+                const query = supabaseAdmin
                   .from("leads")
                   .select("id, name, phone, kanban_column_id, customer_id")
                   .eq("company_id", companyId);
@@ -1158,25 +1144,27 @@ export function registerLivechatChatRoutes(app: express.Application) {
       endTimer();
     }
   });
-  app.post("/livechat/messages", requireAuth, async (req: any, res, next) => {
+  app.post("/livechat/messages", requireAuth, async (req: AuthRequest, res: Response, next) => {
     const startedAt = performance.now();
     let insertedId: string | null = null;
     let logStatus: "ok" | "error" = "ok";
     let logError: string | null = null;
+    let chatIdToLog: string | null = null;
+
+    const logMetrics = () => {
+      const durationMs = Number((performance.now() - startedAt).toFixed(1));
+      logger.info("[metrics][api] /livechat/messages", {
+        chatId: chatIdToLog,
+        durationMs,
+        insertedId,
+        status: logStatus,
+        error: logError,
+      });
+    };
     
     try {
       const { chatId, text, senderType, reply_to } = SendMessageSchema.parse(req.body);
-      
-      const logMetrics = () => {
-        const durationMs = Number((performance.now() - startedAt).toFixed(1));
-        logger.info("[metrics][api] /livechat/messages", {
-          chatId,
-          durationMs,
-          insertedId,
-          status: logStatus,
-          error: logError,
-        });
-      };
+      chatIdToLog = chatId;
 
       const authUserId = typeof req.user?.id === "string" ? req.user.id : null;
       const needsSenderId = String(senderType).toUpperCase() !== "CUSTOMER";
@@ -1541,7 +1529,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Edit a message (WAHA)
-  app.put("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: any, res) => {
+  app.put("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: AuthRequest, res: Response) => {
     const { chatId, messageId } = req.params as { chatId: string; messageId: string };
     const { text, linkPreview = true, linkPreviewHighQuality = false } = req.body || {};
     if (!chatId || !messageId || !text) return res.status(400).json({ error: "chatId, messageId e text obrigatorios" });
@@ -1612,7 +1600,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Delete a message (WAHA)
-  app.delete("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: any, res) => {
+  app.delete("/livechat/chats/:chatId/messages/:messageId", requireAuth, async (req: AuthRequest, res: Response) => {
     const { chatId, messageId } = req.params as { chatId: string; messageId: string };
     if (!chatId || !messageId) return res.status(400).json({ error: "chatId e messageId obrigatorios" });
     try {
@@ -1768,7 +1756,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Detalhar chat (com cache)
-  app.get("/livechat/chats/:id", requireAuth, async (req: any, res) => {
+  app.get("/livechat/chats/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
 
     // 🔒 SEGURANÇA: Validar company_id do usuário
@@ -1826,7 +1814,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Atualizar status (invalida chat + listas)
-  app.put("/livechat/chats/:id/status", requireAuth, async (req: any, res) => {
+  app.put("/livechat/chats/:id/status", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { status } = req.body || {};
     if (!status) return res.status(400).json({ error: "status obrigatorio" });
@@ -1965,7 +1953,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Atualizar departamento do chat
-  app.put("/livechat/chats/:id/department", requireAuth, async (req: any, res) => {
+  app.put("/livechat/chats/:id/department", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     let { department_id: departmentId } = (req.body || {}) as { department_id?: string | null };
 
@@ -2425,7 +2413,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Listar mensagens (publicas + privadas) com cache
-  app.get("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
+  app.get("/livechat/chats/:id/messages", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     
     // 🔒 SEGURANÇA: Validar company_id do usuário
@@ -2741,7 +2729,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       endTimer();
     }
   });
-  app.post("/livechat/chats/:id/messages", requireAuth, async (req: any, res) => {
+  app.post("/livechat/chats/:id/messages", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id: chatId } = req.params as { id: string };
       const { text, senderType = "AGENT", draftId } = req.body || {};
@@ -2922,7 +2910,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Enviar arquivo (base64) — invalida mensagens/listas/chat
-  app.post("/livechat/chats/:id/messages/file", requireAuth, async (req: any, res) => {
+  app.post("/livechat/chats/:id/messages/file", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { filename, mime, data } = (req.body || {}) as { filename?: string; mime?: string; data?: string };
     if (!filename || !data) return res.status(400).json({ error: "filename e data obrigatorios" });
@@ -3078,7 +3066,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
 
   // Enviar mídia (multipart ou JSON base64) — alias mais compatível com o front
   // Suporta: image/*, video/*, audio/*, application/*
-  app.post("/livechat/chats/:id/messages/media", requireAuth, upload.single("file"), async (req: any, res) => {
+  app.post("/livechat/chats/:id/messages/media", requireAuth, (upload as any).single("file"), async (req: AuthRequest, res: Response) => {
     const { id: chatId } = req.params as { id: string };
 
     try {
@@ -3332,7 +3320,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Mensagens privadas - listar (mantive sem cache para simplificar)
-  app.get("/livechat/chats/:id/private/messages", requireAuth, async (req: any, res) => {
+  app.get("/livechat/chats/:id/private/messages", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     try {
       const { data: privChat, error: errPc } = await supabaseAdmin
@@ -3353,7 +3341,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
       const senderIds = Array.from(
         new Set((data || []).map((r: any) => r.sender_id).filter(Boolean))
       );
-      let nameMap: Record<string, string> = {};
+      const nameMap: Record<string, string> = {};
       if (senderIds.length > 0) {
         const { data: usersList } = await supabaseAdmin
           .from("users")
@@ -3384,7 +3372,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // Mensagens privadas - enviar (invalida msgs privadas do chat)
-  app.post("/livechat/chats/:id/private/messages", requireAuth, async (req: any, res) => {
+  app.post("/livechat/chats/:id/private/messages", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { text } = (req.body || {}) as { text?: string };
     if (!text) return res.status(400).json({ error: "text obrigatorio" });
@@ -3496,7 +3484,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
     return res.status(204).send();
   });
 
-  app.get("/livechat/chats/:id/participants", requireAuth, async (req: any, res) => {
+  app.get("/livechat/chats/:id/participants", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     try {
       const { data: rows, error } = await supabaseAdmin
@@ -3509,7 +3497,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
         new Set((rows || []).map((r: any) => r.user_id).filter(Boolean))
       );
 
-      let usersMap: Record<
+      const usersMap: Record<
         string,
         { name: string | null; role: string | null; user_id: string | null }
       > = {};
@@ -3543,7 +3531,7 @@ export function registerLivechatChatRoutes(app: express.Application) {
   });
 
   // -------- Mark Chat as Read (Provider-Agnostic) --------
-  app.post("/livechat/chats/:id/mark-read", requireAuth, async (req: any, res) => {
+  app.post("/livechat/chats/:id/mark-read", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id: chatId } = req.params as { id: string };
       

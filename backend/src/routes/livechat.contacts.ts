@@ -1,10 +1,10 @@
 import express from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
-import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.ts";
-import { NotificationService } from "../services/NotificationService.ts";
+import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.js";
+import { NotificationService } from "../services/notification.service.js";
 
 export function registerLivechatContactsRoutes(app: express.Application) {
   // List contacts of current user's company

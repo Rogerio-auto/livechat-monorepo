@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import SettingsNav from "../componets/settings/SettingsNav";
-import { ToolsAdminPanel } from "../componets/tools/ToolsAdminPanel";
-import TemplatesAdminPanel from "../componets/agents/TemplatesAdminPanel";
-import { AgentToolsManager } from "../componets/admin/AgentToolsManager";
-import { CompaniesManager } from "../componets/admin/CompaniesManager";
-import { AgentsAdminPanel } from "../componets/admin/AgentsAdminPanel";
+import SettingsNav from "../components/settings/SettingsNav";
+import { ToolsAdminPanel } from "../components/tools/ToolsAdminPanel";
+import TemplatesAdminPanel from "../components/agents/TemplatesAdminPanel";
+import { AgentToolsManager } from "../components/admin/AgentToolsManager";
+import { CompaniesManager } from "../components/admin/CompaniesManager";
+import { AgentsAdminPanel } from "../components/admin/AgentsAdminPanel";
 import { API } from "../utils/api";
 import { FiShield, FiTool, FiUsers, FiCpu, FiSettings, FiCrosshair } from "react-icons/fi";
 

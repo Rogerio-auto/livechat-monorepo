@@ -1,4 +1,4 @@
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 import { KnowledgeBaseManager } from '../configuration/KnowledgeBaseManager';
 import { PlaygroundChat } from './PlaygroundChat';
 import { FiInfo } from 'react-icons/fi';

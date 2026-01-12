@@ -3,11 +3,11 @@ import {
   getSubscription,
   checkLimit,
   checkFeatureAccess,
-} from "../services/subscriptions.ts";
+} from "../services/subscriptions.service.js";
 import type {
   PlanFeatures,
   PlanLimits,
-} from "../services/subscriptions.ts";
+} from "../services/subscriptions.service.js";
 
 /**
  * Middleware para verificar se a empresa tem uma assinatura ativa

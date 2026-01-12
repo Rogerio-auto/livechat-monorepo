@@ -1,6 +1,6 @@
 // src/routes/devTest.ts
 import type { Request, Response } from "express";
-import { handleMetaWebhook } from "../services/meta/handlers.js";
+import { handleMetaWebhook } from "../services/meta/handlers.service.js";
 
 export async function devTestWebhook(req: Request, res: Response) {
   const sample = {

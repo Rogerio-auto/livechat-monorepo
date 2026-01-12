@@ -26,19 +26,19 @@ import {
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { NewColumnForm } from "../componets/funil/NewColumnForm";
+import { NewColumnForm } from "../components/funil/NewColumnForm";
 import type { Column, Card, LeadListItem } from "./funil/types";
-import { LoadingOverlay } from "../componets/ui/LoadingOverlay";
-import { CardImageCapture } from "../componets/funil/CardImageCapture";
-import { CardImageGallery } from "../componets/funil/CardImageGallery";
+import { LoadingOverlay } from "../components/ui/LoadingOverlay";
+import { CardImageCapture } from "../components/funil/CardImageCapture";
+import { CardImageGallery } from "../components/funil/CardImageGallery";
 import { useImageUpload, type UploadedPhoto } from "../hooks/useImageUpload";
 import { useRecentChats } from "../hooks/useDashboard";
 import { useNavigate } from "react-router-dom";
 import { showToast } from "../hooks/useToast";
-import { KanbanSetupModal } from "../componets/funil/KanbanSetupModal";
+import { KanbanSetupModal } from "../components/funil/KanbanSetupModal";
 import { TaskModal } from "../components/tasks/TaskModal";
 import { LeadTaskBadge } from "../components/tasks/LeadTaskBadge";
-import type { CreateTaskInput, UpdateTaskInput } from "../types/tasks";
+import { CreateTaskInput, UpdateTaskInput } from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:5000";
 

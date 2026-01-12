@@ -1,4 +1,4 @@
-import { getRedis } from "./redis.ts";
+import { getRedis } from "./redis.js";
 // @ts-ignore
 import Redlock from "redlock";
 

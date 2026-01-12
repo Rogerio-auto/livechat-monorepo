@@ -3,7 +3,7 @@
 import { MetricsCards } from './MetricsCards';
 import { ErrorMonitor } from './ErrorMonitor';
 import { ConversationHistory } from './ConversationHistory';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 
 interface Props {
   agent: Agent;

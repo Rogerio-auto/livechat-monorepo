@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Project, TemplateWithDetails } from "../../types/projects";
+import type { Project, TemplateWithDetails } from "@livechat/shared";
 
 type Props = {
   project: Project;
@@ -27,7 +27,7 @@ export default function ProjectCard({ project, template, isDragging = false }: P
     low: 'bg-gray-500/10 text-gray-500',
   };
 
-  const statusIcons = {
+  const statusIcons: Record<string, string> = {
     active: '🔵',
     completed: '✅',
     on_hold: '⏸️',

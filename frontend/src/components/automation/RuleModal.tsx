@@ -1,18 +1,16 @@
 import { useState, useEffect } from "react";
 import { X, Plus, Trash2, Info } from "lucide-react";
 import { useAutomationRules } from "../../hooks/useAutomationRules";
-import type {
+import {
   AutomationRule,
   CreateAutomationRuleInput,
   TriggerType,
   Condition,
   ConditionOperator,
-} from "../../types/automationRules";
-import {
   TRIGGER_LABELS,
   TRIGGER_DESCRIPTIONS,
   OPERATOR_LABELS,
-} from "../../types/automationRules";
+} from "@livechat/shared";
 
 interface RuleModalProps {
   rule?: AutomationRule;

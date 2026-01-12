@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { TemplateWithDetails, Project, ProjectCustomField } from "../../types/projects";
+import type { TemplateWithDetails, Project, ProjectCustomField } from "@livechat/shared";
 import { Search, Calendar, AlertCircle, CheckCircle2, Layout, ArrowRight, X } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";

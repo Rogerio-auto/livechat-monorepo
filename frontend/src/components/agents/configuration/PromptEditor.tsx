@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FiSave, FiRotateCcw, FiInfo } from 'react-icons/fi';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 
 interface Props {
   agent: Agent;

@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { TaskForm } from "../../components/tasks/TaskForm";
 import { useTasks } from "../../hooks/useTasks";
 import { ArrowLeft } from "lucide-react";
-import type { CreateTaskInput, UpdateTaskInput } from "../../types/tasks";
+import { CreateTaskInput, UpdateTaskInput } from "@livechat/shared";
 
 export default function TaskCreate() {
   const navigate = useNavigate();

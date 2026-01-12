@@ -1,11 +1,11 @@
 // backend/src/jobs/scheduler.ts
 
 import cron from 'node-cron';
-import { checkProjectDeadlines, checkTaskDeadlines } from './check-project-deadlines.job.ts';
-import { checkGeneralTaskDeadlines } from './check-general-tasks.job.ts';
-import { processPendingNotifications } from '../services/notification.service.ts';
-import { supabaseAdmin } from '../lib/supabase.ts';
-import { queueNextStep } from '../services/flow.engine.js';
+import { checkProjectDeadlines, checkTaskDeadlines } from './check-project-deadlines.job.js';
+import { checkGeneralTaskDeadlines } from './check-general-tasks.job.js';
+import { NotificationService } from '../services/notification.service.js';
+import { supabaseAdmin } from '../lib/supabase.js';
+import { queueNextStep } from '../services/flow-engine.service.js';
 
 export function startScheduler() {
   console.log('[Scheduler] Starting notification scheduler...');
@@ -26,16 +26,6 @@ export function startScheduler() {
 
   // Executar uma vez no boot (opcional, para garantir que as notificações do dia sejam enviadas se o server reiniciou)
   checkGeneralTaskDeadlines().catch(err => console.error('[Scheduler] Initial deadline check failed:', err));
-
-  // ==================== PROCESSAR NOTIFICAÇÕES PENDENTES (A cada 5 minutos) ====================
-  cron.schedule('*/5 * * * *', async () => {
-    console.log('[Scheduler] Processing pending notifications...');
-    try {
-      await processPendingNotifications();
-    } catch (error) {
-      console.error('[Scheduler] Error processing notifications:', error);
-    }
-  });
 
   // ==================== PROCESSAR FLOWS AGUARDANDO (A cada minuto) ====================
   cron.schedule('* * * * *', async () => {
@@ -86,7 +76,7 @@ async function cleanupOldNotifications() {
   const { error } = await supabaseAdmin
     .from('notifications')
     .delete()
-    .eq('status', 'READ')
+    .eq('is_read', true)
     .lt('created_at', thirtyDaysAgo.toISOString());
 
   if (error) {

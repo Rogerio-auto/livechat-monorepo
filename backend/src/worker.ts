@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
 import { createHash, randomUUID } from "node:crypto";
-import { encryptMediaUrl, decryptMediaUrl, decryptSecret } from "../src/lib/crypto.ts";
+import { encryptMediaUrl, decryptMediaUrl, decryptSecret } from "./lib/crypto.js";
 import {
   publish,
   publishApp,
@@ -15,12 +15,12 @@ import {
   Q_OUTBOUND,
   Q_INBOUND_MEDIA,
   EX_APP,
-} from "../src/queue/rabbit.ts";
-import db from "../src/pg.ts";
-import { normalizeMsisdn } from "../src/util.ts";
-import { getIO } from "./lib/io.ts";
-import { runWithDistributedLock } from "./lib/distributedLock.ts";
-import { ensureSingleWorkerInstance } from "./lib/singleInstance.ts";
+} from "./queue/rabbit.js";
+import db from "./pg.js";
+import { normalizeMsisdn } from "./utils/util.util.js";
+import { getIO } from "./lib/io.js";
+import { runWithDistributedLock } from "./lib/distributedLock.js";
+import { ensureSingleWorkerInstance } from "./lib/singleInstance.js";
 import {
   saveWebhookEvent,
   updateMessageStatusByExternalId,
@@ -37,21 +37,21 @@ import {
   findChatIdByRemoteId,
   markChatRemoteParticipantLeft,
   findChatMessageIdByExternalId,
-} from "../src/services/meta/store.ts";
-import { redis, rDel, rSet, rGet, k, rememberMessageCacheKey } from "../src/lib/redis.ts";
-import { supabaseAdmin } from "./lib/supabase.ts";
-import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "../src/services/waha/client.ts";
-import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents.runtime.ts";
-import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause, tryLock as bufferTryLock, releaseLock as bufferReleaseLock } from "./services/buffer.ts";
-import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer, getMediaBucket } from "../src/lib/storage.ts";
-import { buildProxyUrl } from "../src/lib/mediaProxy.ts";
-import { incrementUsage, checkLimit } from "../src/services/subscriptions.ts";
-import { NotificationService } from "./services/NotificationService.ts";
-import { registerFlowWorker } from "./worker.flows.ts";
+} from "./services/meta/store.service.js";
+import { redis, rDel, rSet, rGet, k, rememberMessageCacheKey } from "./lib/redis.js";
+import { supabaseAdmin } from "./lib/supabase.js";
+import { WAHA_PROVIDER, wahaFetch, fetchWahaChatDetails, WAHA_BASE_URL } from "./services/waha/client.service.js";
+import { runAgentReply, getAgent as getRuntimeAgent } from "./services/agents-runtime.service.js";
+import { enqueueMessage as bufferEnqueue, getDue as bufferGetDue, clearDue as bufferClearDue, popBatch as bufferPopBatch, parseListKey as bufferParseListKey, pauseBuffer as bufferPause, tryLock as bufferTryLock, releaseLock as bufferReleaseLock } from "./services/buffer.service.js";
+import { uploadBufferToStorage, buildStoragePath, pickFilename, uploadWahaMedia, downloadMediaToBuffer, getMediaBucket } from "./lib/storage.js";
+import { buildProxyUrl } from "./lib/mediaProxy.js";
+import { incrementUsage, checkLimit } from "./services/subscriptions.service.js";
+import { NotificationService } from "./services/notification.service.js";
+import { registerFlowWorker } from "./worker.flows.js";
 import ffmpegPath from "ffmpeg-static";
 import { spawn } from "node:child_process";
 import os from "node:os";
-import { registerCampaignWorker } from "./worker.campaigns.ts";
+import { registerCampaignWorker } from "./worker.campaigns.js";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -191,7 +191,7 @@ function extractFirstUrlAndCaption(text: string): { url: string | null; caption:
 
 function parseAgentReplyToItems(raw: string): ParsedItem[] {
   const items: ParsedItem[] = [];
-  let trimmed = (raw || "").trim();
+  const trimmed = (raw || "").trim();
   if (!trimmed) return items;
 
   // 1. Limpeza robusta para extrair JSON de blocos Markdown ou texto sujo
@@ -450,8 +450,8 @@ async function flushDueBuffers(): Promise<void> {
 
       // Aggregate user messages into a single prompt
       const lines = items
-        .map((it) => (typeof it.text === "string" ? it.text.trim() : ""))
-        .filter((t) => t.length > 0);
+        .map((it: any) => (typeof it.text === "string" ? it.text.trim() : ""))
+        .filter((t: string) => t.length > 0);
       if (lines.length === 0) continue;
 
       const aggregated = lines.join("\n");
@@ -2579,7 +2579,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   const isGroupChat = isWahaGroupJid(chatJid);
 
   let chatId: string;
-  let phoneForLead = basePhone && basePhone.trim() ? basePhone : chatJid;
+  const phoneForLead = basePhone && basePhone.trim() ? basePhone : chatJid;
 
   let groupMeta: { name: string | null; avatarUrl: string | null } | null = null;
 
@@ -2634,7 +2634,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   // });
 
   // ========== OPTIMIZATION: Try cache first ==========
-  let cachedChatId = await getCachedChatId(job.inboxId, chatJid);
+  const cachedChatId = await getCachedChatId(job.inboxId, chatJid);
   
   if (cachedChatId) {
     chatId = cachedChatId;
@@ -4519,7 +4519,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           const chatId = String(job.chatId || "");
           const messageId = job.messageId ? String(job.messageId) : "";
           const storageKey = String(job.storage_key || "");
-          let mimeType = String(job.mime_type || "");
+          const mimeType = String(job.mime_type || "");
           meta.chatId = chatId || meta.chatId || null;
           meta.provider = provider || meta.provider || "META";
           if (!chatId) throw new Error("meta.sendMedia missing chatId");
@@ -5829,7 +5829,7 @@ async function tickCampaigns() {
         if (isMetaTemplate) {
           console.log(`[campaigns] 📨 enviando META TEMPLATE: campaign=${c.id} (${c.name || ""}) templateName=${payloadObj.meta_template_name} phone=${r.phone}`);
           try {
-            const { sendTemplateMessage } = await import("./services/meta/templates.ts");
+            const { sendTemplateMessage } = await import("./services/meta/templates.service.js");
             
             // Para templates sem variáveis, não enviar components
             // Se tiver send_components (estrutura de envio), usa ela; senão, deixa undefined

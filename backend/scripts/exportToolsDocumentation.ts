@@ -49,7 +49,7 @@ async function exportToolsDocumentation() {
     }, {} as Record<string, Tool[]>);
 
     // Gerar Markdown
-    let markdown = generateMarkdown(toolsByCategory);
+    const markdown = generateMarkdown(toolsByCategory);
 
     // Salvar arquivo
     const outputPath = join(process.cwd(), "TOOLS_DOCUMENTATION.md");

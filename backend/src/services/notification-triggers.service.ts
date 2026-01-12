@@ -1,8 +1,8 @@
 // backend/src/services/notification-triggers.service.ts
 
-import { NotificationService } from "./NotificationService.js";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import * as FlowEngine from "./flow.engine.js";
+import { NotificationService } from "./notification.service.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import * as FlowEngine from "./flow-engine.service.js";
 
 // ==================== PROJECT NOTIFICATIONS ====================
 

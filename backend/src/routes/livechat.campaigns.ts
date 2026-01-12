@@ -1,16 +1,16 @@
 import express from "express";
 import multer from "multer";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { z } from "zod";
-import { publish, EX_APP } from "../queue/rabbit.ts";
-import { rGet, rSet, rDelMatch } from "../lib/redis.ts";
-import { bumpScopeVersion } from "../lib/cache.ts";
-import { validateCampaignSafety } from "../services/campaigns/validation.js";
-import * as db from "../pg.ts";
+import { publish, EX_APP } from "../queue/rabbit.js";
+import { rGet, rSet, rDelMatch } from "../lib/redis.js";
+import { bumpScopeVersion } from "../lib/cache.js";
+import { validateCampaignSafety } from "../services/campaigns/validation.service.js";
+import * as db from "../pg.js";
 import { logger } from "../lib/logger.js";
-import { CampaignSchema, CampaignUpdateSchema } from "../schemas/campaign.schema.ts";
+import { CampaignSchema, CampaignUpdateSchema } from "../schemas/campaign.schema.js";
 
 // Multer for file uploads (max 5MB for recipient lists)
 const upload = multer({ 
@@ -265,7 +265,7 @@ const insert = {
           .eq("provider", "META_CLOUD");
         
         if (inboxes && inboxes.length > 0) {
-          const { listWhatsAppTemplates } = await import("../services/meta/templates.js");
+          const { listWhatsAppTemplates } = await import("../services/meta/templates.service.js");
           
           for (const inbox of inboxes) {
             if (!inbox.waba_id) continue;
@@ -364,7 +364,7 @@ const insert = {
       }
 
       // Busca templates da Meta
-      const { listWhatsAppTemplates } = await import("../services/meta/templates.js");
+      const { listWhatsAppTemplates } = await import("../services/meta/templates.service.js");
       const metaTemplates = await listWhatsAppTemplates(parsed.inboxId, { 
         status: parsed.status,
         limit: 100 
@@ -1108,7 +1108,7 @@ const insert = {
       params.push(filters.limit);
 
       // Usa conexão direta PG para melhor flexibilidade
-      const { db } = await import("../pg.ts");
+      const { db } = await import("../pg.js");
       const rows = await db.any(sql, params);
       return res.json({ items: rows, count: rows.length });
     } catch (e: any) {
@@ -1178,7 +1178,7 @@ const insert = {
             const where = conditions.length ? conditions.join(" AND ") : "TRUE";
             const sql = `SELECT DISTINCT c.phone AS phone, c.name AS name, c.lead_id AS lead_id, c.id AS customer_id, c.created_at AS created_at FROM customers c INNER JOIN leads l ON l.id = c.lead_id LEFT JOIN kanban_columns kc ON kc.id = l.kanban_column_id WHERE c.company_id = $1 AND c.phone IS NOT NULL AND c.lead_id IS NOT NULL AND (${where}) ORDER BY c.created_at DESC LIMIT $${params.length + 1}`;
             params.push(previewReq.limit);
-            const { db } = await import("../pg.ts");
+            const { db } = await import("../pg.js");
             const rows = await db.any(sql, params);
             previewResp = { items: rows, count: rows.length };
           } catch (err) {
@@ -1536,7 +1536,7 @@ const insert = {
       const { buffer, originalname } = req.file;
       
       // Parse file based on extension
-      const { parseRecipientFile } = await import("../services/campaigns/uploadParser.js");
+      const { parseRecipientFile } = await import("../services/campaigns/upload-parser.service.js");
       const parseResult = await parseRecipientFile(buffer, originalname);
       
       if (parseResult.valid.length === 0) {
@@ -1552,14 +1552,14 @@ const insert = {
       }
       
       // Import sync utility
-      const { ensureLeadCustomerChat } = await import("../services/meta/store.js");
+      const { ensureLeadCustomerChat } = await import("../services/meta/store.service.js");
       
       // Process valid recipients
       const CHUNK = 1000;
       let created_customers = 0;
-      let created_leads = 0;
+      const created_leads = 0;
       let inserted = 0;
-      let skipped_existing = 0;
+      const skipped_existing = 0;
       const failed_phones: string[] = [];
       
       console.log(`[campaigns] Processing ${parseResult.valid.length} valid recipients for campaign ${campaignId}`);
@@ -1661,7 +1661,7 @@ const insert = {
         const templateCategory = payload?.category || (template as any)?.kind;
         
         if (templateCategory === "MARKETING") {
-          const { countRecipientsWithoutOptIn } = await import("../services/customers/optIn.ts");
+          const { countRecipientsWithoutOptIn } = await import("../services/customers/opt-in.service.js");
           const withoutOptIn = await countRecipientsWithoutOptIn(campaignId);
           
           if (withoutOptIn > 0) {
@@ -1674,7 +1674,7 @@ const insert = {
       
       // 2. Check tier limit
       try {
-        const { isInboxHealthy } = await import("../services/meta/health.js");
+        const { isInboxHealthy } = await import("../services/meta/health.service.js");
         const health = await isInboxHealthy(campaign.inbox_id);
         
         if (inserted > health.tier_limit) {

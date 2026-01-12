@@ -1,8 +1,8 @@
 import express, { Request, Response } from "express";
 import multer from "multer";
 import sharp from "sharp";
-import { requireAuth } from "../middlewares/requireAuth";
-import { supabaseAdmin } from "../lib/supabase";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { randomUUID } from "crypto";
 
 const router = express.Router();

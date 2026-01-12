@@ -1,6 +1,6 @@
 // frontend/src/hooks/useAgentConfig.ts
 import { useState, useEffect } from 'react';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 
 export function useAgentConfig(agentId: string) {
   const [config, setConfig] = useState<Agent | null>(null);

@@ -1,9 +1,9 @@
 import { TaskForm } from "./TaskForm";
-import type {
+import {
   Task,
-  CreateTaskInput,
-  UpdateTaskInput,
-} from "../../types/tasks";
+  CreateTaskDTO as CreateTaskInput,
+  UpdateTaskDTO as UpdateTaskInput,
+} from "@livechat/shared";
 
 interface TaskModalProps {
   isOpen: boolean;

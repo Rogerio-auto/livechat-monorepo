@@ -1,5 +1,5 @@
 import { PlaygroundChat as SharedPlayground } from '../configuration/PlaygroundChat';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 
 export function PlaygroundChat({ agent }: { agent: Agent }) {
   return (

@@ -2,14 +2,14 @@ import type { Application, Request, Response } from "express";
 import multer from "multer";
 import path from "node:path";
 import fs from "node:fs/promises";
-import db from "../pg.ts";
+import db from "../pg.js";
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import ffmpegPath from "ffmpeg-static";
-import { publish, publishApp, EX_APP } from "../queue/rabbit.ts";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
+import { publish, publishApp, EX_APP } from "../queue/rabbit.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
 
 const MEDIA_DIR = process.env.MEDIA_DIR || path.resolve(process.cwd(), "media");
 const MEDIA_PUBLIC_BASE = (process.env.MEDIA_PUBLIC_BASE || "").replace(/\/+$/, "");

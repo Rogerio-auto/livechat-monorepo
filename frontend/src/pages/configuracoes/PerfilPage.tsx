@@ -1,4 +1,4 @@
-import PerfilPanel from "../../componets/profile/PerfilPanel";
+import PerfilPanel from "../../components/profile/PerfilPanel";
 import { useProfileSettings } from "../../hooks/useProfileSettings";
 
 export default function PerfilPage() {

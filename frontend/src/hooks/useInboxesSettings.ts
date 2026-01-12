@@ -7,7 +7,7 @@ import type {
   MetaProviderConfig,
   ProviderConfig,
   WahaProviderConfig,
-} from "../types/types";
+} from "@livechat/shared";
 
 const META_WEBHOOK_URL = `${API}/webhooks/meta`;
 
@@ -230,7 +230,7 @@ export function useInboxesSettings() {
   const normalizeInboxPayload = (data: InboxFormExtended) => {
     const metaPayload = data.provider === "META_CLOUD" ? buildMetaPayload(data.provider_config?.meta ?? undefined) : undefined;
     const wahaPayload = data.provider === "WAHA" ? buildWahaPayload(data.provider_config?.waha ?? undefined) : undefined;
-    let providerConfig =
+    const providerConfig =
       metaPayload || wahaPayload
         ? {
             ...(metaPayload ? { meta: metaPayload } : {}),

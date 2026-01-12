@@ -1,15 +1,15 @@
 import express from "express";
 import multer from "multer";
 import { z } from "zod";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import { 
   uploadBufferToStorage, 
   buildStoragePath, 
   computeSha256,
   pickFilename,
   sanitizeFilename
-} from "../lib/storage.ts";
+} from "../lib/storage.js";
 
 // Multer para upload em memória
 const upload = multer({ 

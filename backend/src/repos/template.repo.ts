@@ -1,7 +1,7 @@
 // backend/src/repos/template.repo.ts
 
-import { db } from '../pg.ts';
-import { AgentTemplate, TemplateTool, TemplateTest, TemplateValidation, TemplateVersion, AgentTemplateQuestion } from '../types/agentTemplate.ts';
+import { db } from '../pg.js';
+import { AgentTemplate, TemplateTool, TemplateTest, TemplateValidation, TemplateVersion, AgentTemplateQuestion } from '../types/agent-template.types.js';
 
 export class TemplateRepository {
   
@@ -27,7 +27,7 @@ export class TemplateRepository {
       offset = 0,
     } = options;
 
-    let whereConditions = ['is_active = $1'];
+    const whereConditions = ['is_active = $1'];
     const params: any[] = [isActive];
     let paramIndex = 2;
 

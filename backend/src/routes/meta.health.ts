@@ -7,7 +7,7 @@ import {
   fetchMetaAccountHealth,
   updateInboxHealthStatus,
   isInboxHealthy,
-} from "../services/meta/health.js";
+} from "../services/meta/health.service.js";
 
 export function registerMetaHealthRoutes(app: Application) {
   async function resolveCompanyId(req: any): Promise<string> {

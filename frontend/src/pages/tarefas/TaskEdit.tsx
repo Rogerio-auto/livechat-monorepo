@@ -4,7 +4,7 @@ import { TaskForm } from "../../components/tasks/TaskForm";
 import { useTasks } from "../../hooks/useTasks";
 import { API } from "../../utils/api";
 import { ArrowLeft } from "lucide-react";
-import type { Task, UpdateTaskInput } from "../../types/tasks";
+import { Task, UpdateTaskInput } from "@livechat/shared";
 
 const TaskEdit: React.FC = () => {
   const { id } = useParams();

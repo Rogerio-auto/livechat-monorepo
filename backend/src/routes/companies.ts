@@ -1,11 +1,11 @@
 import express from "express";
 import { z } from "zod";
 import crypto from "crypto";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin, supabaseAnon } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
-import { getRedis, rSet, clearCompanyListCaches, clearMessageCache } from "../lib/redis.ts";
-import db from "../pg.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin, supabaseAnon } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { getRedis, rSet, clearCompanyListCaches, clearMessageCache } from "../lib/redis.js";
+import db from "../pg.js";
 
 // Middleware para verificar se é ADMIN
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
@@ -676,7 +676,7 @@ export function registerCompanyRoutes(app: express.Application) {
 
     try {
       // 1. Update Subscription
-      const { changePlan } = await import("../services/subscriptions.js");
+      const { changePlan } = await import("../services/subscriptions.service.js");
       await changePlan(companyId, planId);
 
       // 2. Update Company (legacy field) - REMOVED to avoid Enum errors
@@ -705,7 +705,7 @@ export function registerCompanyRoutes(app: express.Application) {
     if (!status) return res.status(400).json({ error: "status is required" });
 
     try {
-      const { updateSubscriptionStatus } = await import("../services/subscriptions.js");
+      const { updateSubscriptionStatus } = await import("../services/subscriptions.service.js");
       await updateSubscriptionStatus(companyId, status);
       return res.json({ success: true, status });
     } catch (e: any) {
@@ -722,7 +722,7 @@ export function registerCompanyRoutes(app: express.Application) {
     if (!days || isNaN(days)) return res.status(400).json({ error: "days is required" });
 
     try {
-      const { extendSubscription } = await import("../services/subscriptions.js");
+      const { extendSubscription } = await import("../services/subscriptions.service.js");
       await extendSubscription(companyId, Number(days));
       return res.json({ success: true, days });
     } catch (e: any) {

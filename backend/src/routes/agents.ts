@@ -1,26 +1,27 @@
-import type { Application } from "express";
+import { Application, Response } from "express";
 import { ZodError, z } from "zod";
 
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { checkResourceLimit } from "../middlewares/checkSubscription.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { createAgent, deleteAgent, listAgentsFiltered, updateAgent, getAgent } from "../repos/agents.repo.ts";
-import { AgentSchema } from "../types/integrations.ts";
-import { runAgentReply } from "../services/agents.runtime.ts";
-import type { ChatTurn } from "../services/agents.runtime.ts";
-import { getAgentTemplateTools } from "../repos/agent.templates.repo.ts";
-import { addToolToAgent, getToolById, listAgentTools, updateAgentTool } from "../repos/tools.repo.ts";
-import { generateAgentToken } from "../services/tokens.ts";
-import { listOpenAIIntegrations, createOpenAIIntegration } from "../repos/integrations.openai.repo.ts";
-import { createOpenAIProject } from "../services/openai.admin.service.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { createAgent, deleteAgent, listAgentsFiltered, updateAgent, getAgent } from "../repos/agents.repo.js";
+import { AgentSchema } from "../types/integrations.types.js";
+import { runAgentReply } from "../services/agents-runtime.service.js";
+import type { ChatTurn } from "../services/agents-runtime.service.js";
+import { getAgentTemplateTools } from "../repos/agent-templates.repo.js";
+import { addToolToAgent, getToolById, listAgentTools, updateAgentTool } from "../repos/tools.repo.js";
+import { generateAgentToken } from "../services/tokens.service.js";
+import { listOpenAIIntegrations, createOpenAIIntegration } from "../repos/integrations-openai.repo.js";
+import { createOpenAIProject } from "../services/openai-admin.service.js";
+import { AuthRequest } from "../types/index.js";
 
 const updateAgentSchema = AgentSchema.partial();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];
 
-async function ensureAdminRole(req: any) {
+async function ensureAdminRole(req: AuthRequest) {
   const authId = String(req?.user?.id || "");
   if (!authId) {
-    throw Object.assign(new Error("Não autenticado"), { status: 401 });
+    throw Object.assign(new Error("NÃ£o autenticado"), { status: 401 });
   }
 
   const { data: userData, error: userError } = await supabaseAdmin
@@ -33,7 +34,7 @@ async function ensureAdminRole(req: any) {
     throw Object.assign(new Error(userError.message), { status: 500 });
   }
 
-  const role = String((userData as any)?.role || "").toUpperCase();
+  const role = String(userData?.role || "").toUpperCase();
   if (!ADMIN_ROLES.includes(role)) {
     throw Object.assign(new Error("Acesso negado. Apenas administradores."), { status: 403 });
   }
@@ -41,7 +42,7 @@ async function ensureAdminRole(req: any) {
   return role;
 }
 
-async function resolveCompanyId(req: any) {
+async function resolveCompanyId(req: AuthRequest) {
   const authId = String(req?.user?.id || "");
   if (!authId) {
     throw Object.assign(new Error("Not authenticated"), { status: 401 });
@@ -57,7 +58,7 @@ async function resolveCompanyId(req: any) {
     throw Object.assign(new Error(error.message), { status: 500 });
   }
 
-  const companyId = (data as any)?.company_id || req?.user?.company_id || null;
+  const companyId = data?.company_id || req?.user?.company_id || null;
   if (!companyId) {
     throw Object.assign(new Error("Usuario sem company_id"), { status: 404 });
   }
@@ -86,7 +87,7 @@ function formatRouteError(error: unknown) {
 
 export function registerAgentsRoutes(app: Application) {
   // Admin: listar TODOS os agentes de TODAS as empresas
-  app.get("/api/admin/agents", requireAuth, async (req: any, res) => {
+  app.get("/api/admin/agents", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
 
@@ -120,13 +121,13 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  // Admin: agentes por empresa específica
-  app.get("/api/admin/companies/:companyId/agents", requireAuth, async (req: any, res) => {
+  // Admin: agentes por empresa especÃfica
+  app.get("/api/admin/companies/:companyId/agents", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId } = req.params as { companyId?: string };
       if (!companyId) {
-        return res.status(400).json({ error: "companyId obrigatório" });
+        return res.status(400).json({ error: "companyId obrigatÃ³rio" });
       }
 
       const agents = await listAgentsFiltered(companyId);
@@ -137,17 +138,17 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.get("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+  app.get("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
       if (!companyId || !agentId) {
-        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+        return res.status(400).json({ error: "ParÃ¢metros obrigatÃ³rios" });
       }
 
       const agent = await getAgent(companyId, agentId);
       if (!agent) {
-        return res.status(404).json({ error: "Agente não encontrado" });
+        return res.status(404).json({ error: "Agente nÃ£o encontrado" });
       }
 
       return res.json(agent);
@@ -157,12 +158,12 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.put("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+  app.put("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
       if (!companyId || !agentId) {
-        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+        return res.status(400).json({ error: "ParÃ¢metros obrigatÃ³rios" });
       }
 
       const parsed = updateAgentSchema.parse(req.body ?? {});
@@ -178,12 +179,12 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.delete("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: any, res) => {
+  app.delete("/api/admin/companies/:companyId/agents/:agentId", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
       if (!companyId || !agentId) {
-        return res.status(400).json({ error: "Parâmetros obrigatórios" });
+        return res.status(400).json({ error: "ParÃ¢metros obrigatÃ³rios" });
       }
 
       await deleteAgent(companyId, agentId);
@@ -195,22 +196,22 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // GET /api/admin/companies/:companyId/agents/:agentId/token
-  app.get("/api/admin/companies/:companyId/agents/:agentId/token", requireAuth, async (req: any, res) => {
+  app.get("/api/admin/companies/:companyId/agents/:agentId/token", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
-      if (!companyId || !agentId) return res.status(400).json({ error: "Parâmetros obrigatórios" });
+      if (!companyId || !agentId) return res.status(400).json({ error: "ParÃ¢metros obrigatÃ³rios" });
 
-      // 1. Tentar buscar do próprio agente (nova coluna api_token)
+      // 1. Tentar buscar do prÃ³prio agente (nova coluna api_token)
       const agent = await getAgent(companyId, agentId);
       let token: string | null = agent?.api_token || null;
 
-      // 2. Se não tiver, procurar token em overrides de ferramentas HTTP (fallback legado)
+      // 2. Se nÃ£o tiver, procurar token em overrides de ferramentas HTTP (fallback legado)
       if (!token) {
         const agentTools = await listAgentTools({ agent_id: agentId });
         for (const at of agentTools) {
-          if (at.tool.handler_type === 'HTTP' && at.overrides?.headers?.Authorization) {
-            const auth = at.overrides.headers.Authorization as string;
+          if (at.tool.handler_type === 'HTTP' && (at.overrides as any)?.headers?.Authorization) {
+            const auth = (at.overrides as any).headers.Authorization as string;
             if (auth.startsWith("Bearer ")) {
               token = auth.replace("Bearer ", "");
               break; 
@@ -227,11 +228,11 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // POST /api/admin/companies/:companyId/agents/:agentId/token/regenerate
-  app.post("/api/admin/companies/:companyId/agents/:agentId/token/regenerate", requireAuth, async (req: any, res) => {
+  app.post("/api/admin/companies/:companyId/agents/:agentId/token/regenerate", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       await ensureAdminRole(req);
       const { companyId, agentId } = req.params as { companyId?: string; agentId?: string };
-      if (!companyId || !agentId) return res.status(400).json({ error: "Parâmetros obrigatórios" });
+      if (!companyId || !agentId) return res.status(400).json({ error: "ParÃ¢metros obrigatÃ³rios" });
 
       // 1. Gerar novo token
       const newToken = generateAgentToken(agentId);
@@ -253,9 +254,9 @@ export function registerAgentsRoutes(app: Application) {
       let updatedCount = 0;
 
       for (const at of agentTools) {
-        // Verificar se é HTTP (pela definição da tool)
+        // Verificar se Ã© HTTP (pela definiÃ§Ã£o da tool)
         if (at.tool.handler_type === 'HTTP') {
-          const currentOverrides = at.overrides || {};
+          const currentOverrides = (at.overrides as any) || {};
           const newOverrides = {
             ...currentOverrides,
             headers: {
@@ -277,8 +278,8 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  // Nova rota: agentes com métricas de desempenho
-  app.get("/api/agents/metrics", requireAuth, async (req: any, res) => {
+  // Nova rota: agentes com mÃ©tricas de desempenho
+  app.get("/api/agents/metrics", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
 
@@ -292,8 +293,8 @@ export function registerAgentsRoutes(app: Application) {
         throw Object.assign(new Error(agentsError.message), { status: 500 });
       }
 
-      // Buscar métricas de chat para cada agente
-  const agentIds = agents?.map((a: any) => a.id) || [];
+      // Buscar mÃ©tricas de chat para cada agente
+      const agentIds = (agents || [])?.map((a: any) => a.id) || [];
       
       const { data: chatMetrics, error: metricsError } = await supabaseAdmin
         .from("chats")
@@ -305,7 +306,7 @@ export function registerAgentsRoutes(app: Application) {
         throw Object.assign(new Error(metricsError.message), { status: 500 });
       }
 
-      // Calcular métricas por agente
+      // Calcular mÃ©tricas por agente
       const metricsMap = new Map<string, { active: number; total: number }>();
       
       for (const chat of chatMetrics || []) {
@@ -320,8 +321,8 @@ export function registerAgentsRoutes(app: Application) {
         metricsMap.set(agentId, current);
       }
 
-      // Montar resposta com métricas
-      const result = (agents as any[])?.map((agent: any) => {
+      // Montar resposta com mÃ©tricas
+      const result = (agents || [])?.map((agent: any) => {
         const metrics = metricsMap.get(agent.id) || { active: 0, total: 0 };
         
         return {
@@ -344,7 +345,7 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // Backward-compat: legacy endpoint without /api used by older frontend
-  app.get("/agents", requireAuth, async (req: any, res) => {
+  app.get("/agents", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
@@ -358,7 +359,7 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.get("/api/agents", requireAuth, async (req: any, res) => {
+  app.get("/api/agents", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
@@ -373,7 +374,7 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // POST /api/agents/from-template - criar agente a partir de template + respostas
-  app.post("/api/agents/from-template", requireAuth, checkResourceLimit("ai_agents"), async (req: any, res) => {
+  app.post("/api/agents/from-template", requireAuth, checkResourceLimit("ai_agents"), async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const bodySchema = z.object({
@@ -522,7 +523,7 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.post("/api/agents", requireAuth, checkResourceLimit("ai_agents"), async (req: any, res) => {
+  app.post("/api/agents", requireAuth, checkResourceLimit("ai_agents"), async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const parsed = AgentSchema.parse(req.body ?? {});
@@ -534,7 +535,7 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.put("/api/agents/:id", requireAuth, async (req: any, res) => {
+  app.put("/api/agents/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params as { id?: string };
@@ -562,7 +563,7 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  app.delete("/api/agents/:id", requireAuth, async (req: any, res) => {
+  app.delete("/api/agents/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params as { id?: string };
@@ -579,7 +580,7 @@ export function registerAgentsRoutes(app: Application) {
   });
 
   // GET /api/agents/:id (detalhe)
-  app.get("/api/agents/:id", requireAuth, async (req: any, res) => {
+  app.get("/api/agents/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params as { id?: string };
@@ -593,8 +594,8 @@ export function registerAgentsRoutes(app: Application) {
     }
   });
 
-  // POST /api/agents/:id/test — executa o agente contra um prompt
-  app.post("/api/agents/:id/test", requireAuth, async (req: any, res) => {
+  // POST /api/agents/:id/test â€” executa o agente contra um prompt
+  app.post("/api/agents/:id/test", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const companyId = await resolveCompanyId(req);
       const { id } = req.params as { id?: string };

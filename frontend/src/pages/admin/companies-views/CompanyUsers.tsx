@@ -1,5 +1,5 @@
 import { useOutletContext } from 'react-router-dom';
-import type { CompanyOutletContext } from '../types';
+import { CompanyOutletContext } from '@livechat/shared';
 
 export function CompanyUsers() {
   const { company, analytics } = useOutletContext<CompanyOutletContext>();

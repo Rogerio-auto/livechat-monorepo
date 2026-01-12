@@ -1,5 +1,5 @@
 import { FaCheckCircle, FaCheck } from "react-icons/fa";
-import { INDUSTRIES, Industry } from "../../../types/cadastro";
+import { INDUSTRIES, Industry } from "@livechat/shared";
 import {
 	FaGraduationCap,
 	FaChartLine,

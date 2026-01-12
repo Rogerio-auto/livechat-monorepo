@@ -2,9 +2,9 @@
 
 import type { Application } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { markAsRead } from "../services/notification.service.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { NotificationService } from "../services/notification.service.js";
 
 // ==================== HELPERS ====================
 
@@ -125,7 +125,7 @@ export function registerNotificationRoutes(app: Application) {
         return res.status(404).json({ error: "Notification not found" });
       }
 
-      await markAsRead(id);
+      await NotificationService.markAsRead(id, userId);
 
       return res.json({ success: true });
     } catch (error) {

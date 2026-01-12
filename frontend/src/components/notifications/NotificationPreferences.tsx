@@ -1,6 +1,6 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { API, fetchJson } from "../../utils/api";
-import type { NotificationPreferences } from "../../types/notifications";
+import type { NotificationPreferences } from "@livechat/shared";
 import { Loader2, Save, Bell, Mail, MessageSquare, CheckCircle2, AlertCircle, Layout, CheckSquare, Settings } from "lucide-react";
 
 const Field = ({ label, children, description }: { label: string; children: ReactNode; description?: string }) => (

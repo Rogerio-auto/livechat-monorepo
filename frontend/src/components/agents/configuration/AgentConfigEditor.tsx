@@ -1,4 +1,4 @@
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 import { PromptEditor } from './PromptEditor';
 import { PlaygroundChat } from './PlaygroundChat';
 import { ModelParameters } from './ModelParameters';

@@ -1,7 +1,7 @@
 // backend/src/routes/queue.ts
 import type { Application, Request, Response } from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { publish, EX_APP } from "../queue/rabbit.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { publish, EX_APP } from "../queue/rabbit.js";
 
 export function registerQueueRoutes(app: Application) {
   app.post(

@@ -1,15 +1,17 @@
 import express from "express";
+import type { Application, Response } from "express";
 import { z } from "zod";
-import { requireAuth } from "../middlewares/requireAuth.ts";
-import { supabaseAdmin } from "../lib/supabase.ts";
-import { getIO } from "../lib/io.ts";
-import { triggerFlow } from "../services/flow.engine.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO } from "../lib/io.js";
+import { triggerFlow } from "../services/flow-engine.service.js";
+import { AuthRequest } from "../types/express.js";
 
-export function registerLivechatTagsRoutes(app: express.Application) {
+export function registerLivechatTagsRoutes(app: Application) {
   // List company tags
-  app.get("/livechat/tags", requireAuth, async (req: any, res) => {
+  app.get("/livechat/tags", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
       const { data: urow, error: errU } = await supabaseAdmin.from("users").select("company_id").eq("user_id", authUserId).maybeSingle();
       if (errU) return res.status(500).json({ error: errU.message });
       if (!urow?.company_id) return res.status(404).json({ error: "Usuário sem company_id" });
@@ -26,8 +28,8 @@ export function registerLivechatTagsRoutes(app: express.Application) {
   });
 
   // Create tag; optionally create a kanban column in default board
-  app.post("/livechat/tags", requireAuth, async (req: any, res) => {
-    const authUserId = req.user.id as string;
+  app.post("/livechat/tags", requireAuth, async (req: AuthRequest, res: Response) => {
+    const authUserId = req.user?.id as string;
     const schema = z.object({ name: z.string().min(1), color: z.string().min(1).optional(), createColumn: z.boolean().optional() });
     const parsed = schema.safeParse(req.body || {});
     if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
@@ -79,7 +81,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
   });
 
   // Adicionar uma tag individual a um chat (POST /livechat/chats/:id/tags)
-  app.post("/livechat/chats/:id/tags", requireAuth, async (req: any, res) => {
+  app.post("/livechat/chats/:id/tags", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { tagId } = req.body || {};
     
@@ -88,7 +90,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
     }
 
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
       const { data: urow } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
       const companyId = (urow as any)?.company_id;
 
@@ -216,7 +218,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
   });
 
   // Gerenciar tags do chat (set completo)
-  app.put("/livechat/chats/:id/tags", requireAuth, async (req, res) => {
+  app.put("/livechat/chats/:id/tags", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { tags } = req.body || {};
     const tagIds: string[] = Array.isArray(tags) ? tags : [];
@@ -229,7 +231,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
     }
 
     try {
-      const authUserId = (req as any).user.id as string;
+      const authUserId = req.user?.id as string;
       const { data: urow } = await supabaseAdmin.from('users').select('company_id').eq('user_id', authUserId).maybeSingle();
       const companyId = (urow as any)?.company_id;
 
@@ -295,7 +297,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
   });
 
   // Listar tags do chat
-  app.get("/livechat/chats/:id/tags", requireAuth, async (req, res) => {
+  app.get("/livechat/chats/:id/tags", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     try {
       const { data, error } = await supabaseAdmin.from('chat_tags').select('tag_id').eq('chat_id', id);
@@ -307,7 +309,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
   });
 
   // Remover uma tag individual de um chat (DELETE /livechat/chats/:id/tags/:tagId)
-  app.delete("/livechat/chats/:id/tags/:tagId", requireAuth, async (req, res) => {
+  app.delete("/livechat/chats/:id/tags/:tagId", requireAuth, async (req: AuthRequest, res: Response) => {
     const { id, tagId } = req.params as { id: string; tagId: string };
     
     try {
@@ -330,7 +332,7 @@ export function registerLivechatTagsRoutes(app: express.Application) {
 
       // System message
       try {
-        const authUserId = (req as any).user.id as string;
+        const authUserId = req.user?.id as string;
         const { data: actorUser } = await supabaseAdmin
           .from("users")
           .select("name")

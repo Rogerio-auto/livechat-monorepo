@@ -1,6 +1,6 @@
 // frontend/src/components/agents/shared/AgentSelector.tsx
 
-import { Agent } from '../../../types/agent';
+import { Agent } from '@livechat/shared';
 
 interface Props {
   agents: Agent[];

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Notification } from '@/types/notifications';
+import { Notification } from '@livechat/shared';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

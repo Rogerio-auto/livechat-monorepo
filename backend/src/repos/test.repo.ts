@@ -1,7 +1,7 @@
 // backend/src/repos/test.repo.ts
 
-import { db } from '../pg.ts';
-import { TemplateTest, TemplateValidation, TestScenario } from '../types/agentTemplate.ts';
+import { db } from '../pg.js';
+import { TemplateTest, TemplateValidation, TestScenario } from '../types/agent-template.types.js';
 
 export class TestRepository {
   

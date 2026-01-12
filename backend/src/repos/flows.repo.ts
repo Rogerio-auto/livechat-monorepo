@@ -1,35 +1,12 @@
 import { supabaseAdmin } from "../lib/supabase.js";
-
-export type FlowStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
-export type ExecutionStatus = 'RUNNING' | 'WAITING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
-
-export interface AutomationFlow {
-  id: string;
-  company_id: string;
-  name: string;
-  description?: string;
-  status: FlowStatus;
-  trigger_config: any;
-  nodes: any[];
-  edges: any[];
-  created_by?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface FlowExecution {
-  id: string;
-  flow_id: string;
-  contact_id: string;
-  current_node_id?: string;
-  status: ExecutionStatus;
-  variables: any;
-  next_step_at?: string;
-  last_error?: string;
-  started_at: string;
-  updated_at: string;
-  finished_at?: string;
-}
+import {
+  AutomationFlow,
+  FlowExecution,
+  FlowStatus,
+  ExecutionStatus,
+  CreateFlowDTO,
+  UpdateFlowDTO
+} from "../types/index.js";
 
 /**
  * List flows for a company
@@ -62,7 +39,7 @@ export async function getFlowById(id: string) {
 /**
  * Create a new flow
  */
-export async function createFlow(input: Partial<AutomationFlow>) {
+export async function createFlow(input: CreateFlowDTO) {
   const { data, error } = await supabaseAdmin
     .from("automation_flows")
     .insert([input])
@@ -76,7 +53,7 @@ export async function createFlow(input: Partial<AutomationFlow>) {
 /**
  * Update an existing flow
  */
-export async function updateFlow(id: string, input: Partial<AutomationFlow>) {
+export async function updateFlow(id: string, input: UpdateFlowDTO) {
   const { data, error } = await supabaseAdmin
     .from("automation_flows")
     .update(input)
@@ -141,7 +118,7 @@ export async function logFlowStep(log: {
   action_type: string;
   status: 'SUCCESS' | 'ERROR' | 'INFO';
   message: string;
-  data?: any;
+  data?: unknown;
 }) {
   const { error } = await supabaseAdmin
     .from("flow_logs")

@@ -5,7 +5,7 @@ import {
   addStageToTemplate,
   addCustomFieldToTemplate,
   type TemplateWithDetails,
-} from "../repos/project-templates.repo.ts";
+} from "../repos/project-templates.repo.js";
 
 // ==================== SEED DATA ====================
 

@@ -1,5 +1,5 @@
 import type { Response, NextFunction } from "express";
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
 
 /**
  * Middleware que verifica se o usuário autenticado tem acesso a pelo menos uma inbox.

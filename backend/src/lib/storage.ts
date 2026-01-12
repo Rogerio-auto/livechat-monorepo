@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { supabaseAdmin } from "./supabase.ts";
-import { SUPABASE_MEDIA_BUCKET } from "../config/env.ts";
+import { supabaseAdmin } from "./supabase.js";
+import { SUPABASE_MEDIA_BUCKET } from "../config/env.js";
 
 export function getMediaBucket(): string {
   return SUPABASE_MEDIA_BUCKET || "chat-uploads";

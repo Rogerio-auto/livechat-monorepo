@@ -1,4 +1,4 @@
-import AgentesPanel from "../../componets/users/AgentesPanel";
+import AgentesPanel from "../../components/users/AgentesPanel";
 
 export default function ColaboradoresPage() {
   return (

@@ -1,9 +1,8 @@
 import { useState } from "react";
-import InboxesPanel from "../../componets/inboxes/InboxesPanel";
+import InboxesPanel from "../../components/inboxes/InboxesPanel";
 import { useInboxesSettings, EMPTY_INBOX_FORM, EMPTY_WAHA_FORM } from "../../hooks/useInboxesSettings";
-import type { InboxFormExtended } from "../../types/types";
 import { API, fetchJson, getAccessToken } from "../../utils/api";
-import type { Inbox } from "../../types/types";
+import type { InboxFormExtended, Inbox } from "@livechat/shared";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";

@@ -1,428 +1,320 @@
-// backend/src/services/notification.service.ts
-
-import { supabaseAdmin } from "../lib/supabase.ts";
+import { supabaseAdmin } from "../lib/supabase.js";
+import { getIO, hasIO } from "../lib/io.js";
 import { publish, EX_APP } from "../queue/rabbit.js";
+import { 
+  NotificationType, 
+  NotificationPriority, 
+  SoundType, 
+  NotificationCategory,
+  Notification,
+  CreateNotificationDTO
+} from "@livechat/shared";
 
-// ==================== TYPES ====================
-
-export type NotificationType =
-  // Projetos
-  | 'PROJECT_CREATED'
-  | 'PROJECT_ASSIGNED'
-  | 'PROJECT_DEADLINE_TODAY'
-  | 'PROJECT_DEADLINE_TOMORROW'
-  | 'PROJECT_DEADLINE_WARNING'
-  | 'PROJECT_OVERDUE'
-  | 'PROJECT_STAGE_CHANGED'
-  | 'PROJECT_COMPLETED'
-  | 'PROJECT_COMMENTED'
-  // Tarefas
-  | 'TASK_ASSIGNED'
-  | 'TASK_DUE_TODAY'
-  | 'TASK_DUE_TOMORROW'
-  | 'TASK_DUE_SOON'
-  | 'TASK_OVERDUE'
-  | 'TASK_COMPLETED'
-  // Menções
-  | 'MENTIONED_IN_COMMENT'
-  // Sistema
-  | 'SYSTEM_ALERT';
-
-export type NotificationChannel = 'IN_APP' | 'WHATSAPP' | 'EMAIL' | 'SMS';
-
-export type NotificationStatus = 'PENDING' | 'SENT' | 'READ' | 'FAILED' | 'CANCELLED';
-
-export type CreateNotificationInput = {
-  userId: string;
-  companyId: string;
-  type: NotificationType;
-  channel?: NotificationChannel;
+interface CreateNotificationInput {
   title: string;
   message: string;
+  type: NotificationType;
+  priority?: NotificationPriority;
+  userId: string;
+  companyId: string;
+  data?: Record<string, unknown>;
+  soundType?: SoundType;
   actionUrl?: string;
+  category?: NotificationCategory;
   projectId?: string;
   taskId?: string;
   commentId?: string;
-  metadata?: Record<string, any>;
+}
+
+interface NotificationConfig {
+  priority: NotificationPriority;
+  soundType: SoundType;
+  category: NotificationCategory;
+}
+
+// Configuração padrão por tipo de notificação
+const NOTIFICATION_CONFIG: Record<NotificationType, NotificationConfig> = {
+  // Chat
+  CHAT_MESSAGE: { priority: "HIGH", soundType: "message", category: "chat" },
+  CHAT_ASSIGNED: { priority: "HIGH", soundType: "default", category: "chat" },
+  CHAT_TRANSFERRED: { priority: "NORMAL", soundType: "default", category: "chat" },
+  CHAT_CLOSED: { priority: "LOW", soundType: "silent", category: "chat" },
+  
+  // Leads
+  NEW_LEAD: { priority: "HIGH", soundType: "success", category: "lead" },
+  LEAD_CONVERTED: { priority: "NORMAL", soundType: "success", category: "lead" },
+  NEW_CUSTOMER: { priority: "HIGH", soundType: "success", category: "lead" },
+  
+  // Propostas
+  PROPOSAL_VIEWED: { priority: "NORMAL", soundType: "default", category: "proposal" },
+  PROPOSAL_ACCEPTED: { priority: "HIGH", soundType: "success", category: "proposal" },
+  PROPOSAL_REJECTED: { priority: "NORMAL", soundType: "warning", category: "proposal" },
+  PROPOSAL_EXPIRED: { priority: "LOW", soundType: "warning", category: "proposal" },
+  
+  // Tarefas
+  TASK_CREATED: { priority: "NORMAL", soundType: "default", category: "task" },
+  TASK_ASSIGNED: { priority: "NORMAL", soundType: "default", category: "task" },
+  TASK_DUE_TODAY: { priority: "HIGH", soundType: "warning", category: "task" },
+  TASK_DUE_SOON: { priority: "HIGH", soundType: "warning", category: "task" },
+  TASK_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "task" },
+  TASK_COMPLETED: { priority: "NORMAL", soundType: "success", category: "task" },
+  TASK_DUE_TOMORROW: { priority: "NORMAL", soundType: "warning", category: "task" },
+  
+  // Campanhas
+  MASS_DISPATCH: { priority: "NORMAL", soundType: "success", category: "campaign" },
+  CAMPAIGN_COMPLETED: { priority: "NORMAL", soundType: "success", category: "campaign" },
+  CAMPAIGN_FAILED: { priority: "HIGH", soundType: "error", category: "campaign" },
+  
+  // Sistema
+  SYSTEM: { priority: "NORMAL", soundType: "default", category: "system" },
+  SYSTEM_ALERT: { priority: "URGENT", soundType: "urgent", category: "system" },
+  TECHNICAL_VISIT: { priority: "HIGH", soundType: "default", category: "system" },
+  
+  // Social
+  MENTION: { priority: "HIGH", soundType: "message", category: "general" },
+  TEAM_INVITE: { priority: "NORMAL", soundType: "default", category: "general" },
+  USER_MESSAGE: { priority: "NORMAL", soundType: "message", category: "general" },
+  
+  // Financeiro
+  PAYMENT_RECEIVED: { priority: "HIGH", soundType: "success", category: "payment" },
+  PAYMENT_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "payment" },
+
+  // Projetos
+  PROJECT_CREATED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_ASSIGNED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_STAGE_CHANGED: { priority: "NORMAL", soundType: "default", category: "project" },
+  PROJECT_COMPLETED: { priority: "HIGH", soundType: "success", category: "project" },
+  PROJECT_COMMENTED: { priority: "NORMAL", soundType: "message", category: "project" },
+  PROJECT_OVERDUE: { priority: "URGENT", soundType: "urgent", category: "project" },
+  PROJECT_DEADLINE_TODAY: { priority: "HIGH", soundType: "warning", category: "project" },
+  PROJECT_DEADLINE_TOMORROW: { priority: "NORMAL", soundType: "warning", category: "project" },
+  PROJECT_DEADLINE_WARNING: { priority: "NORMAL", soundType: "warning", category: "project" },
 };
 
-// ==================== NOTIFICATION CREATION ====================
-
-/**
- * Cria uma notificação e agenda o envio
- */
-export async function createNotification(input: CreateNotificationInput): Promise<string> {
-  const { data, error } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      user_id: input.userId,
-      company_id: input.companyId,
+export class NotificationService {
+  /**
+   * Cria uma notificação e envia via WebSocket
+   */
+  static async create(input: CreateNotificationInput): Promise<Notification> {
+    console.log("[NotificationService] 🔔 Creating notification:", {
       type: input.type,
-      channel: input.channel || 'IN_APP',
-      title: input.title,
-      message: input.message,
-      action_url: input.actionUrl,
-      project_id: input.projectId,
-      task_id: input.taskId,
-      comment_id: input.commentId,
-      metadata: input.metadata,
-      status: 'PENDING',
-    })
-    .select('id')
-    .single();
-
-  if (error) {
-    console.error('[Notification] Error creating notification:', error);
-    throw new Error('Failed to create notification');
-  }
-
-  // Agendar envio assíncrono
-  scheduleNotificationDelivery(data.id);
-
-  return data.id;
-}
-
-/**
- * Cria notificação multi-canal (in-app + WhatsApp)
- */
-export async function createMultiChannelNotification(
-  input: Omit<CreateNotificationInput, 'channel'>
-): Promise<void> {
-  // Buscar preferências do usuário
-  const prefs = await getUserNotificationPreferences(input.userId);
-  
-  // Verificar se está em horário de silêncio
-  const isQuietHours = checkQuietHours(prefs);
-
-  // In-app sempre cria
-  await createNotification({ ...input, channel: 'IN_APP' });
-
-  // WhatsApp apenas se habilitado e fora do horário de silêncio
-  if (prefs.whatsapp_enabled && !isQuietHours) {
-    const typePrefs = prefs.preferences[input.type as string];
-    if (typePrefs?.whatsapp) {
-      await createNotification({ ...input, channel: 'WHATSAPP' });
-    }
-  }
-
-  // Email se habilitado
-  if (prefs.email_enabled) {
-    const typePrefs = prefs.preferences[input.type as string];
-    if (typePrefs?.email) {
-      await createNotification({ ...input, channel: 'EMAIL' });
-    }
-  }
-}
-
-// ==================== NOTIFICATION DELIVERY ====================
-
-/**
- * Agenda envio da notificação (via queue ou imediato)
- */
-async function scheduleNotificationDelivery(notificationId: string): Promise<void> {
-  // Se tiver sistema de fila (Bull, BullMQ), adicionar na fila
-  // Caso contrário, enviar imediatamente
-  await processNotification(notificationId);
-}
-
-/**
- * Processa e envia uma notificação
- */
-export async function processNotification(notificationId: string): Promise<void> {
-  // Buscar notificação
-  const { data: notification, error } = await supabaseAdmin
-    .from('notifications')
-    .select(`
-      *,
-      users: user_id (name, phone, email)
-    `)
-    .eq('id', notificationId)
-    .eq('status', 'PENDING')
-    .single();
-
-  if (error || !notification) {
-    console.error('[Notification] Notification not found:', notificationId);
-    return;
-  }
-
-  try {
-    switch (notification.channel) {
-      case 'IN_APP':
-        // In-app já está criada, apenas marcar como enviada
-        await markAsSent(notificationId);
-        break;
-
-      case 'WHATSAPP':
-        await sendWhatsAppNotification(notification);
-        break;
-
-      case 'EMAIL':
-        await sendEmailNotification(notification);
-        break;
-
-      case 'SMS':
-        await sendSMSNotification(notification);
-        break;
-    }
-  } catch (error: any) {
-    console.error('[Notification] Delivery failed:', error);
-    await markAsFailed(notificationId, error.message);
-  }
-}
-
-/**
- * Envia notificação via WhatsApp
- */
-async function sendWhatsAppNotification(notification: any): Promise<void> {
-  const phone = notification.users?.phone;
-  if (!phone) {
-    throw new Error('User has no phone number');
-  }
-
-  const companyId = notification.company_id;
-  const whatsappMessage = formatWhatsAppMessage(notification);
-  
-  try {
-    // Buscar a primeira inbox ativa de WhatsApp que não seja META/META_CLOUD para esta empresa
-    const { data: inbox } = await supabaseAdmin
-      .from('inboxes')
-      .select('id, provider')
-      .eq('company_id', companyId)
-      .eq('is_active', true)
-      .not('provider', 'ilike', 'META%')
-      .limit(1)
-      .maybeSingle();
-
-    if (!inbox) {
-      throw new Error(`No active non-META WhatsApp inbox found for company ${companyId}`);
-    }
-
-    // Formatar telefone para JID
-    let cleanPhone = phone.replace(/\D/g, "");
-    if (!cleanPhone.startsWith("55")) cleanPhone = "55" + cleanPhone;
-    const chatJid = `${cleanPhone}@s.whatsapp.net`;
-
-    console.log(`[Notification] 📤 Enfileirando WhatsApp para ${chatJid} via inbox ${inbox.id} (provider: ${inbox.provider})`);
-    
-    await publish(EX_APP, "outbound.request", {
-      jobType: "message.send",
-      provider: inbox.provider || "WAHA", // Usa o provider da inbox, fallback para WAHA
-      inboxId: inbox.id,
-      payload: {
-        chatId: chatJid,
-        content: whatsappMessage,
-      },
-      companyId: companyId,
-      createdAt: new Date().toISOString(),
+      userId: input.userId,
+      companyId: input.companyId,
+      title: input.title
     });
 
-    // Log de entrega (SENT aqui significa que foi para a fila)
-    await logDelivery(notification.id, 'WHATSAPP', 'SENT', phone, { inboxId: inbox.id });
-    await markAsSent(notification.id);
+    try {
+      const config = NOTIFICATION_CONFIG[input.type];
+      
+      // Heurística para evitar erros de FK: task_id em notificações geralmente aponta para project_tasks.
+      // Tarefas gerais (tabela 'tasks') não devem ser inseridas na coluna task_id se houver essa restrição.
+      const isProjectTask = !!input.projectId;
 
-  } catch (error: any) {
-    console.error(`[Notification] ❌ WhatsApp delivery failed for notification ${notification.id}:`, error);
-    await logDelivery(notification.id, 'WHATSAPP', 'FAILED', phone, null, error.message);
-    throw error;
-  }
-}
+      const newNotification: CreateNotificationDTO = {
+        title: input.title,
+        message: input.message,
+        type: input.type,
+        priority: input.priority || config.priority,
+        user_id: input.userId,
+        company_id: input.companyId,
+        data: {
+          ...(input.data || {} as Record<string, unknown>),
+          taskId: input.taskId,
+          projectId: input.projectId
+        },
+        sound_type: input.soundType || config.soundType,
+        action_url: input.actionUrl,
+        category: input.category || config.category,
+        project_id: input.projectId,
+        task_id: isProjectTask ? input.taskId : undefined,
+        comment_id: input.commentId,
+      };
 
-/**
- * Envia notificação via Email (implementação futura)
- */
-async function sendEmailNotification(notification: any): Promise<void> {
-  // TODO: Implementar com Resend, SendGrid, etc
-  console.log('[Notification] Email delivery not implemented yet');
-  await markAsSent(notification.id);
-}
+      const { data: notification, error } = await supabaseAdmin
+        .from("notifications")
+        .insert(newNotification)
+        .select()
+        .single();
 
-/**
- * Envia notificação via SMS (implementação futura)
- */
-async function sendSMSNotification(notification: any): Promise<void> {
-  // TODO: Implementar com Twilio, etc
-  console.log('[Notification] SMS delivery not implemented yet');
-  await markAsSent(notification.id);
-}
+      if (error) {
+        console.error("[NotificationService] ❌ Error creating notification in DB:", error);
+        throw error;
+      }
 
-// ==================== FORMATTING ====================
+      // Cast to Notification to ensure type safety
+      const typedNotification = notification as Notification;
 
-/**
- * Formata mensagem para WhatsApp
- */
-function formatWhatsAppMessage(notification: any): string {
-  const emoji = getEmojiForType(notification.type);
-  
-  let message = `${emoji} *${notification.title}*\n\n`;
-  message += notification.message;
-  
-  if (notification.action_url) {
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    message += `\n\n🔗 Ver detalhes:\n${frontendUrl}${notification.action_url}`;
-  }
-  
-  return message;
-}
+      // Enviar via WebSocket se disponível
+      if (hasIO()) {
+        try {
+          const io = getIO();
+          
+          // 1. Enviar para o usuário específico
+          const room = `user:${input.userId}`;
+          console.log(`[NotificationService] 📡 Emitting socket event to room: ${room}`);
+          io.to(room).emit("notification", {
+            ...typedNotification,
+            isNew: true,
+          });
 
-function getEmojiForType(type: string): string {
-  const emojiMap: Record<string, string> = {
-    PROJECT_CREATED: '🎉',
-    PROJECT_ASSIGNED: '👤',
-    PROJECT_DEADLINE_TODAY: '⚠️',
-    PROJECT_DEADLINE_TOMORROW: '📅',
-    PROJECT_DEADLINE_WARNING: '⏰',
-    PROJECT_OVERDUE: '🚨',
-    PROJECT_STAGE_CHANGED: '➡️',
-    PROJECT_COMPLETED: '✅',
-    PROJECT_COMMENTED: '💬',
-    TASK_ASSIGNED: '📝',
-    TASK_DUE_TODAY: '⚠️',
-    TASK_DUE_TOMORROW: '📅',
-    TASK_DUE_SOON: '⏰',
-    TASK_OVERDUE: '🚨',
-    TASK_COMPLETED: '✅',
-    NEW_LEAD: '🎯',
-    NEW_CUSTOMER: '🤝',
-    MENTIONED_IN_COMMENT: '💬',
-    SYSTEM_ALERT: '🔔',
-  };
-  return emojiMap[type] || '🔔';
-}
+          // 2. Se for um evento global da empresa (Leads, Clientes), enviar para a sala da empresa
+          const globalTypes: NotificationType[] = ["NEW_LEAD", "NEW_CUSTOMER", "LEAD_CONVERTED", "SYSTEM_ALERT"];
+          if (globalTypes.includes(input.type)) {
+            const companyRoom = `company:${input.companyId}`;
+            console.log(`[NotificationService] 🏢 Emitting global notification to company room: ${companyRoom}`);
+            io.to(companyRoom).emit("notification", {
+              ...typedNotification,
+              isNew: true,
+            });
+          }
+        } catch (socketError) {
+          console.warn("[NotificationService] ⚠️ Failed to emit socket event (IO error):", socketError);
+        }
+      } else {
+        console.log("[NotificationService] ℹ️ Skipping direct socket emit (no IO instance), trying RabbitMQ...");
+        try {
+          await publish(EX_APP, "socket.notification", {
+            kind: "notification",
+            userId: input.userId,
+            notification: {
+              ...typedNotification,
+              isNew: true,
+            }
+          });
+          console.log("[NotificationService] ✅ Notification event published to RabbitMQ");
+        } catch (mqError) {
+          console.warn("[NotificationService] ⚠️ Failed to publish notification event to RabbitMQ:", mqError);
+        }
+      }
 
-// ==================== STATUS UPDATES ====================
+      console.log(`[NotificationService] ✅ Notification created for user ${input.userId}:`, {
+        id: typedNotification.id,
+        type: input.type,
+        title: input.title,
+        sound: input.soundType || config.soundType,
+      });
 
-async function markAsSent(notificationId: string): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from('notifications')
-    .update({ status: 'SENT', sent_at: new Date().toISOString() })
-    .eq('id', notificationId);
-  
-  if (error) {
-    console.error(`[Notification] Error marking as sent (${notificationId}):`, error);
-    throw error;
-  }
-}
-
-async function markAsFailed(notificationId: string, reason: string): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from('notifications')
-    .update({ status: 'FAILED', failed_reason: reason })
-    .eq('id', notificationId);
-
-  if (error) {
-    console.error(`[Notification] Error marking as failed (${notificationId}):`, error);
-  }
-}
-
-export async function markAsRead(notificationId: string): Promise<void> {
-  await supabaseAdmin
-    .from('notifications')
-    .update({ 
-      status: 'READ', 
-      is_read: true,
-      read_at: new Date().toISOString() 
-    })
-    .eq('id', notificationId);
-}
-
-// ==================== DELIVERY LOG ====================
-
-async function logDelivery(
-  notificationId: string,
-  channel: NotificationChannel,
-  status: NotificationStatus,
-  phoneOrEmail: string,
-  responseData: any,
-  errorMessage?: string
-): Promise<void> {
-  await supabaseAdmin.from('notification_delivery_log').insert({
-    notification_id: notificationId,
-    channel,
-    status,
-    [channel === 'WHATSAPP' || channel === 'SMS' ? 'phone_number' : 'email_address']: phoneOrEmail,
-    response_data: responseData,
-    error_message: errorMessage,
-  });
-}
-
-// ==================== PREFERENCES ====================
-
-async function getUserNotificationPreferences(userId: string): Promise<any> {
-  const { data } = await supabaseAdmin
-    .from('notification_preferences')
-    .select('*')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  // Se não existir, retornar padrão com WhatsApp habilitado para as tarefas principais
-  if (!data) {
-    return {
-      whatsapp_enabled: true,
-      email_enabled: false,
-      quiet_hours_enabled: false,
-      preferences: {
-        TASK_ASSIGNED: { app: true, whatsapp: true, email: false },
-        TASK_DUE_TODAY: { app: true, whatsapp: true, email: false },
-        TASK_OVERDUE: { app: true, whatsapp: true, email: false },
-        PROJECT_ASSIGNED: { app: true, whatsapp: true, email: false },
-      },
-    };
+      return typedNotification;
+    } catch (error) {
+      console.error("[NotificationService] 💥 Fatal error in create:", error);
+      throw error;
+    }
   }
 
-  // Se existir mas preferences estiver vazio, preencher com os mesmos padrões
-  const prefs = data.preferences || {};
-  if (Object.keys(prefs).length === 0) {
-    data.preferences = {
-      TASK_ASSIGNED: { app: true, whatsapp: true, email: false },
-      TASK_DUE_TODAY: { app: true, whatsapp: true, email: false },
-      TASK_OVERDUE: { app: true, whatsapp: true, email: false },
-      PROJECT_ASSIGNED: { app: true, whatsapp: true, email: false },
-    };
+  /**
+   * Marca notificação como lida
+   */
+  static async markAsRead(notificationId: string, userId: string): Promise<void> {
+    console.log(`[NotificationService] Marking as read: ${notificationId} for user ${userId}`);
+    const { error } = await supabaseAdmin
+      .from("notifications")
+      .update({
+        is_read: true,
+        read_at: new Date().toISOString(),
+      })
+      .eq("id", notificationId)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("[NotificationService] ❌ Error marking as read:", error);
+      throw error;
+    }
   }
 
-  return data;
-}
+  /**
+   * Marca todas as notificações do usuário como lidas
+   */
+  static async markAllAsRead(userId: string, companyId: string): Promise<void> {
+    console.log(`[NotificationService] Marking ALL as read for user ${userId}`);
+    const { error } = await supabaseAdmin
+      .from("notifications")
+      .update({
+        is_read: true,
+        read_at: new Date().toISOString(),
+      })
+      .eq("user_id", userId)
+      .eq("company_id", companyId)
+      .eq("is_read", false);
 
-function checkQuietHours(prefs: any): boolean {
-  if (!prefs.quiet_hours_enabled) return false;
-
-  const now = new Date();
-  const currentTime = now.getHours() * 60 + now.getMinutes();
-
-  const [startHour, startMin] = (prefs.quiet_hours_start || "22:00").split(':').map(Number);
-  const [endHour, endMin] = (prefs.quiet_hours_end || "08:00").split(':').map(Number);
-
-  const startTime = startHour * 60 + startMin;
-  const endTime = endHour * 60 + endMin;
-
-  // Handle overnight quiet hours (ex: 22:00 - 08:00)
-  if (startTime > endTime) {
-    return currentTime >= startTime || currentTime <= endTime;
+    if (error) {
+      console.error("[NotificationService] ❌ Error marking all as read:", error);
+      throw error;
+    }
   }
 
-  return currentTime >= startTime && currentTime <= endTime;
-}
+  /**
+   * Busca notificações não lidas do usuário
+   */
+  static async getUnread(userId: string, companyId: string): Promise<Notification[]> {
+    // console.log(`[NotificationService] Fetching unread for user ${userId}`);
+    const { data, error } = await supabaseAdmin
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("company_id", companyId)
+      .eq("is_read", false)
+      .order("created_at", { ascending: false });
 
-// ==================== BATCH NOTIFICATIONS ====================
+    if (error) {
+      console.error("[NotificationService] ❌ Error fetching unread:", error);
+      throw error;
+    }
 
-/**
- * Busca e processa notificações pendentes (para cron job)
- */
-export async function processPendingNotifications(): Promise<void> {
-  const { data: pending } = await supabaseAdmin
-    .from('notifications')
-    .select('id')
-    .eq('status', 'PENDING')
-    .order('created_at', { ascending: true })
-    .limit(100);
+    return (data as Notification[]) || [];
+  }
 
-  if (!pending || pending.length === 0) return;
+  /**
+   * Busca todas as notificações do usuário (com paginação)
+   */
+  static async getAll(userId: string, companyId: string, limit = 50, offset = 0): Promise<Notification[]> {
+    const { data, error } = await supabaseAdmin
+      .from("notifications")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-  console.log(`[Notification] Processing ${pending.length} pending notifications`);
+    if (error) {
+      console.error("[NotificationService] Error fetching all:", error);
+      throw error;
+    }
 
-  for (const notification of pending) {
-    await processNotification(notification.id);
-    // Aguardar 1s entre envios para não sobrecarregar APIs
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    return (data as Notification[]) || [];
+  }
+
+  /**
+   * Deleta notificação
+   */
+  static async delete(notificationId: string, userId: string): Promise<void> {
+    const { error } = await supabaseAdmin
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId)
+      .eq("user_id", userId);
+
+    if (error) {
+      console.error("[NotificationService] Error deleting:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Conta notificações não lidas
+   */
+  static async countUnread(userId: string, companyId: string): Promise<number> {
+    const { count, error } = await supabaseAdmin
+      .from("notifications")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("company_id", companyId)
+      .eq("is_read", false);
+
+    if (error) {
+      console.error("[NotificationService] ❌ Error counting unread:", error);
+      return 0;
+    }
+
+    return count || 0;
   }
 }

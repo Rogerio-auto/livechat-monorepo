@@ -1,6 +1,6 @@
 // ESM
 import type { Request, Response } from "express";
-import { handleMetaWebhook, verifyMetaWebhook, validateSignatureOrThrow } from "../services/meta/handlers.ts";
+import { handleMetaWebhook, verifyMetaWebhook, validateSignatureOrThrow } from "../services/meta/handlers.service.js";
 
 export async function metaWebhookGet(req: Request, res: Response) {
     try {

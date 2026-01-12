@@ -1,6 +1,6 @@
-ï»¿// backend/src/lib/crypto.ts
+// backend/src/lib/crypto.ts
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from "node:crypto";
-import { ENCRYPTION_KEY } from "../config/env.ts";
+import { ENCRYPTION_KEY } from "../config/env.js";
 
 const AES_ALGO = "aes-256-gcm";
 const IV_LENGTH = 12; // 96 bits recomendado para GCM
@@ -27,7 +27,7 @@ function parseKey(v?: string) {
   if (utf.length === 32) return utf;
 
   // 4) fallback legado: deriva 32 bytes com SHA-256 da string
-  // (evita quebrar registros criptografados com lÃ³gica antiga)
+  // (evita quebrar registros criptografados com lógica antiga)
   const sha = createHash("sha256").update(v, "utf8").digest();
   if (sha.length === 32) return sha;
 
@@ -61,7 +61,7 @@ function unpackSecret(packed: string): { iv: Buffer; tag: Buffer; ciphertext: Bu
   return { iv, tag, ciphertext };
 }
 
-// -------- API pÃºblica --------
+// -------- API pública --------
 export function encryptSecret(plain: string): string {
   if (typeof plain !== "string" || !plain) {
     throw new Error("Plain secret must be a non-empty string");
@@ -79,7 +79,7 @@ export function isEncryptedSecret(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const segments = value.split(".");
   if (segments.length !== 3) return false;
-  // checagem leve de base64 (nÃ£o perfeita, mas evita falsos Ã³bvios)
+  // checagem leve de base64 (não perfeita, mas evita falsos óbvios)
   return segments.every((seg) => !!seg && /^[A-Za-z0-9+/=_-]+$/.test(seg));
 }
 

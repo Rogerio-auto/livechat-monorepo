@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Agent } from '@/types/agent';
+import { Agent } from '@livechat/shared';
 import { 
   FiActivity, FiCheckCircle, FiAlertCircle, FiClock, 
   FiTrendingUp, FiMessageSquare, FiZap 

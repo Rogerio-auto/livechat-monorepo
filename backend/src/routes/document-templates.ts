@@ -2,30 +2,31 @@
  * Rotas para gerenciamento de templates de documentos
  */
 
-import express from "express";
+import express, { Response } from "express";
 import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { DOCS_BUCKET } from "../config/env.js";
+import { AuthRequest } from "../types/express.js";
 import {
   generateDocumentFromTemplate,
   createSignedUrl,
   downloadGeneratedDocument,
-} from "../services/document-generator.js";
-import { getAvailableVariables } from "../services/document-variables.js";
-import { generateSolarProposal } from "../services/python-generator.js";
-import { mapDatabaseToPython, validateProposalData } from "../services/python-data-mapper.js";
+} from "../services/document-generator.service.js";
+import { getAvailableVariables } from "../services/document-variables.service.js";
+import { generateSolarProposal } from "../services/python-generator.service.js";
+import { mapDatabaseToPython, validateProposalData } from "../services/python-data-mapper.service.js";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 export function registerDocumentTemplateRoutes(app: express.Application) {
   // Listar templates da empresa (com filtro por nicho)
-  app.get("/document-templates", requireAuth, async (req: any, res) => {
+  app.get("/document-templates", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -68,14 +69,14 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   });
 
   // Obter um template específico
-  app.get("/document-templates/:id", requireAuth, async (req: any, res) => {
+  app.get("/document-templates/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
 
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -104,12 +105,12 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
     "/document-templates",
     requireAuth,
     upload.single("template"),
-    async (req: any, res) => {
+    async (req: AuthRequest, res: Response) => {
       try {
         const { data: urow } = await supabaseAdmin
           .from("users")
           .select("id, company_id")
-          .eq("user_id", req.user.id)
+          .eq("user_id", req.user?.id)
           .maybeSingle();
 
         if (!urow?.company_id) {
@@ -214,14 +215,14 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   );
 
   // Atualizar template
-  app.patch("/document-templates/:id", requireAuth, async (req: any, res) => {
+  app.patch("/document-templates/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
 
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -280,14 +281,14 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   });
 
   // Deletar template
-  app.delete("/document-templates/:id", requireAuth, async (req: any, res) => {
+  app.delete("/document-templates/:id", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
 
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -329,7 +330,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   // ========================================
   // ROTA GENÉRICA: Gerar documento (detecta tipo automaticamente)
   // ========================================
-  app.post("/document-templates/:templateId/generate-document", requireAuth, async (req: any, res) => {
+  app.post("/document-templates/:templateId/generate-document", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       console.log("[DocGen] Iniciando geração de documento...");
       const { templateId } = req.params;
@@ -559,7 +560,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   // ========================================
   // ROTA LEGADA: Manter para compatibilidade
   // ========================================
-  app.post("/document-templates/:templateId/generate-solar-proposal", requireAuth, async (req: any, res) => {
+  app.post("/document-templates/:templateId/generate-solar-proposal", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       console.log("[SolarGen] Iniciando geração de proposta solar...");
       const { templateId } = req.params;
@@ -576,7 +577,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("id, company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -739,7 +740,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   // ========================================
   // NOVA ROTA: Gerar documento direto de proposta
   // ========================================
-  app.post("/document-templates/:templateId/generate-from-proposal", requireAuth, async (req: any, res) => {
+  app.post("/document-templates/:templateId/generate-from-proposal", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       console.log("[DocGen Route] Iniciando geração de documento...");
       const { templateId } = req.params;
@@ -754,7 +755,7 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("id, company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -876,14 +877,14 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   });
 
   // Gerar documento a partir de um template
-  app.post("/documents/:id/generate", requireAuth, async (req: any, res) => {
+  app.post("/documents/:id/generate", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id: documentId } = req.params;
 
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {
@@ -956,14 +957,14 @@ export function registerDocumentTemplateRoutes(app: express.Application) {
   });
 
   // Download de documento gerado
-  app.get("/documents/:id/download-generated", requireAuth, async (req: any, res) => {
+  app.get("/documents/:id/download-generated", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
       const { id } = req.params;
 
       const { data: urow } = await supabaseAdmin
         .from("users")
         .select("company_id")
-        .eq("user_id", req.user.id)
+        .eq("user_id", req.user?.id)
         .maybeSingle();
 
       if (!urow?.company_id) {

@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
+        '@livechat/shared': path.resolve(__dirname, '../packages/shared/src/index.ts'),
       },
     },
     server: {

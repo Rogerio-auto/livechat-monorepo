@@ -1,7 +1,7 @@
 // frontend/src/hooks/useAgentMetrics.ts
 
 import { useState, useEffect } from 'react';
-import { AgentMetrics } from '@/types/agent';
+import { AgentMetrics } from '@livechat/shared';
 
 export function useAgentMetrics(agentId:  string, period: 'hour' | 'day' | 'week' | 'month') {
   const [metrics, setMetrics] = useState<AgentMetrics | null>(null);

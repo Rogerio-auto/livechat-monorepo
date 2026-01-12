@@ -1,7 +1,7 @@
 // backend/src/routes/admin/templates.ts
 
 import { Router } from 'express';
-import { TemplateController } from '../../controllers/admin/template.controller.ts';
+import { TemplateController } from '../../controllers/admin/template.controller.js';
 import { requireAuth } from '../../middlewares/requireAuth.js';
 
 const router = Router();

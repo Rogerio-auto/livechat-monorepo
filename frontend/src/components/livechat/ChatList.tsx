@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { FiCpu, FiUser, FiGrid } from "react-icons/fi";
-import type { Chat as LivechatChat, Tag } from "../../componets/livechat/types";
+import type { Chat as LivechatChat, Tag } from "@livechat/shared";
 
 type BaseChat = Partial<LivechatChat> & {
   id: string;

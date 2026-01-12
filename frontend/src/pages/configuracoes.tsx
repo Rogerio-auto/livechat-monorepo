@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FaCalendar, FaPlus, FaTrash, FaEdit, FaLock, FaUsers, FaEye, FaCog, FaBan, FaCheck, FaMoneyBillWave } from "react-icons/fa";
-import Sidebar from "../componets/Sidbars/sidebar";
-import SettingsNav from "../componets/settings/SettingsNav";
-import EmpresaPanel, { type CompanyForm } from "../componets/company/EmpresaPanel";
-import PerfilPanel, { type ProfileForm } from "../componets/profile/PerfilPanel";
-import InboxesPanel from "../componets/inboxes/InboxesPanel";
-import IntegracoesPanel from "../componets/integrations/IntegracoesPanel";
-import OpenAIBillingPanel from "../componets/billing/OpenAIBillingPanel";
-import { SimplifiedAgentPanel } from "../componets/agents/SimplifiedAgentPanel";
-import { KnowledgeBasePanel } from "../componets/knowledge/KnowledgeBasePanel";
-import AgentesPanel from "../componets/users/AgentesPanel";
-import { DepartmentsManager } from "../componets/admin/DepartmentsManager";
-import { TeamsManager } from "../componets/admin/TeamsManager";
+import Sidebar from "../components/sidebars/sidebar";
+import SettingsNav from "../components/settings/SettingsNav";
+import EmpresaPanel, { type CompanyForm } from "../components/company/EmpresaPanel";
+import PerfilPanel, { type ProfileForm } from "../components/profile/PerfilPanel";
+import InboxesPanel from "../components/inboxes/InboxesPanel";
+import IntegracoesPanel from "../components/integrations/IntegracoesPanel";
+import OpenAIBillingPanel from "../components/billing/OpenAIBillingPanel";
+import { SimplifiedAgentPanel } from "../components/agents/SimplifiedAgentPanel";
+import { KnowledgeBasePanel } from "../components/knowledge/KnowledgeBasePanel";
+import AgentesPanel from "../components/users/AgentesPanel";
+import { DepartmentsManager } from "../components/admin/DepartmentsManager";
+import { TeamsManager } from "../components/admin/TeamsManager";
 import { API, fetchJson } from "../utils/api";
 import { showToast } from "../hooks/useToast";
 import type {
@@ -22,7 +22,7 @@ import type {
   MetaProviderConfig,
   ProviderConfig,
   WahaProviderConfig,
-} from "../types/types";
+} from "@livechat/shared";
 
 // ======= PALETA (SION) =======
 const SECTIONS = [
@@ -1415,7 +1415,7 @@ export default function ConfiguracoesPage() {
                     <label className={LABEL}>Provider</label>
                     <select
                       className={INPUT_BASE}
-                      value={createInboxForm.provider}
+                      value={createInboxForm.provider || ""}
                       onChange={(e) =>
                         setCreateInboxForm((prev) => {
                           const nextProvider = e.target.value as "META_CLOUD" | "WAHA" | "OTHER";
@@ -1441,7 +1441,7 @@ export default function ConfiguracoesPage() {
                       <label className={LABEL}>Canal</label>
                       <select
                         className={INPUT_BASE}
-                        value={createInboxForm.channel}
+                        value={createInboxForm.channel || ""}
                         onChange={(e) => setCreateInboxForm((prev) => ({ ...prev, channel: e.target.value }))}
                         disabled={createSaving}
                       >

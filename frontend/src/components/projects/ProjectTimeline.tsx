@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { ProjectActivity } from "../../types/projects";
+import type { ProjectActivity } from "@livechat/shared";
 
 const API = import.meta.env.VITE_API_URL;
 

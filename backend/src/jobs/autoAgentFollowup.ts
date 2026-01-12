@@ -1,7 +1,7 @@
 // backend/src/jobs/autoAgentFollowup.ts
 import { createClient } from "@supabase/supabase-js";
-import { runAgentReply } from "../services/agents.runtime.js";
-import { db } from "../pg.ts";
+import { runAgentReply } from "../services/agents-runtime.service.js";
+import { db } from "../pg.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL || "",

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { Project, TemplateWithDetails } from "../../types/projects";
+import type { Project, TemplateWithDetails } from "@livechat/shared";
 import ProjectTimeline from "./ProjectTimeline";
 import ProjectComments from "./ProjectComments";
 import ProjectAttachments from "./ProjectAttachments";
@@ -105,7 +105,7 @@ export default function ProjectDetailsModal({ project:  initialProject, template
   };
 
   const currentStage = template.stages.find(s => s.id === project.current_stage_id);
-  const statusColors = {
+  const statusColors: Record<string, string> = {
     active: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
     completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     on_hold: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',

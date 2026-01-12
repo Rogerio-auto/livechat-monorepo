@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { fetchJson } from "../../lib/fetch";
-import type { TemplateWithDetails } from "../../types/projects";
+import type { TemplateWithDetails } from "@livechat/shared";
 import { Layout, ChevronRight, Search, Star } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL;

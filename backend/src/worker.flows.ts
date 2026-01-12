@@ -1,5 +1,5 @@
 import { consume, Q_FLOW_EXECUTION } from "./queue/rabbit.js";
-import { processFlowStep } from "./services/flow.engine.js";
+import { processFlowStep } from "./services/flow-engine.service.js";
 import "./config/env.js";
 
 export async function registerFlowWorker() {

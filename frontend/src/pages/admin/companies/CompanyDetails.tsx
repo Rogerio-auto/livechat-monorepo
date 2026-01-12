@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { FiArrowLeft, FiPauseCircle, FiPlayCircle, FiRefreshCw, FiRotateCcw } from 'react-icons/fi';
-import { IndustryBadge } from '../../../componets/admin/IndustryBadge';
+import { IndustryBadge } from '../../../components/admin/IndustryBadge';
 import { useAdminNav } from '../layout/AdminNavContext';
-import type {
+import {
   AdminCompany,
   AdminCompanyDetails,
   CompanyAnalytics,
   CompanyDetailsPayload,
   CompanyOutletContext,
-} from '../types';
+} from '@livechat/shared';
 
 const TABS = [
   { label: 'Visão Geral', to: 'overview' },

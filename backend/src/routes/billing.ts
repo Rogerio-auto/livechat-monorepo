@@ -1,12 +1,12 @@
 // backend/src/routes/billing.ts
 
 import type { Application } from "express";
-import { requireAuth } from "../middlewares/requireAuth.ts";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import { 
   getCompanyUsageLogs, 
   getCompanyMonthlyBills,
   consolidateMonthlyBill 
-} from "../services/openai.usage.service.ts";
+} from "../services/openai-usage.service.js";
 
 async function resolveCompanyId(req: any): Promise<string> {
   const authId = String(req?. user?.id || "");

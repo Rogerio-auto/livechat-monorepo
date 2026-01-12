@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaUsers, FaPlus, FaTrash, FaCheckCircle } from "react-icons/fa";
-import { Industry } from "../../../types/cadastro";
+import { Industry } from "@livechat/shared";
 
 interface Props {
   industry: Industry | null;

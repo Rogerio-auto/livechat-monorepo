@@ -10,7 +10,7 @@ import {
   notifyTaskCompleted,
   notifyTaskAssigned,
 } from '../services/notification-triggers.service.js';
-import {
+import type {
   Project,
   ProjectComment,
   CreateProjectDTO,

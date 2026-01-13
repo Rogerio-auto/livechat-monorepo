@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "../lib/supabase.js";
-import { 
+import type { 
   KnowledgeBaseEntry, 
   KnowledgeStatus, 
   CreateKnowledgeDTO, 

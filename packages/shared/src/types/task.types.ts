@@ -16,6 +16,8 @@ export interface Task {
   related_event_id: string | null;
   related_campaign_id: string | null;
   kanban_column_id: string | null;
+  project_id?: string | null;
+  project_title?: string | null;
   status: TaskStatus;
   priority: TaskPriority;
   type: TaskType;
@@ -86,6 +88,8 @@ export interface CreateTaskDTO {
   related_event_id?: string | null;
   related_campaign_id?: string | null;
   kanban_column_id?: string | null;
+  project_id?: string | null;
+  project_title?: string | null;
   status?: TaskStatus;
   priority?: TaskPriority;
   type?: TaskType;
@@ -93,6 +97,11 @@ export interface CreateTaskDTO {
   reminder_enabled?: boolean;
   reminder_time?: string | null;
   reminder_channels?: ReminderChannel[] | string[] | null;
+  recurrence_type?: string | null;
+  recurrence_interval?: number | null;
+  recurrence_end_date?: string | null;
+  parent_task_id?: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 export interface UpdateTaskDTO extends Partial<Omit<CreateTaskDTO, "company_id" | "created_by">> {

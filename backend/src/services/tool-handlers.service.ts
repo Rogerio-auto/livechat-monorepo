@@ -905,7 +905,7 @@ async function handleSocket(
       provider = (chatData.inboxes as any).provider?.toUpperCase();
     }
 
-    const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD"];
+    const allowedProviders = Array.isArray(allowed_providers) ? allowed_providers : ["META_CLOUD", "META"];
 
     if (!allowedProviders.includes(provider)) {
       throw new Error(
@@ -916,7 +916,7 @@ async function handleSocket(
   }
 
   // 2. Enviar via Meta API se for o caso
-  if (provider === "META_CLOUD" && inboxId && customerPhone) {
+  if ((provider === "META_CLOUD" || provider === "META") && inboxId && customerPhone) {
     // No Playground, apenas simulamos o envio com sucesso
     if (context.isPlayground) {
       console.log(`[SOCKET] Playground mode: skipping real Meta API call for ${event}`);

@@ -561,7 +561,7 @@ async function resolveChatContext(session: string, chatIdentifier: string): Prom
     if (chat.customer_id) {
       const { data: customer } = await supabaseAdmin
         .from("customers")
-        .select("id, name, phone")
+        .select("id, name, phone, avatar_url:avatar")
         .eq("id", chat.customer_id)
         .maybeSingle();
       customerRow = (customer as any) || null;
@@ -569,7 +569,7 @@ async function resolveChatContext(session: string, chatIdentifier: string): Prom
   } else {
     const { data: customer } = await supabaseAdmin
       .from("customers")
-      .select("id, name, phone")
+      .select("id, name, phone, avatar_url:avatar")
       .eq("company_id", inbox.company_id)
       .eq("phone", parsed.digits)
       .maybeSingle();
@@ -1149,11 +1149,11 @@ export function registerWAHARoutes(app: Express) {
       const rows = (chatRows || []) as any[];
       const customerIds = Array.from(new Set(rows.map((row) => row.customer_id).filter(Boolean)));
 
-      const customersById: Record<string, { name: string | null; phone: string | null }> = {};
+      const customersById: Record<string, { name: string | null; phone: string | null; avatar_url?: string | null }> = {};
       if (customerIds.length > 0) {
         const { data: customerRows, error: customerErr } = await supabaseAdmin
           .from("customers")
-          .select("id, name, phone")
+          .select("id, name, phone, avatar_url:avatar")
           .in("id", customerIds);
         if (customerErr) {
           console.warn("[WAHA] customers lookup failed:", customerErr.message);
@@ -1162,6 +1162,7 @@ export function registerWAHARoutes(app: Express) {
             customersById[row.id] = {
               name: row.name ?? null,
               phone: row.phone ?? null,
+              avatar_url: row.avatar_url ?? null,
             };
           }
         }
@@ -1219,8 +1220,8 @@ export function registerWAHARoutes(app: Express) {
         const displayName = isGroup ? row.group_name ?? customer?.name ?? null : customer?.name ?? null;
         const displayPhone = isGroup ? null : customer?.phone ?? null;
         const customerAvatar = isGroup
-          ? row.group_avatar_url ?? cachedAvatar ?? null
-          : cachedAvatar ?? null;
+          ? row.group_avatar_url ?? cachedAvatar ?? customersById[row.customer_id]?.avatar_url ?? null
+          : cachedAvatar ?? customersById[row.customer_id]?.avatar_url ?? null;
 
         return {
           id: row.id,
@@ -1330,7 +1331,7 @@ export function registerWAHARoutes(app: Express) {
 
       const { data: customerRow } = await supabaseAdmin
         .from("customers")
-        .select("id, name, phone")
+        .select("id, name, phone, avatar_url:avatar")
         .eq("id", chatRow.customer_id)
         .maybeSingle();
 

@@ -52,6 +52,7 @@ import ffmpegPath from "ffmpeg-static";
 import { spawn } from "node:child_process";
 import os from "node:os";
 import { registerCampaignWorker } from "./worker.campaigns.js";
+import { parseFlowResponse } from "./services/meta/flows.service.js";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
 
@@ -577,7 +578,7 @@ async function fetchChatUpdateForSocket(chatId: string): Promise<{
             ag.name as ai_agent_name,
             cust.name as customer_name,
             cust.phone as customer_phone,
-            NULL as customer_avatar_url,
+            cust.avatar as customer_avatar_url,
             cust.id as customer_id
        from public.chats ch
   left join public.inboxes ib on ib.id = ch.inbox_id
@@ -1064,6 +1065,8 @@ function extractContentAndType(m: any): { content: string; type: string; caption
         interactiveText = interactive.button_reply?.title || "[BUTTON REPLY]";
       } else if (interactive?.type === "list_reply") {
         interactiveText = interactive.list_reply?.title || "[LIST REPLY]";
+      } else if (interactive?.type === "nfm_reply") {
+        interactiveText = "📝 Resposta de Formulário";
       }
       return {
         content: interactiveText,
@@ -1150,6 +1153,18 @@ function extractWahaContactName(payload: any): string | null {
     payload?.senderName ||
     payload?._data?.notifyName ||
     payload?.notifyName ||
+    null
+  );
+}
+
+function extractWahaContactAvatar(payload: any): string | null {
+  const chat = payload?.chat || payload?._data?.chat || {};
+  return (
+    payload?.senderPicUrl ||
+    payload?.senderPic ||
+    payload?.pushPic ||
+    chat?.imgUrl ||
+    chat?.img ||
     null
   );
 }
@@ -1658,6 +1673,7 @@ async function handleMetaInboundMessages(args: {
         name: metaContext.participantName ?? pushname ?? remotePhone ?? participantWaId ?? null,
         rawPhone: participantWaId || metaContext.participantId || remotePhone || null,
         lid: extractedLid,  // ✅ Passar o LID extraído
+        avatarUrl: metaContext.participantAvatarUrl ?? null,
       });
       chatId = ensured.chatId;
       // console.log("[META][inbound] Direct chat ensured", {
@@ -1804,6 +1820,34 @@ async function handleMetaInboundMessages(args: {
     });
     if (!inserted) {
       continue;
+    }
+
+    // Processar Meta Flow Response (nfm_reply)
+    if (m?.type === "interactive" && m?.interactive?.type === "nfm_reply") {
+      try {
+        const responseData = parseFlowResponse(m.interactive.nfm_reply);
+        const flowId = m.interactive.nfm_reply.flow_id;
+
+        // Salvar na tabela flow_submissions
+        await db.none(
+          `INSERT INTO public.flow_submissions (company_id, inbox_id, chat_id, flow_id, external_id, response)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [companyId, inboxId, chatId, flowId, wamid, JSON.stringify(responseData)]
+        );
+
+        // Emitir evento para o frontend
+        await emitSocketWithRetry("socket.livechat.flow_submission", {
+          chatId,
+          companyId,
+          flowId,
+          submission: responseData,
+          messageId: inserted.id
+        });
+
+        console.log("[META][FLOWS] Flow submission saved and emitted", { chatId, flowId });
+      } catch (err) {
+        console.error("[META][FLOWS] Failed to process flow submission", err);
+      }
     }
 
     // ========== OPTIMIZATION: Replace draft with confirmed message ==========
@@ -2572,6 +2616,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
   }
 
   const name = extractWahaContactName(msg);
+  const contactAvatar = !isWahaGroupJid(chatJid) ? extractWahaContactAvatar(msg) : null;
   const basePhone =
     normalizeMsisdn(chatJid) ||
     normalizeMsisdn(msg?.from) ||
@@ -2660,6 +2705,7 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
       name: name ?? phoneForContact,
       rawPhone: chatJid,
       lid: lidForContact,
+      avatarUrl: contactAvatar,
     });
     chatId = ensured.chatId;
     
@@ -3728,7 +3774,7 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
 
   if (!remoteChatId && internalChatId) {
     try {
-      const chatInfo = await getChatWithCustomerPhone(internalChatId);
+      const chatInfo = await getChatWithCustomerPhone(internalChatId, inboxId, job.companyId);
       remoteChatId = ensureWahaChatId(null, chatInfo.customer_phone);
     } catch (error) {
       console.warn("[worker][WAHA] nao foi possivel resolver o chatId remoto", {
@@ -4525,7 +4571,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
           if (!chatId) throw new Error("meta.sendMedia missing chatId");
 
         const { chat_id, customer_phone, inbox_id } =
-          await getChatWithCustomerPhone(chatId);
+          await getChatWithCustomerPhone(chatId, job.inboxId, job.companyId);
 
         const inboxId = String(job.inboxId || inbox_id || "");
         if (!inboxId) throw new Error("inboxId missing");
@@ -4887,7 +4933,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
       if (!chatId || !content) throw new Error("chatId/content missing");
 
       const { chat_id, customer_phone, inbox_id } =
-        await getChatWithCustomerPhone(chatId);
+        await getChatWithCustomerPhone(chatId, job.inboxId, job.companyId);
 
       const inboxId = String(job.inboxId || inbox_id || "");
       if (!inboxId) throw new Error("inboxId missing");
@@ -5396,7 +5442,7 @@ async function getAdaptiveBatchSize(inboxId: string): Promise<number> {
     if (!inbox) return 3; // Fallback conservador
 
     // Se não é Meta, usar padrão conservador
-    if (inbox.provider !== "META_CLOUD") {
+    if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
       return 3;
     }
 

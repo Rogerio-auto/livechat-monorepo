@@ -4,7 +4,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO } from "../lib/io.js";
-import { AuthRequest, Inbox, CreateInboxDTO, UpdateInboxDTO } from "../types/index.js";
+import type { AuthRequest, Inbox, CreateInboxDTO, UpdateInboxDTO } from "../types/index.js";
 
 export function registerLivechatInboxesRoutes(app: express.Application) {
   // Verificar se deve mostrar wizard de primeira inbox
@@ -62,7 +62,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   // Inboxes do usuÃ¡rio autenticado
   app.get("/livechat/inboxes/my", requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
 
       let { data: links, error: errLinks } = await supabaseAdmin
         .from("inbox_users")

@@ -301,7 +301,7 @@ export class LivechatController {
   // GET /livechat/inboxes/my
   static async getMyInboxes(req: AuthRequest, res: Response) {
     try {
-      const authUserId = req.user.id as string;
+      const authUserId = req.user?.id as string;
       let { data: links, error: errLinks } = await supabaseAdmin
         .from("inbox_users")
         .select("inbox_id")
@@ -496,7 +496,7 @@ export class LivechatController {
       if (iErr) return res.status(500).json({ error: iErr.message });
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
 
-      const { data: urow, error: uerr } = await supabaseAdmin.from("users").select("company_id, role, id").eq("user_id", req.user.id).maybeSingle();
+      const { data: urow, error: uerr } = await supabaseAdmin.from("users").select("company_id, role, id").eq("user_id", req.user?.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });
       if ((urow as any)?.company_id !== (inbox as any).company_id) return res.status(403).json({ error: "Proibido" });
 
@@ -552,7 +552,7 @@ export class LivechatController {
       if (inboxErr) return res.status(500).json({ error: inboxErr.message });
       if (!inbox) return res.status(404).json({ error: "Inbox nao encontrada" });
 
-      const { data: actor, error: actorErr } = await supabaseAdmin.from("users").select("id, role, company_id").eq("user_id", req.user.id).maybeSingle();
+      const { data: actor, error: actorErr } = await supabaseAdmin.from("users").select("id, role, company_id").eq("user_id", req.user?.id).maybeSingle();
       if (actorErr) return res.status(500).json({ error: actorErr.message });
       if (!actor || (actor as any).company_id !== (inbox as any).company_id) return res.status(403).json({ error: "Proibido" });
 

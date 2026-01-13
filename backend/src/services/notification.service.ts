@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO, hasIO } from "../lib/io.js";
 import { publish, EX_APP } from "../queue/rabbit.js";
-import { 
+import type { 
   NotificationType, 
   NotificationPriority, 
   SoundType, 

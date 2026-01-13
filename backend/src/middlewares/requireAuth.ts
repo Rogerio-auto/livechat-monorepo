@@ -117,8 +117,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     // Se o token do header for "undefined" (string), ignorar
     if (token === "undefined") token = undefined;
     
-    if (!token) token = (req as any).cookies?.[JWT_COOKIE_NAME];
-    if (!token) return res.status(401).json({ error: "Not authenticated" });
+    if (!token) {
+      token = (req as any).cookies?.[JWT_COOKIE_NAME];
+      if (token) console.log("[requireAuth] 🍪 Token found in cookies");
+    }
+
+    if (!token) {
+      console.warn("[requireAuth] ❌ No token found in Authorization header or cookies. Header:", bearer ? "Present" : "Missing");
+      return res.status(401).json({ error: "Not authenticated" });
+    }
 
     // ✅ Cache de autenticação por token hash (SHA-256 para garantir unicidade)
     const tokenHash = crypto.createHash("sha256").update(token).digest("hex");

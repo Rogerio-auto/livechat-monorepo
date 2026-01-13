@@ -20,10 +20,11 @@ type GraphCreds = {
   access_token: string;
   app_secret?: string;
   phone_number_id: string;
+  company_id?: string;
 };
 
 function toGraphCreds(
-  creds: { access_token: string; app_secret?: string | null; phone_number_id?: string | null },
+  creds: { access_token: string; app_secret?: string | null; phone_number_id?: string | null; company_id?: string },
 ): GraphCreds {
   const phoneNumberId = creds.phone_number_id?.trim();
   if (!phoneNumberId) {
@@ -33,10 +34,11 @@ function toGraphCreds(
     access_token: creds.access_token,
     app_secret: creds.app_secret || undefined,
     phone_number_id: phoneNumberId,
+    company_id: creds.company_id,
   };
 }
 
-async function graphFetch(
+export async function graphFetch(
   creds: GraphCreds,
   path: string,
   init: RequestInit & { asJson?: boolean } = {},
@@ -84,7 +86,7 @@ export async function sendWhatsAppText({
 }) {
   const creds = await getDecryptedCredsForInbox(inboxId);
   const graphCreds = toGraphCreds(creds);
-  const chat = await getChatWithCustomerPhone(chatId);
+  const chat = await getChatWithCustomerPhone(chatId, inboxId, graphCreds.company_id);
 
   const payload = {
     messaging_product: "whatsapp",
@@ -101,7 +103,7 @@ export async function sendWhatsAppText({
   const wamid: string | null = (data as any)?.messages?.[0]?.id ?? null;
 
   await insertOutboundMessage({
-    chatId,
+    chatId: chat.chat_id,
     inboxId,
     customerId: "",
     externalId: wamid,
@@ -271,6 +273,9 @@ export async function sendInteractiveButtons({
     hasFooter: !!footer,
   });
 
+  // Resolve chat metadata (UUID, etc)
+  const chatInfo = await getChatWithCustomerPhone(chatId, inboxId, graphCreds.company_id);
+
   // Envia para API da Meta
   const data = await graphFetch(graphCreds, `${graphCreds.phone_number_id}/messages`, {
     method: "POST",
@@ -284,7 +289,7 @@ export async function sendInteractiveButtons({
 
   // Salva mensagem no banco
   const upsert = await insertOutboundMessage({
-    chatId,
+    chatId: chatInfo.chat_id,
     inboxId,
     customerId: "", // Will be set by trigger
     externalId: wamid,
@@ -295,7 +300,7 @@ export async function sendInteractiveButtons({
   });
 
   console.log("[META][INTERACTIVE] ✅ Interactive message sent", {
-    chatId,
+    chatId: chatInfo.chat_id,
     wamid,
     buttonsCount: buttons.length,
   });
@@ -410,9 +415,12 @@ export async function sendInteractiveList({
     throw new Error("Meta API não retornou message ID (wamid)");
   }
 
+  // Resolve chat metadata (UUID, etc)
+  const chatInfo = await getChatWithCustomerPhone(chatId, inboxId, graphCreds.company_id);
+
   // Salva mensagem no banco
   const upsert = await insertOutboundMessage({
-    chatId,
+    chatId: chatInfo.chat_id,
     inboxId,
     customerId: "", // Will be set by trigger
     externalId: wamid,
@@ -423,7 +431,7 @@ export async function sendInteractiveList({
   });
 
   console.log("[META][INTERACTIVE] ✅ Interactive list sent", {
-    chatId,
+    chatId: chatInfo.chat_id,
     wamid,
     totalRows,
   });

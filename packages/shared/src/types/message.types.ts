@@ -34,6 +34,7 @@ export interface Message {
   replied_message_id?: string | null;
   replied_message_external_id?: string | null;
   interactive_content?: Record<string, any> | null;
+  metadata?: Record<string, any> | null;
   delivery_status?: string | null;
   upload_progress?: number | null;
   client_draft_id?: string | null;

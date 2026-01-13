@@ -11,6 +11,9 @@ import {
 import { previewTemplate } from "../services/agent-templates.service.js";
 
 async function resolveCompanyId(req: any) {
+  const companyId = req.profile?.company_id || req.user?.company_id;
+  if (companyId) return companyId;
+
   const authId = String(req?.user?.id || "");
   if (!authId) {
     throw Object.assign(new Error("Not authenticated"), { status: 401 });
@@ -26,16 +29,16 @@ async function resolveCompanyId(req: any) {
     throw Object.assign(new Error(error.message), { status: 500 });
   }
 
-  const companyId = (data as any)?.company_id || req?.user?.company_id || null;
-  if (!companyId) {
+  const resolvedCompanyId = (data as any)?.company_id || req?.user?.company_id || null;
+  if (!resolvedCompanyId) {
     throw Object.assign(new Error("Usuario sem company_id"), { status: 404 });
   }
 
   if (req?.user && !req.user.company_id) {
-    req.user.company_id = companyId;
+    req.user.company_id = resolvedCompanyId;
   }
 
-  return companyId as string;
+  return resolvedCompanyId as string;
 }
 
 function formatRouteError(error: unknown) {

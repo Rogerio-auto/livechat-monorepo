@@ -13,7 +13,7 @@ import { addToolToAgent, getToolById, listAgentTools, updateAgentTool } from "..
 import { generateAgentToken } from "../services/tokens.service.js";
 import { listOpenAIIntegrations, createOpenAIIntegration } from "../repos/integrations-openai.repo.js";
 import { createOpenAIProject } from "../services/openai-admin.service.js";
-import { AuthRequest } from "../types/index.js";
+import type { AuthRequest } from "../types/index.js";
 
 const updateAgentSchema = AgentSchema.partial();
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"];

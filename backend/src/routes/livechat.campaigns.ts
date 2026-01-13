@@ -30,23 +30,50 @@ export function registerCampaignRoutes(app: express.Application) {
   const router = express.Router();
 
 async function resolveCompanyId(req: any): Promise<string> {
+  // Se já foi resolvido pelo requireAuth, usamos o que está no req
+  // Isso é importante para AGENTES (que não estão na tabela users)
+  // e para SUPER_ADMINS (que podem estar passando x-company-id)
+  const companyId = req.profile?.company_id || req.user?.company_id;
+  
+  if (companyId) {
+    // Tenta apenas preencher db_user_id se necessário, mas não falha se não achar
+    if (!req.user.db_user_id) {
+      const { data } = await supabaseAdmin
+        .from("users")
+        .select("id")
+        .eq("user_id", req.user.id)
+        .maybeSingle();
+      
+      if (data) {
+        req.user.db_user_id = data.id;
+      } else if (req.user.is_agent) {
+        req.user.db_user_id = req.user.id;
+      }
+    }
+    return companyId;
+  }
+
+  // Fallback para comportamento antigo se por algum motivo não estiver no req
   const { data, error } = await supabaseAdmin
     .from("users")
     .select("id, user_id, company_id")
-    .eq("user_id", req.user.id) // req.user.id = UID do auth
+    .eq("user_id", req.user.id)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
   const row = data as any;
-  const companyId = row?.company_id;
-  if (!companyId) throw new Error("Usuário sem company_id");
+  const resolvedCompanyId = row?.company_id;
+  
+  if (!resolvedCompanyId) {
+    // Se for SUPER_ADMIN, talvez não tenha empresa fixa, mas o requireAuth deveria ter pego via header
+    throw new Error("Usuário sem company_id. Se você é SUPER_ADMIN, forneça o header x-company-id.");
+  }
 
-  // anota no req para reuso
-  req.user.company_id ||= companyId;
-  req.user.db_user_id = row?.id ?? null;     // PK da tabela users
-  req.user.user_uid  = row?.user_id ?? null; // UID de auth (coluna user_id)
+  req.user.company_id ||= resolvedCompanyId;
+  req.user.db_user_id = row?.id ?? null;
+  req.user.user_uid  = row?.user_id ?? null;
 
-  return companyId;
+  return resolvedCompanyId;
 }
 
 
@@ -262,7 +289,7 @@ const insert = {
           .from("inboxes")
           .select("id, provider, waba_id")
           .eq("company_id", companyId)
-          .eq("provider", "META_CLOUD");
+          .in("provider", ["META_CLOUD", "META"]);
         
         if (inboxes && inboxes.length > 0) {
           const { listWhatsAppTemplates } = await import("../services/meta/templates.service.js");
@@ -336,7 +363,7 @@ const insert = {
   app.post("/livechat/campaigns/templates/import-from-meta", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      const allowed = ["ADMIN","MANAGER"].includes(role);
+      const allowed = ["ADMIN","MANAGER", "SUPER_ADMIN", "SUPERADMIN", "OWNER"].includes(role);
       if (!allowed) return res.status(403).json({ error: "Sem permissão para importar templates" });
       
       const companyId = await resolveCompanyId(req);
@@ -356,8 +383,8 @@ const insert = {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD ou META" });
       }
       if (!inbox.waba_id) {
         return res.status(400).json({ error: "Inbox não possui waba_id configurado" });
@@ -457,7 +484,7 @@ const insert = {
   app.post("/livechat/campaigns/templates", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      const allowed = ["ADMIN","MANAGER","SUPERVISOR"].includes(role);
+      const allowed = ["ADMIN","MANAGER","SUPERVISOR", "SUPER_ADMIN", "SUPERADMIN", "OWNER"].includes(role);
       if (!allowed) return res.status(403).json({ error: "Sem permissão para criar template" });
       const companyId = await resolveCompanyId(req);
       const bodySchema = z.object({
@@ -499,7 +526,7 @@ const insert = {
             .maybeSingle();
           if (inboxErr) throw new Error(inboxErr.message);
           if (!inboxRow) return res.status(400).json({ error: "Inbox inválida para a empresa" });
-          if (!["META_CLOUD","WAHA"].includes(inboxRow.provider)) {
+          if (!["META_CLOUD", "META", "WAHA"].includes(inboxRow.provider)) {
             return res.status(400).json({ error: "Esta campanha contém botões ou mídia, mas a inbox selecionada não é API oficial." });
           }
         }
@@ -555,7 +582,7 @@ const insert = {
   app.put("/livechat/campaigns/templates/:id", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      const allowed = ["ADMIN","MANAGER","SUPERVISOR"].includes(role);
+      const allowed = ["ADMIN","MANAGER","SUPERVISOR", "SUPER_ADMIN", "SUPERADMIN", "OWNER"].includes(role);
       if (!allowed) return res.status(403).json({ error: "Sem permissão para atualizar template" });
       const companyId = await resolveCompanyId(req);
       const { id } = req.params;

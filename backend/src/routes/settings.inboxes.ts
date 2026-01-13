@@ -158,7 +158,7 @@ async function fetchActorContext(req: any): Promise<ActorContext> {
 
 function buildProviderConfig(row: any, secret?: InboxSecretRow | null) {
   const provider = (row?.provider || "").toUpperCase();
-  if (provider === META_PROVIDER) {
+  if (provider === "META_CLOUD" || provider === "META") {
     const meta: Record<string, string | null> = {
       access_token: decryptSecret(secret?.access_token),
       phone_number_id: row?.phone_number_id ?? null,
@@ -273,7 +273,8 @@ function extractMeta(
   provider: string | undefined,
   providerConfig: any | undefined,
 ) {
-  if ((provider || META_PROVIDER).toUpperCase() !== META_PROVIDER) {
+  const p = (provider || META_PROVIDER).toUpperCase();
+  if (p !== "META_CLOUD" && p !== "META") {
     return null;
   }
   return providerConfig?.meta ?? null;
@@ -369,9 +370,10 @@ export function registerSettingsInboxesRoutes(app: Application) {
       
       const meta = extractMeta(provider, body.provider_config);
       const waha = extractWaha(provider, body.provider_config);
-      const resolvedMetaWebhook = provider === META_PROVIDER ? resolveMetaWebhookUrl(req) : null;
+      const isMeta = provider === "META_CLOUD" || provider === "META";
+      const resolvedMetaWebhook = isMeta ? resolveMetaWebhookUrl(req) : null;
 
-      if (provider === META_PROVIDER) {
+      if (isMeta) {
         if (
           !meta?.access_token ||
           !meta.phone_number_id ||
@@ -413,7 +415,7 @@ export function registerSettingsInboxesRoutes(app: Application) {
             ? normalizedPhoneNumber ?? fallbackPhoneNumber
             : normalizedPhoneNumber ?? body.phone_number,
         webhook_url:
-          provider === META_PROVIDER
+          (provider === "META_CLOUD" || provider === "META")
             ? resolvedMetaWebhook ?? normalizeString(body.webhook_url)
             : normalizeString(body.webhook_url),
         channel: body.channel || "WHATSAPP",
@@ -592,8 +594,9 @@ export function registerSettingsInboxesRoutes(app: Application) {
 
       const existingProvider = ((existingInbox as any)?.provider || META_PROVIDER) as string;
       const provider = (update.provider || body.provider || existingProvider).toUpperCase();
-      const resolvedMetaWebhook = provider === META_PROVIDER ? resolveMetaWebhookUrl(req) : null;
-      if (provider === META_PROVIDER) {
+      const isMeta = provider === "META_CLOUD" || provider === "META";
+      const resolvedMetaWebhook = isMeta ? resolveMetaWebhookUrl(req) : null;
+      if (isMeta) {
         const metaWebhook =
           resolvedMetaWebhook ??
           (body.webhook_url !== undefined ? normalizeString(body.webhook_url) : undefined);

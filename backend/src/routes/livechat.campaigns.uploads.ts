@@ -19,6 +19,9 @@ const upload = multer({ storage });
 
 export function registerCampaignUploadsRoutes(app: Application) {
   async function resolveCompanyId(req: AuthRequest): Promise<string | undefined> {
+    const companyId = req.profile?.company_id || req.user?.company_id;
+    if (companyId) return companyId;
+
     const { data } = await supabaseAdmin
       .from("users")
       .select("company_id")

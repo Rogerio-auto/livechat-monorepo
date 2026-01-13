@@ -4,13 +4,17 @@ import { supabaseAdmin } from "../lib/supabase.js";
 
 export function registerCampaignFollowupsRoutes(app: express.Application) {
   async function resolveCompanyId(req: any): Promise<string> {
+    const companyId = req.profile?.company_id || req.user?.company_id;
+    if (companyId) return companyId;
+
     const { data, error } = await supabaseAdmin
       .from("users")
       .select("company_id")
       .eq("user_id", req.user.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    return data?.company_id;
+    if (!data?.company_id) throw new Error("Usuário sem company_id");
+    return data.company_id;
   }
 
   app.get("/livechat/campaigns/:id/followups", requireAuth, async (req: any, res) => {

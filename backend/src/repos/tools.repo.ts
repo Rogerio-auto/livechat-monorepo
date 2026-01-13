@@ -2,13 +2,20 @@
 // Repositório para CRUD de tools_catalog e agent_tools
 
 import { db } from "../pg.js";
-import { 
+import type { 
   Tool, 
   AgentTool, 
   ToolLog, 
   CreateToolDTO, 
   UpdateToolDTO 
 } from "@livechat/shared";
+export type { 
+  Tool, 
+  AgentTool, 
+  ToolLog, 
+  CreateToolDTO, 
+  UpdateToolDTO 
+};
 
 // ====== tools_catalog CRUD ======
 

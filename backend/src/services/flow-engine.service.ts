@@ -5,7 +5,7 @@ import { logger } from "../lib/logger.js";
 import { sendInteractiveButtons, sendInteractiveList } from "./meta/graph.service.js";
 import { NotificationService } from "./notification.service.js";
 import { normalizeMsisdn } from "../utils/util.util.js";
-import { AutomationFlow, FlowExecution, Customer, Inbox } from "@livechat/shared";
+import type { AutomationFlow, FlowExecution, Customer, Inbox } from "@livechat/shared";
 
 interface FlowNode {
   id: string;

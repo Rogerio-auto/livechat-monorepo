@@ -59,8 +59,8 @@ export function registerMetaHealthRoutes(app: Application) {
         return res.status(404).json({ error: "Inbox não encontrada" });
       }
 
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
 
       // Se refresh=true ou nunca foi atualizado, buscar da API
@@ -116,8 +116,8 @@ export function registerMetaHealthRoutes(app: Application) {
         return res.status(404).json({ error: "Inbox não encontrada" });
       }
 
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
 
       const health = await updateInboxHealthStatus(inboxId);
@@ -157,8 +157,8 @@ export function registerMetaHealthRoutes(app: Application) {
         return res.status(404).json({ error: "Inbox não encontrada" });
       }
 
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
 
       const health = await isInboxHealthy(inboxId);

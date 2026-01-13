@@ -22,7 +22,6 @@ declare global {
 
 export interface AuthRequest extends Request {
   // Tornamos user opcional para compatibilidade com RequestHandler
-  // Mas no código usamos req.user! após o middleware requireAuth
   user?: Express.User;
   profile?: any;
 }

@@ -14,13 +14,14 @@ async function getUserRole(userId: string): Promise<string | null> {
 }
 
 async function resolveCompanyId(req: any) {
-  const companyId = req?.user?.company_id || null;
+  const companyId = req.profile?.company_id || req?.user?.company_id || null;
   if (!companyId) throw Object.assign(new Error("Missing company context"), { status: 400 });
   return companyId as string;
 }
 
 function ensureAdmin(role: string | null) {
-  if (String(role || "").toUpperCase() !== "ADMIN") {
+  const r = String(role || "").toUpperCase();
+  if (r !== "ADMIN" && r !== "SUPER_ADMIN" && r !== "SUPERADMIN" && r !== "OWNER") {
     throw Object.assign(new Error("Not allowed"), { status: 403 });
   }
 }

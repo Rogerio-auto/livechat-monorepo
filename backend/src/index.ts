@@ -76,6 +76,7 @@ import { registerAgentTemplatesAdminRoutes } from "./routes/agents.templates.adm
 import { registerCompanyRoutes } from "./routes/companies.js";
 import { registerProductRoutes } from "./routes/products.js";
 import { registerMetaTemplatesRoutes } from "./routes/meta.templates.js";
+import { registerMetaFlowsRoutes } from "./routes/meta.flows.js";
 import { registerDocumentRoutes } from "./routes/documents.js";
 import { registerDocumentTemplateRoutes } from "./routes/document-templates.js";
 import { registerProjectTemplateRoutes } from "./routes/project-templates.js";
@@ -211,6 +212,7 @@ app.use("/api/upload", uploadRouter);
 app.use("/api/media", mediaRouter);
 registerProductRoutes(app);
 registerMetaTemplatesRoutes(app);
+registerMetaFlowsRoutes(app);
 registerDocumentRoutes(app);
 registerDocumentTemplateRoutes(app);
 registerProjectTemplateRoutes(app);

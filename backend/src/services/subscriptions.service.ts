@@ -1,6 +1,7 @@
 import db from "../pg.js";
 import { rGet, rSet } from "../lib/redis.js";
-import { Plan, PlanLimits, PlanFeatures } from "@livechat/shared";
+import type { Plan, PlanLimits, PlanFeatures } from "@livechat/shared";
+export type { PlanLimits, PlanFeatures };
 
 const SUBSCRIPTION_CACHE_TTL = 300; // 5 minutos
 

@@ -20,15 +20,18 @@ const upload = multer({
 export function registerMediaLibraryRoutes(app: express.Application) {
   
   async function resolveCompanyId(req: any): Promise<string> {
+    const companyId = req.profile?.company_id || req.user?.company_id;
+    if (companyId) return companyId;
+
     const { data: userRow, error } = await supabaseAdmin
       .from("users")
       .select("company_id")
       .eq("user_id", req.user.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    const companyId = userRow?.company_id;
-    if (!companyId) throw new Error("Usuário sem company_id");
-    return companyId;
+    const resolvedCompanyId = userRow?.company_id;
+    if (!resolvedCompanyId) throw new Error("Usuário sem company_id");
+    return resolvedCompanyId;
   }
 
   // ==================== UPLOAD DE MÍDIA ====================

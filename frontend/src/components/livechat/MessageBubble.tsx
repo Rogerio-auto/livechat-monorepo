@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin, FiInfo } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin, FiInfo, FiFileText } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -439,6 +439,19 @@ export function MessageBubble({
         )}
       </div>
     );
+  } else if (messageType === "TEMPLATE") {
+    bubbleContent = (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1.5 text-[11px] font-bold text-(--color-primary) opacity-90 uppercase border-b border-white/10 pb-1 mb-1">
+          <FiFileText className="w-3.5 h-3.5" />
+          WhatsApp Template
+        </div>
+        <div className="italic opacity-90">{textBody}</div>
+        {m.metadata?.template_name && (
+          <div className="text-[10px] opacity-50 mt-1">Nome: {m.metadata.template_name}</div>
+        )}
+      </div>
+    );
   } else if (messageType === "INTERACTIVE") {
     let interactive = m.interactive_content;
     if (typeof interactive === "string") {
@@ -519,6 +532,35 @@ export function MessageBubble({
               {interactive.list_reply?.description && (
                 <div className="text-xs opacity-70 ml-6">{interactive.list_reply.description}</div>
               )}
+            </div>
+          )}
+
+          {type === "flow" && (
+            <div className="flex flex-col gap-2 mt-2">
+              <div className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center border border-white/20">
+                <FiLayers className="inline mr-2" />
+                {(action as Record<string, any>)?.parameters?.flow_cta || "Abrir Formulário"}
+              </div>
+              <div className="text-[10px] opacity-50 text-center">Flow ID: {interactive.flow_id || (action as any)?.parameters?.flow_id}</div>
+            </div>
+          )}
+
+          {type === "nfm_reply" && (
+            <div className="flex flex-col gap-2 mt-2">
+              <div className="text-xs font-bold border-b border-white/10 pb-1">
+                RESPOSTA DO FORMULÁRIO:
+              </div>
+              <div className="text-xs opacity-90 font-mono bg-black/20 p-2 rounded max-h-40 overflow-auto">
+                {(() => {
+                  try {
+                    const resp = interactive.nfm_reply?.response_json;
+                    const data = typeof resp === "string" ? JSON.parse(resp) : resp;
+                    return <pre>{JSON.stringify(data || {}, null, 2)}</pre>;
+                  } catch (e) {
+                    return <span>{String(interactive.nfm_reply?.response_json)}</span>;
+                  }
+                })()}
+              </div>
             </div>
           )}
         </div>

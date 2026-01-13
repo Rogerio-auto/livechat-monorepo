@@ -817,7 +817,11 @@ export function ChatHeader({
 		<div className="relative mb-4 mx-4 mt-4 p-4 rounded-xl bg-(--color-surface) border border-(--color-border) shadow-sm">
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				<div className="flex flex-1 items-start gap-3">
-					<AvatarCircle name={chatTitle} />
+					<AvatarCircle 
+						name={chatTitle} 
+						url={chat?.photo_url || chat?.customer_avatar_url || chat?.group_avatar_url || null}
+						isGroup={chat?.is_group || chat?.kind === "GROUP"}
+					/>
 				<div className="flex flex-col gap-2 overflow-hidden">
 					<div className="flex flex-wrap items-center gap-2">
 						<h2 className="truncate text-base font-semibold text-(--color-heading)">
@@ -936,7 +940,7 @@ export function ChatHeader({
 	);
 }
 
-function AvatarCircle({ name }: { name: string }) {
+function AvatarCircle({ name, url, isGroup }: { name: string; url?: string | null; isGroup?: boolean }) {
 	const initials = useMemo(() => {
 		if (!name) return "?";
 		const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -945,8 +949,29 @@ function AvatarCircle({ name }: { name: string }) {
 		return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
 	}, [name]);
 
+	const [src, setSrc] = useState<string | null>(url || null);
+
+	useEffect(() => {
+		setSrc(url || null);
+	}, [url]);
+
+	if (src) {
+		return (
+			<img 
+				src={src} 
+				alt={name}
+				className="h-12 w-12 shrink-0 rounded-full object-cover border border-(--color-border)"
+				onError={() => setSrc(null)}
+			/>
+		);
+	}
+
 	return (
-		<div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-(--color-surface-muted) text-sm font-semibold text-(--color-text-muted)">
+		<div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+			isGroup 
+				? "bg-(--color-primary)/15 text-(--color-primary)" 
+				: "bg-(--color-surface-muted) text-(--color-text-muted)"
+		}`}>
 			{initials}
 		</div>
 	);

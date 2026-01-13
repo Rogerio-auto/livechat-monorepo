@@ -12,10 +12,12 @@ import { MessageBubble } from "../components/livechat/MessageBubble";
 import { LabelsManager } from "../components/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "@livechat/shared";
-import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu } from "react-icons/fi";
+import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu, FiLayers, FiFileText } from "react-icons/fi";
 import { ContactsCRM } from "../components/livechat/ContactsCRM";
 import CampaignsPanel from "../components/livechat/CampaignsPanel";
 import FlowsPanel from "../components/livechat/FlowsPanel";
+import { FlowPicker } from "../components/livechat/FlowPicker";
+import { MetaTemplatePicker } from "../components/livechat/MetaTemplatePicker";
 import { FirstInboxWizard } from "../components/livechat/FirstInboxWizard";
 import { ContactInfoPanel } from "../components/livechat/ContactInfoPanel";
 import { MentionInput } from "../components/MentionInput";
@@ -251,6 +253,8 @@ export default function LiveChatPage() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [text, setText] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showFlowPicker, setShowFlowPicker] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const chatsListRef = useRef<HTMLDivElement | null>(null);
@@ -3426,6 +3430,91 @@ const scrollToBottom = useCallback(
     await sendMessageToChat(currentChat, trimmedText, replyId);
   }, [currentChat, text, replyingTo, sendMessageToChat, isPrivateMode, mentions]);
 
+  const handleSendMetaFlow = useCallback(async (flow: any, config: any) => {
+    if (!currentChat) return;
+    try {
+      const token = getAccessToken();
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
+      const res = await fetch(`${API}/api/meta/flows/send`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          inboxId: currentChat.inbox_id,
+          chatId: currentChat.id,
+          flowId: flow.id,
+          ctaText: config.ctaText,
+          headerText: config.headerText,
+          bodyText: config.bodyText
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro ao enviar flow");
+      }
+
+      const { data: inserted } = await res.json();
+      if (inserted) {
+        appendMessageToCache({
+          ...inserted,
+          body: inserted.body || inserted.content,
+          sender_name: currentUser?.name || "Você"
+        });
+      }
+      
+      setShowFlowPicker(false);
+    } catch (error: any) {
+      console.error("Failed to send flow:", error);
+      alert(error.message);
+    }
+  }, [currentChat, API]);
+
+  const handleSendMetaTemplate = useCallback(async (template: any, components: any[] = []) => {
+    if (!currentChat) return;
+    try {
+      const token = getAccessToken();
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+
+      const res = await fetch(`${API}/api/meta/templates/send`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          inboxId: currentChat.inbox_id,
+          chatId: currentChat.id,
+          templateName: template.name,
+          languageCode: template.language,
+          components: components
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Erro ao enviar template");
+      }
+
+      const { data: inserted } = await res.json();
+      if (inserted) {
+        appendMessageToCache({
+          ...inserted,
+          body: inserted.body || inserted.content,
+          sender_name: currentUser?.name || "Você"
+        });
+      }
+      
+      setShowTemplatePicker(false);
+    } catch (error: any) {
+      console.error("Failed to send template:", error);
+      alert(error.message);
+    }
+  }, [currentChat, API]);
+
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;
     setText(newText);
@@ -4379,6 +4468,26 @@ const scrollToBottom = useCallback(
                     <FiPaperclip className="h-5 w-5" />
                   </Button>
 
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowFlowPicker(true)}
+                    title="Enviar Meta Flow"
+                    aria-label="Enviar Meta Flow"
+                  >
+                    <FiLayers className="h-5 w-5" />
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setShowTemplatePicker(true)}
+                    title="Enviar Template WhatsApp"
+                    aria-label="Enviar Template WhatsApp"
+                  >
+                    <FiFileText className="h-5 w-5" />
+                  </Button>
+
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
@@ -4629,6 +4738,22 @@ const scrollToBottom = useCallback(
           onSkip={() => {
             setShowFirstInboxWizard(false);
           }}
+        />
+      )}
+
+      {showFlowPicker && currentChat && (
+        <FlowPicker
+          inboxId={currentChat.inbox_id}
+          onSelect={handleSendMetaFlow}
+          onClose={() => setShowFlowPicker(false)}
+        />
+      )}
+
+      {showTemplatePicker && currentChat && (
+        <MetaTemplatePicker
+          inboxId={currentChat.inbox_id}
+          onSelect={handleSendMetaTemplate}
+          onClose={() => setShowTemplatePicker(false)}
         />
       )}
         </section>

@@ -65,17 +65,6 @@ export function mapLead(form: LeadForm): Partial<Lead> {
   return mapped;
 }
 
-import { Request, Response } from "express";
-
-interface AuthRequest extends Request {
-  user: {
-    id: string;
-    email?: string;
-    company_id: string;
-    role?: string;
-  };
-}
-
 export function registerLeadRoutes(app: express.Application) {
   // Check phone existence
   app.get("/leads/check-phone/:phone", requireAuth, async (req: AuthRequest, res: Response) => {

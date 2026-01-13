@@ -32,7 +32,7 @@ import {
   UpdateChatStatusSchema, 
   TransferChatSchema 
 } from "../schemas/chat.schema.js";
-import { Chat, Message as ChatMessage, Contact } from "../types/index.js";
+import type { Chat, Message as ChatMessage, Contact } from "../types/index.js";
 
 const TTL_LIST = Math.max(60, Number(process.env.CACHE_TTL_LIST || 120));
 const TTL_CHAT = Number(process.env.CACHE_TTL_CHAT || 30);
@@ -298,7 +298,7 @@ function buildChatSelectFields(): string {
   fields.push(
     "inbox:inboxes!inner(id, company_id)",
     "ai_agent:agents!chats_ai_agent_id_fkey(id, name)",
-    "customer:customers(id, name, phone)",
+    "customer:customers(id, name, phone, avatar)",
     "department:departments(id, name, color, icon)",
   );
   return fields.join(",");
@@ -332,10 +332,12 @@ function flattenChatRow(row: any) {
   if (row.customer) {
     row.customer_name = row.customer?.name ?? null;
     row.customer_phone = row.customer?.phone ?? null;
+    row.customer_avatar_url = row.customer?.avatar ?? null;
     delete row.customer;
   } else {
     row.customer_name = row.customer_name ?? null;
     row.customer_phone = row.customer_phone ?? null;
+    row.customer_avatar_url = row.customer_avatar_url ?? null;
   }
 
   return row;
@@ -955,9 +957,9 @@ export function registerLivechatChatRoutes(app: Application) {
           if (!chat.group_avatar_url && cachedAvatar) {
             chat.group_avatar_url = cachedAvatar;
           }
-          chat.customer_avatar_url = chat.group_avatar_url ?? cachedAvatar ?? null;
+          chat.customer_avatar_url = chat.group_avatar_url ?? cachedAvatar ?? chat.customer_avatar_url ?? null;
         } else {
-          chat.customer_avatar_url = cachedAvatar ?? null;
+          chat.customer_avatar_url = cachedAvatar ?? chat.customer_avatar_url ?? null;
         }
         
         // Debug: log avatar resolution for first 3 chats

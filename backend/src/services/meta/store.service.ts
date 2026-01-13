@@ -513,6 +513,7 @@ type InboxCredentials = {
   verify_token?: string;
   phone_number_id?: string | null;
   waba_id?: string | null;
+  company_id?: string;
 };
 export async function getInboxByVerifyToken(token: string) {
   if (!token) return null;
@@ -852,18 +853,18 @@ export async function updateCustomerAvatar(customerId: string, avatarUrl: string
   try {
     const result = await db.query(
       `update public.customers
-          set avatar_url = $1,
+          set avatar = $1,
               updated_at = now()
         where id = $2
-          and (avatar_url is distinct from $1)`,
+          and (avatar is distinct from $1)`,
       [avatarUrl, customerId],
     );
     return (result as any)?.rowCount > 0;
   } catch (e: any) {
     const message = String(e?.message || "");
-    if (e?.code === "42703" || message.includes("avatar_url")) {
+    if (e?.code === "42703" || message.includes("avatar")) {
       customerAvatarColumnMissing = true;
-      console.warn("[DB] customers.avatar_url column missing. Avatar updates disabled.");
+      console.warn("[DB] customers.avatar column missing. Avatar updates disabled.");
       return false;
     }
     console.error("[DB] updateCustomerAvatar error", e);
@@ -885,10 +886,12 @@ export async function ensureLeadCustomerChat(args: {
   name?: string | null;
   rawPhone?: string | null;
   lid?: string | null;
+  avatarUrl?: string | null;
 }) {
   const msisdn = /[a-zA-Z]/.test(args.phone) ? args.phone : normalizeMsisdn(args.phone);
   const externalIdCandidate = extractExternalId(args.rawPhone ?? null) ?? extractExternalId(args.phone);
   const rawName = typeof args.name === "string" ? args.name.trim() : "";
+  const avatarUrl = args.avatarUrl && typeof args.avatarUrl === "string" && args.avatarUrl.trim() ? args.avatarUrl.trim() : null;
   const fallbackName =
     (isMeaningfulName(rawName) ? rawName : null) ||
     msisdn ||
@@ -1005,15 +1008,19 @@ export async function ensureLeadCustomerChat(args: {
       
       // Now create customer with lead.id if needed
       if (!createdCustomer) {
-        console.log("[META][store] 💾 Creating customer", { companyId: args.companyId, msisdn, lid, leadId: lead!.id });
+        console.log("[META][store] 💾 Creating customer", { companyId: args.companyId, msisdn, lid, leadId: lead!.id, avatarUrl });
         // Use INSERT ... ON CONFLICT DO UPDATE to ensure we get the customer even if it exists
         const insertedCustomer = await tx.oneOrNone<{ id: string; name: string }>(
-          `insert into public.customers (company_id, phone, name, lead_id, lid)
-           values ($1, $2, $3, $4, $5)
+          `insert into public.customers (company_id, phone, name, lead_id, lid, avatar)
+           values ($1, $2, $3, $4, $5, $6)
            on conflict (company_id, phone) 
-           do update set lid = coalesce(excluded.lid, customers.lid), lead_id = excluded.lead_id, name = excluded.name
+           do update set 
+              lid = coalesce(excluded.lid, customers.lid), 
+              lead_id = excluded.lead_id, 
+              name = excluded.name,
+              avatar = coalesce(excluded.avatar, customers.avatar)
            returning id, name`,
-          [args.companyId, msisdn, fallbackName, lead!.id, lid],
+          [args.companyId, msisdn, fallbackName, lead!.id, lid, avatarUrl],
         );
         
         if (insertedCustomer) {
@@ -1050,11 +1057,14 @@ export async function ensureLeadCustomerChat(args: {
 
     if (customer && !isMeaningfulName(customer.name)) {
       customer = await tx.one<{ id: string; name: string }>(
-        `update public.customers set name = $1, lid = coalesce(lid, $3) where id = $2 returning id, name`,
-        [fallbackName, customer.id, lid],
+        `update public.customers set name = $1, lid = coalesce(lid, $3), avatar = coalesce(avatar, $4) where id = $2 returning id, name`,
+        [fallbackName, customer.id, lid, avatarUrl],
       );
-    } else if (customer && lid) {
-      await tx.none(`update public.customers set lid = coalesce(lid, $2) where id = $1`, [customer.id, lid]);
+    } else if (customer && (lid || avatarUrl)) {
+      await tx.none(
+        `update public.customers set lid = coalesce(lid, $2), avatar = coalesce(avatar, $3) where id = $1`, 
+        [customer.id, lid, avatarUrl]
+      );
     }
 
     // ========== OPTIMIZATION: Link lead<->customer EM PARALELO ==========
@@ -1676,6 +1686,7 @@ export async function getDecryptedCredsForInbox(inboxId: string): Promise<InboxC
     webhook_verify_token: string | null;
     phone_number_id: string | null;
     waba_id: string | null;
+    company_id: string;
   }>(
     `select i.provider,
             s.access_token,
@@ -1684,7 +1695,8 @@ export async function getDecryptedCredsForInbox(inboxId: string): Promise<InboxC
             i.app_secret,
             i.webhook_verify_token,
             i.phone_number_id,
-            i.waba_id
+            i.waba_id,
+            i.company_id
        from public.inboxes i
   left join public.inbox_secrets s on s.inbox_id = i.id
       where i.id = $1
@@ -1712,6 +1724,7 @@ export async function getDecryptedCredsForInbox(inboxId: string): Promise<InboxC
       verify_token: row.webhook_verify_token ?? undefined,
       phone_number_id: row.phone_number_id ?? undefined,
       waba_id: row.waba_id ?? undefined,
+      company_id: row.company_id,
     };
   } else {
     if (!row.phone_number_id) {
@@ -1726,6 +1739,7 @@ export async function getDecryptedCredsForInbox(inboxId: string): Promise<InboxC
       verify_token: row.webhook_verify_token ?? undefined,
       phone_number_id: row.phone_number_id,
       waba_id: row.waba_id ?? undefined,
+      company_id: row.company_id,
     };
   }
 
@@ -1733,7 +1747,7 @@ export async function getDecryptedCredsForInbox(inboxId: string): Promise<InboxC
   return payload;
 }
 
-export async function getChatWithCustomerPhone(chatId: string): Promise<{
+export async function getChatWithCustomerPhone(chatId: string, inboxId?: string | null, companyId?: string | null): Promise<{
   chat_id: string;
   customer_phone: string;
   inbox_id: string;
@@ -1745,31 +1759,69 @@ export async function getChatWithCustomerPhone(chatId: string): Promise<{
     return cached.value;
   }
 
-  const row = await db.one<{ phone: string; inbox_id: string | null; external_id: string | null; remote_id: string | null }>(
-    `select c.phone, ch.inbox_id, ch.external_id, ch.remote_id
-       from public.chats ch
-       join public.customers c on c.id = ch.customer_id
-      where ch.id = $1`,
-    [chatId],
-  );
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chatId);
 
-  const phone = normalizeMsisdn(row.phone || "");
-  if (!phone) throw new Error("Telefone do cliente não encontrado");
-  const inboxId = row.inbox_id;
-  if (!inboxId) throw new Error("Inbox não encontrada para o chat");
-  const normalizedPhone = phone.startsWith("+") ? phone : `+${phone}`;
-  const result = { chat_id: chatId, customer_phone: normalizedPhone, inbox_id: inboxId };
-  
-  console.log("[META][getChatWithCustomerPhone] resolved", { 
-    chatId, 
-    customerPhone: normalizedPhone,
-    inboxId,
-    externalId: row.external_id,
-    remoteId: row.remote_id,
-  });
-  
-  await cacheWriteNullable(cacheKey, result, TTL_CHAT_PHONE_LOOKUP);
-  return result;
+  if (isUuid) {
+    const row = await db.one<{ phone: string; inbox_id: string | null; external_id: string | null; remote_id: string | null }>(
+      `select c.phone, ch.inbox_id, ch.external_id, ch.remote_id
+         from public.chats ch
+         join public.customers c on c.id = ch.customer_id
+        where ch.id = $1`,
+      [chatId],
+    );
+
+    const phone = normalizeMsisdn(row.phone || "");
+    if (!phone) throw new Error("Telefone do cliente não encontrado");
+    const resolvedInboxId = row.inbox_id;
+    if (!resolvedInboxId) throw new Error("Inbox não encontrada para o chat");
+    const normalizedPhone = phone.startsWith("+") ? phone : `+${phone}`;
+    const result = { chat_id: chatId, customer_phone: normalizedPhone, inbox_id: resolvedInboxId };
+    
+    console.log("[META][getChatWithCustomerPhone] resolved by UUID", { 
+      chatId, 
+      customerPhone: normalizedPhone,
+      inboxId: resolvedInboxId,
+    });
+    
+    await cacheWriteNullable(cacheKey, result, TTL_CHAT_PHONE_LOOKUP);
+    return result;
+  } else {
+    // Not a UUID, treat as phone number
+    if (!inboxId) throw new Error("getChatWithCustomerPhone: inboxId required for phone-based lookup");
+    
+    let effectiveCompanyId = companyId;
+    if (!effectiveCompanyId) {
+      const inbox = await db.oneOrNone<{ company_id: string }>(
+        "select company_id from public.inboxes where id = $1",
+        [inboxId]
+      );
+      effectiveCompanyId = inbox?.company_id;
+    }
+    
+    if (!effectiveCompanyId) throw new Error("getChatWithCustomerPhone: companyId not found");
+
+    // Ensure lead/customer/chat exists
+    const chatInfo = await ensureLeadCustomerChat({
+      inboxId,
+      companyId: effectiveCompanyId,
+      phone: chatId, // chatId is the phone
+    });
+
+    const result = { 
+      chat_id: chatInfo.id, 
+      customer_phone: normalizeMsisdn(chatId).startsWith("+") ? normalizeMsisdn(chatId) : `+${normalizeMsisdn(chatId)}`,
+      inbox_id: inboxId 
+    };
+
+    console.log("[META][getChatWithCustomerPhone] resolved by Phone", { 
+      phone: chatId, 
+      chatId: chatInfo.id,
+      inboxId,
+    });
+
+    await cacheWriteNullable(cacheKey, result, TTL_CHAT_PHONE_LOOKUP);
+    return result;
+  }
 }
 
 export async function invalidateInboxCredsCache(inboxId: string): Promise<void> {

@@ -2,6 +2,7 @@ import type { Application } from "express";
 import { ZodError, z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { EX_APP, publish } from "../queue/rabbit.js";
 import {
   createWhatsAppTemplate,
   listWhatsAppTemplates,
@@ -13,7 +14,7 @@ import {
 import { sendInteractiveButtons } from "../services/meta/graph.service.js";
 
 async function resolveCompanyId(req: any) {
-  const companyId = req?.user?.company_id || null;
+  const companyId = req.profile?.company_id || req?.user?.company_id || null;
   if (!companyId) throw Object.assign(new Error("Missing company context"), { status: 400 });
   return companyId as string;
 }
@@ -41,7 +42,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.post("/api/meta/templates/create", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
 
       const schema = z.object({
@@ -80,8 +81,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
       if (!inbox.waba_id) {
         return res.status(400).json({ error: "Inbox não possui waba_id configurado" });
@@ -130,7 +131,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.post("/api/meta/templates/upload-media", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
 
       const schema = z.object({
@@ -150,8 +151,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
 
       // Faz upload da mídia usando Resumable Upload API e retorna o handle
@@ -174,7 +175,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.get("/api/meta/templates/list/:inboxId", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
       const inboxId = req.params.inboxId;
 
@@ -188,8 +189,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
+        return res.status(400).json({ error: "Inbox deve ser do tipo META (Official API)" });
       }
 
       const status = req.query.status as string | undefined;
@@ -211,7 +212,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.get("/api/meta/templates/:templateId", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
       const templateId = req.params.templateId;
       const inboxId = req.query.inboxId as string;
@@ -247,7 +248,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.delete("/api/meta/templates/:templateName", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
       const templateName = req.params.templateName;
       const inboxId = req.query.inboxId as string;
@@ -291,12 +292,13 @@ export function registerMetaTemplatesRoutes(app: Application) {
   app.post("/api/meta/templates/send", requireAuth, async (req: any, res) => {
     try {
       const role = String(req?.profile?.role || "").toUpperCase();
-      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT"]);
+      ensureRole(role, ["ADMIN", "MANAGER", "SUPERVISOR", "AGENT", "SUPER_ADMIN", "OWNER"]);
       const companyId = await resolveCompanyId(req);
 
       const schema = z.object({
         inboxId: z.string().uuid(),
-        customerPhone: z.string().trim().min(1),
+        chatId: z.string().uuid().optional(),
+        customerPhone: z.string().trim().min(1).optional(),
         templateName: z.string().trim().min(1),
         languageCode: z.string().trim().min(2),
         components: z.array(z.object({
@@ -326,22 +328,90 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
-        return res.status(400).json({ error: "Inbox deve ser do tipo META_CLOUD" });
+
+      let customerPhone = body.customerPhone;
+      let chatId = body.chatId;
+
+      if (chatId) {
+        const { data: chat } = await supabaseAdmin
+          .from("chats")
+          .select("*, customer:customers(phone, msisdn)")
+          .eq("id", chatId)
+          .single();
+        
+        if (chat) {
+          customerPhone = chat.customer?.phone || chat.customer?.msisdn || chat.remote_id;
+        }
+      }
+
+      if (!customerPhone) {
+        return res.status(400).json({ error: "customerPhone ou chatId válido é obrigatório" });
       }
 
       const result = await sendTemplateMessage({
         inboxId: body.inboxId,
-        customerPhone: body.customerPhone,
+        customerPhone,
         templateName: body.templateName,
         languageCode: body.languageCode,
         components: body.components,
       });
 
+      // Se tiver chatId, salvar no banco e emitir socket
+      if (chatId) {
+        const { data: chat } = await supabaseAdmin.from("chats").select("company_id").eq("id", chatId).single();
+        
+        const { data: inserted } = await supabaseAdmin
+          .from("chat_messages")
+          .insert({
+            chat_id: chatId,
+            inbox_id: body.inboxId,
+            company_id: chat?.company_id || companyId,
+            external_id: result.wamid,
+            content: `Template: ${body.templateName}`,
+            body: `Template: ${body.templateName}`,
+            type: "TEMPLATE",
+            sender_type: "AGENT",
+            sender_id: req.user?.id,
+            view_status: "Sent",
+            metadata: {
+              template_name: body.templateName,
+              language_code: body.languageCode,
+              components: body.components
+            }
+          })
+          .select()
+          .single();
+
+        if (inserted) {
+          const senderName = (req as any).profile?.name || (req as any).user?.name || "Agente";
+          
+          await publish(EX_APP, "socket.livechat.outbound", {
+            kind: "livechat.outbound.message",
+            chatId,
+            companyId: chat?.company_id || companyId,
+            inboxId: body.inboxId,
+            message: {
+              ...inserted,
+              sender_name: senderName
+            },
+            chatUpdate: {
+              chatId,
+              companyId: chat?.company_id || companyId,
+              inboxId: body.inboxId,
+              last_message: inserted.body || `Template: ${body.templateName}`,
+              last_message_at: inserted.created_at,
+              last_message_from: "AGENT",
+              last_message_type: "TEMPLATE"
+            }
+          });
+        }
+      }
+
       return res.json({ 
         success: true, 
         wamid: result.wamid,
         message: "Template enviado com sucesso",
+        data: inserted
       });
     } catch (error) {
       const { status, payload } = formatRouteError(error);
@@ -382,9 +452,9 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       if (inboxErr) throw new Error(inboxErr.message);
       if (!inbox) return res.status(404).json({ error: "Inbox não encontrada" });
-      if (inbox.provider !== "META_CLOUD") {
+      if (inbox.provider !== "META_CLOUD" && inbox.provider !== "META") {
         return res.status(400).json({ 
-          error: "Botões interativos só funcionam com WhatsApp Business API (Meta Cloud)" 
+          error: "Botões interativos só funcionam com WhatsApp Business API oficial (Meta)" 
         });
       }
 

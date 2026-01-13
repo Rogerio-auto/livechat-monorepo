@@ -1,6 +1,9 @@
 import { supabaseAdmin } from "../lib/supabase.js";
 import type { Task, CreateTaskDTO, UpdateTaskDTO, TaskStatus, TaskPriority, TaskType } from "../types/index.js";
 
+export type CreateTaskInput = CreateTaskDTO;
+export type UpdateTaskInput = UpdateTaskDTO;
+
 export interface TaskWithContext extends Task {
   assigned_to_name?: string | null;
   assigned_to_email?: string | null;

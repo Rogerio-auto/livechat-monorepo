@@ -572,18 +572,21 @@ export function MessageBubble({
 
   const renderStatusIcon = () => {
     if (!isAgent) return null;
+    const iconStyle = { color: "var(--color-on-primary)", opacity: 0.8 };
+    const readStyle = { color: "#34b7f1" }; // Blue for READ
+
     switch (deliveryStatus) {
       case "sending":
       case "pending":
-        return <FiClock className="w-3.5 h-3.5" style={{ color: "var(--color-text-muted)" }} />;
+        return <FiClock className="w-3.5 h-3.5" style={iconStyle} />;
       case "sent":
-        return <FiCheck className="w-3.5 h-3.5" style={{ color: "var(--color-text-muted)" }} />;
+        return <FiCheck className="w-3.5 h-3.5" style={iconStyle} />;
       case "delivered":
-        return <BiCheckDouble className="h-4 w-4" style={{ color: "var(--color-text-muted)" }} />;
+        return <BiCheckDouble className="h-4 w-4" style={iconStyle} />;
       case "read":
-        return <BiCheckDouble className="h-4 w-4" style={{ color: "var(--color-primary)" }} />;
+        return <BiCheckDouble className="h-4 w-4" style={readStyle} />;
       case "error":
-        return <FiAlertTriangle className="w-3.5 h-3.5 text-red-400" />;
+        return <FiAlertTriangle className="w-3.5 h-3.5 text-red-100" />;
       default:
         return null;
     }
@@ -771,7 +774,7 @@ export function MessageBubble({
               {/* Left side empty to align */}
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-[10px]" style={{ color: "var(--color-text-muted)" }}>
+              <span className="text-[10px]" style={{ color: isAgent ? "var(--color-on-primary)" : "var(--color-text-muted)", opacity: isAgent ? 0.8 : 1 }}>
                 {time}
               </span>
               {renderStatusIcon()}
@@ -780,7 +783,7 @@ export function MessageBubble({
                   <button
                     type="button"
                     className="p-1 rounded transition-colors"
-                    style={{ color: "var(--color-text-muted)" }}
+                    style={{ color: isAgent ? "var(--color-on-primary)" : "var(--color-text-muted)", opacity: isAgent ? 0.8 : 1 }}
                     onClick={() => setShowMenu((v) => !v)}
                     title="Ações"
                   >

@@ -8,6 +8,7 @@
   --color-border: rgba(31, 84, 57, 0.18);
   --color-primary: #2fb463;
   --color-primary-strong: #1f8b49;
+  --color-on-primary: #ffffff;
   --color-highlight: #74e69e;
   --color-highlight-strong: #52d67d;
   --color-text: #0f2418;
@@ -34,6 +35,7 @@
   /* Desaturated accents */
   --color-primary: #238636;
   --color-primary-strong: #2ea043;
+  --color-on-primary: #ffffff;
   --color-highlight: #1f6feb;
   --color-highlight-strong: #388bfd;
   

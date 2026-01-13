@@ -66,7 +66,7 @@ export function MessageBubble({
     }
     if (isAgent) {
       return {
-        background: "color-mix(in srgb, var(--color-primary) 52%, var(--color-bg))",
+        background: "var(--color-primary)",
         color: "var(--color-on-primary)",
       };
     }

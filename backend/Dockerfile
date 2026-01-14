@@ -5,6 +5,7 @@ WORKDIR /monorepo
 # Copy all package files for workspace resolution
 COPY package*.json ./
 COPY backend/package*.json ./backend/
+COPY packages/shared/package*.json ./packages/shared/
 
 # Install all dependencies (monorepo aware, skip postinstall scripts)
 RUN npm ci --ignore-scripts
@@ -13,6 +14,7 @@ RUN npm ci --ignore-scripts
 COPY backend/tsconfig.json ./backend/
 COPY backend/tsup.config.ts ./backend/
 COPY backend/src ./backend/src
+COPY packages/shared ./packages/shared
 
 # Build backend
 RUN npm run build:backend

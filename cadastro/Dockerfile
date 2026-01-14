@@ -5,9 +5,13 @@ WORKDIR /monorepo
 # Copy all package files for workspace resolution
 COPY package*.json ./
 COPY cadastro/package*.json ./cadastro/
+COPY packages/shared/package*.json ./packages/shared/
 
 # Install all dependencies (monorepo aware, skip postinstall scripts)
 RUN npm ci --ignore-scripts
+
+# Copy shared source
+COPY packages/shared ./packages/shared
 
 # Copy cadastro source files
 COPY cadastro ./cadastro/

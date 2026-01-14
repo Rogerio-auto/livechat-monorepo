@@ -5,9 +5,13 @@ WORKDIR /monorepo
 # Copy all package files for workspace resolution
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
+COPY packages/shared/package*.json ./packages/shared/
 
 # Install all dependencies (monorepo aware, skip postinstall scripts)
 RUN npm ci --ignore-scripts
+
+# Copy shared package source (needed if frontend depends on shared source or types)
+COPY packages/shared ./packages/shared
 
 # Copy frontend source files
 COPY frontend ./frontend/

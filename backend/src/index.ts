@@ -109,17 +109,27 @@ const FRONTEND_ORIGINS = Array.from(
 
 const corsOptions = {
   origin: (origin: any, callback: any) => {
+    // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
+    
     const isAllowed =
       FRONTEND_ORIGINS.includes(origin) ||
       origin.endsWith(".7sion.com") ||
+      origin.endsWith("7sion.com") ||
       origin.startsWith("http://localhost:") ||
       origin.startsWith("http://127.0.0.1:");
-    if (isAllowed) return callback(null, true);
-    callback(new Error("Not allowed by CORS"));
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`[CORS] Bloqueado para origem: ${origin}`);
+      callback(null, false);
+    }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin", "token"],
+  exposedHeaders: ["set-cookie"]
 };
 
 const app = express();

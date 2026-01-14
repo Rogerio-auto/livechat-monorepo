@@ -372,7 +372,6 @@ export function registerMetaTemplatesRoutes(app: Application) {
             company_id: chat?.company_id || companyId,
             external_id: result.wamid,
             content: `Template: ${body.templateName}`,
-            body: `Template: ${body.templateName}`,
             type: "TEMPLATE",
             sender_type: "AGENT",
             sender_id: req.user?.id,

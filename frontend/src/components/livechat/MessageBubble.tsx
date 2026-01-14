@@ -546,18 +546,25 @@ export function MessageBubble({
           )}
 
           {type === "nfm_reply" && (
-            <div className="flex flex-col gap-2 mt-2">
-              <div className="text-xs font-bold border-b border-white/10 pb-1">
-                RESPOSTA DO FORMULÁRIO:
+            <div className="flex flex-col gap-2 mt-2 min-w-[200px]">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-white/50 border-b border-white/10 pb-1.5">
+                <FiFileText className="w-3 h-3" /> Resposta do Formulário
               </div>
-              <div className="text-xs opacity-90 font-mono bg-black/20 p-2 rounded max-h-40 overflow-auto">
+              <div className="flex flex-col gap-1.5 py-1">
                 {(() => {
                   try {
                     const resp = interactive.nfm_reply?.response_json;
                     const data = typeof resp === "string" ? JSON.parse(resp) : resp;
-                    return <pre>{JSON.stringify(data || {}, null, 2)}</pre>;
+                    if (!data || typeof data !== "object") return <span className="text-xs italic opacity-70">Sem dados</span>;
+                    
+                    return Object.entries(data).map(([key, value]) => (
+                      <div key={key} className="flex flex-col gap-0.5 bg-black/10 rounded px-2 py-1.5 border border-white/5">
+                        <span className="text-[10px] font-bold text-white/40 uppercase leading-none">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-sm font-medium text-white/90">{String(value)}</span>
+                      </div>
+                    ));
                   } catch (e) {
-                    return <span>{String(interactive.nfm_reply?.response_json)}</span>;
+                    return <span className="text-xs break-all opacity-80">{String(interactive.nfm_reply?.response_json)}</span>;
                   }
                 })()}
               </div>

@@ -2251,6 +2251,7 @@ const scrollToBottom = useCallback(
     s.on("message:media-ready", onMediaReady);
     s.on("chat:agent-changed", onAgentChanged);
     s.on("chat:department-changed", onDepartmentChanged);
+    s.on("socket.livechat.flow_submission", (p: any) => console.log("[SOCKET] Flow submission:", p));
     s.on("send:interactive_message", onInteractiveMessage);
 
     return () => {
@@ -2262,6 +2263,7 @@ const scrollToBottom = useCallback(
       s.off("message:media-ready", onMediaReady);
       s.off("chat:agent-changed", onAgentChanged);
       s.off("chat:department-changed", onDepartmentChanged);
+      s.off("socket.livechat.flow_submission");
       s.off("send:interactive_message", onInteractiveMessage);
       // DO NOT disconnect here, as the socket is managed by the parent effect
     };

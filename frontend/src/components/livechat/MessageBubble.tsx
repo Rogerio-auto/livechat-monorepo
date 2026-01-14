@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin, FiInfo, FiFileText } from "react-icons/fi";
+import { FiClock, FiCheck, FiLock, FiAlertTriangle, FiRotateCcw, FiCpu, FiMoreVertical, FiEdit2, FiTrash2, FiCornerUpLeft, FiLayers, FiMapPin, FiInfo, FiFileText, FiExternalLink } from "react-icons/fi";
 import { BiCheckDouble } from "react-icons/bi";
 import Lightbox from "../../components/ui/Lightbox";
 import AudioPlayerWhatsApp from "../../components/livechat/AudioPlayerWhatsApp";
@@ -353,23 +353,40 @@ export function MessageBubble({
       </div>
     );
   } else if (messageType === "TEMPLATE") {
-    const template = m.interactive_content || (m as any).metadata; 
-    const templateName = template?.template_name || template?.name || "";
-    let components = template?.components || [];
-
-    // Se o template vier do backend como { template: { name, components } }
-    if (!components.length && template?.template?.components) {
-      components = template.template.components;
-    }
+    const interactive = m.interactive_content || (m as any).metadata; 
+    const templateName = interactive?.template_name || interactive?.name || "";
     
+    // templateDef contém a estrutura original (textos com {{1}})
+    const templateDef = interactive?.template_definition || interactive?.template || null;
+    
+    // componentsList contém o que foi enviado (parâmetros/valores)
+    const componentsList = interactive?.components || [];
+    
+    // Se não temos a definição mas o interactive parece ter tudo (ex: webhook de entrada)
+    let finalComponents = componentsList;
+    if (templateDef?.components) {
+      // Mesclamos: pegamos a estrutura e injetamos os parâmetros
+      finalComponents = templateDef.components.map((def: any) => {
+        const matchingParams = componentsList.find((c: any) => c.type?.toLowerCase() === def.type?.toLowerCase());
+        return {
+          ...def,
+          parameters: matchingParams?.parameters || def.parameters || []
+        };
+      });
+    }
+
     // Tentar encontrar o texto do corpo no template
-    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY" || (c.type === "button" && c.sub_type === "url"));
-    const headerComponent = components.find((c: any) => c.type === "header" || c.type === "HEADER");
-    const footerComponent = components.find((c: any) => c.type === "footer" || c.type === "FOOTER");
+    const bodyComponent = finalComponents.find((c: any) => c.type === "body" || c.type === "BODY" || (c.type === "button" && c.sub_type === "url"));
+    const headerComponent = finalComponents.find((c: any) => c.type === "header" || c.type === "HEADER");
+    const footerComponent = finalComponents.find((c: any) => c.type === "footer" || c.type === "FOOTER");
 
     const renderTemplateText = (comp: any, fallback: string) => {
       let t = comp?.text || fallback;
       if (!t) return "";
+      
+      // Se t ainda for o fallback de "Template: Name", evitamos substituição se não houver {{1}}
+      if (t === fallback && !t.includes("{{")) return t;
+
       if (comp?.parameters && Array.isArray(comp.parameters)) {
         comp.parameters.forEach((p: any, i: number) => {
           const placeholder = `{{${i + 1}}}`;
@@ -424,15 +441,30 @@ export function MessageBubble({
         )}
 
         {/* Render Buttons */}
-        {components.some((c: any) => c.type === "buttons" || c.type === "BUTTONS" || c.type === "button") && (
+        {finalComponents.some((c: any) => c.type === "buttons" || c.type === "BUTTONS" || c.type === "button") && (
           <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-current/10">
-            {components
+            {finalComponents
               .filter((c: any) => c.type === "buttons" || c.type === "BUTTONS" || c.type === "button")
-              .flatMap((c: any) => c.buttons || c.parameters || [])
+              .flatMap((c: any) => c.buttons || (c.sub_type === "url" ? [c] : []) || c.parameters || [])
               .map((btn: any, idx: number) => {
                 const label = btn.text || btn.reply?.title || btn.parameters?.[0]?.text || "Botão";
                 const isQuickReply = btn.type === "quick_reply" || btn.sub_type === "quick_reply" || btn.reply;
+                const isUrl = btn.type === "url" || btn.sub_type === "url";
                 
+                if (isUrl) {
+                  return (
+                    <a
+                      key={idx}
+                      href={btn.url || "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2 px-3 bg-current/5 border border-current/10 rounded text-sm font-medium text-center flex items-center justify-center gap-2 hover:bg-current/10 transition-colors forced-colors:border-white"
+                    >
+                      {label} <FiExternalLink className="w-3 h-3" />
+                    </a>
+                  );
+                }
+
                 return (
                   <button 
                     key={idx} 

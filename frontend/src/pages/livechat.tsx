@@ -1718,7 +1718,7 @@ const scrollToBottom = useCallback(
       sender_type: senderType,
       media_url: raw.media_url ?? raw.mediaUrl ?? null,
       media_public_url: raw.media_public_url ?? raw.mediaPublicUrl ?? null,
-      type: raw.type ?? "TEXT",
+      type: (raw.type ?? raw.message_type ?? "TEXT").toUpperCase(),
       remote_participant_id: raw.remote_participant_id ?? null,
       remote_sender_id: raw.remote_sender_id ?? null,
       remote_sender_name: raw.remote_sender_name ?? null,
@@ -1730,7 +1730,18 @@ const scrollToBottom = useCallback(
       delivery_status: deliveryStatus,
       client_draft_id: clientDraftId,
       error_reason: raw?.error_reason ?? null,
-      interactive_content: raw.interactive_content ?? raw.interactiveContent ?? null,
+      interactive_content: (() => {
+        let content = raw.interactive_content ?? raw.interactiveContent ?? raw.metadata ?? null;
+        if (typeof content === "string" && content.trim().startsWith("{")) {
+          try {
+            return JSON.parse(content);
+          } catch (e) {
+            console.warn("[livechat] Failed to parse interactive_content:", e);
+            return content;
+          }
+        }
+        return content;
+      })(),
       view_status:
         typeof raw?.view_status === "string" && raw.view_status
           ? raw.view_status.toUpperCase()
@@ -3515,7 +3526,8 @@ const scrollToBottom = useCallback(
           chatId: currentChat.id,
           templateName: template.name,
           languageCode: template.language,
-          components: components
+          components: components,
+          templateDefinition: template // Envia a definição completa para persistência e renderização local
         })
       });
 

@@ -322,7 +322,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
             action: z.any().optional(),
           })),
         })).optional(),
-      }).strict();
+      }); // Reduzido strict para permitir metadados do template original
 
       const body = schema.parse(req.body || {});
 
@@ -394,7 +394,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
             interactive_content: {
               template_name: body.templateName,
               language_code: body.languageCode,
-              components: body.components
+              components: body.components,
+              template_definition: (req.body as any).templateDefinition || null
             }
           })
           .select()

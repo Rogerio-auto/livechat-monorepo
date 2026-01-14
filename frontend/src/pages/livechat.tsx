@@ -12,7 +12,7 @@ import { MessageBubble } from "../components/livechat/MessageBubble";
 import { LabelsManager } from "../components/livechat/LabelsManager";
 import { ReplyPreview } from "../components/livechat/ReplyPreview";
 import type { Chat, Message, Inbox, Tag, Contact } from "@livechat/shared";
-import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu, FiLayers, FiFileText } from "react-icons/fi";
+import { FiPaperclip, FiMic, FiSmile, FiX, FiFilter, FiSearch, FiMessageSquare, FiMenu, FiLayers, FiFileText, FiAlertTriangle } from "react-icons/fi";
 import { ContactsCRM } from "../components/livechat/ContactsCRM";
 import CampaignsPanel from "../components/livechat/CampaignsPanel";
 import FlowsPanel from "../components/livechat/FlowsPanel";

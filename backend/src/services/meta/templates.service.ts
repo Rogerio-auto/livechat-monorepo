@@ -299,12 +299,16 @@ export async function sendTemplateMessage(params: {
   languageCode: string;
   components?: Array<{
     type: "header" | "body" | "button";
+    sub_type?: string;
+    index?: string;
     parameters: Array<{
-      type: "text" | "image" | "video" | "document";
+      type: "text" | "image" | "video" | "document" | "payload" | "action";
       text?: string;
       image?: { link: string };
       video?: { link: string };
       document?: { link: string; filename?: string };
+      payload?: string;
+      action?: any;
     }>;
   }>;
 }): Promise<{ wamid: string }> {

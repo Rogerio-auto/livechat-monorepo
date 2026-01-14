@@ -303,8 +303,10 @@ export function registerMetaTemplatesRoutes(app: Application) {
         languageCode: z.string().trim().min(2),
         components: z.array(z.object({
           type: z.enum(["header", "body", "button"]),
+          sub_type: z.string().optional(),
+          index: z.string().optional(),
           parameters: z.array(z.object({
-            type: z.enum(["text", "image", "video", "document"]),
+            type: z.enum(["text", "image", "video", "document", "action"]),
             text: z.string().optional(),
             image: z.object({ link: z.string() }).optional(),
             video: z.object({ link: z.string() }).optional(),
@@ -312,6 +314,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
               link: z.string(),
               filename: z.string().optional(),
             }).optional(),
+            action: z.any().optional(),
           })),
         })).optional(),
       }).strict();
@@ -331,6 +334,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       let customerPhone = body.customerPhone;
       let chatId = body.chatId;
+      let inserted = null;
 
       if (chatId) {
         const { data: chat } = await supabaseAdmin
@@ -360,7 +364,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
       if (chatId) {
         const { data: chat } = await supabaseAdmin.from("chats").select("company_id").eq("id", chatId).single();
         
-        const { data: inserted } = await supabaseAdmin
+        const { data: insertedData } = await supabaseAdmin
           .from("chat_messages")
           .insert({
             chat_id: chatId,
@@ -382,6 +386,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
           .select()
           .single();
 
+        inserted = insertedData;
+
         if (inserted) {
           const senderName = (req as any).profile?.name || (req as any).user?.name || "Agente";
           
@@ -398,8 +404,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
               chatId,
               companyId: chat?.company_id || companyId,
               inboxId: body.inboxId,
-              last_message: inserted.body || `Template: ${body.templateName}`,
-              last_message_at: inserted.created_at,
+              last_message: inserted?.body || `Template: ${body.templateName}`,
+              last_message_at: inserted?.created_at || new Date().toISOString(),
               last_message_from: "AGENT",
               last_message_type: "TEMPLATE"
             }

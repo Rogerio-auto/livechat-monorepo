@@ -114,16 +114,59 @@ export function MetaTemplatePicker({ inboxId, onSelect, onClose }: MetaTemplateP
             parameters: headerParams
           });
         }
-      } else if (header?.format === "IMAGE" || header?.format === "VIDEO" || header?.format === "DOCUMENT") {
-        // Para media, precisamos de um link. Por enquanto, se o usuário não puder subir, 
-        // vamos ao menos mandar um parâmetro vazio ou placeholder para não dar erro 500
-        // Idealmente deveríamos ter um input de URL ou upload aqui
+      } else if ((header?.format === "IMAGE" || header?.format === "VIDEO" || header?.format === "DOCUMENT") && variables["header_media_url"]) {
         components.push({
           type: "header",
           parameters: [{
             type: header.format.toLowerCase(),
-            [header.format.toLowerCase()]: { link: variables["header_media_url"] || "" }
+            [header.format.toLowerCase()]: { link: variables["header_media_url"] }
           }]
+        });
+      }
+
+      // Buttons Params
+      const buttonsComp = selectedTemplate.components.find(c => c.type === "BUTTONS");
+      if (buttonsComp && buttonsComp.buttons) {
+        buttonsComp.buttons.forEach((btn: any, index: number) => {
+          if (btn.type === "FLOW") {
+            components.push({
+              type: "button",
+              sub_type: "flow",
+              index: index.toString(),
+              parameters: [
+                {
+                  type: "action",
+                  action: {
+                    flow_token: variables[`button_${index}_flow_token`] || `token_${Date.now()}`
+                  }
+                }
+              ]
+            });
+          } else if (btn.type === "URL" && btn.url.includes("{{1}}")) {
+             components.push({
+               type: "button",
+               sub_type: "url",
+               index: index.toString(),
+               parameters: [
+                 {
+                   type: "text",
+                   text: variables[`button_${index}_url_1`] || ""
+                 }
+               ]
+             });
+          } else if (btn.type === "COPY_CODE") {
+             components.push({
+              type: "button",
+              sub_type: "copy_code",
+              index: index.toString(),
+              parameters: [
+                {
+                  type: "coupon_code",
+                  coupon_code: variables[`button_${index}_coupon`] || "PROMO10"
+                }
+              ]
+            });
+          }
         });
       }
 

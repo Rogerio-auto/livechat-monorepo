@@ -1692,6 +1692,7 @@ const scrollToBottom = useCallback(
     const normalized = {
       ...raw,
       chat_id: raw.chat_id ?? raw.chatId ?? null,
+      body: raw.body ?? raw.content ?? raw.text ?? null,
       sender_type: senderType,
       media_url: raw.media_url ?? raw.mediaUrl ?? null,
       media_public_url: raw.media_public_url ?? raw.mediaPublicUrl ?? null,

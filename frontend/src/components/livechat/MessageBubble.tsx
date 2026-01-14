@@ -353,10 +353,15 @@ export function MessageBubble({
   } else if (messageType === "TEMPLATE") {
     const template = m.interactive_content || (m as any).metadata; 
     const templateName = template?.template_name || template?.name || "";
-    const components = template?.components || [];
+    let components = template?.components || [];
+
+    // Se o template vier do backend como { template: { name, components } }
+    if (!components.length && template?.template?.components) {
+      components = template.template.components;
+    }
     
     // Tentar encontrar o texto do corpo no template
-    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY");
+    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY" || c.type === "body");
     const headerComponent = components.find((c: any) => c.type === "header" || c.type === "HEADER");
     const footerComponent = components.find((c: any) => c.type === "footer" || c.type === "FOOTER");
 
@@ -393,7 +398,12 @@ export function MessageBubble({
 
         {/* Render Body */}
         <div className="text-[13px] whitespace-pre-wrap wrap-break-word">
-          {bodyComponent?.text || (bodyComponent?.parameters && bodyComponent.parameters.map((p: any) => p.text).join(" ")) || textBody || `[Template: ${templateName}]`}
+          {bodyComponent?.text || 
+           (bodyComponent?.parameters && bodyComponent.parameters.some((p: any) => p.text) ? 
+             bodyComponent.parameters.filter((p: any) => p.text).map((p: any) => p.text).join(" ") : 
+             null) || 
+           textBody || 
+           `[Template: ${templateName}]`}
         </div>
 
         {/* Render Footer */}

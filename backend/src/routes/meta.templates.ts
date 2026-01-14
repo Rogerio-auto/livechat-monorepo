@@ -11,6 +11,7 @@ import {
   sendTemplateMessage,
   uploadMediaToMeta,
 } from "../services/meta/templates.service.js";
+import { ensureLeadCustomerChat, touchChatAfterMessage } from "../services/meta/store.service.js";
 import { sendInteractiveButtons } from "../services/meta/graph.service.js";
 
 async function resolveCompanyId(req: any) {
@@ -338,8 +339,8 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       let customerPhone = body.customerPhone;
       let chatId = body.chatId;
-      let inserted = null;
 
+      // 1. Garantir que temos chatId e CompanyId vinculados
       if (chatId) {
         const { data: chat } = await supabaseAdmin
           .from("chats")
@@ -356,6 +357,16 @@ export function registerMetaTemplatesRoutes(app: Application) {
         return res.status(400).json({ error: "customerPhone ou chatId válido é obrigatório" });
       }
 
+      // Se não temos chatId mas temos phone, garantimos a criação do chat
+      if (!chatId && customerPhone) {
+        const result = await ensureLeadCustomerChat({
+          inboxId: body.inboxId,
+          companyId,
+          phone: customerPhone
+        });
+        chatId = result.chatId;
+      }
+
       const result = await sendTemplateMessage({
         inboxId: body.inboxId,
         customerPhone,
@@ -364,7 +375,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
         components: body.components,
       });
 
-      // Se tiver chatId, salvar no banco e emitir socket
+      // Salvar no banco e emitir socket
       if (chatId) {
         const { data: chat } = await supabaseAdmin.from("chats").select("company_id").eq("id", chatId).single();
         
@@ -380,7 +391,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
             sender_type: "AGENT",
             sender_id: req.user?.id,
             view_status: "Sent",
-            metadata: {
+            interactive_content: {
               template_name: body.templateName,
               language_code: body.languageCode,
               components: body.components
@@ -389,10 +400,18 @@ export function registerMetaTemplatesRoutes(app: Application) {
           .select()
           .single();
 
-        inserted = insertedData;
+        let inserted = insertedData;
 
         if (inserted) {
           const senderName = (req as any).profile?.name || (req as any).user?.name || "Agente";
+
+          // Atualizar o chat no banco de dados (last_message, etc)
+          await touchChatAfterMessage({
+            chatId,
+            content: inserted.content || `Template: ${body.templateName}`,
+            lastMessageFrom: "AGENT",
+            lastMessageType: "TEMPLATE"
+          });
           
           await publish(EX_APP, "socket.livechat.outbound", {
             kind: "livechat.outbound.message",
@@ -407,20 +426,26 @@ export function registerMetaTemplatesRoutes(app: Application) {
               chatId,
               companyId: chat?.company_id || companyId,
               inboxId: body.inboxId,
-              last_message: inserted?.body || `Template: ${body.templateName}`,
+              last_message: inserted?.content || `Template: ${body.templateName}`,
               last_message_at: inserted?.created_at || new Date().toISOString(),
               last_message_from: "AGENT",
               last_message_type: "TEMPLATE"
             }
           });
         }
+
+        return res.json({ 
+          success: true, 
+          wamid: result.wamid,
+          message: "Template enviado com sucesso",
+          data: inserted
+        });
       }
 
       return res.json({ 
         success: true, 
         wamid: result.wamid,
-        message: "Template enviado com sucesso",
-        data: inserted
+        message: "Template enviado com sucesso (chat não localizado para registro local)",
       });
     } catch (error) {
       const { status, payload } = formatRouteError(error);

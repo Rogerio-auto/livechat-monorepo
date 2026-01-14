@@ -770,15 +770,6 @@ export async function getBoardIdForCompany(companyId: string): Promise<string> {
 
   throw new Error(`Nenhum Funil (Kanban Board) encontrado para a empresa ${companyId}. Crie um funil primeiro.`);
 }
-  const created = await db.one<{ id: string }>(
-    `insert into public.kanban_boards (company_id, name, is_default)
-     values ($1, $2, true)
-     returning id`,
-    [companyId, "WhatsApp Leads"],
-  );
-  await cacheWriteNullable(cacheKey, created.id, TTL_BOARD_LOOKUP);
-  return created.id;
-}
 
 export async function upsertLeadByPhone(args: {
   companyId: string;

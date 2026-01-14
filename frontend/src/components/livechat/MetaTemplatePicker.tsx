@@ -28,6 +28,10 @@ export function MetaTemplatePicker({ inboxId, onSelect, onClose }: MetaTemplateP
 
   useEffect(() => {
     async function fetchTemplates() {
+      if (!inboxId || inboxId === "null") {
+        setLoading(false);
+        return;
+      }
       try {
         const token = getAccessToken();
         const headers = new Headers();

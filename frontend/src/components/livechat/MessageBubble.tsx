@@ -482,14 +482,14 @@ export function MessageBubble({
           
           {body?.text && <div className="whitespace-pre-wrap wrap-break-word">{body.text}</div>}
           
-          {footer?.text && <div className="text-xs opacity-70 border-t border-white/10 pt-1 mt-1">{footer.text}</div>}
+          {footer?.text && <div className="text-xs opacity-70 border-t border-current/10 pt-1 mt-1">{footer.text}</div>}
 
           {(type === "button" || type === "buttons") && (action as Record<string, unknown>)?.buttons && (
              <div className="flex flex-col gap-2 mt-2">
                {((action as Record<string, unknown>).buttons as Array<Record<string, unknown>>).map((btn: Record<string, unknown>, idx: number) => (
                  <div 
                    key={idx} 
-                   className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-90"
+                   className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center"
                  >
                    {(btn.reply as any)?.title || (btn.text as string) || (btn.type as string)}
                  </div>
@@ -499,14 +499,14 @@ export function MessageBubble({
 
           {type === "list" && (action as Record<string, unknown>)?.sections && (
              <div className="flex flex-col gap-2 mt-2">
-               <div className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-80">
+               <div className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center">
                  {(action as Record<string, unknown>).button as string || "Ver opções"}
                </div>
                {((action as Record<string, unknown>).sections as Array<Record<string, unknown>>).map((section: Record<string, unknown>, sIdx: number) => (
                  <div key={sIdx} className="flex flex-col gap-1">
                    {!!section.title && <div className="text-xs font-bold opacity-70 mt-1 uppercase tracking-wider">{String(section.title)}</div>}
                    {(section.rows as Array<Record<string, unknown>>)?.map((row: Record<string, unknown>, rIdx: number) => (
-                     <div key={rIdx} className="py-1.5 px-2 border-l-2 border-white/20 pl-2 text-sm hover:bg-white/5 rounded-r">
+                     <div key={rIdx} className="py-1.5 px-2 border-l-2 border-current/20 pl-2 text-sm hover:bg-current/5 rounded-r">
                        <div className="font-medium">{String(row.title)}</div>
                        {!!row.description && <div className="text-xs opacity-70">{String(row.description)}</div>}
                      </div>
@@ -517,14 +517,14 @@ export function MessageBubble({
           )}
 
           {type === "button_reply" && (
-            <div className="flex items-center gap-2 py-1 px-2 bg-white/10 rounded border-l-4 border-white/30">
+            <div className="flex items-center gap-2 py-1 px-2 bg-current/10 rounded border-l-4 border-current/30">
               <FiCheck className="w-4 h-4 opacity-70" />
               <span className="font-medium">{interactive.button_reply?.title || "Opção selecionada"}</span>
             </div>
           )}
 
           {type === "list_reply" && (
-            <div className="flex flex-col gap-1 py-1 px-2 bg-white/10 rounded border-l-4 border-white/30">
+            <div className="flex flex-col gap-1 py-1 px-2 bg-current/10 rounded border-l-4 border-current/30">
               <div className="flex items-center gap-2">
                 <FiCheck className="w-4 h-4 opacity-70" />
                 <span className="font-medium">{interactive.list_reply?.title || "Opção selecionada"}</span>
@@ -537,7 +537,7 @@ export function MessageBubble({
 
           {type === "flow" && (
             <div className="flex flex-col gap-2 mt-2">
-              <div className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center border border-white/20">
+              <div className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center border border-current/20">
                 <FiLayers className="inline mr-2" />
                 {(action as Record<string, any>)?.parameters?.flow_cta || "Abrir Formulário"}
               </div>
@@ -547,7 +547,7 @@ export function MessageBubble({
 
           {type === "nfm_reply" && (
             <div className="flex flex-col gap-2 mt-2 min-w-[200px]">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-white/50 border-b border-white/10 pb-1.5">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold opacity-50 border-b border-current/10 pb-1.5">
                 <FiFileText className="w-3 h-3" /> Resposta do Formulário
               </div>
               <div className="flex flex-col gap-1.5 py-1">
@@ -556,11 +556,11 @@ export function MessageBubble({
                     const resp = interactive.nfm_reply?.response_json;
                     const data = typeof resp === "string" ? JSON.parse(resp) : resp;
                     if (!data || typeof data !== "object") return <span className="text-xs italic opacity-70">Sem dados</span>;
-                    
+
                     return Object.entries(data).map(([key, value]) => (
-                      <div key={key} className="flex flex-col gap-0.5 bg-black/10 rounded px-2 py-1.5 border border-white/5">
-                        <span className="text-[10px] font-bold text-white/40 uppercase leading-none">{key.replace(/_/g, ' ')}</span>
-                        <span className="text-sm font-medium text-white/90">{String(value)}</span>
+                      <div key={key} className="flex flex-col gap-0.5 bg-current/5 rounded px-2 py-1.5 border border-current/5">
+                        <span className="text-[10px] font-bold opacity-50 uppercase leading-none">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-sm font-medium">{String(value)}</span>
                       </div>
                     ));
                   } catch (e) {

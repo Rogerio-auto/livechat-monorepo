@@ -11,6 +11,11 @@ export function registerMetaFlowsRoutes(app: Application) {
    */
   app.get("/api/meta/flows/:inboxId", requireAuth, async (req, res) => {
     const { inboxId } = req.params;
+
+    if (!inboxId || inboxId === "null" || inboxId === "undefined") {
+      return res.status(400).json({ error: "inboxId inválido" });
+    }
+
     try {
       const flows = await listMetaFlows(inboxId);
       return res.json(flows);

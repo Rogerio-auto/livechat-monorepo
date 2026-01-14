@@ -179,6 +179,10 @@ export function registerMetaTemplatesRoutes(app: Application) {
       const companyId = await resolveCompanyId(req);
       const inboxId = req.params.inboxId;
 
+      if (!inboxId || inboxId === "null" || inboxId === "undefined") {
+        return res.status(400).json({ error: "inboxId inválido" });
+      }
+
       // Valida inbox
       const { data: inbox, error: inboxErr } = await supabaseAdmin
         .from("inboxes")

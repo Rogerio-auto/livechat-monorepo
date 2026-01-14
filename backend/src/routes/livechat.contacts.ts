@@ -5,6 +5,8 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
 import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.js";
 import { NotificationService } from "../services/notification.service.js";
+import { getBoardIdForCompany, ensureLeadCustomerChat } from "../services/meta/store.service.js";
+import { QueueController } from "../controllers/queue.controller.js";
 
 export function registerLivechatContactsRoutes(app: express.Application) {
   // List contacts of current user's company
@@ -276,6 +278,37 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
          .single();
        if (error) throw error;
 
+       const customerId = (data as any).id;
+
+       // 💡 Criar Lead vinculado (Essencial para o funcionamento do sistema conforme feedback)
+       let leadId = null;
+       try {
+         const boardId = await getBoardIdForCompany((urow as any).company_id);
+         const { data: leadData } = await supabaseAdmin
+           .from("leads")
+           .insert([{
+             company_id: (urow as any).company_id,
+             customer_id: customerId,
+             name: body.name,
+             phone: body.phone ?? null,
+             email: body.email ?? null,
+             kanban_board_id: boardId,
+             statusClient: "Ativo"
+           }])
+           .select("id")
+           .single();
+         leadId = (leadData as any)?.id;
+
+         if (leadId) {
+           await supabaseAdmin
+             .from("customers")
+             .update({ lead_id: leadId })
+             .eq("id", customerId);
+         }
+       } catch (leadErr: any) {
+         logger.warn("[contacts:create] lead creation failed", { error: leadErr.message });
+       }
+
        // 🔔 Notificar novo cliente cadastrado
        try {
          await NotificationService.create({
@@ -284,15 +317,16 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
            type: "NEW_CUSTOMER",
            userId: authUserId,
            companyId: (urow as any).company_id,
-           data: { contactId: (data as any).id },
-           actionUrl: `/livechat/contacts/${(data as any).id}`,
+           data: { contactId: customerId, leadId },
+           actionUrl: `/livechat/contacts/${customerId}`,
          });
        } catch (notifErr) {
          logger.warn("[contacts:create] notification failed", { error: (notifErr as any).message });
        }
 
-       return res.status(201).json({ id: (data as any).id });
-     } catch (e) {
+       return res.status(201).json({ id: customerId, lead_id: leadId });
+     } catch (e: any) {
+       logger.error("[contacts:create] primary insert failed, trying legacy", { error: e.message });
        // fallback legacy table with column mapping
        const legacy = {
          company_id: (urow as any).company_id,
@@ -315,6 +349,37 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
            .single();
          if (error) throw error;
 
+         const customerIdLegacy = (data as any).id;
+
+         // 💡 Criar Lead vinculado (Legacy path)
+         let leadIdLegacy = null;
+         try {
+           const boardId = await getBoardIdForCompany((urow as any).company_id);
+           const { data: leadData } = await supabaseAdmin
+             .from("leads")
+             .insert([{
+               company_id: (urow as any).company_id,
+               customer_id: customerIdLegacy,
+               name: body.name,
+               phone: body.phone ?? null,
+               email: body.email ?? null,
+               kanban_board_id: boardId,
+               statusClient: "Ativo"
+             }])
+             .select("id")
+             .single();
+           leadIdLegacy = (leadData as any)?.id;
+
+           if (leadIdLegacy) {
+             await supabaseAdmin
+               .from("customers")
+               .update({ lead_id: leadIdLegacy })
+               .eq("id", customerIdLegacy);
+           }
+         } catch (leadErr: any) {
+           logger.warn("[contacts:create:legacy] lead creation failed", { error: leadErr.message });
+         }
+
          // 🔔 Notificar novo cliente cadastrado (legacy)
          try {
            await NotificationService.create({
@@ -323,14 +388,14 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
              type: "NEW_CUSTOMER",
              userId: authUserId,
              companyId: (urow as any).company_id,
-             data: { contactId: (data as any).id },
-             actionUrl: `/livechat/contacts/${(data as any).id}`,
+             data: { contactId: customerIdLegacy, leadId: leadIdLegacy },
+             actionUrl: `/livechat/contacts/${customerIdLegacy}`,
            });
          } catch (notifErr) {
            logger.warn("[contacts:create:legacy] notification failed", { error: (notifErr as any).message });
          }
 
-         return res.status(201).json({ id: (data as any).id });
+         return res.status(201).json({ id: customerIdLegacy, lead_id: leadIdLegacy });
        } catch (err: any) {
          logger.error("[contacts:create] fatal", { error: err.message });
          next(err);
@@ -398,6 +463,53 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
      return res.json({ id: (dataLegacy as any)?.id ?? id });
    } catch (e: any) {
      logger.error("[contacts:update] fatal", { error: e.message, id });
+     next(e);
+   }
+ });
+
+ // ===== Start Chat from Contact =====
+ // Esta rota é chamada pelo CRM para iniciar uma conversa ativa de forma síncrona
+ app.post("/livechat/contacts/:id/start-chat", requireAuth, async (req: any, res, next) => {
+   const { id } = req.params;
+   const { inboxId } = req.body;
+   const companyId = req.user?.company_id;
+
+   if (!inboxId || inboxId === "null") {
+     return res.status(400).json({ error: "inboxId é obrigatório e deve ser válido" });
+   }
+
+   try {
+     // 1. Localizar o contato
+     const { data: contactData, error: contactError } = await supabaseAdmin
+       .from("customers")
+       .select("id, phone, name, lead_id")
+       .eq("id", id)
+       .eq("company_id", companyId)
+       .maybeSingle();
+
+     if (contactError) throw contactError;
+     if (!contactData) return res.status(404).json({ error: "Contato não encontrado" });
+     if (!contactData.phone) return res.status(400).json({ error: "Contato não possui telefone cadastrado" });
+
+     // 2. Usar o serviço robusto para garantir que tudo (Chat, Lead, Customer) está sincronizado
+     // O ensureLeadCustomerChat já lida com a criação de lead se não existir
+     const result = await ensureLeadCustomerChat({
+       inboxId,
+       companyId,
+       phone: contactData.phone,
+       name: contactData.name,
+     });
+
+     // Se o contactData.lead_id estiver vazio, aproveitamos para atualizar agora
+     if (!contactData.lead_id && result.leadId) {
+        await supabaseAdmin.from("customers").update({ lead_id: result.leadId }).eq("id", id);
+     }
+
+     // 3. Retornar o ID do chat para o frontend redirecionar imediatamente
+     return res.json({ id: result.chatId });
+
+   } catch (e: any) {
+     logger.error("[contacts:start-chat] fatal", { error: e.message, id });
      next(e);
    }
  });

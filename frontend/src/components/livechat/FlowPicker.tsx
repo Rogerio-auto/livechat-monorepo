@@ -29,6 +29,10 @@ export function FlowPicker({ inboxId, onSelect, onClose }: FlowPickerProps) {
 
   useEffect(() => {
     async function fetchFlows() {
+      if (!inboxId || inboxId === "null") {
+        setLoading(false);
+        return;
+      }
       try {
         const token = getAccessToken();
         const headers = new Headers();

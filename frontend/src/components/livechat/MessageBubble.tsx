@@ -25,6 +25,7 @@ type MessageBubbleProps = {
   onDelete?: (message: Message) => void;
   allMessages?: Message[]; // Para buscar mensagem citada
   customerName?: string | null; // Nome do contato/cliente do chat
+  onSend?: (text: string) => void; // Para cliques em botões interativos
 };
 
 export function MessageBubble({
@@ -39,6 +40,7 @@ export function MessageBubble({
   onDelete,
   allMessages = [],
   customerName = null,
+  onSend,
 }: MessageBubbleProps) {
   const deliveryStatusSource =
     typeof m.delivery_status === "string" && m.delivery_status
@@ -361,9 +363,22 @@ export function MessageBubble({
     }
     
     // Tentar encontrar o texto do corpo no template
-    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY" || c.type === "body");
+    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY" || (c.type === "button" && c.sub_type === "url"));
     const headerComponent = components.find((c: any) => c.type === "header" || c.type === "HEADER");
     const footerComponent = components.find((c: any) => c.type === "footer" || c.type === "FOOTER");
+
+    const renderTemplateText = (comp: any, fallback: string) => {
+      let t = comp?.text || fallback;
+      if (!t) return "";
+      if (comp?.parameters && Array.isArray(comp.parameters)) {
+        comp.parameters.forEach((p: any, i: number) => {
+          const placeholder = `{{${i + 1}}}`;
+          const val = p.text || p.date_time?.fallback_value || p.currency?.fallback_value || "";
+          t = t.replace(placeholder, val);
+        });
+      }
+      return t;
+    };
 
     bubbleContent = (
       <div className="flex flex-col gap-2 min-w-[200px]">
@@ -392,18 +407,13 @@ export function MessageBubble({
            </div>
         ) : headerComponent?.text || headerComponent?.parameters?.[0]?.text ? (
            <div className="font-bold text-sm mb-1">
-             {headerComponent.text || headerComponent.parameters[0].text}
+             {renderTemplateText(headerComponent, "")}
            </div>
         ) : null}
 
         {/* Render Body */}
         <div className="text-[13px] whitespace-pre-wrap wrap-break-word">
-          {bodyComponent?.text || 
-           (bodyComponent?.parameters && bodyComponent.parameters.some((p: any) => p.text) ? 
-             bodyComponent.parameters.filter((p: any) => p.text).map((p: any) => p.text).join(" ") : 
-             null) || 
-           textBody || 
-           `[Template: ${templateName}]`}
+          {renderTemplateText(bodyComponent, textBody || `[Template: ${templateName}]`)}
         </div>
 
         {/* Render Footer */}
@@ -421,10 +431,17 @@ export function MessageBubble({
               .flatMap((c: any) => c.buttons || c.parameters || [])
               .map((btn: any, idx: number) => {
                 const label = btn.text || btn.reply?.title || btn.parameters?.[0]?.text || "Botão";
+                const isQuickReply = btn.type === "quick_reply" || btn.sub_type === "quick_reply" || btn.reply;
+                
                 return (
-                  <div key={idx} className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center border border-current/10">
+                  <button 
+                    key={idx} 
+                    disabled={!onSend || isAgent}
+                    onClick={() => onSend && onSend(label)}
+                    className={`w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center border border-current/10 transition-colors ${onSend && !isAgent ? 'hover:bg-current/20' : 'cursor-default'}`}
+                  >
                     {label}
-                  </div>
+                  </button>
                 );
               })}
           </div>
@@ -516,12 +533,14 @@ export function MessageBubble({
           {(type === "button" || type === "buttons") && (action as Record<string, unknown>)?.buttons && (
              <div className="flex flex-col gap-2 mt-2">
                {((action as Record<string, unknown>).buttons as Array<Record<string, unknown>>).map((btn: Record<string, unknown>, idx: number) => (
-                 <div 
+                 <button 
                    key={idx} 
-                   className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center"
+                   disabled={!onSend || isAgent}
+                   onClick={() => onSend && onSend((btn.reply as any)?.title || (btn.text as string) || "Opção")}
+                   className={`w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center border border-current/10 transition-colors ${onSend && !isAgent ? 'hover:bg-current/20' : 'cursor-default'}`}
                  >
                    {(btn.reply as any)?.title || (btn.text as string) || (btn.type as string)}
-                 </div>
+                 </button>
                ))}
              </div>
           )}

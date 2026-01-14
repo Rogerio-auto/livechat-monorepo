@@ -277,6 +277,28 @@ export default function LiveChatPage() {
   // Private mode toggle state
   const [isPrivateMode, setIsPrivateMode] = useState(false);
   const [mentions, setMentions] = useState<string[]>([]);
+
+  const lastCustomerMessage = useMemo(() => {
+    return [...messages].reverse().find(m => m.sender_type === "CUSTOMER");
+  }, [messages]);
+
+  const isMetaChat = useMemo(() => {
+    if (!currentChat) return false;
+    const inbox = inboxes.find(ib => ib.id === currentChat.inbox_id);
+    return inbox?.provider === "META_CLOUD" || inbox?.provider === "WHATSAPP";
+  }, [currentChat, inboxes]);
+
+  const isWindowOpen = useMemo(() => {
+    if (!isMetaChat) return true;
+    if (!lastCustomerMessage) return false;
+    
+    const lastDate = new Date(lastCustomerMessage.created_at);
+    const now = new Date();
+    const diffMs = now.getTime() - lastDate.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    
+    return diffHours < 24;
+  }, [lastCustomerMessage, isMetaChat]);
   const [companyUsers, setCompanyUsers] = useState<Array<{ id: string; name: string; email?: string; avatar?: string }>>([]);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [chatTags, setChatTags] = useState<string[]>([]);
@@ -4446,6 +4468,9 @@ const scrollToBottom = useCallback(
                         onReply={() => setReplyingTo(m)}
                         onEdit={handleEditMessage}
                         onDelete={handleDeleteMessage}
+                        onSend={(val) => {
+                          if (currentChat) sendMessageToChat(currentChat, val);
+                        }}
                         allMessages={messages}
                         customerName={currentChat?.customer_name || currentChat?.display_name || null}
                       />
@@ -4562,6 +4587,27 @@ const scrollToBottom = useCallback(
                   </div>
                 )}
 
+                {/* 24h Window Warning for Meta */}
+                {isMetaChat && !isWindowOpen && !isPrivateMode && (
+                  <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <FiAlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                        Janela de 24h fechada
+                      </p>
+                      <p className="text-xs text-amber-700/80 dark:text-amber-300/60 mt-0.5">
+                        O cliente não entra em contato há mais de 24 horas. Para reativar a conversa no WhatsApp, você deve enviar um <strong>Template</strong> pré-aprovado.
+                      </p>
+                      <button 
+                        onClick={() => setShowTemplatePicker(true)}
+                        className="mt-2 text-xs font-bold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
+                      >
+                        <FiFileText className="w-3 h-3" /> Abrir Templates
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2">
                   <button
                     onClick={() => setIsPrivateMode(!isPrivateMode)}
@@ -4611,8 +4657,18 @@ const scrollToBottom = useCallback(
                     />
                   ) : (
                     <input
-                      className={`flex-1 rounded-xl px-3 py-2 text-sm bg-(--color-surface-muted) border border-(--color-border) text-(--color-text) placeholder-(--color-text-muted) focus:outline-none focus:border-(--color-primary)`}
-                      placeholder={isRecording ? "Gravando áudio..." : "Digite sua mensagem..."}
+                      className={`flex-1 rounded-xl px-3 py-2 text-sm ${
+                        isMetaChat && !isWindowOpen
+                          ? "bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-60"
+                          : "bg-(--color-surface-muted) border border-(--color-border) text-(--color-text)"
+                      } placeholder-(--color-text-muted) focus:outline-none focus:border-(--color-primary)`}
+                      placeholder={
+                        isRecording 
+                          ? "Gravando áudio..." 
+                          : (isMetaChat && !isWindowOpen) 
+                            ? "Janela fechada - use templates" 
+                            : "Digite sua mensagem..."
+                      }
                       value={text}
                       onChange={handleTextChange}
                       onKeyDown={(e) => {
@@ -4621,7 +4677,7 @@ const scrollToBottom = useCallback(
                           send();
                         }
                       }}
-                      disabled={isRecording}
+                      disabled={isRecording || (isMetaChat && !isWindowOpen)}
                     />
                   )}
                   

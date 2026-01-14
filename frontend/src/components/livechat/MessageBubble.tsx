@@ -351,46 +351,78 @@ export function MessageBubble({
       </div>
     );
   } else if (messageType === "TEMPLATE") {
-    const template = m.interactive_content; // We store template data here too
+    const template = m.interactive_content || (m as any).metadata; 
+    const templateName = template?.template_name || template?.name || "";
+    const components = template?.components || [];
+    
+    // Tentar encontrar o texto do corpo no template
+    const bodyComponent = components.find((c: any) => c.type === "body" || c.type === "BODY");
+    const headerComponent = components.find((c: any) => c.type === "header" || c.type === "HEADER");
+    const footerComponent = components.find((c: any) => c.type === "footer" || c.type === "FOOTER");
+
     bubbleContent = (
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-1 text-xs text-purple-400 mb-1">
-          <FiLayers className="w-3.5 h-3.5" /> Template
+      <div className="flex flex-col gap-2 min-w-[200px]">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold opacity-50 border-b border-current/10 pb-1.5 mb-1">
+          <FiFileText className="w-3.5 h-3.5" />
+          WhatsApp Template
         </div>
         
-        {/* Render Media if present (handled by worker-media) */}
-        {mediaUrl && (
+        {/* Render Header */}
+        {headerComponent?.format === "IMAGE" || headerComponent?.parameters?.[0]?.type === "image" ? (
            <div className="mb-2">
-             {m.media_mime?.startsWith("image") || mediaUrl.match(/\.(jpeg|jpg|gif|png)$/i) ? (
-               <img src={mediaUrl} alt="Template Media" className="rounded-lg max-h-48 object-cover w-full cursor-pointer" onClick={openLightbox} />
-             ) : m.media_mime?.startsWith("video") || mediaUrl.match(/\.(mp4|mov)$/i) ? (
-               <video src={mediaUrl} controls className="rounded-lg max-h-48 w-full" />
-             ) : (
-               <a href={mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline opacity-90">Ver mídia anexa</a>
-             )}
+              <img 
+                src={headerComponent.parameters?.[0]?.image?.link || mediaUrl} 
+                alt="Template Header" 
+                className="rounded-lg max-h-48 object-cover w-full cursor-pointer" 
+                onClick={openLightbox} 
+              />
            </div>
+        ) : headerComponent?.format === "VIDEO" || headerComponent?.parameters?.[0]?.type === "video" ? (
+           <div className="mb-2">
+              <video 
+                src={headerComponent.parameters?.[0]?.video?.link || mediaUrl} 
+                controls 
+                className="rounded-lg max-h-48 w-full" 
+              />
+           </div>
+        ) : headerComponent?.text || headerComponent?.parameters?.[0]?.text ? (
+           <div className="font-bold text-sm mb-1">
+             {headerComponent.text || headerComponent.parameters[0].text}
+           </div>
+        ) : null}
+
+        {/* Render Body */}
+        <div className="text-[13px] whitespace-pre-wrap wrap-break-word">
+          {bodyComponent?.text || (bodyComponent?.parameters && bodyComponent.parameters.map((p: any) => p.text).join(" ")) || textBody || `[Template: ${templateName}]`}
+        </div>
+
+        {/* Render Footer */}
+        {footerComponent?.text && (
+          <div className="text-[11px] opacity-60 mt-1 border-t border-current/10 pt-1">
+            {footerComponent.text}
+          </div>
         )}
 
-        {template?.name ? (
-           <div className="text-sm">
-             <span className="opacity-70">Nome:</span> <span className="font-medium">{template.name}</span>
-             {template.language?.code && <span className="ml-2 opacity-60 text-xs">({template.language.code})</span>}
-           </div>
-        ) : (
-           <div>{textBody || "[Template]"}</div>
+        {/* Render Buttons */}
+        {components.some((c: any) => c.type === "buttons" || c.type === "BUTTONS" || c.type === "button") && (
+          <div className="flex flex-col gap-2 mt-2 pt-2 border-t border-current/10">
+            {components
+              .filter((c: any) => c.type === "buttons" || c.type === "BUTTONS" || c.type === "button")
+              .flatMap((c: any) => c.buttons || c.parameters || [])
+              .map((btn: any, idx: number) => {
+                const label = btn.text || btn.reply?.title || btn.parameters?.[0]?.text || "Botão";
+                return (
+                  <div key={idx} className="w-full py-2 px-3 bg-current/10 rounded text-sm font-medium text-center border border-current/10">
+                    {label}
+                  </div>
+                );
+              })}
+          </div>
         )}
 
-        {/* Render Buttons if present in template components */}
-        {template?.components && Array.isArray(template.components) && (
-          <div className="flex flex-col gap-2 mt-2 border-t border-white/10 pt-2">
-            {template.components
-              .filter((c: Record<string, unknown>) => c.type === "BUTTONS" || c.type === "buttons")
-              .flatMap((c: Record<string, unknown>) => (c.buttons as Array<Record<string, unknown>>) || [])
-              .map((btn: Record<string, unknown>, idx: number) => (
-                <div key={idx} className="w-full py-2 px-3 bg-white/10 rounded text-sm font-medium text-center opacity-90">
-                  {(btn.text as string) || (btn.reply as any)?.title || "Botão"}
-                </div>
-              ))}
+        {templateName && !bodyComponent?.text && (
+          <div className="text-[10px] opacity-30 mt-1 text-right italic">
+            ID: {templateName}
           </div>
         )}
       </div>
@@ -424,31 +456,18 @@ export function MessageBubble({
     const poll = m.interactive_content;
     bubbleContent = (
       <div className="flex flex-col gap-2 min-w-[200px]">
-        <div className="flex items-center gap-1 text-xs text-purple-400 mb-1">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold opacity-50 border-b border-current/10 pb-1.5">
           <FiCheck className="w-3.5 h-3.5" /> Enquete
         </div>
         <div className="font-medium">{poll?.name || textBody || "Enquete"}</div>
         {poll?.options && Array.isArray(poll.options) && (
           <div className="flex flex-col gap-1 mt-1">
             {poll.options.map((opt: Record<string, unknown>, idx: number) => (
-              <div key={idx} className="py-1.5 px-3 bg-white/10 rounded text-sm border border-white/5">
+              <div key={idx} className="py-1.5 px-3 bg-current/10 rounded text-sm border border-current/10">
                 {(opt.option_name as string) || (opt.text as string) || `Opção ${idx + 1}`}
               </div>
             ))}
           </div>
-        )}
-      </div>
-    );
-  } else if (messageType === "TEMPLATE") {
-    bubbleContent = (
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold text-(--color-primary) opacity-90 uppercase border-b border-white/10 pb-1 mb-1">
-          <FiFileText className="w-3.5 h-3.5" />
-          WhatsApp Template
-        </div>
-        <div className="italic opacity-90">{textBody}</div>
-        {m.metadata?.template_name && (
-          <div className="text-[10px] opacity-50 mt-1">Nome: {m.metadata.template_name}</div>
         )}
       </div>
     );

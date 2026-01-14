@@ -759,6 +759,17 @@ export async function getBoardIdForCompany(companyId: string): Promise<string> {
     return row.id;
   }
 
+  // Fallback: search for ANY board for this company
+  const anyBoard = await db.oneOrNone<{ id: string }>(
+    `select id from public.kanban_boards where company_id = $1 limit 1`,
+    [companyId]
+  );
+  if (anyBoard?.id) {
+    return anyBoard.id;
+  }
+
+  throw new Error(`Nenhum Funil (Kanban Board) encontrado para a empresa ${companyId}. Crie um funil primeiro.`);
+}
   const created = await db.one<{ id: string }>(
     `insert into public.kanban_boards (company_id, name, is_default)
      values ($1, $2, true)

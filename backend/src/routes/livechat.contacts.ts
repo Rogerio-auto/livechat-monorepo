@@ -270,6 +270,12 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        website: body.website ?? null,
        notes: body.notes ?? null,
      } as any;
+
+     // Validação extra antes de tentar inserir
+     if (!payload.name) {
+        return res.status(400).json({ error: "Nome é obrigatório" });
+     }
+
      try {
        const { data, error } = await supabaseAdmin
          .from("customers")
@@ -284,7 +290,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
        let leadId = null;
        try {
          const boardId = await getBoardIdForCompany((urow as any).company_id);
-         const { data: leadData } = await supabaseAdmin
+         const { data: leadData, error: leadErrIn } = await supabaseAdmin
            .from("leads")
            .insert([{
              company_id: (urow as any).company_id,
@@ -297,6 +303,8 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
            }])
            .select("id")
            .single();
+
+         if (leadErrIn) throw leadErrIn;
          leadId = (leadData as any)?.id;
 
          if (leadId) {
@@ -307,6 +315,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
          }
        } catch (leadErr: any) {
          logger.warn("[contacts:create] lead creation failed", { error: leadErr.message });
+         // Não travamos a criação do cliente se o lead falhar, mas logamos
        }
 
        // 🔔 Notificar novo cliente cadastrado
@@ -355,7 +364,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
          let leadIdLegacy = null;
          try {
            const boardId = await getBoardIdForCompany((urow as any).company_id);
-           const { data: leadData } = await supabaseAdmin
+           const { data: leadData, error: leadErrIn } = await supabaseAdmin
              .from("leads")
              .insert([{
                company_id: (urow as any).company_id,
@@ -368,6 +377,8 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
              }])
              .select("id")
              .single();
+           
+           if (leadErrIn) throw leadErrIn;
            leadIdLegacy = (leadData as any)?.id;
 
            if (leadIdLegacy) {
@@ -468,10 +479,11 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
  });
 
  // ===== Start Chat from Contact =====
- // Esta rota é chamada pelo CRM para iniciar uma conversa ativa de forma síncrona
- app.post("/livechat/contacts/:id/start-chat", requireAuth, async (req: any, res, next) => {
+ // Esta rota é chamada pelo CRM para iniciar uma conversa ativa
+ // Suporta tanto POST (com body {inboxId}) quanto GET (com query ?inboxId=)
+ const startChatHandler = async (req: any, res: express.Response, next: express.NextFunction) => {
    const { id } = req.params;
-   const { inboxId } = req.body;
+   const inboxId = req.body?.inboxId || req.query?.inboxId;
    const companyId = req.user?.company_id;
 
    if (!inboxId || inboxId === "null") {
@@ -505,12 +517,28 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
         await supabaseAdmin.from("customers").update({ lead_id: result.leadId }).eq("id", id);
      }
 
-     // 3. Retornar o ID do chat para o frontend redirecionar imediatamente
+     // 3. 🚀 Vincular ao QueueController: Publicar na fila para processamento assíncrono (se necessário)
+     try {
+       const { EX_APP, publish } = await import("../queue/rabbit.js");
+       await publish(EX_APP, "outbound.request", {
+         leadId: result.leadId,
+         inboxId,
+         jobType: "livechat.startChat",
+         attempt: 0,
+       });
+     } catch (qErr: any) {
+       logger.warn("[contacts:start-chat] queue publish ignored", { error: qErr.message });
+     }
+
+     // 4. Retornar o ID do chat para o frontend redirecionar imediatamente
      return res.json({ id: result.chatId });
 
    } catch (e: any) {
      logger.error("[contacts:start-chat] fatal", { error: e.message, id });
      next(e);
    }
- });
+ };
+
+ app.post("/livechat/contacts/:id/start-chat", requireAuth, startChatHandler);
+ app.get("/livechat/contacts/:id/start-chat", requireAuth, startChatHandler);
 }

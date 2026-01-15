@@ -3563,6 +3563,7 @@ const scrollToBottom = useCallback(
       id: draftId,
       chat_id: currentChat.id,
       body: bodyText,
+      content: bodyText, // Add content for Message compatibility
       sender_type: "AGENT",
       sender_id: currentUser?.id || null,
       sender_name: currentUser?.name || null,

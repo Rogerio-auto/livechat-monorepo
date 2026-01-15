@@ -820,9 +820,9 @@ export const MetaFlowNode = memo(({ data, selected }: NodeProps) => {
 
   // We need to know which inbox to use to fetch flows.
   const activeTriggerNode = nodes.find(n => n.type === 'trigger');
-  const triggerInboxId = activeTriggerNode?.data?.trigger_config?.inbox_id;
+  const triggerInboxId = (activeTriggerNode?.data as any)?.trigger_config?.inbox_id;
   
-  const activeInbox = triggerInboxId || nodeData.activeInboxId;
+  const activeInbox = triggerInboxId || nodeData.activeInbox;
   const activeInboxObj = (nodeData.inboxes || []).find((i: any) => String(i.id) === String(activeInbox));
 
   useEffect(() => {

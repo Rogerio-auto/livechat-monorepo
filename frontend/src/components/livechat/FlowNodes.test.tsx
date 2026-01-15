@@ -59,6 +59,9 @@ describe('MetaFlowNode Component', () => {
           dragging={false} 
           positionAbsoluteX={0} 
           positionAbsoluteY={0}
+          draggable={true}
+          selectable={true}
+          deletable={true}
         />
       </ReactFlowProvider>
     );

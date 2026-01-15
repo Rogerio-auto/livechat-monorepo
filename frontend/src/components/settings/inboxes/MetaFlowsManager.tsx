@@ -88,7 +88,7 @@ export default function MetaFlowsManager({ inboxId, apiBase = API }: MetaFlowsMa
         <div className="text-center py-8 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-xl">
           <FiFileText className="text-gray-200 mx-auto mb-2" size={32} />
           <p className="text-xs text-gray-500">Nenhum formulário sincronizado para esta Inbox.</p>
-          <Button variant="link" size="sm" onClick={handleSync} className="mt-2">
+          <Button variant="ghost" size="sm" onClick={handleSync} className="mt-2 underline text-primary">
             Sincronizar agora
           </Button>
         </div>

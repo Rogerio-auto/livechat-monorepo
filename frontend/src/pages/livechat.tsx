@@ -455,7 +455,6 @@ export default function LiveChatPage() {
     base.group_name = base.group_name ?? null;
     base.group_avatar_url = base.group_avatar_url || null;
     base.customer_avatar_url = base.customer_avatar_url || null;
-    base.photo_url = (base as any).photo_url || null;
     base.customer_name = base.customer_name ?? (base as any)?.name ?? null;
     base.customer_phone = base.customer_phone ?? (base as any)?.phone ?? (base as any)?.cellphone ?? (base as any)?.celular ?? null;
 
@@ -480,6 +479,24 @@ export default function LiveChatPage() {
     }
     if (!finalIsGroup && chatTypeSuggestsGroup) {
       base.kind = "GROUP";
+    }
+
+    // RESOLVER FOTO (Prioridade: photo_url vindo da API -> field específico do tipo -> null)
+    base.photo_url = (base as any).photo_url || (finalIsGroup ? base.group_avatar_url : base.customer_avatar_url) || null;
+    
+    // Normalizar URLs do Proxy se forem relativas (independente do campo)
+    const normalizeProxy = (url: string | null | undefined) => {
+      if (url && url.startsWith("/")) return `${API}${url}`;
+      return url || null;
+    };
+
+    base.photo_url = normalizeProxy(base.photo_url);
+    base.group_avatar_url = normalizeProxy(base.group_avatar_url);
+    base.customer_avatar_url = normalizeProxy(base.customer_avatar_url);
+
+    // Debug de avatar
+    if (base.photo_url) {
+      console.debug(`[UI][normalizeChat] Chat ${base.id} has photo:`, base.photo_url.substring(0, 50) + "...");
     }
 
     const formattedPhone = finalIsGroup ? null : formatPhoneDisplay(base.display_phone ?? base.customer_phone ?? cleanedRemote);
@@ -729,9 +746,10 @@ export default function LiveChatPage() {
         : isGroup
           ? chat.group_name || sanitizeRemoteIdentifier(chat.display_remote_id || chat.remote_id || chat.external_id) || chat.id
           : chat.customer_name || chat.display_phone || sanitizeRemoteIdentifier(chat.display_remote_id || chat.remote_id || chat.external_id) || chat.id;
+      
       const photoUrl = isGroup
-        ? chat.group_avatar_url || (chat as any)?.photo_url || null
-        : chat.customer_avatar_url || (chat as any)?.customer_photo_url || (chat as any)?.photo_url || null;
+        ? chat.group_avatar_url || (chat as any)?.photo_url || (chat as any)?.avatar || null
+        : chat.customer_avatar_url || (chat as any)?.customer_photo_url || (chat as any)?.photo_url || (chat as any)?.avatar || null;
 
       return {
         ...(chat as ChatListItem),
@@ -3497,8 +3515,16 @@ const scrollToBottom = useCallback(
       if (inserted) {
         appendMessageToCache({
           ...inserted,
-          body: inserted.body || inserted.content,
           sender_name: currentUser?.name || "Você"
+        });
+
+        // Update chat list
+        bumpChatToTop({
+          chatId: currentChat.id,
+          last_message: inserted.content || "Flow Meta",
+          last_message_at: inserted.created_at || new Date().toISOString(),
+          last_message_from: "AGENT",
+          last_message_type: "flow"
         });
       }
       
@@ -3511,6 +3537,52 @@ const scrollToBottom = useCallback(
 
   const handleSendMetaTemplate = useCallback(async (template: any, components: any[] = []) => {
     if (!currentChat) return;
+
+    // Optimistic Update
+    const draftId = generateDraftId();
+    const createdAt = new Date().toISOString();
+    
+    // Tentar pré-renderizar o corpo para o draft
+    let bodyText = `[Template: ${template.name}]`;
+    const bodyComp = template.components?.find((c: any) => c.type === "BODY" || c.type === "body");
+    if (bodyComp?.text) {
+      bodyText = bodyComp.text;
+      // Simples substituição para o draft
+      components.forEach((c) => {
+        if (c.type?.toLowerCase() === "body" && c.parameters) {
+          c.parameters.forEach((p: any, i: number) => {
+            const placeholder = `{{${i + 1}}}`;
+            const val = p.text || p.date_time?.fallback_value || p.currency?.fallback_value || "[...]";
+            bodyText = bodyText.replace(placeholder, val);
+          });
+        }
+      });
+    }
+
+    const draftMessage: Message = {
+      id: draftId,
+      chat_id: currentChat.id,
+      body: bodyText,
+      sender_type: "AGENT",
+      sender_id: currentUser?.id || null,
+      sender_name: currentUser?.name || null,
+      sender_avatar_url: currentUser?.avatar || null,
+      created_at: createdAt,
+      type: "TEMPLATE",
+      view_status: "SENDING",
+      delivery_status: "SENDING",
+      client_draft_id: draftId,
+      interactive_content: {
+        template_name: template.name,
+        template_definition: template,
+        components: components
+      }
+    } as Message;
+
+    appendMessageToCache(draftMessage);
+    setShowTemplatePicker(false);
+    scrollToBottom();
+
     try {
       const token = getAccessToken();
       const headers = new Headers();
@@ -3527,7 +3599,8 @@ const scrollToBottom = useCallback(
           templateName: template.name,
           languageCode: template.language,
           components: components,
-          templateDefinition: template // Envia a definição completa para persistência e renderização local
+          templateDefinition: template,
+          draftId: draftId // Envia o draftId para o backend poder retornar se quiser, mas o match principal é pelo client_draft_id
         })
       });
 
@@ -3538,19 +3611,32 @@ const scrollToBottom = useCallback(
 
       const { data: inserted } = await res.json();
       if (inserted) {
+        // O appendMessageToCache vai substituir o draft pois tem o mesmo client_draft_id no normalizeMessage
         appendMessageToCache({
           ...inserted,
-          body: inserted.body || inserted.content,
           sender_name: currentUser?.name || "Você"
         });
+
+        // Update chat list
+        bumpChatToTop({
+          chatId: currentChat.id,
+          last_message: inserted.content || `Template: ${template.name}`,
+          last_message_at: inserted.created_at || new Date().toISOString(),
+          last_message_from: "AGENT",
+          last_message_type: "TEMPLATE"
+        });
       }
-      
-      setShowTemplatePicker(false);
     } catch (error: any) {
       console.error("Failed to send template:", error);
+      updateMessageStatusInCache({
+        chatId: currentChat.id,
+        draftId: draftId,
+        delivery_status: "ERROR",
+        error_reason: error.message
+      });
       alert(error.message);
     }
-  }, [currentChat, API]);
+  }, [currentChat, API, currentUser, appendMessageToCache, updateMessageStatusInCache, generateDraftId, scrollToBottom]);
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newText = e.target.value;

@@ -25,26 +25,45 @@ const planColors: Record<string, string> = {
 export function PlanBadge() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
+  const [errorCount, setErrorCount] = useState(0);
 
   useEffect(() => {
-    fetch("/api/subscriptions/current", {
-      credentials: "include",
-    })
-      .then((res) => {
+    let isMounted = true;
+    
+    const fetchSubscription = async () => {
+      try {
+        const res = await fetch("/api/subscriptions/current", {
+          credentials: "include",
+        });
+        
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.message || `HTTP ${res.status}`);
         }
-        return res.json();
-      })
-      .then((data) => {
-        setSubscription(data);
-        setLoading(false);
-      })
-      .catch((error) => {
+        
+        const data = await res.json();
+        if (isMounted) {
+          setSubscription(data);
+          setLoading(false);
+          setErrorCount(0);
+        }
+      } catch (error) {
         console.error("Failed to fetch subscription:", error);
-        setLoading(false);
-      });
-  }, []);
+        if (isMounted) {
+          // Tentar novamente apenas uma vez se falhar de primeira
+          if (errorCount < 1) {
+            setErrorCount(prev => prev + 1);
+            setTimeout(fetchSubscription, 2000);
+          } else {
+            setLoading(false);
+          }
+        }
+      }
+    };
+
+    fetchSubscription();
+    return () => { isMounted = false; };
+  }, [errorCount]);
 
   if (loading) {
     return (

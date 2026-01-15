@@ -46,12 +46,17 @@ export function registerSubscriptionRoutes(app: express.Application) {
         ...subscription,
         trial_days_remaining: trialDaysRemaining,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("[subscriptions] Error getting current subscription:", error);
+      
+      // Detalhar o erro se for de conexão com o banco
+      const isDbError = error?.code === 'ECONNREFUSED' || error?.code === 'ETIMEDOUT' || error?.message?.includes('connection');
+      
       res.status(500).json({ 
         error: "Failed to get subscription",
-        message: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined
+        message: isDbError ? "Erro de conexão com o banco de dados. Verifique sua internet." : (error instanceof Error ? error.message : "Unknown error"),
+        details: isDbError ? "CONNECTION_ERROR" : undefined,
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
       });
     }
   });

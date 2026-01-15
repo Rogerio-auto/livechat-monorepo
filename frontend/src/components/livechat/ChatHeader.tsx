@@ -819,7 +819,7 @@ export function ChatHeader({
 				<div className="flex flex-1 items-start gap-3">
 					<AvatarCircle 
 						name={chatTitle} 
-						url={chat?.photo_url || chat?.customer_avatar_url || chat?.group_avatar_url || null}
+						url={chat?.photo_url || chat?.customer_avatar_url || chat?.group_avatar_url || (chat as any)?.avatar || null}
 						isGroup={chat?.is_group || chat?.kind === "GROUP"}
 					/>
 				<div className="flex flex-col gap-2 overflow-hidden">

@@ -20,6 +20,7 @@ interface FlowPickerProps {
 export function FlowPicker({ inboxId, onSelect, onClose }: FlowPickerProps) {
   const [flows, setFlows] = useState<Flow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [selectedFlow, setSelectedFlow] = useState<Flow | null>(null);
   
@@ -33,6 +34,8 @@ export function FlowPicker({ inboxId, onSelect, onClose }: FlowPickerProps) {
         setLoading(false);
         return;
       }
+      setError(null);
+      setLoading(true);
       try {
         const token = getAccessToken();
         const headers = new Headers();
@@ -42,11 +45,16 @@ export function FlowPicker({ inboxId, onSelect, onClose }: FlowPickerProps) {
           headers,
           credentials: "include"
         });
-        if (!res.ok) throw new Error("Erro ao buscar flows");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || "Erro ao buscar flows");
+        }
         const data = await res.json();
-        setFlows(Array.isArray(data.data) ? data.data : []);
-      } catch (err) {
+        const flowsList = Array.isArray(data) ? data : (data.data || []);
+        setFlows(flowsList);
+      } catch (err: any) {
         console.error("Error fetching flows:", err);
+        setError(err.message);
       } finally {
         setLoading(false);
       }
@@ -94,6 +102,10 @@ export function FlowPicker({ inboxId, onSelect, onClose }: FlowPickerProps) {
 
               {loading ? (
                 <div className="py-10 text-center text-sm text-(--color-text-muted)">Carregando flows...</div>
+              ) : error ? (
+                <div className="py-10 text-center text-sm text-red-500">
+                  {error}
+                </div>
               ) : filteredFlows.length === 0 ? (
                 <div className="py-10 text-center text-sm text-(--color-text-muted)">Nenhum flow encontrado nesta inbox.</div>
               ) : (

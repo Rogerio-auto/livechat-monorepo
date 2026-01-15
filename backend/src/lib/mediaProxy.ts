@@ -9,14 +9,19 @@ const BACKEND_BASE_URL = process.env.BACKEND_BASE_URL || `http://localhost:${pro
  */
 export function buildProxyUrl(encryptedToken: string | null | undefined): string | null {
   if (!encryptedToken) return null;
-  
-  // If already a full URL (not encrypted), encrypt it first then build proxy URL
-  if (encryptedToken.startsWith("http://") || encryptedToken.startsWith("https://")) {
-    const token = encryptUrl(encryptedToken);
-    return `${BACKEND_BASE_URL}/media/proxy?token=${encodeURIComponent(token)}`;
+
+  // Prevent double proxying if already a proxy URL
+  if (encryptedToken.includes("/media/proxy")) {
+    return encryptedToken;
   }
   
-  return `${BACKEND_BASE_URL}/media/proxy?token=${encodeURIComponent(encryptedToken)}`;
+  // Use relative paths to avoid domain mismatch issues (let frontend normalize with API base)
+  if (encryptedToken.startsWith("http://") || encryptedToken.startsWith("https://")) {
+    const token = encryptUrl(encryptedToken);
+    return `/media/proxy?token=${encodeURIComponent(token)}`;
+  }
+  
+  return `/media/proxy?token=${encodeURIComponent(encryptedToken)}`;
 }
 
 /**

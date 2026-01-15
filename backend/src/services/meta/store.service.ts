@@ -62,6 +62,7 @@ type ChatListContext =
       kind?: string | null;
       chatType?: string | null;
       remoteId?: string | null;
+      departmentId?: string | null;
     };
 
 function normalizeChatKind(
@@ -94,6 +95,7 @@ export async function invalidateChatCaches(chatId: string, context?: ChatListCon
   let kind: string | null | undefined;
   let chatType: string | null | undefined;
   let remoteId: string | null | undefined;
+  let departmentId: string | null | undefined;
 
   if (typeof context === "string" || context === null) {
     companyId = context ?? null;
@@ -104,10 +106,16 @@ export async function invalidateChatCaches(chatId: string, context?: ChatListCon
     kind = context.kind ?? null;
     chatType = context.chatType ?? null;
     remoteId = context.remoteId ?? null;
+    departmentId = context.departmentId ?? null;
   }
 
   const needsLookup =
-    !companyId || inboxId === undefined || status === undefined || kind === undefined || chatType === undefined;
+    !companyId ||
+    inboxId === undefined ||
+    status === undefined ||
+    kind === undefined ||
+    chatType === undefined ||
+    departmentId === undefined;
 
   if (needsLookup) {
     try {
@@ -118,8 +126,9 @@ export async function invalidateChatCaches(chatId: string, context?: ChatListCon
         kind: string | null;
         chat_type: string | null;
         remote_id: string | null;
+        department_id: string | null;
       }>(
-        `select company_id, inbox_id, status, kind, chat_type, remote_id
+        `select company_id, inbox_id, status, kind, chat_type, remote_id, department_id
            from public.chats
           where id = $1
           limit 1`,
@@ -132,6 +141,7 @@ export async function invalidateChatCaches(chatId: string, context?: ChatListCon
         kind = kind ?? row.kind ?? null;
         chatType = chatType ?? row.chat_type ?? null;
         remoteId = remoteId ?? row.remote_id ?? null;
+        departmentId = departmentId ?? row.department_id ?? null;
       }
     } catch (err) {
       console.warn("[META][store] invalidateChatCaches lookup failed", {
@@ -147,18 +157,25 @@ export async function invalidateChatCaches(chatId: string, context?: ChatListCon
   if (typeof status === "string" && status.trim()) {
     statuses.add(status.trim().toUpperCase());
   }
+  // Se o status atual não for OPEN nem PENDING, mas o chat pode aparecer nelas via unread_count,
+  // idealmente invalidaríamos elas também. Por segurança, invalidamos as principais.
+  statuses.add("OPEN");
+  statuses.add("PENDING");
 
   const resolvedKind = normalizeChatKind(kind, chatType, remoteId);
   const kinds = new Set<string>(["ALL"]);
   if (resolvedKind) kinds.add(resolvedKind);
 
   const inboxes = new Set<string | null>([inboxId ?? null, null]);
+  const depts = new Set<string | null>([departmentId ?? null, null]);
 
   const indexKeys: string[] = [];
   for (const inboxCandidate of inboxes) {
     for (const statusCandidate of statuses) {
       for (const kindCandidate of kinds) {
-        indexKeys.push(k.listIndex(companyId, inboxCandidate, statusCandidate, kindCandidate));
+        for (const deptCandidate of depts) {
+          indexKeys.push(k.listIndex(companyId, inboxCandidate, statusCandidate, kindCandidate, deptCandidate));
+        }
       }
     }
   }
@@ -239,16 +256,18 @@ export async function ensureGroupChat(args: {
 
       const nextName = args.groupName?.trim() || null;
       const nextAvatar = args.groupAvatarUrl?.trim() || null;
-      const shouldUpdateName = nextName && !(existing.group_name && existing.group_name.trim());
-      const shouldUpdateAvatar = nextAvatar && !(existing.group_avatar_url && existing.group_avatar_url.trim());
-      if (shouldUpdateName || shouldUpdateAvatar) {
+      
+      const nameChanged = nextName && nextName !== existing.group_name;
+      const avatarChanged = nextAvatar && nextAvatar !== existing.group_avatar_url;
+
+      if (nameChanged || avatarChanged) {
         await tx.none(
           `update public.chats
               set group_name = coalesce($2, group_name),
                   group_avatar_url = coalesce($3, group_avatar_url),
                   updated_at = now()
             where id = $1`,
-          [existing.id, shouldUpdateName ? nextName : null, shouldUpdateAvatar ? nextAvatar : null],
+          [existing.id, nextName, nextAvatar],
         );
       }
 
@@ -1059,12 +1078,12 @@ export async function ensureLeadCustomerChat(args: {
 
     if (customer && !isMeaningfulName(customer.name)) {
       customer = await tx.one<{ id: string; name: string }>(
-        `update public.customers set name = $1, lid = coalesce(lid, $3), avatar = coalesce(avatar, $4) where id = $2 returning id, name`,
+        `update public.customers set name = $1, lid = coalesce($3, lid), avatar = coalesce($4, avatar) where id = $2 returning id, name`,
         [fallbackName, customer.id, lid, avatarUrl],
       );
     } else if (customer && (lid || avatarUrl)) {
       await tx.none(
-        `update public.customers set lid = coalesce(lid, $2), avatar = coalesce(avatar, $3) where id = $1`, 
+        `update public.customers set lid = coalesce($2, lid), avatar = coalesce($3, avatar) where id = $1`, 
         [customer.id, lid, avatarUrl]
       );
     }

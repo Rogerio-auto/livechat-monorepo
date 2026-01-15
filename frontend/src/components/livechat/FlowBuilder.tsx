@@ -15,7 +15,7 @@ import {
   type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { FiX, FiSave, FiPlus, FiTrash2, FiChevronRight, FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, FiList, FiActivity, FiEdit2, FiBell, FiHelpCircle, FiBookOpen } from 'react-icons/fi';
+import { FiX, FiSave, FiPlus, FiTrash2, FiChevronRight, FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, FiList, FiActivity, FiEdit2, FiBell, FiHelpCircle, FiBookOpen, FiFileText } from 'react-icons/fi';
 
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -34,6 +34,7 @@ import {
   SwitchNode,
   WaitForResponseNode,
   ExternalNotifyNode,
+  MetaFlowNode,
   AVAILABLE_VARIABLES,
   type FlowNodeData
 } from './FlowNodes';
@@ -42,6 +43,7 @@ const nodeTypes = {
   trigger: TriggerNode,
   message: MessageNode,
   interactive: InteractiveNode,
+  meta_flow: MetaFlowNode,
   ai_action: AIActionNode,
   wait: WaitNode,
   add_tag: TagNode,
@@ -281,6 +283,10 @@ function FlowBuilderContent({ apiBase, flowId, onClose }: Props) {
       newNode.data.text = 'Escolha uma opção:';
       newNode.data.buttons = [];
     }
+    if (type === 'meta_flow') {
+      newNode.data.text = 'Por favor, preencha este formulário:';
+      newNode.data.meta_flow_cta = 'Abrir Formulário';
+    }
     if (type === 'ai_action') {
       newNode.data.action = 'ACTIVATE';
       newNode.data.change_chat_status = 'AI';
@@ -320,6 +326,12 @@ function FlowBuilderContent({ apiBase, flowId, onClose }: Props) {
                   <FiList size={16} />
                 </div>
                 Interativo (Meta)
+              </button>
+              <button onClick={() => addNode('meta_flow')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-cyan-400 dark:hover:border-cyan-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
+                <div className="w-8 h-8 bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <FiFileText size={16} />
+                </div>
+                Meta Flow (Formulário)
               </button>
               <button onClick={() => addNode('wait_for_response')} className="w-full flex items-center gap-3 p-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl hover:border-orange-400 dark:hover:border-orange-500 hover:shadow-sm transition-all text-xs font-medium text-gray-600 dark:text-gray-300 group">
                 <div className="w-8 h-8 bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">

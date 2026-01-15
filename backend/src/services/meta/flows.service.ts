@@ -1,7 +1,8 @@
-// backend/src/services/meta/flows.service.ts
 import { getDecryptedCredsForInbox } from "./store.service.js";
 // @ts-ignore - graph.service.js will exist after build
 import { graphFetch } from "./graph.service.js";
+import { supabaseAdmin } from "../../lib/supabase.js";
+import { logger } from "../../lib/logger.js";
 
 export interface MetaFlow {
   id: string;
@@ -36,13 +37,13 @@ export async function sendMetaFlow(params: {
   const payload: any = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
-    to: customerPhone,
+    to: customerPhone.replace(/\D/g, ""), // Limpar telefone
     type: "interactive",
     interactive: {
       type: "flow",
       header: headerText ? { type: "text", text: headerText } : undefined,
       body: { text: bodyText || "Por favor, preencha as informações no formulário abaixo." },
-      footer: { text: "Meta Flows" },
+      footer: { text: "WhatsApp Flow" },
       action: {
         name: "flow",
         parameters: {
@@ -50,10 +51,8 @@ export async function sendMetaFlow(params: {
           flow_token: `token_${Date.now()}`,
           flow_id: flowId,
           flow_cta: ctaText,
-          flow_action: "navigate",
-          flow_action_payload: {
-            screen: "QUESTIONNAIRE", // Default screen, can be customized if needed
-          },
+          // Removido flow_action: "navigate" para usar a tela padrão do flow
+          // Isso evita erro #131009 se a tela "START" ou "QUESTIONNAIRE" não existir
         },
       },
     },
@@ -112,9 +111,76 @@ export async function listMetaFlows(inboxId: string): Promise<MetaFlow[]> {
       app_secret: creds.app_secret || undefined,
       phone_number_id: creds.phone_number_id || "",
     },
-    `${wabaId}/flows`,
+    `${wabaId}/flows?fields=id,name,status,categories,last_updated_time`,
     { method: "GET" }
   );
 
   return (data.data || []) as MetaFlow[];
+}
+
+/**
+ * Sincroniza formulários da Meta para o banco de dados local
+ */
+export async function syncMetaFlows(inboxId: string, companyId: string): Promise<number> {
+  try {
+    const flows = await listMetaFlows(inboxId);
+    
+    if (flows.length === 0) return 0;
+
+    const upserts = flows.map(flow => ({
+      company_id: companyId,
+      inbox_id: inboxId,
+      meta_flow_id: flow.id,
+      name: flow.name,
+      status: flow.status,
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabaseAdmin
+      .from("meta_flows")
+      .upsert(upserts, {
+        onConflict: "inbox_id, meta_flow_id",
+        ignoreDuplicates: false
+      });
+
+    if (error) {
+      logger.error(`[META][FLOWS] Sync error for inbox ${inboxId}:`, error);
+      throw error;
+    }
+
+    return flows.length;
+  } catch (error) {
+    logger.error(`[META][FLOWS] Sync error in search for inbox ${inboxId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Cria um formulário (Flow) na Meta
+ */
+export async function createMetaFlow(inboxId: string, name: string, categories: string[]): Promise<any> {
+  const creds = await getDecryptedCredsForInbox(inboxId);
+  const wabaId = creds.waba_id?.trim();
+  
+  if (!wabaId) {
+    throw new Error("Inbox misconfigured: missing waba_id");
+  }
+
+  const data = await graphFetch(
+    {
+      access_token: creds.access_token,
+      app_secret: creds.app_secret || undefined,
+      phone_number_id: creds.phone_number_id || "",
+    },
+    `${wabaId}/flows`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name,
+        categories
+      })
+    }
+  );
+
+  return data;
 }

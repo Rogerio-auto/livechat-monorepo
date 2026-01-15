@@ -54,6 +54,8 @@ function buildPoolConfig() {
       max: DEFAULT_POOL_SIZE,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 10_000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
     };
   }
 
@@ -71,6 +73,8 @@ function buildPoolConfig() {
     max: DEFAULT_POOL_SIZE,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   };
 }
 

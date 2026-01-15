@@ -1,26 +1,87 @@
 import { Application } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
-import { listMetaFlows, sendMetaFlow } from "../services/meta/flows.service.js";
+import { listMetaFlows, sendMetaFlow, syncMetaFlows, createMetaFlow } from "../services/meta/flows.service.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { EX_APP, publish } from "../queue/rabbit.js";
+import { clearMessageCache } from "../lib/redis.js";
 
 export function registerMetaFlowsRoutes(app: Application) {
   /**
    * GET /api/meta/flows/:inboxId
-   * Lista os flows disponíveis em uma inbox Meta
+   * Lista os flows disponíveis. Por padrão tenta o banco local, com ?refresh=true busca na API Meta.
    */
   app.get("/api/meta/flows/:inboxId", requireAuth, async (req, res) => {
     const { inboxId } = req.params;
+    const { refresh } = req.query;
 
     if (!inboxId || inboxId === "null" || inboxId === "undefined") {
       return res.status(400).json({ error: "inboxId inválido" });
     }
 
     try {
-      const flows = await listMetaFlows(inboxId);
-      return res.json(flows);
+      const companyId = (req as any).user?.company_id;
+
+      if (refresh === 'true' && companyId) {
+        await syncMetaFlows(inboxId, companyId);
+      }
+
+      // Buscar do banco local
+      const { data: flows, error } = await supabaseAdmin
+        .from("meta_flows")
+        .select("*")
+        .eq("inbox_id", inboxId)
+        .eq("status", "PUBLISHED"); // Sugestão: Apenas os publicados? Ou remover filtro.
+
+      // Se não houver nada no banco e não pediram refresh, tentar buscar direto uma vez
+      if ((!flows || flows.length === 0) && refresh !== 'true' && companyId) {
+        const directFlows = await listMetaFlows(inboxId);
+        return res.json({ data: directFlows });
+      }
+
+      return res.json({ data: flows || [] });
     } catch (error: any) {
       console.error("[GET /api/meta/flows] Error:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/meta/flows/:inboxId/sync
+   * Força a sincronização dos fluxos da Meta para o banco local
+   */
+  app.post("/api/meta/flows/:inboxId/sync", requireAuth, async (req, res) => {
+    const { inboxId } = req.params;
+    const companyId = (req as any).user?.company_id;
+    
+    if (!inboxId || !companyId) return res.status(400).json({ error: "Parâmetros inválidos" });
+
+    try {
+      const count = await syncMetaFlows(inboxId, companyId);
+      return res.json({ success: true, count });
+    } catch (error: any) {
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  /**
+   * POST /api/meta/flows/:inboxId/create
+   * Cria um novos formulário (Flow) na Meta
+   */
+  app.post("/api/meta/flows/:inboxId/create", requireAuth, async (req, res) => {
+    const { inboxId } = req.params;
+    const { name, categories } = req.body;
+    const companyId = (req as any).user?.company_id;
+
+    if (!inboxId || !name || !categories) return res.status(400).json({ error: "Parâmetros faltando" });
+
+    try {
+      const result = await createMetaFlow(inboxId, name, categories);
+      
+      // Auto-sync after creation
+      if (companyId) await syncMetaFlows(inboxId, companyId);
+      
+      return res.json({ success: true, data: result });
+    } catch (error: any) {
       return res.status(500).json({ error: error.message });
     }
   });
@@ -68,6 +129,9 @@ export function registerMetaFlowsRoutes(app: Application) {
     const body = bodyText || "Formulário enviado";
 
     // Inserir no banco como uma mensagem interativa
+    const senderName = (req as any).user?.name || (req as any).profile?.full_name || "Agente";
+    const senderAvatar = (req as any).user?.avatar_url || (req as any).profile?.avatar_url || null;
+
     const { data: inserted, error: insertError } = await supabaseAdmin
       .from("chat_messages")
       .insert({
@@ -76,14 +140,17 @@ export function registerMetaFlowsRoutes(app: Application) {
         company_id: chat.company_id,
         external_id: wamid,
         content: body,
-        body: body,
         type: "INTERACTIVE",
-        sender_type: "AGENT",
-        sender_id: (req as any).user?.id,
+        is_from_customer: false,
+        sender_id: (req as any).user?.id || (req as any).profile?.id || null,
+        sender_name: senderName,
+        sender_avatar_url: senderAvatar,
         view_status: "Sent",
         interactive_content: {
           type: "flow",
           flow_id: flowId,
+          body: { text: body },
+          header: headerText ? { type: "text", text: headerText } : undefined,
           action: {
             parameters: {
               flow_cta: ctaText || "Preencher"
@@ -96,6 +163,16 @@ export function registerMetaFlowsRoutes(app: Application) {
 
     if (insertError) {
       console.error("[POST /meta/flows/send] Error inserting message:", insertError);
+    } else if (inserted) {
+      // Limpar cache do redis para que a mensagem apareça no frontend
+      await clearMessageCache(chatId);
+
+      // Publicar evento de nova mensagem
+      await publish(EX_APP, "im.message.created", {
+        messageId: inserted.id,
+        chatId: chatId,
+        companyId: chat.company_id
+      });
     }
 
     // Emitir via socket para o front atualizar
@@ -115,7 +192,7 @@ export function registerMetaFlowsRoutes(app: Application) {
           chatId,
           companyId: chat.company_id,
           inboxId,
-          last_message: inserted.body || "Flow Meta",
+          last_message: inserted.content || "Flow Meta",
           last_message_at: inserted.created_at,
           last_message_from: "AGENT",
           last_message_type: "flow"
@@ -125,8 +202,11 @@ export function registerMetaFlowsRoutes(app: Application) {
 
     return res.json({ ok: true, wamid, data: inserted });
   } catch (error: any) {
-    console.error("[POST /api/meta/flows/send] Error:", error);
-    return res.status(500).json({ error: error.message });
+    console.error("[POST /api/meta/flows/send] Fatal Error:", error);
+    return res.status(500).json({ 
+      error: error.message || "Internal Server Error",
+      details: error.response?.data || error.data || null
+    });
   }
 });
 

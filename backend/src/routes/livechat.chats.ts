@@ -23,7 +23,11 @@ import {
 import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.service.js";
 import { normalizeMsisdn } from "../utils/util.util.js";
 import { getAgent as getRuntimeAgent } from "../services/agents-runtime.service.js";
-import { transformMessagesMediaUrls, transformMessageMediaUrl } from "../lib/mediaProxy.js";
+import { 
+  transformMessagesMediaUrls, 
+  transformMessageMediaUrl,
+  buildProxyUrl 
+} from "../lib/mediaProxy.js";
 import messagesRouter from "./livechat.messages.js";
 import { logger } from "../lib/logger.js";
 import { 
@@ -801,20 +805,18 @@ export function registerLivechatChatRoutes(app: Application) {
                   const picResp = isGroup
                     ? await fetchWahaGroupPicture(session, normalizedRemoteKey)
                     : await fetchWahaContactPicture(session, normalizedRemoteKey, { refresh: false });
+                  
                   const url = (picResp && typeof picResp.url === "string" && picResp.url.trim()) || null;
+                  
                   if (url) {
-                    console.debug("[AVATAR][livechat/chats] foto fetched do WAHA", { remoteKey, normalizedRemoteKey, isGroup, url: url.substring(0, 80) });
+                    console.log("[AVATAR][WAHA] Foto encontrada!", { remoteKey, url: url.substring(0, 50) + "..." });
                     avatarByRemote[remoteKey] = url;
-                    try {
-                      await rSet(k.avatar(companyId, remoteKey), url, TTL_AVATAR);
-                    } catch (cacheErr) {
-                      console.warn("[livechat/chats] avatar cache set failed", { remoteKey, error: cacheErr });
-                    }
+                    await rSet(k.avatar(companyId, remoteKey), url, TTL_AVATAR);
                   } else {
-                    console.debug("[AVATAR][livechat/chats] foto não retornada pelo WAHA", { remoteKey, normalizedRemoteKey, isGroup });
+                    console.log("[AVATAR][WAHA] Foto não disponível no WAHA", { remoteKey });
                   }
                 } catch (fetchErr) {
-                  console.warn("[AVATAR][livechat/chats] erro ao buscar foto do WAHA", { remoteKey, normalizedRemoteKey, isGroup, error: (fetchErr as any)?.message || fetchErr });
+                  console.warn("[AVATAR][WAHA] Erro ao buscar foto", { remoteKey, error: (fetchErr as any)?.message });
                 }
               })(),
             );
@@ -949,29 +951,6 @@ export function registerLivechatChatRoutes(app: Application) {
           (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
           (typeof chat.external_id === "string" && chat.external_id.trim()) ||
           null;
-        const cachedAvatar = remoteKey ? avatarByRemote[remoteKey] ?? null : null;
-        const isGroupChatKind =
-          typeof chat.kind === "string" && chat.kind.toUpperCase() === "GROUP";
-
-        if (isGroupChatKind) {
-          if (!chat.group_avatar_url && cachedAvatar) {
-            chat.group_avatar_url = cachedAvatar;
-          }
-          chat.customer_avatar_url = chat.group_avatar_url ?? cachedAvatar ?? chat.customer_avatar_url ?? null;
-        } else {
-          chat.customer_avatar_url = cachedAvatar ?? chat.customer_avatar_url ?? null;
-        }
-        
-        // Debug: log avatar resolution for first 3 chats
-        if ((items as any[]).indexOf(chat) < 3) {
-          console.debug("[AVATAR][enrich]", {
-            chatId: chat.id,
-            remoteKey,
-            isGroup: isGroupChatKind,
-            cachedAvatar: cachedAvatar ? cachedAvatar.substring(0, 60) + '...' : null,
-            final_customer_avatar_url: chat.customer_avatar_url ? chat.customer_avatar_url.substring(0, 60) + '...' : null,
-          });
-        }
 
         if (!chat.display_name) {
           if (chat.customer_name) {
@@ -1047,6 +1026,41 @@ export function registerLivechatChatRoutes(app: Application) {
         if (!chat.display_name) {
           chat.display_name = chat.group_name || chat.customer_name || chat.remote_id || chat.external_id || chat.id;
         }
+
+        // --- AVATAR RESOLUTION ---
+        const remoteKeyFinal =
+          (typeof chat.remote_id === "string" && chat.remote_id.trim()) ||
+          (typeof chat.external_id === "string" && chat.external_id.trim()) ||
+          null;
+        
+        const isGroupFinal = chat.kind === "GROUP";
+        const cachedAvatarFinal = remoteKeyFinal ? avatarByRemote[remoteKeyFinal] ?? null : null;
+
+        if (isGroupFinal) {
+          if (!chat.group_avatar_url && cachedAvatarFinal) {
+            chat.group_avatar_url = cachedAvatarFinal;
+          }
+          chat.customer_avatar_url = chat.group_avatar_url ?? cachedAvatarFinal ?? chat.customer_avatar_url ?? null;
+        } else {
+          chat.customer_avatar_url = cachedAvatarFinal ?? chat.customer_avatar_url ?? null;
+        }
+
+        // ✅ PROXY: Transformar URLs externas/expiradas em URLs de proxy
+        if (chat.customer_avatar_url) {
+          chat.customer_avatar_url = buildProxyUrl(chat.customer_avatar_url);
+        }
+        if (chat.group_avatar_url) {
+          chat.group_avatar_url = buildProxyUrl(chat.group_avatar_url);
+        }
+        
+        // Atalho para o frontend
+        chat.photo_url = isGroupFinal ? chat.group_avatar_url : chat.customer_avatar_url;
+        
+        // Debug detalhado para os primeiros chats
+        if ((items as any[]).indexOf(chat) < 5) {
+          console.log(`[AVATAR][debug] Chat ${chat.id}: photo_url=${chat.photo_url ? 'EXISTS' : 'NULL'}, kind=${chat.kind}, remote=${remoteKeyFinal}`);
+        }
+        // -------------------------
       }
 
       // Attach AI agent identity: prefer per-chat agent; fallback to active company agent when null
@@ -1811,8 +1825,18 @@ export function registerLivechatChatRoutes(app: Application) {
       console.warn("[livechat/chat] enrich ai agent failed", err instanceof Error ? err.message : err);
     }
 
-    await rSet(cacheKey, flattened, TTL_CHAT);
-    return res.json(flattened);
+    const result = {
+      ...flattened,
+      customer_avatar_url: buildProxyUrl(flattened.customer_avatar_url),
+      group_avatar_url: buildProxyUrl(flattened.group_avatar_url),
+    };
+
+    (result as any).photo_url = (result.kind === "GROUP" || (result as any).chat_type === "GROUP")
+      ? result.group_avatar_url 
+      : result.customer_avatar_url;
+
+    await rSet(cacheKey, result, TTL_CHAT);
+    return res.json(result);
   });
 
   // Atualizar status (invalida chat + listas)
@@ -3726,22 +3750,26 @@ export function registerLivechatChatRoutes(app: Application) {
           if (roomName) {
             io.to(roomName).emit("chat:updated", {
               chatId,
+              companyId: chatCompanyId,
               unread_count: 0,
             });
 
             io.to(roomName).emit("chat:read", {
               chatId,
+              companyId: chatCompanyId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),
             });
           } else {
             io.emit("chat:updated", {
               chatId,
+              companyId: chatCompanyId,
               unread_count: 0,
             });
 
             io.emit("chat:read", {
               chatId,
+              companyId: chatCompanyId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),
             });
@@ -3884,22 +3912,26 @@ export function registerLivechatChatRoutes(app: Application) {
           if (roomName) {
             io.to(roomName).emit("chat:updated", {
               chatId,
+              companyId: chatCompanyId,
               unread_count: 0,
             });
 
             io.to(roomName).emit("chat:read", {
               chatId,
+              companyId: chatCompanyId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),
             });
           } else {
             io.emit("chat:updated", {
               chatId,
+              companyId: chatCompanyId,
               unread_count: 0,
             });
 
             io.emit("chat:read", {
               chatId,
+              companyId: chatCompanyId,
               inboxId: chat.inbox_id,
               timestamp: new Date().toISOString(),
             });

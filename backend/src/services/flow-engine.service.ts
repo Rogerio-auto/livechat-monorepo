@@ -2,7 +2,7 @@ import { supabaseAdmin } from "../lib/supabase.js";
 import * as flowsRepo from "../repos/flows.repo.js";
 import { EX_APP, publish, publishApp } from "../queue/rabbit.js";
 import { logger } from "../lib/logger.js";
-import { sendInteractiveButtons, sendInteractiveList } from "./meta/graph.service.js";
+import { sendInteractiveButtons, sendInteractiveList, sendMetaFlow } from "./meta/graph.service.js";
 import { NotificationService } from "./notification.service.js";
 import { normalizeMsisdn } from "../utils/util.util.js";
 import type { AutomationFlow, FlowExecution, Customer, Inbox } from "@livechat/shared";
@@ -20,12 +20,16 @@ interface FlowEdge {
 }
 
 /**
- * Replace variables in a string
+ * Replace variables in a string (supports nested objects like user.name)
  */
-export function replaceVariables(text: string, variables: Record<string, unknown>): string {
+export function replaceVariables(text: string, variables: Record<string, any>): string {
   if (!text) return "";
-  return text.replace(/{{\s*([\w.-]+)\s*}}/g, (match, key) => {
-    return variables[key] !== undefined ? String(variables[key]) : match;
+  return text.replace(/{{\s*([\w.-]+)\s*}}/g, (match, path) => {
+    const value = path.split('.').reduce((obj: any, key: string) => {
+      return obj && obj[key] !== undefined ? obj[key] : undefined;
+    }, variables);
+    
+    return value !== undefined ? String(value) : match;
   });
 }
 
@@ -82,7 +86,7 @@ export async function triggerFlow(params: {
   companyId: string;
   contactId: string | null;
   chatId?: string;
-  triggerType: 'STAGE_CHANGE' | 'TAG_ADDED' | 'KEYWORD' | 'LEAD_CREATED' | 'NEW_MESSAGE' | 'SYSTEM_EVENT' | 'MANUAL';
+  triggerType: 'STAGE_CHANGE' | 'TAG_ADDED' | 'KEYWORD' | 'LEAD_CREATED' | 'NEW_MESSAGE' | 'SYSTEM_EVENT' | 'MANUAL' | 'FLOW_SUBMISSION';
   triggerData: Record<string, unknown>;
 }): Promise<void> {
   const { companyId, contactId, chatId, triggerType } = params;
@@ -154,6 +158,14 @@ export async function triggerFlow(params: {
           shouldTrigger = true;
         } else {
           logger.debug(`[FlowEngine] Flow ${flow.id} event mismatch: expected ${config.event}, got ${triggerData.event}`);
+        }
+      } else if (triggerType === 'FLOW_SUBMISSION') {
+        // Match specific Meta Flow ID and Inbox (if specified)
+        const flowMatch = config.meta_flow_id && config.meta_flow_id === String(triggerData.meta_flow_id);
+        const inboxMatch = !config.inbox_id || String(config.inbox_id) === String(triggerData.inbox_id);
+        
+        if (flowMatch && inboxMatch) {
+          shouldTrigger = true;
         }
       }
 
@@ -629,6 +641,51 @@ async function sendFlowMessage(args: {
     }
   }
 
+  if (data.meta_flow_id && inboxId && customerPhone && isMeta) {
+    try {
+      logger.info(`[FlowEngine] Attempting to send Meta Flow ${data.meta_flow_id} to ${customerPhone}`);
+      const { message } = await sendMetaFlow({
+        inboxId,
+        chatId,
+        customerPhone,
+        message: textContent,
+        flowId: String(data.meta_flow_id),
+        flowCta: (data.meta_flow_cta as string) || 'Abrir Formulário',
+        flowAction: (data.meta_flow_action as any) || 'navigate',
+        flowScreen: (data.meta_flow_screen as string) || 'START',
+        senderSupabaseId: null
+      });
+
+      if (message && companyId) {
+        await publishApp("socket.livechat.outbound", {
+          kind: "livechat.outbound.message",
+          chatId,
+          companyId,
+          inboxId,
+          message: {
+            ...message,
+            body: message.content,
+            sender_type: 'AI',
+            is_private: false
+          },
+          chatUpdate: {
+            chatId,
+            inboxId,
+            last_message: message.content,
+            last_message_at: message.created_at,
+            last_message_from: 'AI',
+            last_message_type: message.type
+          }
+        });
+      }
+
+      return true;
+    } catch (err) {
+      logger.error(`[FlowEngine] Failed to send Meta Flow, falling back to text: ${err}`);
+      // Fall through to text fallback
+    }
+  }
+
   if (data.media_url) {
     logger.info(`[FlowEngine] Sending media message to ${chatId}`);
     await publish(EX_APP, "outbound.request", {
@@ -794,6 +851,7 @@ async function executeNode(node: FlowNode, execution: Record<string, unknown>): 
 
   switch (type) {
     case 'interactive':
+    case 'meta_flow':
     case 'message':
       await sendFlowMessage({ nodeData: data, execution, customer });
       return { status: 'SUCCESS' };

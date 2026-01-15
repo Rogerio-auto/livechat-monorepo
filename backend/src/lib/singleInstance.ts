@@ -9,8 +9,8 @@ import process from "node:process";
  */
 export async function ensureSingleWorkerInstance(workerType: string = "all"): Promise<void> {
   const INSTANCE_KEY = `worker:instance:lock:${workerType}`;
-  const INSTANCE_TTL = 30; // 30 segundos
-  const CHECK_INTERVAL = 20000; // 20 segundos
+  const INSTANCE_TTL = 60; // 60 segundos (aumentado de 30 para evitar perda por lag do event loop)
+  const CHECK_INTERVAL = 15000; // 15 segundos (reduzido de 20 para ser mais proativo)
 
   const instanceId = `${process.pid}-${Date.now()}`;
 
@@ -31,17 +31,32 @@ export async function ensureSingleWorkerInstance(workerType: string = "all"): Pr
     return;
   }
 
-  console.log(`[SingleInstance][${workerType}] ✅ Worker registrado: PID ${process.pid}`);
+  console.log(`[SingleInstance][${workerType}] ✅ Worker registrado: PID ${process.pid} (ID: ${instanceId})`);
 
   // Renova o lock periodicamente (heartbeat)
   const heartbeat = setInterval(async () => {
     try {
       const current = await redis.get(INSTANCE_KEY);
+      
       if (current === instanceId) {
+        // Sou eu mesmo, renova
         await redis.expire(INSTANCE_KEY, INSTANCE_TTL);
-        console.log(`[SingleInstance][${workerType}] 💓 Heartbeat: PID ${process.pid}`);
+        console.debug(`[SingleInstance][${workerType}] 💓 Heartbeat: PID ${process.pid}`);
+      } else if (current === null) {
+        // Lock expirou no Redis (provavelmente por lag exagerado do event loop)
+        // Tenta recuperar se ninguém pegou ainda
+        const reacquired = await (redis as any).set(INSTANCE_KEY, instanceId, "NX", "EX", INSTANCE_TTL);
+        if (reacquired) {
+          console.warn(`[SingleInstance][${workerType}] ♻️ Lock expirado recuperado (Auto-Healing): PID ${process.pid}`);
+        } else {
+          const newOwner = await redis.get(INSTANCE_KEY);
+          console.error(`[SingleInstance][${workerType}] ⚠️ Lock expirado e assumido por outra instância: ${newOwner}`);
+          clearInterval(heartbeat);
+          process.exit(1);
+        }
       } else {
-        console.error(`[SingleInstance][${workerType}] ⚠️  Lock perdido! Encerrando...`);
+        // Outro ID está lá (outra instância forçou a entrada?)
+        console.error(`[SingleInstance][${workerType}] ⚠️ Lock perdido (Assumido por ${current})! Encerrando PID ${process.pid}...`);
         clearInterval(heartbeat);
         process.exit(1);
       }

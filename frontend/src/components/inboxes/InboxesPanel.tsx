@@ -9,6 +9,7 @@ import type {
 } from "@livechat/shared";
 import MetaConfig from "../settings/inboxes/MetaConfig";
 import WahaConfig from "../settings/inboxes/WahaConfig";
+import MetaFlowsManager from "../settings/inboxes/MetaFlowsManager";
 import { Card, Input, Button } from "../../components/ui";
 
 // Estilos utilitários (para elementos que ainda não possuem componente no design system, como <select>)
@@ -478,13 +479,16 @@ export default function InboxesPanel({
                   )}
 
                   {isMeta && (
-                    <div className="py-6 border-b border-gray-100 dark:border-gray-800">
-                      <MetaConfig
-                        value={meta}
-                        onChange={(next) => handleMetaChange(inbox.id, next)}
-                        disabled={disabled}
-                      />
-                    </div>
+                    <>
+                      <div className="py-6 border-b border-gray-100 dark:border-gray-800">
+                        <MetaConfig
+                          value={meta}
+                          onChange={(next) => handleMetaChange(inbox.id, next)}
+                          disabled={disabled}
+                        />
+                      </div>
+                      <MetaFlowsManager inboxId={inbox.id} />
+                    </>
                   )}
                   
                   {isWaha && (

@@ -1,13 +1,14 @@
-import React, { memo, useState } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import React, { memo, useState, useEffect, useMemo } from 'react';
+import { Handle, Position, type NodeProps, useNodes } from '@xyflow/react';
 import { 
   FiMessageSquare, FiClock, FiTag, FiArrowRight, FiZap, 
   FiSettings, FiChevronDown, FiChevronUp, FiTrash2,
   FiFileText, FiImage, FiVideo, FiInbox, FiPlus, FiList, FiLink, FiPhone, FiMessageCircle, FiX,
-  FiUser, FiActivity, FiMic, FiFilter, FiBell, FiHelpCircle
+  FiUser, FiActivity, FiMic, FiFilter, FiBell, FiHelpCircle, FiRefreshCw
 } from 'react-icons/fi';
 import MediaLibraryModal from './MediaLibraryModal';
 import AudioRecorderModal from './AudioRecorderModal';
+import { getAccessToken, API, fetchJson } from '../../utils/api';
 
 export const AVAILABLE_VARIABLES = [
   { 
@@ -44,10 +45,17 @@ export const AVAILABLE_VARIABLES = [
       { label: 'Última Resposta', value: '{{last_response}}', description: 'Texto da última resposta recebida ou botão clicado' },
       { label: 'Criador', value: '{{created_by_name}}', description: 'Nome de quem criou a tarefa/projeto' },
     ]
+  },
+  {
+    group: 'Formulário',
+    variables: [
+      { label: 'Dados do Formulário', value: '{{responses}}', description: 'Objeto JSON com todas as respostas do formulário' },
+      { label: 'Campo Específico', value: '{{responses.NOME_DO_CAMPO}}', description: 'Acessa um campo específico do formulário Meta' },
+    ]
   }
 ];
 
-export const VariableGuide = ({ side = 'right', categories }: { side?: 'right' | 'left', categories?: ('Tarefa' | 'Projeto' | 'Contato' | 'Sistema')[] }) => {
+export const VariableGuide = ({ side = 'right', categories }: { side?: 'right' | 'left', categories?: ('Tarefa' | 'Projeto' | 'Contato' | 'Sistema' | 'Formulário')[] }) => {
   const filtered = AVAILABLE_VARIABLES.filter(group => !categories || categories.includes(group.group as any));
   
   return (
@@ -114,12 +122,17 @@ export interface FlowNodeData {
   custom_phone?: string;
   cases?: string[];
   timeoutMinutes?: number;
+  meta_flow_id?: string;
+  meta_flow_cta?: string;
+  meta_flow_action?: string;
+  meta_flow_screen?: string;
   trigger_config?: {
     type: string;
     event?: string;
     message_types?: string[];
     inbox_id?: string;
     column_id?: string;
+    meta_flow_id?: string;
     filter_stage_id?: string;
     filter_tag_ids?: string[];
   };
@@ -205,10 +218,25 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
     'TAG_ADDED': 'Etiqueta Adicionada',
     'LEAD_CREATED': 'Novo Lead',
     'NEW_MESSAGE': 'Nova Mensagem',
-    'SYSTEM_EVENT': 'Evento de Sistema'
+    'SYSTEM_EVENT': 'Evento de Sistema',
+    'FLOW_SUBMISSION': 'Resposta de Formulário (Meta)'
   };
 
   const config = nodeData.trigger_config || { type: 'MANUAL' };
+  const [metaFlows, setMetaFlows] = useState<any[]>([]);
+  const [loadingFlows, setLoadingFlows] = useState(false);
+
+  useEffect(() => {
+    if (config.type === 'FLOW_SUBMISSION' && config.inbox_id) {
+      setLoadingFlows(true);
+      fetchJson<any>(`${nodeData.apiBase || API}/api/meta/flows/${config.inbox_id}`)
+      .then(json => {
+        setMetaFlows(json.data || []);
+      })
+      .catch(err => console.error("Error fetching meta flows:", err))
+      .finally(() => setLoadingFlows(false));
+    }
+  }, [config.type, config.inbox_id, nodeData.apiBase]);
 
   return (
     <div className="relative">
@@ -334,6 +362,49 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
                 </div>
               )}
 
+              {config.type === 'FLOW_SUBMISSION' && (
+                <>
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Canal (Inbox Meta)</label>
+                    <select 
+                      className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                      value={config.inbox_id || ''}
+                      onChange={(e) => nodeData.onChange({ trigger_config: { ...config, inbox_id: e.target.value, meta_flow_id: '' } })}
+                    >
+                      <option value="">Selecione uma Inbox...</option>
+                      {(nodeData.inboxes || []).filter((i: any) => 
+                        i.channel?.toLowerCase() === 'whatsapp' || 
+                        i.provider?.toLowerCase()?.startsWith('meta')
+                      ).map((i: any) => (
+                        <option key={i.id} value={String(i.id)}>{i.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {config.inbox_id && (
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase flex justify-between">
+                        Formulário (Meta Flow)
+                        {loadingFlows && <span className="animate-spin text-blue-500">...</span>}
+                      </label>
+                      <select 
+                        className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                        value={config.meta_flow_id || ''}
+                        onChange={(e) => nodeData.onChange({ trigger_config: { ...config, meta_flow_id: e.target.value } })}
+                      >
+                        <option value="">Selecione um formulário...</option>
+                        {metaFlows.map((f: any) => (
+                          <option key={f.id} value={f.meta_flow_id || f.id}>{f.name} ({f.meta_flow_id || f.id})</option>
+                        ))}
+                      </select>
+                      {metaFlows.length === 0 && !loadingFlows && (
+                        <p className="text-[9px] text-red-400 mt-1 italic">Nenhum formulário encontrado para esta inbox.</p>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Condições Adicionais (Filtros) */}
               {config.type !== 'MANUAL' && (
                 <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-3">
@@ -386,6 +457,21 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
           {config.type === 'NEW_MESSAGE' && config.message_types && config.message_types.length > 0 && (
             <div className="mt-1 flex gap-1">
               {config.message_types.map((t: string) => <span key={t} className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-[9px]">{t}</span>)}
+            </div>
+          )}
+
+          {config.type === 'FLOW_SUBMISSION' && (
+            <div className="mt-1 space-y-0.5">
+              <div className="flex items-center gap-1 text-[9px] text-gray-500">
+                 <FiMessageSquare size={10} />
+                 <span>Canal: {(nodeData.inboxes || []).find((i: any) => String(i.id) === String(config.inbox_id))?.name || 'Não selecionado'}</span>
+              </div>
+              {config.meta_flow_id && (
+                <div className="flex items-center gap-1 text-[9px] text-blue-500 font-medium">
+                  <FiFileText size={10} />
+                  <span>Flow: {config.meta_flow_id}</span>
+                </div>
+              )}
             </div>
           )}
           
@@ -721,6 +807,121 @@ export const InteractiveNode = memo(({ data, selected }: NodeProps) => {
         </div>
       </NodeWrapper>
       <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-indigo-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+    </div>
+  );
+});
+
+export const MetaFlowNode = memo(({ data, selected }: NodeProps) => {
+  const nodeData = data as unknown as FlowNodeData;
+  const nodes = useNodes();
+  const [showSettings, setShowSettings] = useState(false);
+  const [metaFlows, setMetaFlows] = useState<any[]>([]);
+  const [loadingFlows, setLoadingFlows] = useState(false);
+
+  // We need to know which inbox to use to fetch flows.
+  const activeTriggerNode = nodes.find(n => n.type === 'trigger');
+  const triggerInboxId = activeTriggerNode?.data?.trigger_config?.inbox_id;
+  
+  const activeInbox = triggerInboxId || nodeData.activeInboxId;
+  const activeInboxObj = (nodeData.inboxes || []).find((i: any) => String(i.id) === String(activeInbox));
+
+  useEffect(() => {
+    if (showSettings && activeInbox && activeInboxObj?.provider?.toLowerCase()?.startsWith('meta')) {
+      setLoadingFlows(true);
+      fetchJson<any>(`${nodeData.apiBase || API}/api/meta/flows/${activeInbox}`)
+      .then(json => {
+        setMetaFlows(json.data || []);
+      })
+      .catch(err => console.error("Error fetching meta flows:", err))
+      .finally(() => setLoadingFlows(false));
+    }
+  }, [showSettings, activeInbox, activeInboxObj, nodeData.apiBase]);
+
+  return (
+    <div className="relative group/node">
+      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-cyan-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      
+      {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
+
+      <NodeWrapper 
+        title="Enviar Formulário (Meta)" 
+        icon={FiFileText} 
+        color="bg-cyan-500" 
+        selected={selected}
+        showSettings={showSettings}
+        onToggleSettings={() => setShowSettings(!showSettings)}
+        data={{
+          ...nodeData,
+          renderSettings: () => (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-bold text-gray-400 uppercase">Texto da Mensagem</label>
+                <textarea 
+                  className="w-full mt-1 p-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md focus:ring-1 focus:ring-blue-500 outline-none"
+                  rows={2}
+                  value={nodeData.text || ''}
+                  onChange={(e) => nodeData.onChange({ text: e.target.value })}
+                  placeholder="Digite o convite para o formulário..."
+                />
+              </div>
+
+              {!activeInbox ? (
+                <div className="p-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-[10px] text-amber-700 dark:text-amber-400">
+                  ⚠️ Defina uma Inbox no Gatilho (Trigger) para listar os formulários.
+                </div>
+              ) : !activeInboxObj?.provider?.toLowerCase()?.startsWith('meta') ? (
+                <div className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-[10px] text-red-700 dark:text-red-400">
+                  ⚠️ Esta Inbox ({activeInboxObj?.name || 'WhatsApp'}) não suporta Meta Flows. Use uma Inbox tipo Meta.
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase">Selecionar Formulário</label>
+                    </div>
+                    <select 
+                      className="w-full p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                      value={nodeData.meta_flow_id || ''}
+                      onChange={(e) => nodeData.onChange({ meta_flow_id: e.target.value })}
+                    >
+                      <option value="">Selecione um formulário...</option>
+                      {metaFlows.map((f: any) => (
+                        <option key={f.id} value={f.meta_flow_id || f.id}>{f.name} ({f.meta_flow_id || f.id})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase">Texto do Botão (CTA)</label>
+                    <input 
+                      type="text"
+                      className="w-full mt-1 p-1.5 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
+                      value={nodeData.meta_flow_cta || ''}
+                      onChange={(e) => nodeData.onChange({ meta_flow_cta: e.target.value })}
+                      placeholder="Ex: Abrir Formulário"
+                    />
+                  </div>
+                  <p className="text-[9px] text-gray-500 italic mt-2">
+                    Gerencie seus formulários nas configurações da Inbox.
+                  </p>
+                </>
+              )}
+            </div>
+          )
+        }}
+      >
+        <div className="space-y-2">
+          <div className="text-xs text-gray-600 dark:text-gray-400 italic line-clamp-2">
+            {nodeData.text || 'Enviar Meta Flow...'}
+          </div>
+          {nodeData.meta_flow_id && (
+            <div className="text-[9px] bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 px-1.5 py-0.5 rounded border border-cyan-100 dark:border-cyan-800 flex items-center gap-1">
+              <FiFileText size={10} /> {metaFlows.find(f => (f.meta_flow_id || f.id) === nodeData.meta_flow_id)?.name || nodeData.meta_flow_id}
+            </div>
+          )}
+        </div>
+      </NodeWrapper>
+      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-cyan-500 border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });

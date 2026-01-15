@@ -596,6 +596,13 @@ export function MessageBubble({
              </div>
           )}
 
+          {type === "flow" && (
+            <div className="mt-2 py-2.5 px-3 bg-blue-500/10 border border-blue-500/20 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-blue-500">
+               <FiFileText className="w-4 h-4" />
+               {(action as any)?.parameters?.flow_cta || "Abrir Formulário"}
+            </div>
+          )}
+
           {type === "button_reply" && (
             <div className="flex items-center gap-2 py-1 px-2 bg-current/10 rounded border-l-4 border-current/30">
               <FiCheck className="w-4 h-4 opacity-70" />

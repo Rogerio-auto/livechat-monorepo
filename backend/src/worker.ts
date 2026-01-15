@@ -53,8 +53,9 @@ import { spawn } from "node:child_process";
 import os from "node:os";
 import { registerCampaignWorker } from "./worker.campaigns.js";
 import { parseFlowResponse } from "./services/meta/flows.service.js";
+import { triggerFlow } from "./services/flow-engine.service.js";
 
-const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 300);
+const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 86400); // Default to 24 hours instead of 5 minutes
 
 function rememberAvatar(
   companyId: string | null | undefined,
@@ -1791,11 +1792,17 @@ async function handleMetaInboundMessages(args: {
           last_message_type: type,
           customer_name: metaContext.participantName ?? pushname ?? null,
           customer_avatar_url: metaContext.participantAvatarUrl ?? null,
+          companyId, // ✅ Adicionado
         },
       });
       // console.log("[META][inbound][DRAFT] Optimistic message emitted", { chatId, wamid });
     } catch (err) {
       console.error("[META][inbound][DRAFT] Failed to emit draft", { chatId, wamid, error: err });
+    }
+
+    // Cache avatar for faster lookup in lists
+    if (metaContext.participantAvatarUrl) {
+      rememberAvatar(companyId, participantWaId || remotePhone || chatId, metaContext.participantAvatarUrl);
     }
 
     // Insert message
@@ -1830,10 +1837,30 @@ async function handleMetaInboundMessages(args: {
 
         // Salvar na tabela flow_submissions
         await db.none(
-          `INSERT INTO public.flow_submissions (company_id, inbox_id, chat_id, flow_id, external_id, response)
+          `INSERT INTO public.flow_submissions (company_id, inbox_id, chat_id, meta_flow_id, response_data, raw_payload)
            VALUES ($1, $2, $3, $4, $5, $6)`,
-          [companyId, inboxId, chatId, flowId, wamid, JSON.stringify(responseData)]
+          [companyId, inboxId, chatId, flowId, JSON.stringify(responseData), JSON.stringify(m.interactive.nfm_reply)]
         );
+
+        // Disparar automação no FlowEngine
+        const { data: chatData } = await supabaseAdmin
+          .from("chats")
+          .select("customer_id")
+          .eq("id", chatId)
+          .single();
+
+        await triggerFlow({
+          companyId,
+          contactId: chatData?.customer_id || null,
+          chatId,
+          triggerType: "FLOW_SUBMISSION",
+          triggerData: {
+            meta_flow_id: flowId,
+            inbox_id: inboxId,
+            responses: responseData,
+            wamid
+          }
+        });
 
         // Emitir evento para o frontend
         await emitSocketWithRetry("socket.livechat.flow_submission", {
@@ -1844,7 +1871,7 @@ async function handleMetaInboundMessages(args: {
           messageId: inserted.id
         });
 
-        console.log("[META][FLOWS] Flow submission saved and emitted", { chatId, flowId });
+        console.log("[META][FLOWS] Flow submission saved, triggered and emitted", { chatId, flowId });
       } catch (err) {
         console.error("[META][FLOWS] Failed to process flow submission", err);
       }
@@ -2553,6 +2580,7 @@ async function processMediaInBackground(args: {
         companyId,
         chatUpdate: {
           chatId,
+          companyId, // ✅ Adicionado
           last_message_media_url: buildProxyUrl(publicUrl),
         }
       };
@@ -2622,6 +2650,10 @@ async function handleWahaMessage(job: WahaInboundPayload, payload: any) {
     normalizeMsisdn(msg?.from) ||
     normalizeMsisdn(msg?.to);
   const isGroupChat = isWahaGroupJid(chatJid);
+
+  if (!isGroupChat && contactAvatar) {
+    rememberAvatar(job.companyId, chatJid, contactAvatar);
+  }
 
   let chatId: string;
   const phoneForLead = basePhone && basePhone.trim() ? basePhone : chatJid;
@@ -3481,6 +3513,8 @@ async function handleWahaParticipantEvent(job: WahaInboundPayload, payload: any)
   }
 
   const groupMeta = extractWahaGroupMetadata(payload);
+  rememberAvatar(job.companyId, groupJid, groupMeta.avatarUrl ?? null);
+
   const ensured = await ensureGroupChat({
     inboxId: job.inboxId,
     companyId: job.companyId,
@@ -4120,7 +4154,14 @@ export async function handleWahaOutboundRequest(job: any): Promise<void> {
             ...chatSummary,
             last_message_from: mapped.sender_type,
           }
-        : undefined,
+        : {
+            chatId: mapped.chat_id,
+            inboxId,
+            companyId: job.companyId,
+            last_message: mapped.body,
+            last_message_at: mapped.created_at,
+            last_message_from: mapped.sender_type,
+          },
     });
 
     if (!socketSuccess) {
@@ -4861,6 +4902,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
                 : {
                     chatId: mapped.chat_id,
                     inboxId,
+                    companyId: job.companyId, // ✅ Adicionado
                     last_message: mapped.body,
                     last_message_at: mapped.created_at,
                     last_message_from: mapped.sender_type,
@@ -5076,6 +5118,7 @@ async function startOutboundWorkerInstance(index: number, prefetch: number): Pro
               : {
                   chatId: mapped.chat_id,
                   inboxId,
+                  companyId: job.companyId, // ✅ Adicionado
                   last_message: mapped.body,
                   last_message_at: mapped.created_at,
                   last_message_from: mapped.sender_type,
@@ -5965,6 +6008,7 @@ async function tickCampaigns() {
               
               // Emite mensagem completa para aparecer na interface
               if (messageId) {
+                const chatUpdate = await fetchChatUpdateForSocket(chatId);
                 await publishApp("socket.livechat.outbound", {
                   kind: "livechat.outbound.message",
                   chatId,
@@ -5987,6 +6031,16 @@ async function tickCampaigns() {
                     template_id: tpl.id,
                     client_draft_id: null,
                   },
+                  chatUpdate: chatUpdate 
+                    ? { ...chatUpdate, last_message_from: "AGENT" as const }
+                    : {
+                        chatId,
+                        inboxId: c.inbox_id,
+                        companyId: c.company_id,
+                        last_message: payloadObj.text || payloadObj.meta_template_name,
+                        last_message_at: new Date().toISOString(),
+                        last_message_from: "AGENT" as const,
+                      },
                 });
               }
             } catch (err) {

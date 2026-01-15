@@ -439,3 +439,100 @@ export async function sendInteractiveList({
   return { wamid, message: upsert?.message };
 }
 
+/**
+ * Envia um formulário (Meta Flow)
+ * Documentação: https://developers.facebook.com/docs/whatsapp/cloud-api/guides/send-messages#flows
+ */
+export async function sendMetaFlow({
+  inboxId,
+  chatId,
+  customerPhone,
+  message,
+  flowId,
+  flowCta,
+  flowToken,
+  flowAction = 'navigate',
+  flowScreen,
+  flowData,
+  footer,
+  senderSupabaseId,
+}: {
+  inboxId: string;
+  chatId: string;
+  customerPhone: string;
+  message: string;
+  flowId: string;
+  flowCta: string;
+  flowToken?: string;
+  flowAction?: 'navigate' | 'data_exchange';
+  flowScreen?: string;
+  flowData?: Record<string, any>;
+  footer?: string;
+  senderSupabaseId?: string | null;
+}): Promise<{ wamid: string; message: any }> {
+  const creds = await getDecryptedCredsForInbox(inboxId);
+  const graphCreds = toGraphCreds(creds);
+
+  if (!flowId || !flowCta) {
+    throw new Error("Flow ID e Texto do Botão (CTA) são obrigatórios");
+  }
+
+  const payload = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: customerPhone,
+    type: "interactive",
+    interactive: {
+      type: "flow",
+      body: {
+        text: message,
+      },
+      action: {
+        name: "flow",
+        parameters: {
+          flow_message_version: "3",
+          flow_token: flowToken || `token_${Date.now()}`,
+          flow_id: flowId,
+          flow_cta: flowCta,
+          flow_action: flowAction,
+          flow_context: flowAction === 'navigate' ? {
+            flow_screen: flowScreen || 'START',
+            flow_data: flowData || {}
+          } : undefined
+        }
+      }
+    }
+  };
+
+  if (footer && footer.trim()) {
+    (payload.interactive as any).footer = {
+      text: footer.trim().slice(0, 60),
+    };
+  }
+
+  const data = await graphFetch(graphCreds, `${graphCreds.phone_number_id}/messages`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  const wamid: string | null = (data as any)?.messages?.[0]?.id ?? null;
+  if (!wamid) {
+    throw new Error("Meta API não retornou message ID (wamid)");
+  }
+
+  const chatInfo = await getChatWithCustomerPhone(chatId, inboxId, graphCreds.company_id);
+
+  const upsert = await insertOutboundMessage({
+    chatId: chatInfo.chat_id,
+    inboxId,
+    customerId: "",
+    externalId: wamid,
+    content: message,
+    type: "INTERACTIVE",
+    senderId: senderSupabaseId,
+    interactiveContent: payload.interactive,
+  });
+
+  return { wamid, message: upsert?.message };
+}
+

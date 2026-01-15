@@ -2,6 +2,7 @@ import type { Application } from "express";
 import { ZodError, z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
+import { k, rDel, clearMessageCache } from "../lib/redis.js";
 import { EX_APP, publish } from "../queue/rabbit.js";
 import {
   createWhatsAppTemplate,
@@ -304,14 +305,15 @@ export function registerMetaTemplatesRoutes(app: Application) {
         inboxId: z.string().uuid(),
         chatId: z.string().uuid().optional(),
         customerPhone: z.string().trim().min(1).optional(),
+        draftId: z.string().optional(),
         templateName: z.string().trim().min(1),
         languageCode: z.string().trim().min(2),
         components: z.array(z.object({
-          type: z.enum(["header", "body", "button"]),
+          type: z.enum(["header", "body", "footer", "button"]),
           sub_type: z.string().optional(),
           index: z.string().optional(),
           parameters: z.array(z.object({
-            type: z.enum(["text", "image", "video", "document", "action"]),
+            type: z.enum(["text", "image", "video", "document", "action", "date_time", "currency"]),
             text: z.string().optional(),
             image: z.object({ link: z.string() }).optional(),
             video: z.object({ link: z.string() }).optional(),
@@ -319,10 +321,12 @@ export function registerMetaTemplatesRoutes(app: Application) {
               link: z.string(),
               filename: z.string().optional(),
             }).optional(),
+            date_time: z.any().optional(),
+            currency: z.any().optional(),
             action: z.any().optional(),
           })),
-        })).optional(),
-      }); // Reduzido strict para permitir metadados do template original
+        })).optional().nullable(),
+      }).passthrough(); // Permitir draftId e outros campos sem erros
 
       const body = schema.parse(req.body || {});
 
@@ -377,29 +381,49 @@ export function registerMetaTemplatesRoutes(app: Application) {
 
       // Salvar no banco e emitir socket
       if (chatId) {
-        const { data: chat } = await supabaseAdmin.from("chats").select("company_id").eq("id", chatId).single();
-        
-        const { data: insertedData } = await supabaseAdmin
+        // Buscar company_id se não tivermos
+        let targetCompanyId = companyId;
+        const { data: chatData } = await supabaseAdmin.from("chats").select("company_id").eq("id", chatId).single();
+        if (chatData?.company_id) targetCompanyId = chatData.company_id;
+
+        const senderName = (req as any).profile?.name || (req as any).user?.name || "Agente";
+        const senderAvatar = (req as any).profile?.avatar_url || (req as any).user?.avatar_url || null;
+
+        const { data: insertedData, error: insertedError } = await supabaseAdmin
           .from("chat_messages")
-          .insert({
+          .insert([{
             chat_id: chatId,
             inbox_id: body.inboxId,
-            company_id: chat?.company_id || companyId,
+            company_id: targetCompanyId,
             external_id: result.wamid,
             content: `Template: ${body.templateName}`,
             type: "TEMPLATE",
-            sender_type: "AGENT",
-            sender_id: req.user?.id,
+            is_from_customer: false,
+            sender_id: req.user?.id || null,
+            sender_name: senderName,
+            sender_avatar_url: senderAvatar,
             view_status: "Sent",
             interactive_content: {
               template_name: body.templateName,
               language_code: body.languageCode,
-              components: body.components,
+              components: body.components || [],
               template_definition: (req.body as any).templateDefinition || null
             }
-          })
+          }])
           .select()
           .single();
+
+        if (insertedError) {
+          console.error("[meta.templates] Failed to insert message into DB:", insertedError);
+          // Mesmo com erro no banco, o template foi enviado. 
+          // Retornamos sucesso mas sem o objeto 'data' do banco.
+          return res.json({ 
+            success: true, 
+            wamid: result.wamid,
+            message: "Template enviado, mas houve erro ao salvar no histórico local",
+            error: insertedError.message
+          });
+        }
 
         let inserted = insertedData;
 
@@ -417,7 +441,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
           await publish(EX_APP, "socket.livechat.outbound", {
             kind: "livechat.outbound.message",
             chatId,
-            companyId: chat?.company_id || companyId,
+            companyId: targetCompanyId,
             inboxId: body.inboxId,
             message: {
               ...inserted,
@@ -425,7 +449,7 @@ export function registerMetaTemplatesRoutes(app: Application) {
             },
             chatUpdate: {
               chatId,
-              companyId: chat?.company_id || companyId,
+              companyId: targetCompanyId,
               inboxId: body.inboxId,
               last_message: inserted?.content || `Template: ${body.templateName}`,
               last_message_at: inserted?.created_at || new Date().toISOString(),
@@ -434,6 +458,16 @@ export function registerMetaTemplatesRoutes(app: Application) {
             }
           });
         }
+
+        // Invalida caches do chat para que a mensagem apareça ao recarregar a página
+        setTimeout(() => {
+          Promise.all([
+            rDel(k.chat(chatId)),
+            clearMessageCache(chatId),
+          ]).catch((err) => {
+            console.warn("[meta.templates] Cache invalidate failure:", err instanceof Error ? err.message : err);
+          });
+        }, 0);
 
         return res.json({ 
           success: true, 

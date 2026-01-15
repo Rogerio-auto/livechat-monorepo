@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useCadastro } from "../../hooks/useCadastro";
 import { CombinedSignupStep, CombinedSignupData } from "./combined-signup-step";
 import { PricingStep } from "./pricing-step";
@@ -18,6 +18,14 @@ export function CadastroPage() {
     // Forçar tema claro nesta parte do sistema conforme solicitado pelo usuário
     document.documentElement.classList.remove("dark");
     document.documentElement.dataset.theme = "light";
+
+    // Verificar se há um plano selecionado na URL vindo da landing page
+    const params = new URLSearchParams(window.location.search);
+    const planFromUrl = params.get("plan");
+    if (planFromUrl) {
+      setSelectedPlan(planFromUrl);
+      setCurrentStep(2);
+    }
   }, []);
 
   // Passo 1: Seleção de Plano
@@ -72,21 +80,7 @@ export function CadastroPage() {
     }
   };
 
-  const steps = useMemo(
-    () => [
-      { number: 1, label: "Escolha seu Plano" },
-      { number: 2, label: "Cadastro" },
-    ],
-    [],
-  );
-
   const containerBackground = "bg-slate-50 text-slate-900";
-
-  const badgeStyles = {
-    backgroundColor: "rgba(47, 180, 99, 0.1)",
-    color: "#2fb463",
-    borderColor: "rgba(47, 180, 99, 0.2)",
-  } as const;
 
   if (loading && currentStep === 1 && !status) {
     return (
@@ -107,23 +101,14 @@ export function CadastroPage() {
       <div className="relative mx-auto flex w-full max-w-7xl flex-col px-4 py-12 sm:px-6 lg:px-8">
         <header className="mb-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-slate-400">
-              Cadastro Simplificado
-            </span>
             <h1 className="text-4xl font-bold leading-tight text-slate-900">
               Comece sua jornada com a 7Sion
             </h1>
             <p className="max-w-xl text-sm text-slate-500">
-              Escolha o plano ideal para o seu negócio e ative seu período de 30 dias grátis agora mesmo.
+              {selectedPlan 
+                ? "Finalize seu cadastro para ativar sua plataforma com o plano selecionado."
+                : "Escolha o plano ideal para o seu negócio e ative seu período de 30 dias grátis agora mesmo."}
             </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <span
-              className="flex items-center gap-2 rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-wide"
-              style={badgeStyles}
-            >
-              Etapa {currentStep} de {steps.length}
-            </span>
           </div>
         </header>
 
@@ -165,6 +150,7 @@ export function CadastroPage() {
               onSubmit={handleCombinedSignup}
               loading={isCreatingAccount}
               error={error}
+              selectedPlan={selectedPlan}
             />
           )}
         </div>

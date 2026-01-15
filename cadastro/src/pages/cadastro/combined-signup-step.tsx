@@ -32,9 +32,10 @@ interface Props {
   onSubmit: (data: CombinedSignupData) => void;
   loading?: boolean;
   error?: string | null;
+  selectedPlan?: string | null;
 }
 
-export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
+export function CombinedSignupStep({ onSubmit, loading, error, selectedPlan }: Props) {
   const [formData, setFormData] = useState<CombinedSignupData>({
     name: "",
     email: "",
@@ -178,6 +179,11 @@ export function CombinedSignupStep({ onSubmit, loading, error }: Props) {
             <FaRocket className="text-2xl" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900">Crie sua conta grátis</h2>
+          {selectedPlan && (
+            <div className="inline-block rounded-full bg-slate-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 border border-slate-200">
+              Plano Selecionado: <span className="text-[#2fb463]">{selectedPlan}</span>
+            </div>
+          )}
           <p className="text-xs text-slate-500">
             Comece a gerenciar seus atendimentos em poucos minutos.
           </p>

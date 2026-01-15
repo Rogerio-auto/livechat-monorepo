@@ -10,8 +10,9 @@ COPY packages/shared/package*.json ./packages/shared/
 # Install all dependencies (monorepo aware, skip postinstall scripts)
 RUN npm ci --ignore-scripts
 
-# Copy shared package source
+# Build shared package first
 COPY packages/shared ./packages/shared
+RUN npm run build --workspace=@livechat/shared
 
 # Copy landing source files
 COPY landing ./landing/
@@ -26,8 +27,8 @@ ENV VITE_API_URL=${VITE_API_URL}
 ENV VITE_CADASTRO_URL=${VITE_CADASTRO_URL}
 ENV VITE_APP_URL=${VITE_APP_URL}
 
-# Build landing
-RUN npm run build --workspace landing
+# Build landing - Forçamos o build limpo
+RUN cd landing && npm run build
 
 # --- production stage
 FROM nginx:1.27-alpine

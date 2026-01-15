@@ -11,6 +11,13 @@ import {
   buildWahaSessionId,
   ensureWahaSession,
 } from "../services/waha/client.service.js";
+import {
+  exchangeMetaToken,
+  exchangeCodeForToken,
+  fetchAllowedWabas,
+  fetchWabaPhoneNumbers,
+  fetchWabaDetails,
+} from "../services/meta/oauth.service.js";
 
 type ActorContext = {
   companyId: string;
@@ -300,6 +307,43 @@ function prepareSecretForStorage(value: string | null | undefined): string | nul
 }
 
 export function registerSettingsInboxesRoutes(app: Application) {
+  app.post("/settings/inboxes/meta-exchange", requireAuth, async (req: any, res) => {
+    try {
+      const { code } = req.body;
+      if (!code) {
+        return res.status(400).json({ error: "O parâmetro 'code' é obrigatório" });
+      }
+
+      logger.info("[META][OAUTH] Iniciando troca de code");
+
+      // 1. Troca o code pelo token de acesso
+      const result = await exchangeCodeForToken(code);
+      const accessToken = result.access_token;
+
+      // 2. Busca as WABAs permitidas
+      const wabas = await fetchAllowedWabas(accessToken);
+      if (wabas.length === 0) {
+          throw new Error("Nenhuma conta do WhatsApp Business encontrada para este usuário.");
+      }
+
+      // Vamos pegar a primeira WABA por padrão para buscar os números,
+      // mas retornamos os dados para o frontend.
+      const waba = wabas[0];
+      const phoneNumbers = await fetchWabaPhoneNumbers(waba.id, accessToken);
+
+      return res.json({
+        success: true,
+        accessToken,
+        wabaId: waba.id,
+        wabaName: waba.name,
+        phoneNumbers,
+      });
+    } catch (error: any) {
+      logger.error("[META][OAUTH] Erro no endpoint de troca:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
   app.get("/settings/inboxes", requireAuth, async (req: any, res) => {
     try {
       const { companyId } = await fetchActorContext(req);

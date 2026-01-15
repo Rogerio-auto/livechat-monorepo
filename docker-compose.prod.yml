@@ -11,6 +11,20 @@ volumes:
   waha-media:
 
 services:
+  landing:
+    build:
+      context: .
+      dockerfile: ./landing/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api-back.7sion.com}
+        VITE_CADASTRO_URL: ${VITE_CADASTRO_URL:-https://account.7sion.com}
+        VITE_APP_URL: ${VITE_APP_URL:-https://app.7sion.com}
+    ports:
+      - "3333:80"
+    networks:
+      - internal
+    restart: unless-stopped
+
   api:
     build:
       context: .

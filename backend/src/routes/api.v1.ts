@@ -1,6 +1,7 @@
 import express, { Response } from "express";
 import crypto from "node:crypto";
 import { requireApiKey } from "../middlewares/requireApiKey.js";
+import { requireApiFeature, apiRateLimiter } from "../middlewares/api-v1-limits.js";
 import { AuthRequest } from "../types/express.js";
 import { 
   SendMessageV1Schema, 
@@ -24,11 +25,16 @@ import { WebhookService } from "../services/webhook.service.js";
 
 const router = express.Router();
 
+// Apply global middlewares to all V1 routes
+router.use(requireApiKey);
+router.use(requireApiFeature);
+router.use(apiRateLimiter);
+
 /**
  * @route   GET /api/v1/chats
  * @desc    List active chats
  */
-router.get("/chats", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.get("/chats", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const limit = Math.min(Number(req.query.limit || 20), 100);
@@ -69,7 +75,7 @@ router.get("/chats", requireApiKey, async (req: AuthRequest, res: Response) => {
  * @route   GET /api/v1/chats/:id/messages
  * @desc    List messages for a specific chat
  */
-router.get("/chats/:id/messages", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.get("/chats/:id/messages", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { id } = req.params;
@@ -114,7 +120,7 @@ router.get("/chats/:id/messages", requireApiKey, async (req: AuthRequest, res: R
  * @desc    Check API Key status
  * @access  Public (via API Key)
  */
-router.get("/health", requireApiKey, (req: AuthRequest, res: Response) => {
+router.get("/health", (req: AuthRequest, res: Response) => {
   return res.json({
     ok: true,
     company_id: req.user?.company_id,
@@ -129,7 +135,7 @@ router.get("/health", requireApiKey, (req: AuthRequest, res: Response) => {
  * @route   GET /api/v1/chats
  * @desc    List active chats
  */
-router.get("/chats", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.get("/chats", async (req: AuthRequest, res: Response) => {
   // TODO: Implement list chats logic
   res.status(501).json({ error: "Not implemented yet" });
 });
@@ -138,7 +144,7 @@ router.get("/chats", requireApiKey, async (req: AuthRequest, res: Response) => {
  * @route   POST /api/v1/messages/send
  * @desc    Send a message (Text or Media)
  */
-router.post("/messages/send", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.post("/messages/send", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     if (!companyId) return res.status(400).json({ error: "Contexto de empresa não encontrado" });
@@ -316,7 +322,7 @@ router.post("/messages/send", requireApiKey, async (req: AuthRequest, res: Respo
  * @route   PATCH /api/v1/chats/:id/ai-agent
  * @desc    Toggle AI Agent
  */
-router.patch("/chats/:id/ai-agent", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.patch("/chats/:id/ai-agent", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { id } = req.params;
@@ -375,7 +381,7 @@ router.patch("/chats/:id/ai-agent", requireApiKey, async (req: AuthRequest, res:
  * @route   POST /api/v1/contacts
  * @desc    Create or update contact (Upsert)
  */
-router.post("/contacts", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.post("/contacts", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     if (!companyId) return res.status(400).json({ error: "Contexto de empresa não encontrado" });
@@ -453,7 +459,7 @@ router.post("/contacts", requireApiKey, async (req: AuthRequest, res: Response) 
  * @route   POST /api/v1/campaigns/:id/start
  * @desc    Start a campaign
  */
-router.post("/campaigns/:id/start", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.post("/campaigns/:id/start", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { id } = req.params;
@@ -511,7 +517,7 @@ router.post("/campaigns/:id/start", requireApiKey, async (req: AuthRequest, res:
  * @route   POST /api/v1/flows/:id/trigger
  * @desc    Trigger a flow for a contact
  */
-router.post("/flows/:id/trigger", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.post("/flows/:id/trigger", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { id } = req.params;
@@ -556,7 +562,7 @@ router.post("/flows/:id/trigger", requireApiKey, async (req: AuthRequest, res: R
  * @route   GET /api/v1/webhooks
  * @desc    List webhook subscriptions
  */
-router.get("/webhooks", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.get("/webhooks", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { data, error } = await supabaseAdmin
@@ -575,7 +581,7 @@ router.get("/webhooks", requireApiKey, async (req: AuthRequest, res: Response) =
  * @route   POST /api/v1/webhooks
  * @desc    Create a webhook subscription
  */
-router.post("/webhooks", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.post("/webhooks", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const parsed = WebhookSubscriptionV1Schema.safeParse(req.body);
@@ -607,7 +613,7 @@ router.post("/webhooks", requireApiKey, async (req: AuthRequest, res: Response) 
  * @route   DELETE /api/v1/webhooks/:id
  * @desc    Delete a webhook subscription
  */
-router.delete("/webhooks/:id", requireApiKey, async (req: AuthRequest, res: Response) => {
+router.delete("/webhooks/:id", async (req: AuthRequest, res: Response) => {
   try {
     const companyId = req.user?.company_id;
     const { id } = req.params;

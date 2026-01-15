@@ -2,10 +2,12 @@ import { useState } from "react";
 import InboxesPanel from "../../components/inboxes/InboxesPanel";
 import { useInboxesSettings, EMPTY_INBOX_FORM, EMPTY_WAHA_FORM } from "../../hooks/useInboxesSettings";
 import { API, fetchJson, getAccessToken } from "../../utils/api";
+import { useMetaOAuth } from "../../hooks/useMetaOAuth";
 import type { InboxFormExtended, Inbox } from "@livechat/shared";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
+import { toast } from "../../hooks/useToast";
 
 const generateVerifyToken = () =>
   Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -32,13 +34,22 @@ export default function InboxesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Inbox | null>(null);
   const [deleteSaving, setDeleteSaving] = useState(false);
 
+  // Estados para o fluxo automático da Meta
+  const { isLoaded: metaSdkLoaded, launchWhatsAppSignup } = useMetaOAuth();
+  const [isManual, setIsManual] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [availablePhones, setAvailablePhones] = useState<any[]>([]);
+
   const isMeta = createInboxForm.provider === "META_CLOUD";
   const isWaha = createInboxForm.provider === "WAHA";
 
   const openCreateModalForProvider = (provider: "META_CLOUD" | "WAHA") => {
+    setIsManual(false); // Reseta para automático por padrão
+    setAvailablePhones([]);
     if (provider === "META_CLOUD") {
       setCreateInboxForm({
         ...EMPTY_INBOX_FORM,
+        provider: "META_CLOUD",
         provider_config: {
           meta: {
             ...EMPTY_INBOX_FORM.provider_config?.meta,
@@ -47,7 +58,7 @@ export default function InboxesPage() {
         },
       });
     } else {
-      setCreateInboxForm({ ...EMPTY_WAHA_FORM });
+      setCreateInboxForm({ ...EMPTY_WAHA_FORM, provider: "WAHA" });
     }
     setProviderPickerOpen(false);
     setCreateModalOpen(true);
@@ -77,18 +88,78 @@ export default function InboxesPage() {
       if (!response.ok) {
         console.error("[submitCreateInbox] Erro na resposta:", data);
         const errorMsg = data.error || "Erro desconhecido";
-        const details = data.details ? JSON.stringify(data.details, null, 2) : "";
-        alert(`Erro ao criar caixa: ${errorMsg}\n${details}`);
+        toast.error(`Erro ao criar caixa: ${errorMsg}`);
         return;
       }
 
       await refetch();
       setCreateModalOpen(false);
+      toast.success("Caixa de entrada criada com sucesso!");
     } catch (err) {
       console.error("Erro ao criar caixa:", err);
-      alert("Erro ao criar caixa de entrada. Verifique o console para mais detalhes.");
+      toast.error("Erro ao criar caixa de entrada.");
     } finally {
       setCreateSaving(false);
+    }
+  };
+
+  const handleMetaConnect = async () => {
+    try {
+      // @ts-ignore - launchWhatsAppSignup return type mismatch with backend expectations
+      const { code } = await launchWhatsAppSignup();
+      setMetaLoading(true);
+
+      const response = await fetch(`${API}/settings/inboxes/meta-exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${getAccessToken() || ""}`
+        },
+        body: JSON.stringify({ code }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+          throw new Error(data.error || "Falha ao conectar com Meta");
+      }
+
+      setAvailablePhones(data.phoneNumbers);
+      
+      // Armazena o token e IDs no form
+      setCreateInboxForm(prev => ({
+          ...prev,
+          provider_config: {
+              ...prev.provider_config,
+              meta: {
+                  ...prev.provider_config?.meta,
+                  access_token: data.accessToken,
+                  waba_id: data.wabaId
+              }
+          }
+      }));
+
+      // Pré-preenche se houver apenas um número
+      if (data.phoneNumbers.length === 1) {
+          const phone = data.phoneNumbers[0];
+          setCreateInboxForm(prev => ({
+              ...prev,
+              phone_number: phone.display_phone_number,
+              provider_config: {
+                  ...prev.provider_config,
+                  meta: {
+                      ...prev.provider_config?.meta,
+                      phone_number_id: phone.id
+                  }
+              }
+          }));
+      }
+      toast.success("Conectado com sucesso! Selecione o número abaixo.");
+    } catch (err: any) {
+      console.error("Erro no OAuth Meta:", err);
+      toast.error(`Erro ao conectar: ${err.message}`);
+    } finally {
+      setMetaLoading(false);
     }
   };
 
@@ -101,9 +172,10 @@ export default function InboxesPage() {
       });
       await refetch();
       setDeleteTarget(null);
+      toast.success("Caixa excluída com sucesso");
     } catch (err) {
       console.error("Erro ao excluir caixa:", err);
-      alert("Erro ao excluir caixa de entrada");
+      toast.error("Erro ao excluir caixa de entrada");
     } finally {
       setDeleteSaving(false);
     }
@@ -202,96 +274,169 @@ export default function InboxesPage() {
             onChange={(e) => setCreateInboxForm({ ...createInboxForm, name: e.target.value })}
           />
 
-          {!isWaha && (
-            <Input
-              label="Número de Telefone"
-              placeholder="5511999999999"
-              value={createInboxForm.phone_number}
-              onChange={(e) => setCreateInboxForm({ ...createInboxForm, phone_number: e.target.value })}
-            />
-          )}
+          {isMeta && !isManual ? (
+            <div className="p-6 border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-xl flex flex-col items-center gap-4">
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600">
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12c0-5.523-4.477-10-10-10z" />
+                </svg>
+              </div>
+              <div className="text-center">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Conexão Automática</h3>
+                <p className="text-sm text-gray-500">Conecte sua conta em segundos usando o Login do Facebook.</p>
+              </div>
+              
+              <Button
+                variant="primary"
+                onClick={handleMetaConnect}
+                disabled={metaLoading || !metaSdkLoaded}
+                className="w-full bg-[#1877F2] hover:bg-[#166fe5] border-none text-white flex items-center justify-center gap-2"
+              >
+                {metaLoading ? "Conectando..." : "Entrar com Facebook"}
+              </Button>
 
-          {isMeta && (
+              {availablePhones.length > 0 && (
+                <div className="w-full space-y-2 mt-4">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Selecione o Número</label>
+                    <select 
+                        className="w-full p-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm"
+                        value={createInboxForm.phone_number}
+                        onChange={(e) => {
+                            const phone = availablePhones.find(p => p.display_phone_number === e.target.value);
+                            setCreateInboxForm(prev => ({
+                                ...prev,
+                                phone_number: e.target.value,
+                                provider_config: {
+                                    ...prev.provider_config,
+                                    meta: {
+                                        ...prev.provider_config?.meta,
+                                        phone_number_id: phone?.id
+                                    }
+                                }
+                            }));
+                        }}
+                    >
+                        {availablePhones.map(p => (
+                            <option key={p.id} value={p.display_phone_number}>
+                                {p.display_phone_number} ({p.verified_name})
+                            </option>
+                        ))}
+                    </select>
+                </div>
+              )}
+
+              <button 
+                type="button"
+                onClick={() => setIsManual(true)}
+                className="text-xs text-blue-600 hover:underline mt-2"
+              >
+                Deseja configurar manualmente? Clique aqui
+              </button>
+            </div>
+          ) : (
             <>
-              <Input
-                label="Phone Number ID"
-                placeholder="ID numérico da Meta"
-                value={createInboxForm.provider_config?.meta?.phone_number_id || ""}
-                onChange={(e) => setCreateInboxForm({
-                  ...createInboxForm,
-                  provider_config: {
-                    ...createInboxForm.provider_config,
-                    meta: { ...createInboxForm.provider_config?.meta, phone_number_id: e.target.value }
-                  }
-                })}
-              />
-              <Input
-                label="WABA ID"
-                placeholder="WhatsApp Business Account ID"
-                value={createInboxForm.provider_config?.meta?.waba_id || ""}
-                onChange={(e) => setCreateInboxForm({
-                  ...createInboxForm,
-                  provider_config: {
-                    ...createInboxForm.provider_config,
-                    meta: { ...createInboxForm.provider_config?.meta, waba_id: e.target.value }
-                  }
-                })}
-              />
-              <Input
-                label="Access Token"
-                placeholder="EAAB..."
-                type="password"
-                value={createInboxForm.provider_config?.meta?.access_token || ""}
-                onChange={(e) => setCreateInboxForm({
-                  ...createInboxForm,
-                  provider_config: {
-                    ...createInboxForm.provider_config,
-                    meta: { ...createInboxForm.provider_config?.meta, access_token: e.target.value }
-                  }
-                })}
-              />
-              <Input
-                label="App Secret"
-                placeholder="App Secret do Painel Meta"
-                type="password"
-                value={createInboxForm.provider_config?.meta?.app_secret || ""}
-                onChange={(e) => setCreateInboxForm({
-                  ...createInboxForm,
-                  provider_config: {
-                    ...createInboxForm.provider_config,
-                    meta: { ...createInboxForm.provider_config?.meta, app_secret: e.target.value }
-                  }
-                })}
-              />
-              <div className="flex flex-col gap-1">
-                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Webhook Verify Token</label>
-                <div className="flex gap-2">
+              {!isWaha && (
+                <Input
+                  label="Número de Telefone"
+                  placeholder="5511999999999"
+                  value={createInboxForm.phone_number}
+                  onChange={(e) => setCreateInboxForm({ ...createInboxForm, phone_number: e.target.value })}
+                />
+              )}
+
+              {isMeta && isManual && (
+                <>
+                  <div className="flex justify-between items-center">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Configuração Manual</label>
+                    <button 
+                        type="button"
+                        onClick={() => setIsManual(false)}
+                        className="text-xs text-blue-600 hover:underline"
+                    >
+                        Voltar para automático
+                    </button>
+                  </div>
                   <Input
-                    placeholder="token seguro"
-                    className="flex-1"
-                    value={createInboxForm.provider_config?.meta?.webhook_verify_token || ""}
+                    label="Phone Number ID"
+                    placeholder="ID numérico da Meta"
+                    value={createInboxForm.provider_config?.meta?.phone_number_id || ""}
                     onChange={(e) => setCreateInboxForm({
                       ...createInboxForm,
                       provider_config: {
                         ...createInboxForm.provider_config,
-                        meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: e.target.value }
+                        meta: { ...createInboxForm.provider_config?.meta, phone_number_id: e.target.value }
                       }
                     })}
                   />
-                  <Button
-                    variant="ghost"
-                    onClick={() => setCreateInboxForm({
+                  <Input
+                    label="WABA ID"
+                    placeholder="WhatsApp Business Account ID"
+                    value={createInboxForm.provider_config?.meta?.waba_id || ""}
+                    onChange={(e) => setCreateInboxForm({
                       ...createInboxForm,
                       provider_config: {
                         ...createInboxForm.provider_config,
-                        meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: generateVerifyToken() }
+                        meta: { ...createInboxForm.provider_config?.meta, waba_id: e.target.value }
                       }
                     })}
-                  >
-                    Gerar
-                  </Button>
-                </div>
-              </div>
+                  />
+                  <Input
+                    label="Access Token"
+                    placeholder="EAAB..."
+                    type="password"
+                    value={createInboxForm.provider_config?.meta?.access_token || ""}
+                    onChange={(e) => setCreateInboxForm({
+                      ...createInboxForm,
+                      provider_config: {
+                        ...createInboxForm.provider_config,
+                        meta: { ...createInboxForm.provider_config?.meta, access_token: e.target.value }
+                      }
+                    })}
+                  />
+                  <Input
+                    label="App Secret"
+                    placeholder="App Secret do Painel Meta"
+                    type="password"
+                    value={createInboxForm.provider_config?.meta?.app_secret || ""}
+                    onChange={(e) => setCreateInboxForm({
+                      ...createInboxForm,
+                      provider_config: {
+                        ...createInboxForm.provider_config,
+                        meta: { ...createInboxForm.provider_config?.meta, app_secret: e.target.value }
+                      }
+                    })}
+                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Webhook Verify Token</label>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="token seguro"
+                        className="flex-1"
+                        value={createInboxForm.provider_config?.meta?.webhook_verify_token || ""}
+                        onChange={(e) => setCreateInboxForm({
+                          ...createInboxForm,
+                          provider_config: {
+                            ...createInboxForm.provider_config,
+                            meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: e.target.value }
+                          }
+                        })}
+                      />
+                      <Button
+                        variant="ghost"
+                        onClick={() => setCreateInboxForm({
+                          ...createInboxForm,
+                          provider_config: {
+                            ...createInboxForm.provider_config,
+                            meta: { ...createInboxForm.provider_config?.meta, webhook_verify_token: generateVerifyToken() }
+                          }
+                        })}
+                      >
+                        Gerar
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 

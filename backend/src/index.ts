@@ -35,6 +35,7 @@ import { DocumentController } from "./controllers/document.controller.js";
 // Middleware & Base Routes
 import { requireAuth } from "./middlewares/requireAuth.js";
 import { webhookRouter } from "./routes/webhooks.js";
+import { apiV1Router } from "./routes/api.v1.js";
 import filesRoute from "./server/files.route.js";
 import mediaProxyRouter from "./routes/media.proxy.js";
 import uploadRouter from "./routes/upload.js";
@@ -87,6 +88,7 @@ import { registerFlowRoutes } from "./routes/livechat.flows.js";
 import { registerMetaHealthRoutes } from "./routes/meta.health.js";
 import { registerCustomerOptInRoutes } from "./routes/customers.optin.js";
 import { registerSendMessageRoutes } from "./routes/sendMessage.js";
+import { settingsApiRouter } from "./routes/settings.api.js";
 
 // Specific Routers
 import adminAgentsRouter from "./routes/admin/agents.js";
@@ -171,15 +173,18 @@ const limiter = rateLimit({
 });
 app.use("/api/", limiter);
 
-// Webhooks
-app.use("/api/webhooks", webhookRouter);
-
 app.use(cookieParser());
 app.use(express.json({
   limit: "2mb",
   verify: (req: any, res, buf) => { req.rawBody = buf; }
 }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+
+// Webhooks
+app.use("/api/webhooks", webhookRouter);
+
+// Public API V1
+app.use("/api/v1", apiV1Router);
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "cadastro-secret-change-in-production",
@@ -241,8 +246,10 @@ registerProjectRoutes(app);
 registerNotificationRoutes(app);
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
+app.use("/api", settingsApiRouter);
 registerSettingsInboxesRoutes(app);
 registerSettingsUsersRoutes(app);
+app.use("/api", settingsApiRouter);
 registerSendMessageRoutes(app);
 registerCampaignRoutes(app);
 registerCampaignSegmentsRoutes(app);
@@ -306,16 +313,18 @@ app.use(errorHandler);
 
 const PORT = Number(process.env.PORT_BACKEND || 5000);
 
-void (async () => {
-  try { await syncGlobalWahaApiKey(); } catch (e) { console.error("[WAHA] API Key sync failed", e); }
-  try { await registerCampaignWorker(); } catch (e) { console.error("[Campaign] Worker failed", e); }
-  try { startScheduler(); } catch (e) { console.error("[Scheduler] Start failed", e); }
+if (process.env.NODE_ENV !== "test") {
+  void (async () => {
+    try { await syncGlobalWahaApiKey(); } catch (e) { console.error("[WAHA] API Key sync failed", e); }
+    try { await registerCampaignWorker(); } catch (e) { console.error("[Campaign] Worker failed", e); }
+    try { startScheduler(); } catch (e) { console.error("[Scheduler] Start failed", e); }
 
-  server.listen(PORT, () => {
-    console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
-    LivechatController.startListeners();
-  });
-})();
+    server.listen(PORT, () => {
+      console.log(`🚀 [BACKEND] Server listening on port ${PORT}`);
+      LivechatController.startListeners();
+    });
+  })();
+}
 
 export { app, server };
 

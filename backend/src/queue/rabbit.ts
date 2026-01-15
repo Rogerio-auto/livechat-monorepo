@@ -25,6 +25,8 @@ export const Q_CAMPAIGN_FOLLOWUP =
   process.env.RABBIT_Q_CAMPAIGN_FOLLOWUP || "campaign.followup";
 export const Q_FLOW_EXECUTION =
   process.env.RABBIT_Q_FLOW_EXECUTION || "flow.execution";
+export const Q_WEBHOOK_DISPATCH =
+  process.env.RABBIT_Q_WEBHOOK_DISPATCH || "webhook.dispatch";
 
 // singletons
 let _conn: AmqpConnection | null = null;
@@ -108,9 +110,12 @@ async function setupTopology(ch: AmqpChannel) {
   await ch.assertQueue(Q_FLOW_EXECUTION, { durable: true });
   await ch.bindQueue(Q_FLOW_EXECUTION, EX_APP, "flow.execution");
 
-
-  // (Opcional) se quiser publicar com "livechat.startChat", binda também:
-  // await ch.bindQueue(Q_OUTBOUND, EX_APP, "livechat.startChat");
+  // Webhook Dispatcher
+  await ch.assertQueue(Q_WEBHOOK_DISPATCH, { 
+    durable: true,
+    deadLetterExchange: EX_DLX 
+  });
+  await ch.bindQueue(Q_WEBHOOK_DISPATCH, EX_APP, "webhook.dispatch");
 }
 
 

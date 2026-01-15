@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import { 
   Building2, 
   User, 
@@ -12,7 +13,8 @@ import {
   Calendar, 
   Lock,
   BookOpen,
-  Bell
+  Bell,
+  Terminal
 } from "lucide-react";
 
 const SECTIONS = [
@@ -20,6 +22,7 @@ const SECTIONS = [
   { id: "perfil", title: "Perfil", icon: <User size={18} />, path: "perfil" },
   { id: "notificacoes", title: "Notificações", icon: <Bell size={18} />, path: "notificacoes" },
   { id: "inboxes", title: "Canais", icon: <Inbox size={18} />, path: "canais" },
+  { id: "desenvolvedor", title: "Desenvolvedor", icon: <Terminal size={18} />, path: "desenvolvedor" },
   // { id: "integracoes", title: "Integrações", icon: <Plug2 size={18} />, path: "integracoes" },
   { id: "billing", title: "Faturamento", icon: <CreditCard size={18} />, path: "faturamento" },
   { id: "ia", title: "Agentes de IA", icon: <Bot size={18} />, path: "ia" },
@@ -31,7 +34,18 @@ const SECTIONS = [
   { id: "permissoes-calendario", title: "Permissões", icon: <Lock size={18} />, path: "permissoes-calendario" },
 ];
 
+const DEVELOPER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SUPERVISOR'];
+
 export default function SettingsLayout() {
+  const { user } = useAuth();
+
+  const filteredSections = SECTIONS.filter(section => {
+    if (section.id === "desenvolvedor") {
+      return DEVELOPER_ROLES.includes(user?.role || "");
+    }
+    return true;
+  });
+
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-950">
       <div className="mx-auto w-full max-w-[1440px] px-4 pb-10 pt-8 sm:px-6 lg:px-8">
@@ -44,7 +58,7 @@ export default function SettingsLayout() {
           {/* Sidebar de Navegação - Sticky no Desktop */}
           <aside className="w-full lg:w-64 shrink-0 lg:sticky lg:top-8 max-h-[calc(100vh-120px)] overflow-y-auto custom-scrollbar">
             <nav className="space-y-0.5 pr-2">
-              {SECTIONS.map((item) => (
+              {filteredSections.map((item) => (
                 <NavLink
                   key={item.id}
                   to={item.path}

@@ -21,7 +21,7 @@ import {
   clearListCacheIndexes,
 } from "../lib/redis.js";
 import { WAHA_PROVIDER, fetchWahaChatPicture, fetchWahaContactPicture, fetchWahaGroupPicture, deleteWahaMessage, editWahaMessage } from "../services/waha/client.service.js";
-import { normalizeMsisdn } from "../utils/util.util.js";
+import { WebhookService } from "../services/webhook.service.js";
 import { getAgent as getRuntimeAgent } from "../services/agents-runtime.service.js";
 import { 
   transformMessagesMediaUrls, 
@@ -1854,7 +1854,7 @@ export function registerLivechatChatRoutes(app: Application) {
     // Primeiro validar se o chat pertence à empresa via inbox_id
     const { data: chatCheck } = await supabaseAdmin
       .from("chats")
-      .select("id, inbox_id")
+      .select("id, inbox_id, status")
       .eq("id", id)
       .maybeSingle();
     
@@ -1883,6 +1883,16 @@ export function registerLivechatChatRoutes(app: Application) {
       .select("*")
       .single();
     if (error) return res.status(500).json({ error: error.message });
+
+    // 🪝 Trigger Webhook for chat status update
+    if (companyId) {
+      WebhookService.trigger("chat.status_updated", companyId, {
+        chat_id: id,
+        status: status,
+        previous_status: chatCheck.status || null, // We should have fetched it if we wanted it
+        updated_at: new Date().toISOString()
+      }).catch(err => console.error("[WebhookService] Failed to trigger chat.status_updated", err));
+    }
 
     // System message for status change
     try {

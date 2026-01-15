@@ -15,6 +15,7 @@ import {
   Q_OUTBOUND,
   Q_INBOUND_MEDIA,
   EX_APP,
+  Q_WEBHOOK_DISPATCH,
 } from "./queue/rabbit.js";
 import db from "./pg.js";
 import { normalizeMsisdn } from "./utils/util.util.js";
@@ -54,6 +55,7 @@ import os from "node:os";
 import { registerCampaignWorker } from "./worker.campaigns.js";
 import { parseFlowResponse } from "./services/meta/flows.service.js";
 import { triggerFlow } from "./services/flow-engine.service.js";
+import { WebhookService } from "./services/webhook.service.js";
 
 const TTL_AVATAR = Number(process.env.CACHE_TTL_AVATAR || 86400); // Default to 24 hours instead of 5 minutes
 
@@ -5226,6 +5228,28 @@ async function startOutboundWorkers(count: number, prefetch: number): Promise<vo
   await Promise.all(tasks);
 }
 
+async function startWebhookWorker(): Promise<void> {
+  const label = `[worker][webhook]`;
+  console.log(`${label} starting`);
+  await consume(
+    Q_WEBHOOK_DISPATCH,
+    async (msg, ch) => {
+      if (!msg) return;
+      try {
+        const job = JSON.parse(msg.content.toString());
+        if (job.jobType === "webhook.dispatch" && job.payload) {
+          await WebhookService.dispatch(job.companyId, job.payload);
+        }
+      } catch (err) {
+        console.error(`${label} error processing job:`, err);
+      } finally {
+        ch.ack(msg);
+      }
+    },
+    { prefetch: 10 }
+  );
+}
+
 async function main(): Promise<void> {
   const target = (process.argv[2] ?? "all").toLowerCase();
 
@@ -5257,12 +5281,13 @@ async function main(): Promise<void> {
         startInboundWorkers(INBOUND_WORKERS, INBOUND_PREFETCH),
         startInboundMediaWorkers(INBOUND_MEDIA_WORKERS, INBOUND_MEDIA_PREFETCH),
         startOutboundWorkers(OUTBOUND_WORKERS, OUTBOUND_PREFETCH),
+        startWebhookWorker(),
         registerFlowWorker(),
         registerCampaignWorker(),
       ]);
       startCronJobs();
       console.log(
-        `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) flows campaigns running.`,
+        `[worker] inbound(${INBOUND_WORKERS}) inbound-media(${INBOUND_MEDIA_WORKERS}) outbound(${OUTBOUND_WORKERS}) webhooks flows campaigns running.`,
       );
       break;
   }

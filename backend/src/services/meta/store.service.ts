@@ -8,6 +8,7 @@ import { clearMessageCache, clearListCacheIndexes, rDel, rGet, rSet, k } from ".
 import { decryptSecret, encryptMediaUrl } from "../../lib/crypto.js";
 import { WAHA_PROVIDER } from "../waha/client.service.js";
 import { notifyNewMessage } from "../../utils/notification-helpers.util.js";
+import { WebhookService } from "../webhook.service.js";
 
 let customerAvatarColumnMissing = false;
 let chatLastMessageFromColumnMissing = false;
@@ -1251,6 +1252,23 @@ export async function ensureLeadCustomerChat(args: {
           inbox_id: args.inboxId
         }
       }).catch(err => console.error("[FlowEngine] Failed to trigger LEAD_CREATED flow", err));
+
+      WebhookService.trigger("contact.created", args.companyId, {
+        id: customer!.id,
+        name: customer!.name,
+        phone: msisdn,
+        lead_id: lead!.id,
+        inbox_id: args.inboxId,
+        created_at: new Date().toISOString()
+      }).catch(err => console.error("[WebhookService] Failed to trigger contact.created", err));
+    } else {
+      WebhookService.trigger("contact.updated", args.companyId, {
+        id: customer!.id,
+        name: customer!.name,
+        phone: msisdn,
+        lead_id: lead!.id,
+        updated_at: new Date().toISOString()
+      }).catch(err => console.error("[WebhookService] Failed to trigger contact.updated", err));
     }
 
     return { leadId: lead!.id, customerId: customer!.id, chatId: chat!.id, externalId: chat.external_id ?? null };
@@ -1633,6 +1651,19 @@ export async function insertInboundMessage(args: {
     senderName: args.remoteSenderName ?? undefined,
     senderPhone: args.remoteSenderPhone ?? undefined,
   }).catch(err => console.error("[META][store] Failed to notify new message", err));
+
+  // 🪝 Trigger Webhook
+  if (args.companyId) {
+    WebhookService.trigger("message.created", args.companyId, {
+      id: result.message.id,
+      chat_id: args.chatId,
+      content: args.content,
+      type: args.type ?? "TEXT",
+      from_me: false,
+      external_id: args.externalId,
+      created_at: result.message.created_at
+    }).catch(err => console.error("[META][store] Failed to trigger webhook (inbound)", err));
+  }
 
   return {
     id: result.message.id,
@@ -2021,6 +2052,13 @@ export async function insertOutboundMessage(args: {
     }
 
     await invalidateChatCaches(row.chat_id, { inboxId: args.inboxId });
+
+    // 🪝 Trigger Webhook for outbound message
+    // Note: We need companyId. We can get it from the chat if needed, but for now 
+    // let's try to pass it if available or do a quick lookup if webhook is active.
+    // However, store.service functions are often called where we don't have companyId.
+    // Let's do a more robust approach in the worker for outbound.
+    
     return { message: row, operation };
   } catch (e) {
     console.error("[DB] insertOutboundMessage error", e);

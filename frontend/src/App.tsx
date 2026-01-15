@@ -33,6 +33,7 @@ import DepartamentosPage from './pages/configuracoes/DepartamentosPage'
 import TimesPage from './pages/configuracoes/TimesPage'
 import CalendariosPage from './pages/configuracoes/CalendariosPage'
 import PermissoesCalendarioPage from './pages/configuracoes/PermissoesCalendarioPage'
+import DeveloperPage from './pages/configuracoes/DeveloperPage'
 import GaleriaPage from './pages/galeria'
 import SubscriptionPage from './pages/subscription'
 import { ResetPassword } from './pages/reset-password'
@@ -194,6 +195,7 @@ function App() {
               <Route path="times" element={<TimesPage />} />
               <Route path="calendarios" element={<CalendariosPage />} />
               <Route path="permissoes-calendario" element={<PermissoesCalendarioPage />} />
+              <Route path="desenvolvedor" element={<DeveloperPage />} />
               <Route path="notificacoes" element={<NotificationPreferencesPage />} />
             </Route>
             <Route path='/subscription' element={<SubscriptionPage/>}/>

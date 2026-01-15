@@ -5275,6 +5275,9 @@ async function main(): Promise<void> {
     case "campaigns":
       await registerCampaignWorker();
       break;
+    case "webhooks":
+      await startWebhookWorker();
+      break;
     case "all":
     default:
       await Promise.all([
@@ -6219,7 +6222,7 @@ function startCronJobs() {
   setInterval(() => runWithDistributedLock("openai:cleanup", monthlyCleanupJob, 29 * 24 * 60 * 60), 24 * 60 * 60_000);
 
   // roda a cada 60s
-  setInterval(tickCampaigns, 60_000);
+  setInterval(() => runWithDistributedLock("campaigns:tick", tickCampaigns, 50), 60_000);
   setInterval(() => runWithDistributedLock("sync:groups", syncWahaGroupMetadata, 240), 300_000);
 }
 

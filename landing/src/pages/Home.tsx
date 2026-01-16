@@ -1,16 +1,25 @@
 import { Hero as AnimatedHero } from "../components/ui/animated-hero";
 import { HeroGeometric } from "../components/ui/shape-landing-hero";
 import { ShaderAnimation } from "../components/ui/shader-animation";
-import { SneakPeek } from "../components/sections/SneakPeek";
-import { TimelineSection } from "../components/sections/TimelineSection";
-import { SocialProof } from "../components/sections/SocialProof";
-import { FeatureGrid } from "../components/sections/FeatureGrid";
-import { Niches } from "../components/sections/Niches";
-import { PricingPreview } from "../components/sections/PricingPreview";
-import { Testimonials } from "../components/sections/Testimonials";
-import { FAQSection } from "../components/sections/FAQSection";
-import { FinalCTA } from "../components/sections/FinalCTA";
+import { Suspense, lazy } from "react";
 import { usePageMeta } from "../hooks/usePageMeta";
+
+// Lazy loaded sections
+const SneakPeek = lazy(() => import("../components/sections/SneakPeek").then(m => ({ default: m.SneakPeek })));
+const TimelineSection = lazy(() => import("../components/sections/TimelineSection").then(m => ({ default: m.TimelineSection })));
+const SocialProof = lazy(() => import("../components/sections/SocialProof").then(m => ({ default: m.SocialProof })));
+const FeatureGrid = lazy(() => import("../components/sections/FeatureGrid").then(m => ({ default: m.FeatureGrid })));
+const Niches = lazy(() => import("../components/sections/Niches").then(m => ({ default: m.Niches })));
+const PricingPreview = lazy(() => import("../components/sections/PricingPreview").then(m => ({ default: m.PricingPreview })));
+const Testimonials = lazy(() => import("../components/sections/Testimonials").then(m => ({ default: m.Testimonials })));
+const FAQSection = lazy(() => import("../components/sections/FAQSection").then(m => ({ default: m.FAQSection })));
+const FinalCTA = lazy(() => import("../components/sections/FinalCTA").then(m => ({ default: m.FinalCTA })));
+
+const SectionLoader = () => (
+  <div className="w-full py-40 flex items-center justify-center opacity-20">
+    <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+  </div>
+);
 
 const Home = () => {
   usePageMeta({
@@ -36,15 +45,17 @@ const Home = () => {
       </section>
       
       <div className="relative z-10 bg-background">
-        <SneakPeek />
-        <SocialProof />
-        <TimelineSection />
-        <FeatureGrid />
-        <Niches />
-        <PricingPreview />
-        <Testimonials />
-        <FAQSection />
-        <FinalCTA />
+        <Suspense fallback={<SectionLoader />}>
+          <SneakPeek />
+          <SocialProof />
+          <TimelineSection />
+          <FeatureGrid />
+          <Niches />
+          <PricingPreview />
+          <Testimonials />
+          <FAQSection />
+          <FinalCTA />
+        </Suspense>
       </div>
     </>
   );

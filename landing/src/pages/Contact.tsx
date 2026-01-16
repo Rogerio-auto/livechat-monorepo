@@ -63,11 +63,11 @@ const Contact = () => {
           description="Preencha o formulário ou escolha um canal de alto toque para conversar agora."
         />
         <div className="grid gap-8 lg:grid-cols-2">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-3xl border border-slate-100 bg-white/80 p-6 shadow-soft">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 rounded-3xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 shadow-sm">
             <div>
-              <label className="text-sm font-semibold text-slate-700">Nome completo</label>
+              <label className="text-sm font-semibold text-foreground/80">Nome completo</label>
               <input
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm focus:border-primary focus:outline-none"
+                className="mt-2 w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-sm focus:border-primary focus:outline-none"
                 placeholder="Nome"
                 {...register("name")}
               />
@@ -75,18 +75,18 @@ const Contact = () => {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="text-sm font-semibold text-slate-700">Email corporativo</label>
+                <label className="text-sm font-semibold text-foreground/80">Email corporativo</label>
                 <input
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm focus:border-primary focus:outline-none"
+                  className="mt-2 w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-sm focus:border-primary focus:outline-none"
                   placeholder="email@empresa.com"
                   {...register("email")}
                 />
                 {errors.email && <p className="mt-1 text-xs text-rose-500">{errors.email.message}</p>}
               </div>
               <div>
-                <label className="text-sm font-semibold text-slate-700">WhatsApp</label>
+                <label className="text-sm font-semibold text-foreground/80">WhatsApp</label>
                 <input
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm focus:border-primary focus:outline-none"
+                  className="mt-2 w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-sm focus:border-primary focus:outline-none"
                   placeholder="(69) 9967-0030"
                   {...register("phone")}
                 />
@@ -94,19 +94,19 @@ const Contact = () => {
               </div>
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Empresa</label>
+              <label className="text-sm font-semibold text-foreground/80">Empresa</label>
               <input
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm focus:border-primary focus:outline-none"
+                className="mt-2 w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-sm focus:border-primary focus:outline-none"
                 placeholder="Razão social"
                 {...register("company")}
               />
               {errors.company && <p className="mt-1 text-xs text-rose-500">{errors.company.message}</p>}
             </div>
             <div>
-              <label className="text-sm font-semibold text-slate-700">Mensagem</label>
+              <label className="text-sm font-semibold text-foreground/80">Mensagem</label>
               <textarea
                 rows={4}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm focus:border-primary focus:outline-none"
+                className="mt-2 w-full rounded-2xl border border-border bg-background/50 px-4 py-3 text-sm focus:border-primary focus:outline-none"
                 placeholder="Conte sobre o seu volume, metas e desafios"
                 {...register("message")}
               />
@@ -118,15 +118,15 @@ const Contact = () => {
             {status === "success" && <p className="text-sm text-emerald-600">Recebemos suas informações. Em breve entraremos em contato.</p>}
             {status === "error" && <p className="text-sm text-rose-600">Não foi possível enviar. Tente novamente em instantes.</p>}
           </form>
-          <div className="rounded-3xl border border-slate-100 bg-white/60 p-6">
-            <h3 className="text-lg font-semibold text-slate-900">Canais de alto toque</h3>
-            <p className="mt-2 text-sm text-slate-500">Nosso time responde em poucos minutos em horário comercial (BRT).
+          <div className="rounded-3xl border border-border/50 bg-card/30 backdrop-blur-sm p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-foreground">Canais de alto toque</h3>
+            <p className="mt-2 text-sm text-muted-foreground">Nosso time responde em poucos minutos em horário comercial (BRT).
             </p>
             <ul className="mt-6 space-y-4">
               {CONTACT_CHANNELS.map((channel) => (
-                <li key={channel.label} className="rounded-2xl border border-slate-100 bg-white p-4">
+                <li key={channel.label} className="rounded-2xl border border-border bg-background/50 p-4">
                   <p className="text-xs uppercase tracking-[0.3em] text-primary">{channel.label}</p>
-                  <p className="text-lg font-semibold text-slate-900">{channel.value}</p>
+                  <p className="text-lg font-semibold text-foreground">{channel.value}</p>
                   {channel.href && (
                     <a href={channel.href} target="_blank" rel="noreferrer" className="text-sm text-primary">
                       Abrir canal

@@ -7,18 +7,18 @@ export const FinalCTA = () => (
   <section className="pb-20 pt-10">
     <Container>
       <ScrollReveal>
-        <div className="relative overflow-hidden rounded-[40px] border border-primary/20 bg-slate-900 px-10 py-16 text-white shadow-2xl">
+        <div className="relative overflow-hidden rounded-[40px] border border-primary/20 bg-background px-10 py-16 text-foreground shadow-2xl">
           <div className="relative z-10">
             <Badge variant="secondary" className="mb-6">Pronto para o Próximo Nível?</Badge>
             <h3 className="text-4xl md:text-5xl font-bold mb-6">Comece sua jornada <br/><span className="text-primary">Omnichannel</span> hoje.</h3>
-            <p className="max-w-2xl text-slate-400 text-lg mb-10">
+            <p className="max-w-2xl text-muted-foreground text-lg mb-10">
               Junte-se a centenas de empresas que já estão automatizando suas vendas e escalando seu atendimento com a 7Sion Platform.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Button className="bg-primary text-white hover:bg-primary/90 rounded-full px-10 py-7 text-lg font-bold animate-pulse-subtle glow-primary" asChild>
-                <a href="#precos">Teste Grátis por 7 dias</a>
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-10 py-7 text-lg font-bold animate-pulse-subtle glow-primary shadow-lg shadow-primary/20" asChild>
+                <a href="#precos">Teste Grátis por 30 dias</a>
               </Button>
-              <Button variant="outline" className="text-white border-white/20 hover:bg-white/10 rounded-full px-10 py-7 text-lg font-bold" asChild>
+              <Button variant="outline" className="border-border hover:bg-accent rounded-full px-10 py-7 text-lg font-bold" asChild>
                 <a href="/contato">Falar com Consultor</a>
               </Button>
             </div>

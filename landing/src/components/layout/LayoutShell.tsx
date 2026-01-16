@@ -7,7 +7,7 @@ import { ScrollToTop } from "./ScrollToTop";
 import { Button } from "../ui/Button";
 
 export const LayoutShell = () => {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     if (isDark) {
@@ -18,7 +18,7 @@ export const LayoutShell = () => {
   }, [isDark]);
 
   return (
-    <div className={`min-h-screen ${isDark ? 'bg-slate-950 text-slate-50' : 'bg-slate-50 text-slate-900'} transition-colors duration-500`}>
+    <div className="min-h-screen bg-background text-foreground transition-colors duration-500">
       <ScrollToTop />
       <Header />
       <main className="relative z-0">

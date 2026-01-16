@@ -21,7 +21,7 @@ export const FeatureGrid = () => (
       <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
         {FEATURES.map((feature, idx) => (
           <ScrollReveal key={feature.id} delay={idx * 0.1}>
-            <Card className="flex flex-col h-full bg-white/[0.03] dark:bg-white/[0.03] backdrop-blur-sm border-white/10 hover:border-primary/50 hover:bg-white/[0.05] transition-all duration-300 p-8 rounded-3xl">
+            <Card className="flex flex-col h-full bg-foreground/[0.03] backdrop-blur-sm border-foreground/10 hover:border-primary/50 hover:bg-foreground/[0.05] transition-all duration-300 p-8 rounded-3xl">
               <div className="flex-1">
                 {feature.badge && (
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-primary bg-primary/10 px-3 py-1 rounded-full">{feature.badge}</span>

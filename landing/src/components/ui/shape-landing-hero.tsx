@@ -60,10 +60,10 @@ function ElegantShape({
                         "absolute inset-0 rounded-full",
                         "bg-gradient-to-r to-transparent",
                         gradient,
-                        "backdrop-blur-[2px] border-2 border-white/[0.15]",
-                        "shadow-[0_8px_32px_0_rgba(255,255,255,0.1)]",
+                        "backdrop-blur-[2px] border-2 border-foreground/[0.15]",
+                        "shadow-[0_8px_32px_0_rgba(0,0,0,0.1)] dark:shadow-[0_8px_32px_0_rgba(255,255,255,0.1)]",
                         "after:absolute after:inset-0 after:rounded-full",
-                        "after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.2),transparent_70%)]"
+                        "after:bg-[radial-gradient(circle_at_50%_50%,rgba(0,0,0,0.05),transparent_70%)] dark:after:bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.2),transparent_70%)]"
                     )}
                 />
             </motion.div>
@@ -96,7 +96,7 @@ const fadeUpVariants: any = {
     };
 
     return (
-        <div className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden bg-slate-950">
+        <div className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden bg-background">
             <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.05] via-transparent to-primary/[0.05] blur-3xl" />
 
             <div className="absolute inset-0 overflow-hidden">
@@ -153,10 +153,10 @@ const fadeUpVariants: any = {
                         variants={fadeUpVariants}
                         initial="hidden"
                         animate="visible"
-                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8 md:mb-12"
+                        className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-foreground/[0.03] border border-foreground/[0.08] mb-8 md:mb-12"
                     >
                         <Circle className="h-2 w-2 fill-primary/80" />
-                        <span className="text-sm text-white/60 tracking-wide font-medium">
+                        <span className="text-sm text-foreground/60 tracking-wide font-medium">
                             {badge}
                         </span>
                     </motion.div>
@@ -168,13 +168,13 @@ const fadeUpVariants: any = {
                         animate="visible"
                     >
                         <h1 className="text-4xl sm:text-6xl md:text-8xl font-bold mb-6 md:mb-8 tracking-tight">
-                            <span className="bg-clip-text text-transparent bg-gradient-to-b from-white to-white/80">
+                            <span className="bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/80">
                                 {title1}
                             </span>
                             <br />
                             <span
                                 className={cn(
-                                    "bg-clip-text text-transparent bg-gradient-to-r from-primary via-white/90 to-emerald-300"
+                                    "bg-clip-text text-transparent bg-gradient-to-r from-primary via-foreground/90 to-emerald-500"
                                 )}
                             >
                                 {title2}
@@ -195,7 +195,7 @@ const fadeUpVariants: any = {
                 </div>
             </div>
 
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/80 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/80 pointer-events-none" />
         </div>
     );
 }

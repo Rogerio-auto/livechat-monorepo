@@ -149,8 +149,9 @@ export const PLANS: Plan[] = [
       "Fluxos de automação ilimitados",
       "10.000 mensagens/mês",
       "10 campanhas por mês",
+      "Suporte via chat",
     ],
-    notIncluded: ["API/Webhooks", "White-label", "Gerador de documentos"],
+    notIncluded: ["API/Webhooks", "Módulo de API avançado", "Gerador de documentos"],
   },
   {
     id: "professional",
@@ -166,8 +167,9 @@ export const PLANS: Plan[] = [
       "Gerador de documentos",
       "20.000 mensagens/mês",
       "Campanhas ilimitadas",
+      "Suporte prioritário",
     ],
-    notIncluded: ["White-label", "Suporte 24/7", "Gerente dedicado"],
+    notIncluded: ["Treinamento presencial", "Suporte 24/7", "Gerente dedicado"],
   },
   {
     id: "business",
@@ -179,8 +181,9 @@ export const PLANS: Plan[] = [
     quota: "15 usuários • 10 inboxes • 20.000 contatos",
     features: [
       "8 Agentes de IA",
+      "Suporte prioritário",
       "Suporte 24/7 e Gerente dedicado",
-      "White-label (Sob consulta)",
+      "Relatórios de BI customizados",
       "100.000 mensagens/mês",
       "Customizações sob medida",
     ],

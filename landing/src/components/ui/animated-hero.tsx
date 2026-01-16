@@ -31,7 +31,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <Button variant="outline" size="sm" className="gap-4 rounded-full bg-white/5 backdrop-blur-md border-white/10 hover:border-primary/50 transition-all text-white/80" asChild>
+            <Button variant="outline" size="sm" className="gap-4 rounded-full bg-foreground/5 backdrop-blur-md border-foreground/10 hover:border-primary/50 transition-all text-foreground/80" asChild>
               <a href="#como-funciona">
                 <span className="text-primary font-bold">NOVO</span>
                 Conheça a nova era do CRM <MoveRight className="w-4 h-4 text-primary" />
@@ -46,7 +46,7 @@ function Hero() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             >
-              <span className="text-white block">IA para suas</span>
+              <span className="text-foreground block">IA para suas</span>
               <span className="relative flex w-full justify-center overflow-hidden text-center py-2 md:pb-6 md:pt-4 text-primary min-h-[1.1em]">
                 {/* Ghost text with natural height to ensure container matches the largest word */}
                 <span className="invisible opacity-0 pointer-events-none whitespace-nowrap select-none">Escalabilidade</span>
@@ -75,7 +75,7 @@ function Hero() {
             </motion.h1>
 
             <motion.p 
-              className="text-lg md:text-xl leading-relaxed tracking-tight text-white/60 max-w-2xl text-center"
+              className="text-lg md:text-xl leading-relaxed tracking-tight text-muted-foreground max-w-2xl text-center"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.5, duration: 1 }}
@@ -90,10 +90,10 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8, duration: 0.5 }}
           >
-            <Button size="lg" className="gap-4 rounded-full px-8 py-7 text-lg group bg-white text-slate-950 hover:bg-white/90" asChild>
+            <Button size="lg" className="gap-4 rounded-full px-8 py-7 text-lg group" asChild>
               <a href="#como-funciona">Ver em detalhes <PhoneCall className="w-4 h-4 group-hover:rotate-12 transition-transform" /></a>
             </Button>
-            <Button size="lg" variant="default" className="gap-4 rounded-full px-8 py-7 text-lg glow-primary" asChild>
+            <Button size="lg" variant="default" className="gap-4 rounded-full px-8 py-7 text-lg glow-primary shadow-lg" asChild>
               <a href="/precos">Começar agora <MoveRight className="w-4 h-4" /></a>
             </Button>
           </motion.div>
@@ -105,10 +105,10 @@ function Hero() {
             transition={{ delay: 1.2, duration: 0.8 }}
           >
             {HERO_STATS.map((stat) => (
-              <div key={stat.label} className="text-center p-8 rounded-3xl bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 transition-all cursor-default group">
-                <p className="text-4xl font-bold text-white group-hover:text-primary transition-colors">{stat.value}</p>
-                <p className="text-sm font-semibold text-white/40 mt-1">{stat.label}</p>
-                <p className="text-xs text-white/20 mt-2">{stat.detail}</p>
+              <div key={stat.label} className="text-center p-8 rounded-3xl bg-foreground/5 backdrop-blur-md border border-foreground/10 hover:bg-foreground/10 transition-all cursor-default group">
+                <p className="text-4xl font-bold text-foreground group-hover:text-primary transition-colors">{stat.value}</p>
+                <p className="text-sm font-semibold text-muted-foreground mt-1">{stat.label}</p>
+                <p className="text-xs text-muted-foreground/40 mt-2">{stat.detail}</p>
               </div>
             ))}
           </motion.div>

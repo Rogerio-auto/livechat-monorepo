@@ -30,8 +30,16 @@ function DisplayCard({
   onSendToBack,
 }: DisplayCardProps) {
   const [isZIndexHigh, setIsZIndexHigh] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
   
   // Efeito de rotação e escala enquanto arrasta
   const rotateDrag = useTransform(x, [-300, 300], [-30, 30]);
@@ -53,7 +61,8 @@ function DisplayCard({
         scale: isZIndexHigh ? scaleDrag : 1,
         opacity: opacityDrag,
         zIndex: isZIndexHigh ? 100 : (50 - index),
-        left: baseX,
+        left: "50%",
+        marginLeft: isMobile ? `calc(-9rem + ${baseX}px)` : `calc(-13rem + ${baseX}px)`,
         top: baseY,
       }}
       drag
@@ -63,8 +72,8 @@ function DisplayCard({
       onDragStart={() => setIsZIndexHigh(true)}
       onDragEnd={(_, info) => {
         setIsZIndexHigh(false);
-        // Se arrastou o suficiente, manda para o fim da fila
-        if (Math.abs(info.offset.x) > 100 || Math.abs(info.offset.y) > 100) {
+        // Se arrastou o suficiente (reduzido para mobile ser mais fácil), manda para o fim da fila
+        if (Math.abs(info.offset.x) > 60 || Math.abs(info.offset.y) > 60) {
           onSendToBack?.();
           x.set(0);
           y.set(0);
@@ -72,36 +81,36 @@ function DisplayCard({
       }}
       whileTap={{ cursor: "grabbing" }}
       className={cn(
-        "absolute flex h-64 w-[22rem] sm:w-[26rem] select-none flex-col justify-between rounded-[2rem] border border-white/10 bg-slate-950/90 p-8 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-blue-500/40 group",
+        "absolute flex h-64 w-[18rem] sm:w-[26rem] select-none flex-col justify-between rounded-[2rem] border border-border bg-card/90 p-8 shadow-2xl backdrop-blur-xl transition-all duration-300 hover:border-primary/40 group touch-none",
         className
       )}
     >
       {/* Glossy Overlay */}
-      <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+      <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-br from-foreground/5 to-transparent pointer-events-none" />
       
       <div className="flex items-center gap-4 relative z-10">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600/10 text-blue-500 shadow-inner group-hover:scale-110 transition-transform duration-500">
-          <div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner group-hover:scale-110 transition-transform duration-500">
+          <div className="absolute inset-0 bg-primary/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
           {icon}
         </div>
         <div className="flex flex-col">
-          <p className={cn("text-2xl font-bold tracking-tight text-white", titleClassName)}>{title}</p>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500/80">Intelligence Deck</p>
+          <p className={cn("text-2xl font-bold tracking-tight text-foreground", titleClassName)}>{title}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/80">Intelligence Deck</p>
         </div>
       </div>
       
-      <p className="text-xl font-medium leading-relaxed text-slate-300 relative z-10">
+      <p className="text-xl font-medium leading-relaxed text-foreground/80 relative z-10">
         {description}
       </p>
       
-      <div className="flex items-center justify-between border-t border-white/5 pt-6 relative z-10">
+      <div className="flex items-center justify-between border-t border-border/50 pt-6 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_10px_rgba(59,130,246,0.8)]" />
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{date}</span>
+          <div className="h-2.5 w-2.5 rounded-full bg-primary animate-pulse shadow-[0_0_10px_rgba(var(--primary),0.8)]" />
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{date}</span>
         </div>
         <div className="flex items-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
-          <Sparkles size={16} className="text-blue-500" />
-          <span className="text-[10px] font-black text-blue-500">PREMIUM</span>
+          <Sparkles size={16} className="text-primary" />
+          <span className="text-[10px] font-black text-primary">PREMIUM</span>
         </div>
       </div>
 
@@ -143,7 +152,7 @@ export default function DisplayCards({ cards: initialCards }: DisplayCardsProps)
 
   return (
     <div className="relative h-[550px] w-full flex items-center justify-center py-20 px-4">
-      <div className="relative w-full max-w-sm h-full flex items-center justify-center -ml-12 md:-ml-24">
+      <div className="relative w-full max-w-sm h-full flex items-center justify-center">
         {cards.map((cardProps, index) => (
           <DisplayCard 
             key={cardProps.title} 

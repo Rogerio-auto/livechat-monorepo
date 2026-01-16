@@ -16,7 +16,7 @@ export const PricingPreview = () => (
           align="center"
         />
       </ScrollReveal>
-      <div className="grid lg:grid-cols-4 border border-border/50 rounded-3xl overflow-hidden bg-card/30 backdrop-blur-sm divide-y lg:divide-y-0 lg:divide-x divide-border/50">
+      <div className="grid lg:grid-cols-4 rounded-3xl overflow-hidden bg-card/30 backdrop-blur-sm">
         {PLANS.map((plan, idx) => (
           <ScrollReveal key={plan.id} delay={idx * 0.1}>
             <div className={`flex h-full flex-col p-8 transition-all duration-500 ${plan.badge ? 'bg-primary/5' : ''}`}>

@@ -83,7 +83,7 @@ const FEATURE_LABELS: Record<string, string> = {
   dedicated_manager: "Gerente de Sucesso",
   custom_integrations: "Integrações Customizadas",
   "24_7_support": "Suporte 24/7",
-  white_label: "White Label",
+  bi_reports: "BI & Relatórios Customizados",
   advanced_reports: "Relatórios Avançados",
   custom_templates: "Templates Personalizados",
 };

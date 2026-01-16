@@ -47,6 +47,9 @@ export const Header = () => {
 
         <div className="hidden items-center gap-3 lg:flex">
           <Button variant="ghost" size="sm" asChild>
+            <a href="https://app.7sion.com/login" className="font-semibold transition-colors hover:text-primary">Entrar</a>
+          </Button>
+          <Button variant="ghost" size="sm" asChild>
             <Link to="/demo">Ver Demo</Link>
           </Button>
           <Button size="sm" asChild>
@@ -79,6 +82,9 @@ export const Header = () => {
             )}
           </nav>
           <div className="mt-4 flex flex-col gap-3">
+            <Button variant="outline" className="w-full" onClick={handleNavClick} asChild>
+              <a href="https://app.7sion.com/login">Acessar Conta</a>
+            </Button>
             <Button variant="secondary" onClick={handleNavClick} asChild>
               <Link to="/demo">Ver Demo</Link>
             </Button>

@@ -53,7 +53,7 @@ const timelineData = [
     id: 5,
     title: "Escala",
     date: "Passo 5",
-    content: "Escalone seu negócio com white-label e gerencie múltiplas caixas de entrada.",
+    content: "Escalone seu negócio com automação avançada e gerencie múltiplas caixas de entrada.",
     category: "Growth",
     icon: Rocket,
     relatedIds: [4],
@@ -64,14 +64,14 @@ const timelineData = [
 
 export function TimelineSection() {
   return (
-    <section className="py-32 bg-slate-950 overflow-hidden relative" id="como-funciona">
+    <section className="py-32 bg-background overflow-hidden relative" id="como-funciona">
       <div className="container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-16 items-center">
           <div className="text-left">
-            <h2 className="text-4xl md:text-6xl font-bold text-white mb-6 leading-tight">
+            <h2 className="text-4xl md:text-6xl font-bold text-foreground mb-6 leading-tight">
               A Jornada do <span className="text-primary">Sucesso</span> Automatizada
             </h2>
-            <p className="text-slate-400 text-lg mb-8 max-w-xl">
+            <p className="text-muted-foreground text-lg mb-8 max-w-xl">
               Nossa plataforma guia sua operação através de 5 marcos estratégicos, desde a primeira conexão até a escala global com IA.
             </p>
             
@@ -81,20 +81,22 @@ export function TimelineSection() {
                 { title: "Automação Inteligente", desc: "Fluxos que aprendem e evoluem com seu cliente." },
                 { title: "Segurança de Dados", desc: "Protocolos de nível bancário para sua operação." }
               ].map((item) => (
-                <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-primary/30 transition-all">
+                <div key={item.title} className="flex gap-4 p-4 rounded-2xl bg-foreground/5 border border-foreground/10 hover:border-primary/30 transition-all">
                   <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
                     <Rocket className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-white">{item.title}</h4>
-                    <p className="text-sm text-slate-500">{item.desc}</p>
+                    <h4 className="font-bold text-foreground">{item.title}</h4>
+                    <p className="text-sm text-foreground/50">{item.desc}</p>
                   </div>
                 </div>
               ))}
             </div>
             
             <div className="mt-10">
-              <Button size="lg" className="rounded-full px-8">Começar jornada</Button>
+              <Button size="lg" className="rounded-full px-8" asChild>
+                <a href="/precos">Começar jornada</a>
+              </Button>
             </div>
           </div>
           

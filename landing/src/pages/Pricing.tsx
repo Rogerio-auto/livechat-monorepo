@@ -23,22 +23,22 @@ const Pricing = () => {
         />
         <div className="grid gap-6 md:grid-cols-2">
           {PLANS.map((plan) => (
-            <Card key={plan.id} glow={plan.id === "growth"}>
+            <Card key={plan.id} glow={plan.id === "growth"} className="border-none shadow-none bg-card/50">
               {plan.badge && (
                 <span className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">{plan.badge}</span>
               )}
               <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <h3 className="text-3xl font-semibold text-slate-900">{plan.name}</h3>
-                  <p className="text-sm text-slate-500">{plan.description}</p>
+                  <h3 className="text-3xl font-semibold text-foreground">{plan.name}</h3>
+                  <p className="text-sm text-muted-foreground">{plan.description}</p>
                 </div>
-                <p className="text-3xl font-semibold text-slate-900">
+                <p className="text-3xl font-semibold text-foreground">
                   R$ {plan.price}
-                  <span className="text-base font-normal text-slate-400">/mês</span>
+                  <span className="text-base font-normal text-muted-foreground/60">/mês</span>
                 </p>
               </div>
-              <p className="mt-4 text-sm text-slate-500">{plan.quota}</p>
-              <ul className="mt-4 space-y-2 text-sm text-slate-600">
+              <p className="mt-4 text-sm text-muted-foreground">{plan.quota}</p>
+              <ul className="mt-4 space-y-2 text-sm text-foreground/80">
                 {plan.features.map((feature) => (
                   <li key={feature} className="flex items-start gap-2">
                     <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary" />
@@ -47,7 +47,7 @@ const Pricing = () => {
                 ))}
               </ul>
               {plan.notIncluded && plan.notIncluded.length > 0 && (
-                <p className="mt-4 text-xs text-slate-400">Não inclui: {plan.notIncluded.join(", ")}</p>
+                <p className="mt-4 text-xs text-muted-foreground/60">Não inclui: {plan.notIncluded.join(", ")}</p>
               )}
               <Button className="mt-6 w-full" size="lg" asChild>
                 <a href={getSignupUrl(plan.id)}>{plan.cta}</a>
@@ -55,7 +55,7 @@ const Pricing = () => {
             </Card>
           ))}
         </div>
-        <div className="mt-10 rounded-3xl border border-primary/20 bg-primary/5 p-6 text-sm text-slate-600 italic text-center">
+        <div className="mt-10 rounded-3xl border border-primary/20 bg-primary/5 p-6 text-sm text-foreground/60 italic text-center">
           <p>
             Todos os planos incluem suporte prioritário, atualizações constantes e segurança de dados garantida.
           </p>

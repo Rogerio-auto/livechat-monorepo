@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Container } from "../components/ui/Container";
 import { Button } from "../components/ui/Button";
 import { usePageMeta } from "../hooks/usePageMeta";
@@ -19,9 +20,11 @@ const ThankYou = () => {
             Você receberá um email com os próximos passos para acessar sua conta. Enquanto isso, aproveite para explorar nossa base de conhecimento.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Button href={getSignupUrl("starter")}>Ir para cadastro</Button>
-            <Button variant="secondary" href="/">
-              Voltar ao início
+            <Button asChild>
+              <a href={getSignupUrl("starter")}>Ir para cadastro</a>
+            </Button>
+            <Button variant="secondary" asChild>
+              <Link to="/">Voltar ao início</Link>
             </Button>
           </div>
         </div>

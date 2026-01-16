@@ -1,25 +1,34 @@
 import { Container } from "../ui/Container";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { ScrollReveal } from "../ui/ScrollReveal";
 
 export const FinalCTA = () => (
   <section className="pb-20 pt-10">
     <Container>
-      <div className="relative overflow-hidden rounded-[40px] border border-primary/20 bg-gradient-to-r from-primary to-secondary px-10 py-12 text-white shadow-soft">
-        <Badge variant="neutral">Pronto para executar</Badge>
-        <h3 className="mt-4 text-3xl font-semibold">Ative seu teste gratuito e transforme sua comunicação.</h3>
-        <p className="mt-3 max-w-2xl text-white/90">
-          Nossa plataforma foi desenhada para escalar com você. Comece hoje mesmo e sinta a diferença de uma gestão verdadeiramente omnichannel.
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          <Button variant="secondary" href="#precos">
-            Escolher meu plano
-          </Button>
-          <Button variant="ghost" href="/demo" className="text-white hover:text-white/80">
-            Falar com especialista
-          </Button>
+      <ScrollReveal>
+        <div className="relative overflow-hidden rounded-[40px] border border-primary/20 bg-slate-900 px-10 py-16 text-white shadow-2xl">
+          <div className="relative z-10">
+            <Badge variant="secondary" className="mb-6">Pronto para o Próximo Nível?</Badge>
+            <h3 className="text-4xl md:text-5xl font-bold mb-6">Comece sua jornada <br/><span className="text-primary">Omnichannel</span> hoje.</h3>
+            <p className="max-w-2xl text-slate-400 text-lg mb-10">
+              Junte-se a centenas de empresas que já estão automatizando suas vendas e escalando seu atendimento com a 7Sion Platform.
+            </p>
+            <div className="flex flex-wrap gap-4">
+              <Button className="bg-primary text-white hover:bg-primary/90 rounded-full px-10 py-7 text-lg font-bold animate-pulse-subtle glow-primary" asChild>
+                <a href="#precos">Teste Grátis por 7 dias</a>
+              </Button>
+              <Button variant="outline" className="text-white border-white/20 hover:bg-white/10 rounded-full px-10 py-7 text-lg font-bold" asChild>
+                <a href="/contato">Falar com Consultor</a>
+              </Button>
+            </div>
+          </div>
+          
+          {/* Decorative elements */}
+          <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-primary/20 blur-[120px] rounded-full" />
+          <div className="absolute bottom-0 left-0 translate-y-1/4 -translate-x-1/4 w-64 h-64 bg-emerald-500/10 blur-[80px] rounded-full" />
         </div>
-      </div>
+      </ScrollReveal>
     </Container>
   </section>
 );

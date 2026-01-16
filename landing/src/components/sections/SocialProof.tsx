@@ -12,18 +12,18 @@ const QUOTE = {
 export const SocialProof = () => (
   <section className="py-12" aria-label="Prova social">
     <Container>
-      <p className="text-center text-xs font-semibold uppercase tracking-[0.6em] text-slate-400">Confiado por scale-ups em 7 nichos</p>
-      <div className="mt-6 grid grid-cols-2 gap-6 text-sm text-slate-500 sm:grid-cols-3 lg:grid-cols-6">
+      <p className="text-center text-xs font-semibold uppercase tracking-[0.6em] text-muted-foreground/60">Confiado por scale-ups em 7 nichos</p>
+      <div className="mt-8 grid grid-cols-2 gap-4 text-xs font-bold text-muted-foreground sm:grid-cols-3 lg:grid-cols-6 uppercase tracking-widest">
         {LOGOS.map((logo) => (
-          <div key={logo} className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white/70 p-4">
+          <div key={logo} className="flex items-center justify-center rounded-2xl border border-border/50 bg-card/40 backdrop-blur-sm p-4">
             {logo}
           </div>
         ))}
       </div>
-      <Card className="mt-10 text-center">
-        <p className="text-lg text-slate-600">“{QUOTE.text}”</p>
-        <p className="mt-4 text-sm font-semibold text-slate-900">{QUOTE.author}</p>
-        <p className="text-xs uppercase tracking-wide text-slate-400">{QUOTE.role}</p>
+      <Card className="mt-12 text-center p-8 bg-card/30 border-border/40">
+        <p className="text-lg italic text-foreground">“{QUOTE.text}”</p>
+        <p className="mt-6 text-sm font-bold text-foreground">{QUOTE.author}</p>
+        <p className="text-xs uppercase tracking-widest text-muted-foreground mt-1">{QUOTE.role}</p>
       </Card>
     </Container>
   </section>

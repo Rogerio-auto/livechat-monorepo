@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { Container } from "../components/ui/Container";
 import { Button } from "../components/ui/Button";
 import { usePageMeta } from "../hooks/usePageMeta";
@@ -12,7 +13,9 @@ const NotFound = () => {
         <h1 className="mt-4 text-4xl font-semibold text-slate-900">Conteúdo não disponível</h1>
         <p className="mt-2 text-sm text-slate-600">Verifique o endereço ou retorne para a página inicial.</p>
         <div className="mt-6 flex justify-center">
-          <Button href="/">Voltar</Button>
+          <Button asChild>
+            <Link to="/">Voltar</Link>
+          </Button>
         </div>
       </Container>
     </section>

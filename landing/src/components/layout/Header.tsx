@@ -6,13 +6,11 @@ import clsx from "clsx";
 import { Button } from "../ui/Button";
 import { NAV_LINKS } from "../../utils/constants";
 
+import Logo from "../../assets/Logo.png";
+
 const Brand = () => (
-  <Link to="/" className="flex items-center gap-2 text-lg font-bold text-slate-900">
-    <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/15 text-primary">7S</span>
-    <div className="leading-tight">
-      <span>7Sion Platform</span>
-      <p className="text-xs font-normal text-slate-500">Omnichannel AI</p>
-    </div>
+  <Link to="/" className="flex items-center gap-2 text-lg font-bold text-foreground">
+    <img src={Logo} alt="7Sion Logo" className="h-10 w-auto" />
   </Link>
 );
 
@@ -23,11 +21,11 @@ export const Header = () => {
   const handleNavClick = () => setOpen(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/20 bg-white/70 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <Brand />
 
-        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 lg:flex">
+        <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground lg:flex">
           {NAV_LINKS.map((link) => {
             const isAnchor = link.path.includes("#");
             const baseClasses = clsx(
@@ -48,16 +46,16 @@ export const Header = () => {
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
-          <Button variant="ghost" size="sm" href="/demo">
-            Ver Demo
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/demo">Ver Demo</Link>
           </Button>
-          <Button size="sm" href="/#precos">
-            Começar Grátis
+          <Button size="sm" asChild>
+            <a href="/#precos">Começar Grátis</a>
           </Button>
         </div>
 
         <button
-          className="inline-flex items-center rounded-full border border-slate-200 p-2 text-slate-600 lg:hidden"
+          className="inline-flex items-center rounded-full border border-border p-2 text-foreground lg:hidden"
           onClick={() => setOpen((state) => !state)}
           aria-label="Abrir menu"
         >
@@ -66,8 +64,8 @@ export const Header = () => {
       </div>
 
       {open && (
-        <div className="border-t border-white/30 bg-white/90 px-4 py-4 shadow-lg lg:hidden">
-          <nav className="flex flex-col gap-3 text-sm font-medium text-slate-700">
+        <div className="border-t border-border/40 bg-background/95 px-4 py-4 shadow-lg lg:hidden backdrop-blur-md">
+          <nav className="flex flex-col gap-3 text-sm font-medium text-muted-foreground">
             {NAV_LINKS.map((link) =>
               link.path.includes("#") ? (
                 <a key={link.label} href={link.path} onClick={handleNavClick}>
@@ -81,11 +79,11 @@ export const Header = () => {
             )}
           </nav>
           <div className="mt-4 flex flex-col gap-3">
-            <Button variant="secondary" href="/demo" onClick={handleNavClick}>
-              Ver Demo
+            <Button variant="secondary" onClick={handleNavClick} asChild>
+              <Link to="/demo">Ver Demo</Link>
             </Button>
-            <Button href="/#precos" onClick={handleNavClick}>
-              Ver Planos
+            <Button onClick={handleNavClick} asChild>
+              <a href="/#precos">Ver Planos</a>
             </Button>
           </div>
         </div>

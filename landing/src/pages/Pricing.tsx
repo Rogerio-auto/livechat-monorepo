@@ -49,8 +49,8 @@ const Pricing = () => {
               {plan.notIncluded && plan.notIncluded.length > 0 && (
                 <p className="mt-4 text-xs text-slate-400">Não inclui: {plan.notIncluded.join(", ")}</p>
               )}
-              <Button className="mt-6 w-full" size="lg" href={getSignupUrl(plan.id)}>
-                {plan.cta}
+              <Button className="mt-6 w-full" size="lg" asChild>
+                <a href={getSignupUrl(plan.id)}>{plan.cta}</a>
               </Button>
             </Card>
           ))}

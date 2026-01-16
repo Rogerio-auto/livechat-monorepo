@@ -13,11 +13,13 @@ export const Testimonials = () => (
       />
       <div className="grid gap-6 md:grid-cols-3">
         {TESTIMONIALS.map((testimonial) => (
-          <Card key={testimonial.company}>
-            <p className="text-sm uppercase tracking-[0.3em] text-primary">{testimonial.company}</p>
-            <p className="mt-3 text-base text-slate-600">“{testimonial.quote}”</p>
-            <p className="mt-4 text-sm font-semibold text-slate-900">{testimonial.author}</p>
-            <p className="text-xs text-slate-400">{testimonial.role}</p>
+          <Card key={testimonial.company} className="p-6">
+            <p className="text-[10px] uppercase font-bold tracking-[0.3em] text-primary">{testimonial.company}</p>
+            <p className="mt-4 text-base italic text-muted-foreground">“{testimonial.quote}”</p>
+            <div className="mt-6 flex flex-col">
+              <span className="text-sm font-bold text-foreground">{testimonial.author}</span>
+              <span className="text-xs text-muted-foreground">{testimonial.role}</span>
+            </div>
           </Card>
         ))}
       </div>

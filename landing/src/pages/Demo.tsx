@@ -34,8 +34,8 @@ const Demo = () => {
               {/* Placeholder para embed de Calendly ou vídeo */}
               <div className="flex h-full items-center justify-center text-sm text-slate-400">Embed Calendly / Vídeo</div>
             </div>
-            <Button className="mt-4 w-full" href="https://calendly.com/7sion/demo" target="_blank" rel="noreferrer">
-              Escolher horário
+            <Button className="mt-4 w-full" asChild>
+              <a href="https://calendly.com/7sion/demo" target="_blank" rel="noreferrer">Escolher horário</a>
             </Button>
           </div>
         </div>

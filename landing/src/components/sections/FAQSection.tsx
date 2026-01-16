@@ -11,13 +11,13 @@ export const FAQSection = () => (
         description="Documentação LGPD, onboarding e integrações prontas. Fale com o time em tempo real pelo WhatsApp prioritário."
         align="center"
       />
-      <div className="mx-auto max-w-3xl divide-y divide-slate-100 rounded-3xl border border-slate-100 bg-white/70">
+      <div className="mx-auto max-w-3xl divide-y divide-border rounded-3xl border border-border bg-card/50 backdrop-blur-sm">
         {FAQS.map((faq) => (
           <details key={faq.question} className="group">
-            <summary className="cursor-pointer list-none px-6 py-5 text-left text-base font-semibold text-slate-900">
+            <summary className="cursor-pointer list-none px-6 py-5 text-left text-base font-semibold text-foreground">
               {faq.question}
             </summary>
-            <p className="px-6 pb-6 text-sm text-slate-600">{faq.answer}</p>
+            <p className="px-6 pb-6 text-sm text-muted-foreground">{faq.answer}</p>
           </details>
         ))}
       </div>

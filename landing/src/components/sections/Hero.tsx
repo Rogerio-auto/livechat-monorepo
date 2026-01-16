@@ -1,4 +1,5 @@
 import { FiArrowUpRight } from "react-icons/fi";
+import { Link } from "react-router-dom";
 import { HERO_STATS } from "../../utils/constants";
 import { Container } from "../ui/Container";
 import { Badge } from "../ui/Badge";
@@ -9,7 +10,7 @@ export const Hero = () => {
     <section className="relative overflow-hidden pb-20 pt-16" id="top">
       <Container className="relative z-10 grid gap-12 lg:grid-cols-2 lg:items-center">
         <div>
-          <Badge variant="primary">Nova stack omnichannel</Badge>
+          <Badge variant="default">Nova stack omnichannel</Badge>
           <h1 className="mt-6 text-4xl font-semibold leading-tight text-slate-900 sm:text-5xl">
             Venda, atenda e automatize tudo em uma única plataforma conversacional.
           </h1>
@@ -18,11 +19,11 @@ export const Hero = () => {
             multicanal com time reduzido.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button size="lg" href="#precos" trailingIcon={<FiArrowUpRight />}>
-              Ver planos e começar
+            <Button size="lg" asChild>
+              <a href="#precos">Ver planos e começar <FiArrowUpRight className="ml-2 inline-block" /></a>
             </Button>
-            <Button size="lg" variant="secondary" href="/demo">
-              Agendar demonstração
+            <Button size="lg" variant="secondary" asChild>
+              <Link to="/demo">Agendar demonstração</Link>
             </Button>
           </div>
           <div className="mt-10 grid gap-6 sm:grid-cols-3">

@@ -3,6 +3,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { AuthRequest } from "../types/express.js";
 import { getSubscription, updateSubscriptionOverrides, updateSubscriptionStatus, extendSubscription } from "../services/subscriptions.service.js";
+import { AdminCompanyController } from "../controllers/admin/adminCompany.controller.js";
 
 // Middleware para verificar se é ADMIN
 const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -352,4 +353,21 @@ export function registerAdminRoutes(app: Application) {
       return res.status(500).json({ error: error.message });
     }
   });
+
+  // Novos endpoints de gerenciamento de empresas
+  // USERS
+  app.get("/api/admin/companies/:companyId/users", requireAuth, requireAdmin, AdminCompanyController.listUsers);
+  app.patch("/api/admin/companies/:companyId/users/:userId/role", requireAuth, requireAdmin, AdminCompanyController.updateUserRole);
+  app.patch("/api/admin/companies/:companyId/users/:userId/status", requireAuth, requireAdmin, AdminCompanyController.updateUserStatus);
+  app.delete("/api/admin/companies/:companyId/users/:userId", requireAuth, requireAdmin, AdminCompanyController.removeUser);
+
+  // LOGS
+  app.get("/api/admin/companies/:companyId/logs", requireAuth, requireAdmin, AdminCompanyController.listLogs);
+  app.get("/api/admin/companies/:companyId/logs/stats", requireAuth, requireAdmin, AdminCompanyController.getLogStats);
+
+  // USAGE
+  app.get("/api/admin/companies/:companyId/usage", requireAuth, requireAdmin, AdminCompanyController.getUsage);
+
+  // BILLING
+  app.get("/api/admin/companies/:companyId/billing", requireAuth, requireAdmin, AdminCompanyController.getBilling);
 }

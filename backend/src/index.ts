@@ -100,6 +100,7 @@ import adminAgentsRouter from "./routes/admin/agents.js";
 import adminTemplatesRouter from "./routes/admin/templates.js";
 import adminToolsRouter from "./routes/admin/tools.js";
 import adminInfrastructureRouter from "./routes/admin/infrastructure.js";
+import adminCompaniesRouter from "./routes/admin/companies.js";
 import templateToolsRouter from "./routes/agents.templates.tools.js";
 import toolsAdminRouter from "./routes/tools.admin.js";
 
@@ -257,6 +258,7 @@ registerDocumentTemplateRoutes(app);
 registerProjectTemplateRoutes(app);
 registerProjectRoutes(app);
 registerNotificationRoutes(app);
+app.use("/api/admin/companies", adminCompaniesRouter);
 app.use("/api", templateToolsRouter);
 app.use("/api", toolsAdminRouter);
 app.use("/api", settingsApiRouter);

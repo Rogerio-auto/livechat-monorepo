@@ -9,6 +9,7 @@ interface RequestConfig {
   method?: string;
   headers?: Record<string, string>;
   body?: any;
+  params?: Record<string, string | number | boolean | undefined>;
   credentials?: RequestCredentials;
 }
 
@@ -29,8 +30,22 @@ class ApiClient {
     endpoint: string,
     config: RequestConfig = {}
   ): Promise<ApiResponse<T>> {
-    const url = `${this.baseURL}${endpoint}`;
-    const { method = "GET", headers = {}, body, credentials = "include" } = config;
+    const { method = "GET", headers = {}, body, params, credentials = "include" } = config;
+
+    let url = `${this.baseURL}${endpoint}`;
+
+    if (params) {
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, String(value));
+        }
+      });
+      const queryString = searchParams.toString();
+      if (queryString) {
+        url += (url.includes("?") ? "&" : "?") + queryString;
+      }
+    }
 
     const options: RequestInit = {
       method,

@@ -15,6 +15,8 @@ const TABS = [
   { label: 'Visão Geral', to: 'overview' },
   { label: 'Agentes', to: 'agents' },
   { label: 'Usuários', to: 'users' },
+  { label: 'Uso', to: 'usage' },
+  { label: 'Financeiro', to: 'billing' },
   { label: 'Logs', to: 'logs' },
   { label: 'Assinatura', to: 'subscription' },
 ];

@@ -62,6 +62,8 @@ import { CompanyDetails } from './pages/admin/companies/CompanyDetails'
 import { CompanyOverview } from './pages/admin/companies-views/CompanyOverview'
 import { CompanyAgents } from './pages/admin/companies-views/CompanyAgents'
 import { CompanyUsers } from './pages/admin/companies-views/CompanyUsers'
+import { CompanyUsage } from './pages/admin/companies-views/CompanyUsage'
+import { CompanyBilling } from './pages/admin/companies-views/CompanyBilling'
 import { CompanyLogs } from './pages/admin/companies-views/CompanyLogs'
 import { CompanySubscription } from './pages/admin/companies-views/CompanySubscription'
 import { SystemHealth } from './pages/admin/infrastructure/SystemHealth'
@@ -231,6 +233,8 @@ function App() {
               <Route path='agents' element={<CompanyAgents />} />
               <Route path='agents/:agentId' element={<CompanyAgents />} />
               <Route path='users' element={<CompanyUsers />} />
+              <Route path='usage' element={<CompanyUsage />} />
+              <Route path='billing' element={<CompanyBilling />} />
               <Route path='logs' element={<CompanyLogs />} />
               <Route path='subscription' element={<CompanySubscription />} />
             </Route>

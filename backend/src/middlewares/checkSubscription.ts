@@ -54,7 +54,7 @@ export async function requireActiveSubscription(req: any, res: Response, next: N
 }
 
 /**
- * Middleware para verificar se a empresa tem acesso a uma feature especÃ­fica
+ * Middleware para verificar se a empresa tem acesso a uma feature específica
  */
 export function requireFeature(feature: keyof PlanFeatures) {
   return async (req: any, res: Response, next: NextFunction) => {
@@ -83,9 +83,9 @@ export function requireFeature(feature: keyof PlanFeatures) {
 
 /**
  * Middleware para verificar limite de um recurso antes de criar
- * Se o limite for atingido, retorna 403 com informaÃ§Ãµes do limite
+ * Se o limite for atingido, retorna 403 com informações do limite
  */
-export function checkResourceLimit(resource: keyof PlanLimits) {
+export function requireLimit(resource: keyof PlanLimits) {
   return async (req: any, res: Response, next: NextFunction) => {
     try {
       const companyId = req.user?.company_id;
@@ -93,41 +93,33 @@ export function checkResourceLimit(resource: keyof PlanLimits) {
         return res.status(401).json({ error: "Unauthorized: company_id not found" });
       }
 
-  const limitCheck = await checkLimit(companyId, resource);
-      
-      console.log(`[checkResourceLimit] ${resource}:`, {
-        companyId,
-        allowed: limitCheck.allowed,
-        limit: limitCheck.limit,
-        current: limitCheck.current,
-        remaining: limitCheck.remaining
-      });
+      const limitCheck = await checkLimit(companyId, resource);
       
       if (!limitCheck.allowed) {
+        console.warn(`[requireLimit] Limit reached for ${resource} in company ${companyId}`);
         return res.status(403).json({
-          error: `Limit reached for ${resource}`,
+          error: "Limite atingido",
+          message: `O limite de ${resource} para o seu plano foi atingido.`,
           code: "LIMIT_REACHED",
-          resource,
           limit: limitCheck.limit,
-          current: limitCheck.current,
-          remaining: limitCheck.remaining,
-          message: `VocÃª atingiu o limite de ${limitCheck.limit} ${resource === 'users' ? 'colaboradores' : resource}. Atualmente vocÃª tem ${limitCheck.current} ${resource === 'users' ? 'colaboradores' : resource} cadastrados.`
+          current: limitCheck.current
         });
       }
 
-      // Passar limitCheck no req para uso posterior se necessÃ¡rio
-      req.limitCheck = limitCheck;
       next();
     } catch (error) {
-      console.error(`[checkResourceLimit(${resource})] Error:`, error);
-      return res.status(500).json({ error: "Failed to check resource limit" });
+      console.error(`[requireLimit(${resource})] Error:`, error);
+      return res.status(500).json({ error: "Erro ao verificar limites da assinatura" });
     }
   };
 }
 
+// Alias para compatibilidade com rotas existentes
+export const checkResourceLimit = requireLimit;
+
 /**
- * Middleware "soft limit" - apenas avisa se estÃ¡ prÃ³ximo do limite, mas nÃ£o bloqueia
- * Adiciona headers com informaÃ§Ãµes de uso
+ * Middleware "soft limit" - apenas avisa se está próximo do limite, mas não bloqueia
+ * Adiciona headers com informações de uso
  */
 export function warnOnLimit(resource: keyof PlanLimits, warningThreshold = 0.8) {
   return async (req: any, res: Response, next: NextFunction) => {
@@ -139,21 +131,14 @@ export function warnOnLimit(resource: keyof PlanLimits, warningThreshold = 0.8) 
 
   const limitCheck = await checkLimit(companyId, resource);
       
-      // Adicionar headers com informaÃ§Ãµes de uso
+      // Adicionar headers com informações de uso
       res.setHeader("X-Resource-Limit", limitCheck.limit);
       res.setHeader("X-Resource-Current", limitCheck.current);
       res.setHeader("X-Resource-Remaining", limitCheck.remaining);
-
-      // Se estÃ¡ prÃ³ximo do limite (ex: 80%), adicionar warning
-      if (limitCheck.limit > 0 && limitCheck.current / limitCheck.limit >= warningThreshold) {
-        res.setHeader("X-Resource-Warning", "approaching-limit");
-      }
-
-      req.limitCheck = limitCheck;
+      
       next();
     } catch (error) {
       console.error(`[warnOnLimit(${resource})] Error:`, error);
-      // NÃ£o bloquear em caso de erro, apenas seguir
       next();
     }
   };

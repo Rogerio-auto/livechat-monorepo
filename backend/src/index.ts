@@ -34,6 +34,11 @@ import { DocumentController } from "./controllers/document.controller.js";
 
 // Middleware & Base Routes
 import { requireAuth } from "./middlewares/requireAuth.js";
+import { 
+  requireActiveSubscription, 
+  requireLimit, 
+  requireFeature 
+} from "./middlewares/checkSubscription.js";
 import { webhookRouter } from "./routes/webhooks.js";
 import { apiV1Router } from "./routes/api.v1.js";
 import filesRoute from "./server/files.route.js";
@@ -94,6 +99,7 @@ import { settingsApiRouter } from "./routes/settings.api.js";
 import adminAgentsRouter from "./routes/admin/agents.js";
 import adminTemplatesRouter from "./routes/admin/templates.js";
 import adminToolsRouter from "./routes/admin/tools.js";
+import adminInfrastructureRouter from "./routes/admin/infrastructure.js";
 import templateToolsRouter from "./routes/agents.templates.tools.js";
 import toolsAdminRouter from "./routes/tools.admin.js";
 
@@ -215,10 +221,17 @@ registerAdminStatsRoutes(app);
 app.use("/api/admin", adminAgentsRouter);
 app.use("/api/admin/templates", adminTemplatesRouter);
 app.use("/api/admin/tools", adminToolsRouter);
+app.use("/api/admin/infrastructure", adminInfrastructureRouter);
 registerSubscriptionRoutes(app);
 app.use("/api/checkout", checkoutRouter);
 
-// Authenticated
+// Authenticated - Routes that require active subscription
+// Rotas críticas que exigem assinatura ativa
+app.use("/api/livechat", requireAuth, requireActiveSubscription); // Bloquear livechat
+app.use("/api/agents", requireAuth, requireActiveSubscription); // Bloquear agentes IA
+app.use("/api/campaigns", requireAuth, requireActiveSubscription); // Bloquear campanhas
+
+// Authenticated - Routes with subscription warning only (não bloqueiam)
 registerAuthRoutes(app);
 registerLivechatContactsRoutes(app);
 registerLivechatInboxesRoutes(app);
@@ -287,7 +300,7 @@ app.put("/proposals/:id/status", requireAuth, ProposalController.updateStatus);
 app.delete("/proposals/:id", requireAuth, ProposalController.deleteProposal);
 
 app.get("/documents", requireAuth, DocumentController.listDocuments);
-app.post("/documents", requireAuth, DocumentController.createDocument);
+app.post("/documents", requireAuth, requireFeature("document_generation"), DocumentController.createDocument);
 app.get("/documents/:id", requireAuth, DocumentController.getById);
 app.get("/documents/:id/download", requireAuth, DocumentController.downloadDocument);
 
@@ -295,7 +308,7 @@ app.get("/documents/:id/download", requireAuth, DocumentController.downloadDocum
 app.get("/livechat/inboxes/my", requireAuth, LivechatController.getMyInboxes);
 app.get("/livechat/inboxes/stats", requireAuth, LivechatController.getInboxesStats);
 app.get("/livechat/inboxes", requireAuth, LivechatController.listInboxes);
-app.post("/livechat/inboxes", requireAuth, LivechatController.createInbox);
+app.post("/livechat/inboxes", requireAuth, requireLimit("inboxes"), LivechatController.createInbox);
 app.put("/livechat/inboxes/:id", requireAuth, LivechatController.updateInbox);
 app.delete("/livechat/inboxes/:id", requireAuth, LivechatController.deleteInbox);
 app.get("/livechat/inboxes/:id/agents", requireAuth, LivechatController.getInboxAgents);

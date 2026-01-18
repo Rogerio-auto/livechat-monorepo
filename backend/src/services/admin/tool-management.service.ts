@@ -13,10 +13,10 @@ export class ToolManagementService {
     const criticalTools = await ToolManagementRepository.getTopErrorProneTools(5);
     
     // Calcular métricas globais
-    const totalCalls = stats.reduce((acc, s) => acc + s.total_calls, 0);
-    const totalErrors = stats.reduce((acc, s) => acc + s.error_count, 0);
+    const totalCalls = stats.reduce((acc, s) => acc + Number(s.total_calls || 0), 0);
+    const totalErrors = stats.reduce((acc, s) => acc + Number(s.error_count || 0), 0);
     const avgLatency = stats.length > 0 
-      ? stats.reduce((acc, s) => acc + s.avg_latency_ms, 0) / stats.length 
+      ? stats.reduce((acc, s) => acc + Number(s.avg_latency_ms || 0), 0) / stats.length 
       : 0;
 
     return {
@@ -26,8 +26,18 @@ export class ToolManagementService {
         errorRate: totalCalls > 0 ? (totalErrors / totalCalls) * 100 : 0,
         avgLatency
       },
-      toolStats: stats,
-      criticalTools
+      toolStats: stats.map(s => ({
+        ...s,
+        total_calls: Number(s.total_calls),
+        error_count: Number(s.error_count),
+        avg_latency_ms: Number(s.avg_latency_ms)
+      })),
+      criticalTools: criticalTools.map(s => ({
+        ...s,
+        total_calls: Number(s.total_calls),
+        error_count: Number(s.error_count),
+        error_rate: Number(s.error_rate)
+      }))
     };
   }
 

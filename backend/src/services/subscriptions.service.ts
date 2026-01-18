@@ -26,6 +26,9 @@ export interface Subscription {
   canceled_at?: string | null;
   cancel_reason?: string | null;
   metadata?: Record<string, any> | null;
+  custom_limits?: Record<string, number> | null;
+  custom_features?: Record<string, boolean> | null;
+  notes?: string | null;
   created_at: string;
   updated_at?: string | null;
 }
@@ -344,6 +347,12 @@ export async function checkLimit(
         case "campaigns_per_month":
           current = await getCurrentUsage(companyId, "campaigns_sent");
           break;
+        case "contacts":
+          current = await db.one<{ count: number }>(
+            `SELECT COUNT(*)::int as count FROM public.contacts WHERE company_id = $1`,
+            [companyId]
+          ).then(r => r.count);
+          break;
       }
     } catch (e) {
       console.warn(`[subscriptions] Error counting usage for ${resource} during trial:`, e);
@@ -359,7 +368,12 @@ export async function checkLimit(
     };
   }
 
-  const limits = sub.plan.limits;
+  // Pegar os limites (priorizando overrides manuais se existirem)
+  const limits = {
+    ...(sub.plan.limits || {}),
+    ...(sub.custom_limits || {})
+  };
+  
   const limit = limits[resource];
   
   // -1 = ilimitado
@@ -407,6 +421,13 @@ export async function checkLimit(
       current = await getCurrentUsage(companyId, "campaigns_sent");
       break;
 
+    case "contacts":
+      current = await db.one<{ count: number }>(
+        `SELECT COUNT(*)::int as count FROM public.contacts WHERE company_id = $1`,
+        [companyId]
+      ).then(r => r.count);
+      break;
+
     default:
       // Para outros recursos, assumir 0
       current = 0;
@@ -445,6 +466,11 @@ export async function checkFeatureAccess(companyId: string, feature: keyof PlanF
 
   // Se estiver em trial, libera todas as features
   if (sub.status === "trial") return true;
+
+  // Priorizar overrides manuais
+  if (sub.custom_features && sub.custom_features[feature] !== undefined) {
+    return sub.custom_features[feature] === true;
+  }
 
   return sub.plan.features[feature] === true;
 }
@@ -640,5 +666,41 @@ export async function extendSubscription(companyId: string, days: number): Promi
   try {
     const { redis } = await import("../lib/redis.js");
     await redis.del(`subscription:${companyId}`);
+  } catch (e) {}
+}
+
+/**
+ * Atualizar sobrescritas (limites, features e notas) de uma empresa
+ */
+export async function updateSubscriptionOverrides(
+  companyId: string, 
+  overrides: { 
+    custom_limits?: Record<string, number>, 
+    custom_features?: Record<string, boolean>,
+    notes?: string 
+  }
+): Promise<void> {
+  const { custom_limits, custom_features, notes } = overrides;
+
+  await db.none(
+    `UPDATE public.subscriptions 
+     SET custom_limits = COALESCE($2, custom_limits),
+         custom_features = COALESCE($3, custom_features),
+         notes = COALESCE($4, notes),
+         updated_at = NOW() 
+     WHERE company_id = $1`,
+    [
+      companyId, 
+      custom_limits ? JSON.stringify(custom_limits) : null, 
+      custom_features ? JSON.stringify(custom_features) : null, 
+      notes
+    ]
+  );
+  
+  // Invalidate cache
+  try {
+    const { redis } = await import("../lib/redis.js");
+    await redis.del(`subscription:${companyId}`);
+    console.log("[subscriptions] Cache invalidated after manual override:", companyId);
   } catch (e) {}
 }

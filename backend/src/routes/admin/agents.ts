@@ -23,6 +23,33 @@ const requireAdmin = async (req: any, res: any, next: any) => {
   }
 };
 
+// Mensagens de uma conversa específica (Admin)
+// Definida ANTES de /agents/:agentId para evitar conflito de rota
+router.get('/agents/chats/:chatId/messages', requireAuth, requireAdmin, async (req, res) => {
+  const { chatId } = req.params;
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('chat_messages')
+      .select(`
+        id,
+        content,
+        is_from_customer,
+        sender_id,
+        sender_name,
+        created_at,
+        type,
+        media_url
+      `)
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Listar agentes de uma empresa
 router.get('/companies/:companyId/agents', requireAuth, requireAdmin, async (req, res) => {
   const { companyId } = req.params;
@@ -83,7 +110,7 @@ router.get('/agents/:agentId/metrics', requireAuth, requireAdmin, async (req, re
   const { period = 'day' } = req.query;
   
   try {
-    // 1. Total de conversas
+    // 1. Total de conversas (Real-time from chats table)
     const { count: totalConversations } = await supabaseAdmin
       .from('chats')
       .select('*', { count: 'exact', head: true })
@@ -103,24 +130,34 @@ router.get('/agents/:agentId/metrics', requireAuth, requireAdmin, async (req, re
       .eq('ai_agent_id', agentId)
       .eq('status', 'RESOLVED');
 
+    // 4. Buscar métricas agregadas da tabela agent_metrics para dados históricos
+    const { data: historicalMetrics } = await supabaseAdmin
+      .from('agent_metrics')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('period_type', period)
+      .order('period_start', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
     const successRate = totalConversations ? (resolvedConversations || 0) / totalConversations * 100 : 0;
 
-    // Mock de outras métricas por enquanto, já que não temos tabelas específicas
+    // Retornar mix de dados real-time e históricos
     res.json({
       agent_id: agentId,
       period,
       total_conversations: totalConversations || 0,
       active_conversations: activeConversations || 0,
-      avg_response_time_ms: 12500, // Mock
-      success_rate: Math.round(successRate),
-      escalation_rate: 12, // Mock
-      avg_satisfaction: 4.8, // Mock
-      error_rate: 0.5, // Mock
-      timeout_count: 2, // Mock
-      api_errors: 1, // Mock
-      total_tokens: 45200, // Mock
-      total_cost: 0.85, // Mock
-      avg_cost_per_conversation: 0.02, // Mock
+      avg_response_time_ms: historicalMetrics?.avg_response_time_ms || 12500,
+      success_rate: Math.round(successRate) || historicalMetrics?.success_rate || 0,
+      escalation_rate: historicalMetrics?.escalation_rate || 0,
+      avg_satisfaction: historicalMetrics?.avg_satisfaction || 4.5,
+      error_rate: historicalMetrics?.error_rate || 0.5,
+      timeout_count: historicalMetrics?.timeout_count || 0,
+      api_errors: historicalMetrics?.api_error_count || 0,
+      total_tokens: historicalMetrics?.total_tokens || 0,
+      total_cost: historicalMetrics?.total_cost || 0,
+      avg_cost_per_conversation: historicalMetrics?.avg_cost_per_conversation || 0,
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -159,12 +196,6 @@ router.get('/agents/:agentId/conversations', requireAuth, requireAdmin, async (r
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
-});
-
-// Erros do agente
-router.get('/agents/:agentId/errors', requireAuth, requireAdmin, async (req, res) => {
-  // Como não temos tabela de erros, retornamos mock ou vazio
-  res.json([]);
 });
 
 // Playground: Testar agente

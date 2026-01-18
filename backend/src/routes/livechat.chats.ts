@@ -4,6 +4,7 @@ import { Request, Response, Application } from "express";
 import { AuthRequest } from "../types/express.js";
 import multer from "multer";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
 import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO } from "../lib/io.js";
@@ -1160,7 +1161,7 @@ export function registerLivechatChatRoutes(app: Application) {
       endTimer();
     }
   });
-  app.post("/livechat/messages", requireAuth, async (req: AuthRequest, res: Response, next) => {
+  app.post("/livechat/messages", requireAuth, checkResourceLimit("messages_per_month"), async (req: AuthRequest, res: Response, next) => {
     const startedAt = performance.now();
     let insertedId: string | null = null;
     let logStatus: "ok" | "error" = "ok";
@@ -2765,7 +2766,7 @@ export function registerLivechatChatRoutes(app: Application) {
       endTimer();
     }
   });
-  app.post("/livechat/chats/:id/messages", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/livechat/chats/:id/messages", requireAuth, checkResourceLimit("messages_per_month"), async (req: AuthRequest, res: Response) => {
     try {
       const { id: chatId } = req.params as { id: string };
       const { text, senderType = "AGENT", draftId } = req.body || {};
@@ -2946,7 +2947,7 @@ export function registerLivechatChatRoutes(app: Application) {
   });
 
   // Enviar arquivo (base64) — invalida mensagens/listas/chat
-  app.post("/livechat/chats/:id/messages/file", requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post("/livechat/chats/:id/messages/file", requireAuth, checkResourceLimit("messages_per_month"), async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { filename, mime, data } = (req.body || {}) as { filename?: string; mime?: string; data?: string };
     if (!filename || !data) return res.status(400).json({ error: "filename e data obrigatorios" });

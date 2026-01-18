@@ -4689,7 +4689,7 @@ const scrollToBottom = useCallback(
                 {/* 24h Window Warning for Meta */}
                 {isMetaChat && !isWindowOpen && !isPrivateMode && (
                   <div className="mb-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <FiAlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                    <FiAlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                         Janela de 24h fechada

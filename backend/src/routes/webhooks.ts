@@ -230,10 +230,20 @@ async function handleSubscriptionUpdated(subscription: any) {
     `UPDATE public.subscriptions 
      SET status = $1,
          plan_id = $2,
+         trial_ends_at = CASE WHEN $4 IS NOT NULL THEN to_timestamp($4) ELSE trial_ends_at END,
+         current_period_start = to_timestamp($5),
+         current_period_end = to_timestamp($6),
          updated_at = NOW()
      WHERE stripe_subscription_id = $3
      RETURNING company_id`,
-    [status, plan.id, subscriptionId]
+    [
+      status, 
+      plan.id, 
+      subscriptionId, 
+      subscription.trial_end,
+      subscription.current_period_start,
+      subscription.current_period_end
+    ]
   );
 
   if (result?.company_id) {

@@ -54,6 +54,7 @@ import { CadastroProvider } from './context/CadastroContext'
 import { FeatureGuard } from './components/auth/FeatureGuard'
 import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/ToastContainer'
+import { SubscriptionBlockedModal, SubscriptionWarningBanner } from './components/SubscriptionBlockedModal'
 import { AdminLayout } from './pages/admin/layout/AdminLayout'
 import { AdminDashboard } from './pages/admin/dashboard/AdminDashboard'
 import { CompaniesList } from './pages/admin/companies/CompaniesList'
@@ -62,11 +63,13 @@ import { CompanyOverview } from './pages/admin/companies-views/CompanyOverview'
 import { CompanyAgents } from './pages/admin/companies-views/CompanyAgents'
 import { CompanyUsers } from './pages/admin/companies-views/CompanyUsers'
 import { CompanyLogs } from './pages/admin/companies-views/CompanyLogs'
+import { CompanySubscription } from './pages/admin/companies-views/CompanySubscription'
 import { SystemHealth } from './pages/admin/infrastructure/SystemHealth'
 import TemplateList from './pages/admin/Templates/TemplateList'
 import TemplateEditor from './pages/admin/Templates/TemplateEditor'
 import TemplateTester from './pages/admin/Templates/TemplateTester'
 import ToolMonitoring from './pages/admin/Tools/ToolMonitoring'
+import { ToolsAdminPanel } from './components/tools/ToolsAdminPanel'
 import ProjectsList from './pages/projects/ProjectsList'
 import ProjectKanban from './pages/projects/ProjectKanban'
 import ProjectDetails from './pages/projects/ProjectDetails'
@@ -85,6 +88,8 @@ function App() {
           <CadastroProvider>
             <BrowserRouter>
           <ToastContainer />
+          <SubscriptionBlockedModal />
+          <SubscriptionWarningBanner />
           <Routes>
           <Route path='/' element={<Navigate to="/dashboard" replace />}/>
           <Route path='/login' element={<Login/>}/>
@@ -227,13 +232,14 @@ function App() {
               <Route path='agents/:agentId' element={<CompanyAgents />} />
               <Route path='users' element={<CompanyUsers />} />
               <Route path='logs' element={<CompanyLogs />} />
+              <Route path='subscription' element={<CompanySubscription />} />
             </Route>
             <Route path='infrastructure' element={<SystemHealth />} />
             <Route path='templates' element={<TemplateList />} />
-            <Route path='templates/new' element={<TemplateEditor />} />
             <Route path='templates/:id' element={<TemplateEditor />} />
             <Route path="templates/:id/test" element={<TemplateTester />} />
             <Route path='tools' element={<ToolMonitoring />} />
+            <Route path='tools/catalog' element={<ToolsAdminPanel />} />
             <Route path='projects/templates' element={<ProjectTemplates />} />
             <Route path='projects/templates/:id' element={<ProjectTemplateEditor />} />
           </Route>

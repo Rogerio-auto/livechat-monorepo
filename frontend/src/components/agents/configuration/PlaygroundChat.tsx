@@ -89,9 +89,9 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
   };
 
   return (
-    <div className="flex gap-6 h-[600px]">
+    <div className="flex gap-4 h-[600px]">
       {/* Chat Panel */}
-      <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${activeLogs ? 'w-2/3' : 'w-full'}`}>
+      <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 ${activeLogs ? 'w-1/2' : 'w-full'}`}>
         <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-800/50">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
@@ -137,7 +137,7 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
                 key={msg.id}
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                <div className={`flex gap-3 max-w-[90%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                     msg.role === 'user' 
                       ? 'bg-blue-600 text-white' 
@@ -214,7 +214,7 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
 
       {/* Logs Panel */}
       {activeLogs && (
-        <div className="w-1/3 bg-gray-900 rounded-xl border border-gray-800 flex flex-col overflow-hidden shadow-xl animate-in slide-in-from-right duration-300">
+        <div className="w-1/2 bg-gray-900 rounded-xl border border-gray-800 flex flex-col overflow-hidden shadow-xl animate-in slide-in-from-right duration-300">
           <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-gray-900/50">
             <div className="flex items-center gap-2 text-gray-300">
               <FiTerminal className="text-blue-400" />

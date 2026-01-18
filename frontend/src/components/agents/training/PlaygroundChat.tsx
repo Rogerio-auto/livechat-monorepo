@@ -11,7 +11,7 @@ export function PlaygroundChat({ agent }: { agent: Agent }) {
         </p>
       </div>
       
-      <div className="max-w-4xl mx-auto w-full">
+      <div className="w-full">
         <SharedPlayground agent={agent} />
       </div>
     </div>

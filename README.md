@@ -23,7 +23,21 @@ Sistema completo de atendimento ao cliente com WhatsApp, chat ao vivo e automaç
 - React 19
 - Aplicação separada para fluxo de cadastro
 
-## 📁 Estrutura do Projeto
+## �️ Painel Administrativo
+
+O sistema possui um painel administrativo robusto acessível a usuários com role `ADMIN` ou `SUPER_ADMIN` na rota `/admin`.
+
+### Funcionalidades:
+- **Gestão de Empresas**: Controle de limites, assinaturas e recursos.
+- **Monitoramento de Agentes**: Métricas em tempo real de custo, latência e performance de IA.
+- **Dashboard de Ferramentas**: Logs detalhados de execução de ferramentas pelos agentes.
+- **Infraestrutura**: Monitoramento em tempo real de:
+  - **Redis**: Hit rate, consumo de memória e conexões.
+  - **RabbitMQ**: Backlog de filas e status dos consumidores.
+  - **PostgreSQL**: Tamanho das tabelas e conexões ativas.
+  - **Workers**: Status de heartbeats (PID locks) das instâncias ativas.
+
+## �📁 Estrutura do Projeto
 
 ```
 .

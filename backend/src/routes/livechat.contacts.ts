@@ -1,6 +1,7 @@
 import express from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { logger } from "../lib/logger.js";
 import { ContactSchema, ContactUpdateSchema } from "../schemas/contact.schema.js";
@@ -245,7 +246,7 @@ app.get("/livechat/contacts", requireAuth, async (req: any, res) => {
  });
  
  // Create contact
- app.post("/livechat/contacts", requireAuth, async (req: any, res, next) => {
+ app.post("/livechat/contacts", requireAuth, checkResourceLimit("contacts"), async (req: any, res, next) => {
    try {
      const authUserId = req.user.id as string;
      const { data: urow, error: errU } = await supabaseAdmin

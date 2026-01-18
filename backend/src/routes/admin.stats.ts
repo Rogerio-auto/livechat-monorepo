@@ -48,20 +48,36 @@ export function registerAdminStatsRoutes(app: express.Application) {
 
       if (usersError) throw usersError;
 
-      // 4. MRR Calculation (Mocked based on plans)
-      // In a real scenario, we would query Stripe or a subscriptions table
-      const { data: companies } = await supabaseAdmin
-        .from("companies")
-        .select("plan");
-      
+      // 4. MRR Calculation
+      const { data: activeSubs, error: subsError } = await supabaseAdmin
+        .from("subscriptions")
+        .select(`
+          status,
+          billing_cycle,
+          plans (
+            price_monthly,
+            price_yearly
+          )
+        `)
+        .eq("status", "active");
+
+      if (subsError) throw subsError;
+
       let mrr = 0;
-      companies?.forEach((c: any) => {
-        if (c.plan === "pro") mrr += 297;
-        else if (c.plan === "starter") mrr += 97;
-        else if (c.plan === "enterprise") mrr += 997;
+      activeSubs?.forEach((sub: any) => {
+        const plan = sub.plans;
+        if (!plan) return;
+
+        if (sub.billing_cycle === "monthly") {
+          mrr += Number(plan.price_monthly || 0);
+        } else {
+          // Pro-rate yearly for MRR
+          mrr += Number(plan.price_yearly || 0) / 12;
+        }
       });
 
-      // 5. Infra Health (Mocked)
+      // 5. Usage stats (Optional for later)
+      // 6. Infra Health (Mocked)
       // In a real scenario, we would check Redis/RabbitMQ connections
       const infraHealth = {
         database: "healthy",

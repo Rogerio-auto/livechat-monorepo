@@ -7,8 +7,29 @@ import { NotificationService } from '../services/notification.service.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { queueNextStep } from '../services/flow-engine.service.js';
 
+import { dailyConsolidationJob, weeklyOpenAISyncJob } from './sync-openai-usage.job.js';
+
 export function startScheduler() {
   console.log('[Scheduler] Starting notification scheduler...');
+
+  // ==================== BILLING & USAGE JOBS ====================
+  // Job de consolidação diária de faturamento (2h da manhã)
+  cron.schedule('0 2 * * *', async () => {
+    try {
+      await dailyConsolidationJob();
+    } catch (error) {
+      console.error('[Scheduler] Error in dailyConsolidationJob:', error);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
+
+  // Job de sincronização semanal com OpenAI (Domingo às 3h da manhã)
+  cron.schedule('0 3 * * 0', async () => {
+    try {
+      await weeklyOpenAISyncJob();
+    } catch (error) {
+      console.error('[Scheduler] Error in weeklyOpenAISyncJob:', error);
+    }
+  }, { timezone: 'America/Sao_Paulo' });
 
   // ==================== VERIFICAR PRAZOS (A cada 1 hora para maior responsividade) ====================
   cron.schedule('0 * * * *', async () => {

@@ -7,8 +7,8 @@ import remarkGfm from 'remark-gfm';
 
 export function AgentTraining({ agent }: { agent: Agent }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div className="lg:col-span-2 space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="lg:col-span-7 space-y-6">
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 p-4 rounded-xl flex gap-3">
           <FiInfo className="text-blue-600 shrink-0 mt-0.5" size={18} />
           <div className="text-sm text-blue-800 dark:text-blue-300">
@@ -39,7 +39,7 @@ export function AgentTraining({ agent }: { agent: Agent }) {
         </div>
       </div>
 
-      <div className="lg:col-span-1">
+      <div className="lg:col-span-5">
         <div className="sticky top-6">
           <PlaygroundChat agent={agent} />
         </div>

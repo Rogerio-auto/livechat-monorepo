@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiSave, FiArrowLeft, FiPlus, FiTrash2, FiSettings, FiCpu, FiTool, FiHelpCircle, FiList } from 'react-icons/fi';
-import { api } from '../../../lib/api';
+import { api } from '@/lib/api';
 import { showToast } from '../../../hooks/useToast';
 
 export default function TemplateEditor() {
@@ -39,7 +39,7 @@ export default function TemplateEditor() {
 
   useEffect(() => {
     fetchTools();
-    if (!isNew) {
+    if (id && id !== 'new') {
       fetchTemplate();
     }
   }, [id]);
@@ -47,7 +47,7 @@ export default function TemplateEditor() {
   const fetchTools = async () => {
     try {
       const response = await api.get('/api/tools'); 
-      setAvailableTools(response.data || []);
+      setAvailableTools(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Erro ao carregar catálogo de ferramentas');
     }

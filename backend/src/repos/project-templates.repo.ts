@@ -60,19 +60,10 @@ export type TemplateWithDetails = ProjectTemplate & {
 // ==================== CRUD ====================
 
 /**
- * Lista todos os templates de uma empresa, incluindo templates globais do mesmo nicho
+ * Lista templates. Se companyId for informado, filtra por templates da empresa + globais do nicho.
+ * Se for null, retorna todos os templates (visão admin).
  */
-export async function listTemplates(companyId: string): Promise<ProjectTemplate[]> {
-  // 1. Buscar indústria da empresa
-  const { data: company } = await supabaseAdmin
-    .from("companies")
-    .select("industry")
-    .eq("id", companyId)
-    .single();
-
-  const industry = company?.industry;
-
-  // 2. Buscar templates da empresa OU globais do mesmo nicho
+export async function listTemplates(companyId?: string | null): Promise<ProjectTemplate[]> {
   let query = supabaseAdmin
     .from("project_templates")
     .select(`
@@ -82,11 +73,22 @@ export async function listTemplates(companyId: string): Promise<ProjectTemplate[
     `)
     .eq("is_active", true);
 
-  if (industry) {
-    // Filtra por templates da empresa OU templates globais do mesmo nicho
-    query = query.or(`company_id.eq.${companyId},and(company_id.is.null,industry.eq.${industry})`);
-  } else {
-    query = query.eq("company_id", companyId);
+  if (companyId) {
+    // 1. Buscar indústria da empresa
+    const { data: company } = await supabaseAdmin
+      .from("companies")
+      .select("industry")
+      .eq("id", companyId)
+      .single();
+
+    const industry = company?.industry;
+
+    if (industry) {
+      // Filtra por templates da empresa OU templates globais do mesmo nicho
+      query = query.or(`company_id.eq.${companyId},and(company_id.is.null,industry.eq.${industry})`);
+    } else {
+      query = query.eq("company_id", companyId);
+    }
   }
 
   const { data, error } = await query.order("is_default", { ascending: false }).order("name");
@@ -100,22 +102,29 @@ export async function listTemplates(companyId: string): Promise<ProjectTemplate[
   }));
 }
 
+
 /**
- * Busca template com estágios e campos
+ * Busca template com estágios e campos. Se companyId for informado, valida propriedade.
  */
 export async function getTemplateWithDetails(
-  companyId: string,
+  companyId: string | null,
   templateId: string
 ): Promise<TemplateWithDetails | null> {
   // Buscar template
-  const { data: template, error:  templateError } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_templates")
     .select("*")
-    .eq("id", templateId)
-    .eq("company_id", companyId)
-    .single();
+    .eq("id", templateId);
+
+  if (companyId) {
+    // Busca template da empresa OU global (se admin permitir)
+    query = query.or(`company_id.eq.${companyId},company_id.is.null`);
+  }
+
+  const { data: template, error: templateError } = await query.maybeSingle();
 
   if (templateError || !template) return null;
+
 
   // Buscar estágios
   const { data:  stages, error: stagesError } = await supabaseAdmin
@@ -146,14 +155,14 @@ export async function getTemplateWithDetails(
  * Cria um novo template
  */
 export async function createTemplate(
-  companyId: string,
+  companyId: string | null,
   userId: string,
   input: {
     name: string;
-    description?:  string;
+    description?: string;
     industry: string;
-    icon?:  string;
-    color?:  string;
+    icon?: string;
+    color?: string;
     is_default?: boolean;
   }
 ): Promise<ProjectTemplate> {
@@ -161,8 +170,8 @@ export async function createTemplate(
     .from("project_templates")
     .insert({
       company_id: companyId,
-      created_by:  userId,
-      ... input,
+      created_by: userId,
+      ...input,
     })
     .select()
     .single();
@@ -175,17 +184,20 @@ export async function createTemplate(
  * Atualiza um template
  */
 export async function updateTemplate(
-  companyId: string,
+  companyId: string | null,
   templateId: string,
-  updates:  Partial<Omit<ProjectTemplate, "id" | "company_id" | "created_at" | "created_by">>
+  updates: Partial<Omit<ProjectTemplate, "id" | "company_id" | "created_at" | "created_by">>
 ): Promise<ProjectTemplate> {
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_templates")
     .update(updates)
-    .eq("id", templateId)
-    .eq("company_id", companyId)
-    .select()
-    .single();
+    .eq("id", templateId);
+
+  if (companyId) {
+    query = query.eq("company_id", companyId);
+  }
+
+  const { data, error } = await query.select().single();
 
   if (error) throw new Error(error.message);
   return data;
@@ -195,14 +207,19 @@ export async function updateTemplate(
  * Deleta um template (soft delete)
  */
 export async function deleteTemplate(
-  companyId: string,
+  companyId: string | null,
   templateId: string
 ): Promise<void> {
-  const { error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("project_templates")
     .update({ is_active: false })
-    .eq("id", templateId)
-    .eq("company_id", companyId);
+    .eq("id", templateId);
+
+  if (companyId) {
+    query = query.eq("company_id", companyId);
+  }
+
+  const { error } = await query;
 
   if (error) throw new Error(error.message);
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiPlay, FiArrowLeft, FiCheckCircle, FiXCircle, FiClock, FiDatabase, FiSend, FiTrash2, FiUser, FiCpu, FiTerminal, FiChevronRight, FiBox, FiInfo } from 'react-icons/fi';
-import { api } from '../../../lib/api';
+import { api } from '@/lib/api';
 import { showToast } from '../../../hooks/useToast';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,7 +34,9 @@ export default function TemplateTester() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchData();
+    if (id && id !== 'new') {
+      fetchData();
+    }
   }, [id]);
 
   useEffect(() => {

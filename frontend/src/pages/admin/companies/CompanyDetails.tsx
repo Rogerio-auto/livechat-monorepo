@@ -16,6 +16,7 @@ const TABS = [
   { label: 'Agentes', to: 'agents' },
   { label: 'Usuários', to: 'users' },
   { label: 'Logs', to: 'logs' },
+  { label: 'Assinatura', to: 'subscription' },
 ];
 
 export function CompanyDetails() {

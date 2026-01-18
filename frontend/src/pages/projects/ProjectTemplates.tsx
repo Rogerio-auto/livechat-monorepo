@@ -18,19 +18,13 @@ import {
   X
 } from "lucide-react";
 import TemplateWizard from "../../components/projects/TemplateWizard";
+import { api } from "../../lib/api";
+import { showToast } from "../../hooks/useToast";
+import type { TemplateWithDetails } from "@livechat/shared";
 
-const API = import.meta.env.VITE_API_URL;
-
-interface Template {
-  id: string;
-  name: string;
-  description: string;
-  industry: string;
-  icon: string;
-  color: string;
-  stages_count: number;
-  fields_count: number;
-  is_default: boolean;
+interface Template extends TemplateWithDetails {
+  stages_count?: number;
+  fields_count?: number;
 }
 
 const ProjectTemplates: React.FC = () => {
@@ -52,15 +46,11 @@ const ProjectTemplates: React.FC = () => {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API}/projects/templates`, {
-        credentials: "include"
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTemplates(data);
-      }
+      const response = await api.get("/projects/templates");
+      setTemplates(response.data);
     } catch (error) {
       console.error("Error fetching templates:", error);
+      showToast("Erro ao carregar templates", "error");
     } finally {
       setLoading(false);
     }
@@ -69,173 +59,189 @@ const ProjectTemplates: React.FC = () => {
   const handleCreateTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch(`${API}/projects/templates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newTemplate),
-        credentials: "include"
-      });
-      if (response.ok) {
-        setShowCreateModal(false);
-        fetchTemplates();
-      }
+      await api.post("/projects/templates", newTemplate);
+      setShowCreateModal(false);
+      fetchTemplates();
+      showToast("Template criado com sucesso!", "success");
     } catch (error) {
       console.error("Error creating template:", error);
+      showToast("Erro ao criar template", "error");
     }
   };
 
   const handleSetDefault = async (templateId: string) => {
     try {
-      const response = await fetch(`${API}/projects/templates/${templateId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_default: true }),
-        credentials: "include"
-      });
-      if (response.ok) {
-        fetchTemplates();
-      }
+      await api.put(`/projects/templates/${templateId}`, { is_default: true });
+      fetchTemplates();
+      showToast("Template definido como padrão", "success");
     } catch (error) {
       console.error("Error setting default template:", error);
+      showToast("Erro ao definir padrão", "error");
     }
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
     if (!confirm("Tem certeza que deseja excluir este template?")) return;
     try {
-      const response = await fetch(`${API}/projects/templates/${templateId}`, {
-        method: "DELETE",
-        credentials: "include"
-      });
-      if (response.ok) {
-        fetchTemplates();
-      }
+      await api.delete(`/projects/templates/${templateId}`);
+      fetchTemplates();
+      showToast("Template excluído", "success");
     } catch (error) {
       console.error("Error deleting template:", error);
+      showToast("Erro ao excluir template", "error");
     }
   };
 
   const getIndustryIcon = (industry: string) => {
     switch (industry) {
-      case "solar_energy": return <Zap className="w-6 h-6 text-amber-500" />;
-      case "construction": return <Construction className="w-6 h-6 text-red-500" />;
-      case "education": return <Layout className="w-6 h-6 text-blue-500" />;
-      case "accounting": return <Layout className="w-6 h-6 text-emerald-500" />;
-      case "clinic": return <Layout className="w-6 h-6 text-rose-500" />;
-      case "real_estate": return <Layout className="w-6 h-6 text-orange-500" />;
-      case "law": return <Layout className="w-6 h-6 text-slate-500" />;
-      case "events": return <Layout className="w-6 h-6 text-pink-500" />;
-      default: return <Layout className="w-6 h-6 text-gray-500" />;
+      case "solar_energy": return <Zap className="w-6 h-6" />;
+      case "construction": return <Construction className="w-6 h-6" />;
+      case "education": return <Layout className="w-6 h-6" />;
+      case "accounting": return <Layout className="w-6 h-6" />;
+      case "clinic": return <Layout className="w-6 h-6" />;
+      case "real_estate": return <Layout className="w-6 h-6" />;
+      case "law": return <Layout className="w-6 h-6" />;
+      case "events": return <Layout className="w-6 h-6" />;
+      default: return <Layout className="w-6 h-6" />;
     }
   };
 
   if (showWizard) {
     return (
-      <div className="p-6">
+      <div className="space-y-6">
         <button 
           onClick={() => setShowWizard(false)}
-          className="mb-4 flex items-center gap-2 text-gray-500 hover:text-gray-700"
+          className="flex items-center gap-2 text-slate-500 hover:text-white transition-colors font-medium group"
         >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Voltar para Templates
+          <ChevronRight className="w-4 h-4 rotate-180 group-hover:-translate-x-1 transition-transform" />
+          Voltar para Lista de Templates
         </button>
-        <TemplateWizard onComplete={() => {
-          setShowWizard(false);
-          fetchTemplates();
-        }} />
+        <div className="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-md">
+          <TemplateWizard onComplete={() => {
+            setShowWizard(false);
+            fetchTemplates();
+          }} />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Templates de Projeto</h1>
-          <p className="text-gray-500">Padronize seus processos com fluxos de trabalho pré-definidos.</p>
+          <h1 className="text-3xl font-bold text-white tracking-tight">Templates de Projeto</h1>
+          <p className="text-slate-400 mt-1">Padronize seus processos com fluxos de trabalho pré-definidos.</p>
         </div>
         <button 
           onClick={() => setShowCreateModal(true)}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
           Criar Template
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Seed Templates Card */}
-        <div className="bg-indigo-600 rounded-xl p-6 text-white shadow-lg relative overflow-hidden group">
-          <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-          <h3 className="text-lg font-bold mb-2">Biblioteca de Indústria</h3>
-          <p className="text-indigo-100 text-sm mb-6">Importe templates otimizados para o seu nicho de mercado em segundos.</p>
-          <button 
-            onClick={() => setShowWizard(true)}
-            className="w-full py-2.5 bg-white text-indigo-600 rounded-lg text-sm font-bold hover:bg-indigo-50 transition-colors"
-          >
-            Explorar Biblioteca
-          </button>
+        <div className="bg-linear-to-br from-indigo-600 to-violet-700 rounded-2xl p-8 text-white shadow-xl relative overflow-hidden group border border-white/10">
+          <div className="absolute top-0 right-0 -mt-8 -mr-8 w-48 h-48 bg-white/20 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-1000"></div>
+          <div className="relative z-10">
+            <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center mb-6 backdrop-blur-md">
+              <Zap className="w-6 h-6 text-white" />
+            </div>
+            <h3 className="text-xl font-bold mb-3">Biblioteca de Indústria</h3>
+            <p className="text-indigo-100 text-sm mb-8 leading-relaxed">
+              Importe fluxos completos e campos personalizados otimizados para o seu nicho de mercado.
+            </p>
+            <button 
+              onClick={() => setShowWizard(true)}
+              className="w-full py-3 bg-white text-indigo-600 rounded-xl text-sm font-bold hover:bg-indigo-50 transition-all shadow-lg active:scale-[0.98]"
+            >
+              Explorar Biblioteca
+            </button>
+          </div>
         </div>
 
         {templates.map((template) => (
           <div 
             key={template.id}
-            className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-md hover:border-indigo-200 transition-all group"
+            className="bg-slate-900/40 border border-white/5 rounded-2xl p-6 hover:shadow-2xl hover:border-indigo-500/30 hover:bg-slate-800/60 transition-all group backdrop-blur-sm relative overflow-hidden"
           >
-            <div className="flex items-start justify-between mb-4">
-              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-indigo-50 transition-colors">
+            {/* Barra lateral de cor opcional */}
+            {template.color && (
+              <div 
+                className="absolute top-0 left-0 bottom-0 w-1"
+                style={{ backgroundColor: template.color }}
+              />
+            )}
+
+            <div className="flex items-start justify-between mb-6">
+              <div 
+                className="p-3 rounded-xl transition-colors"
+                style={{ 
+                  backgroundColor: template.color ? `${template.color}15` : 'rgba(99, 102, 241, 0.1)',
+                  color: template.color || '#6366f1'
+                }}
+              >
                 {getIndustryIcon(template.industry)}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 {!template.is_default && (
                   <button 
                     onClick={() => handleSetDefault(template.id)}
-                    className="px-2 py-0.5 bg-gray-50 text-gray-400 text-[10px] font-bold rounded-full border border-gray-100 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-colors"
+                    className="px-2.5 py-1 bg-slate-800/50 text-slate-400 text-[10px] font-bold rounded-lg border border-white/5 hover:bg-indigo-500/10 hover:text-indigo-400 hover:border-indigo-500/20 transition-all"
                   >
                     TORNAR PADRÃO
                   </button>
                 )}
                 {template.is_default && (
-                  <span className="px-2 py-0.5 bg-green-50 text-green-600 text-[10px] font-bold rounded-full border border-green-100">
+                  <span className="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-[10px] font-bold rounded-lg border border-emerald-500/20">
                     PADRÃO
                   </span>
                 )}
-                <button className="p-1 text-gray-400 hover:text-gray-600">
+                <button className="p-1.5 text-slate-500 hover:text-slate-300 transition-colors">
                   <MoreVertical className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            <h3 className="text-lg font-bold text-gray-900 mb-2">{template.name}</h3>
-            <p className="text-sm text-gray-500 line-clamp-2 mb-6 h-10">
-              {template.description}
+            <h3 className="text-xl font-bold text-white mb-2">{template.name}</h3>
+            <p className="text-sm text-slate-400 line-clamp-2 mb-8 h-10 leading-relaxed">
+              {template.description || "Nenhuma descrição fornecida para este template de projeto."}
             </p>
 
-            <div className="flex items-center gap-6 mb-6">
+            <div className="flex items-center gap-8 mb-8">
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase">Estágios</p>
-                <p className="text-lg font-bold text-gray-900">{template.stages_count}</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Estágios</p>
+                <div className="flex items-center gap-1.5">
+                  <Layout className="w-3.5 h-3.5 text-indigo-400" />
+                  <p className="text-xl font-bold text-white leading-none">{template.stages_count}</p>
+                </div>
               </div>
               <div>
-                <p className="text-xs font-bold text-gray-400 uppercase">Campos</p>
-                <p className="text-lg font-bold text-gray-900">{template.fields_count}</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Campos</p>
+                <div className="flex items-center gap-1.5">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                  <p className="text-xl font-bold text-white leading-none">{template.fields_count}</p>
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-4 border-t border-gray-100">
+            <div className="flex items-center gap-2 pt-6 border-t border-white/5">
               <button 
                 onClick={() => navigate(`/admin/projects/templates/${template.id}`)}
-                className="flex-1 py-2 text-sm font-medium text-gray-700 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 text-sm font-semibold text-white bg-slate-800 rounded-xl hover:bg-slate-700 transition-all flex items-center justify-center gap-2 border border-white/5 active:scale-95"
               >
                 <Settings className="w-4 h-4" />
                 Configurar
               </button>
-              <button className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+              <button className="p-2.5 text-slate-500 hover:text-indigo-400 hover:bg-indigo-500/10 rounded-xl transition-all border border-transparent hover:border-indigo-500/20 active:scale-90">
                 <Copy className="w-4 h-4" />
               </button>
               <button 
                 onClick={() => handleDeleteTemplate(template.id)}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                className="p-2.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all border border-transparent hover:border-red-500/20 active:scale-90"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -246,76 +252,76 @@ const ProjectTemplates: React.FC = () => {
         {/* Create New Card */}
         <button 
           onClick={() => setShowCreateModal(true)}
-          className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center justify-center text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-all group"
+          className="border-2 border-dashed border-white/5 rounded-2xl p-6 flex flex-col items-center justify-center text-center hover:border-indigo-500/40 hover:bg-indigo-500/5 transition-all group group-active:scale-[0.98]"
         >
-          <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mb-4 group-hover:bg-indigo-100 transition-colors">
-            <Plus className="w-6 h-6 text-gray-400 group-hover:text-indigo-600" />
+          <div className="w-14 h-14 bg-slate-900 rounded-2xl flex items-center justify-center mb-5 group-hover:bg-indigo-500 group-hover:text-white transition-all shadow-inner">
+            <Plus className="w-7 h-7 text-slate-600 group-hover:text-white" />
           </div>
-          <h3 className="text-sm font-bold text-gray-900">Novo Template Personalizado</h3>
-          <p className="text-xs text-gray-500 mt-1">Crie um fluxo do zero para sua empresa.</p>
+          <h3 className="text-sm font-bold text-white">Novo Template Personalizado</h3>
+          <p className="text-xs text-slate-500 mt-2 max-w-[180px]">Personalize cada detalhe do fluxo da sua empresa.</p>
         </button>
       </div>
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md overflow-hidden shadow-md animate-in zoom-in duration-200">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Novo Template</h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in duration-200">
+            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-slate-800/50">
+              <h2 className="text-xl font-bold text-white">Novo Template</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white transition-colors">
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <form onSubmit={handleCreateTemplate} className="p-6 space-y-4">
+            <form onSubmit={handleCreateTemplate} className="p-6 space-y-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome do Template</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Nome do Template</label>
                 <input 
                   type="text"
                   required
                   value={newTemplate.name}
                   onChange={e => setNewTemplate({...newTemplate, name: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-4 py-3 bg-slate-800 border border-white/5 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all placeholder:text-slate-600"
                   placeholder="Ex: Fluxo de Vendas Solar"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Descrição</label>
                 <textarea 
                   value={newTemplate.description}
                   onChange={e => setNewTemplate({...newTemplate, description: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-24 resize-none"
+                  className="w-full px-4 py-3 bg-slate-800 border border-white/5 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none h-28 resize-none transition-all placeholder:text-slate-600"
                   placeholder="Descreva o objetivo deste template..."
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Indústria/Nicho</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Indústria/Nicho</label>
                 <select 
                   value={newTemplate.industry}
                   onChange={e => setNewTemplate({...newTemplate, industry: e.target.value})}
-                  className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-4 py-3 bg-slate-800 border border-white/5 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all appearance-none cursor-pointer"
                 >
                   <option value="generic">Genérico</option>
                   <option value="solar_energy">Energia Solar</option>
-                  <option value="construction">Construção Civil</option>
-                  <option value="accounting">Contabilidade</option>
-                  <option value="law">Advocacia</option>
-                  <option value="clinic">Clínica/Saúde</option>
-                  <option value="real_estate">Imobiliária</option>
-                  <option value="education">Educação</option>
-                  <option value="events">Eventos</option>
+                  <option value="construction" className="bg-slate-900">Construção Civil</option>
+                  <option value="accounting" className="bg-slate-900">Contabilidade</option>
+                  <option value="law" className="bg-slate-900">Advocacia</option>
+                  <option value="clinic" className="bg-slate-900">Clínica/Saúde</option>
+                  <option value="real_estate" className="bg-slate-900">Imobiliária</option>
+                  <option value="education" className="bg-slate-900">Educação</option>
+                  <option value="events" className="bg-slate-900">Eventos</option>
                 </select>
               </div>
-              <div className="flex gap-3 pt-4">
+              <div className="flex gap-4 pt-4">
                 <button 
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex-1 px-4 py-3 text-sm font-bold text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700 transition-all border border-white/5 active:scale-95"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="flex-1 px-4 py-3 text-sm font-bold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-500/20 active:scale-95"
                 >
                   Criar Template
                 </button>

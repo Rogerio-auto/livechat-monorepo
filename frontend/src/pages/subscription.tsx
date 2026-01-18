@@ -50,7 +50,7 @@ interface Subscription {
     name: string;
     display_name?: string;
   };
-  status: "trial" | "active" | "expired" | "canceled";
+  status: "trial" | "active" | "expired" | "canceled" | "past_due" | "unpaid";
   trial_ends_at?: string;
   current_period_start?: string;
   current_period_end?: string;
@@ -225,11 +225,11 @@ export default function SubscriptionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4 sm:px-6 lg:px-12">
+      <div className="max-w-[1600px] mx-auto">
         
         {/* Header Section */}
-        <div className="text-center mb-16">
+        <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase tracking-wider mb-4">
             <Sparkles size={14} />
             Planos e Preços
@@ -244,16 +244,45 @@ export default function SubscriptionPage() {
 
         {/* Current Subscription Status */}
         {subscription && (
-          <div className="mb-16 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* Alerta de Trial Expirado / Assinatura Inativa */}
+            {['expired', 'canceled', 'past_due'].includes(subscription.status) && (
+              <div className="bg-gradient-to-r from-red-50 to-amber-50 dark:from-red-900/20 dark:to-amber-900/20 border-b border-red-200 dark:border-red-700 p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0">
+                    <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-red-900 dark:text-red-100 mb-2">
+                      {subscription.status === 'expired' && 'Seu período de teste expirou'}
+                      {subscription.status === 'canceled' && 'Sua assinatura foi cancelada'}
+                      {subscription.status === 'past_due' && 'Pagamento pendente'}
+                    </h3>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {subscription.status === 'expired' && 'Escolha um plano abaixo para continuar usando a plataforma com todos os recursos.'}
+                      {subscription.status === 'canceled' && 'Escolha um plano abaixo para reativar sua conta e continuar usando a plataforma.'}
+                      {subscription.status === 'past_due' && 'Atualize sua forma de pagamento para continuar usando a plataforma sem interrupções.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="p-6 sm:p-8 flex flex-col lg:flex-row gap-8">
               <div className="flex-1">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-lg ${
+                    subscription.status === 'active' ? 'bg-blue-600 shadow-blue-500/20' :
+                    subscription.status === 'trial' ? 'bg-amber-600 shadow-amber-500/20' :
+                    'bg-gray-600 shadow-gray-500/20'
+                  }`}>
                     <ShieldCheck size={24} />
                   </div>
                   <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                      Sua Assinatura Atual
+                      {subscription.status === 'active' ? 'Sua Assinatura Atual' :
+                       subscription.status === 'trial' ? 'Período de Teste' :
+                       'Status da Assinatura'}
                     </h2>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-blue-600 dark:text-blue-400 font-semibold">
@@ -263,9 +292,18 @@ export default function SubscriptionPage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         subscription.status === 'active' 
                           ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                          : subscription.status === 'trial'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                          : subscription.status === 'expired'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
                       }`}>
-                        {subscription.status === 'active' ? 'Ativa' : subscription.status === 'trial' ? 'Período de Teste' : subscription.status}
+                        {subscription.status === 'active' ? 'Ativa' : 
+                         subscription.status === 'trial' ? 'Período de Teste' : 
+                         subscription.status === 'expired' ? 'Expirado' :
+                         subscription.status === 'canceled' ? 'Cancelado' :
+                         subscription.status === 'past_due' ? 'Pagamento Pendente' :
+                         subscription.status}
                       </span>
                     </div>
                   </div>
@@ -275,10 +313,14 @@ export default function SubscriptionPage() {
                   <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
                     <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-xs font-medium uppercase mb-1">
                       <Clock size={14} />
-                      Próxima Cobrança
+                      {subscription.status === 'trial' ? 'Trial Expira em' : 'Próxima Cobrança'}
                     </div>
                     <div className="text-gray-900 dark:text-white font-semibold">
-                      {subscription.current_period_end ? new Date(subscription.current_period_end).toLocaleDateString() : 'N/A'}
+                      {subscription.status === 'trial' && subscription.trial_ends_at
+                        ? new Date(subscription.trial_ends_at).toLocaleDateString()
+                        : subscription.current_period_end 
+                        ? new Date(subscription.current_period_end).toLocaleDateString() 
+                        : 'N/A'}
                     </div>
                   </div>
                   <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-800">
@@ -287,7 +329,9 @@ export default function SubscriptionPage() {
                       Ciclo de Faturamento
                     </div>
                     <div className="text-gray-900 dark:text-white font-semibold capitalize">
-                      {subscription.billing_cycle === 'monthly' ? 'Mensal' : 'Anual'}
+                      {subscription.billing_cycle === 'monthly' ? 'Mensal' : 
+                       subscription.billing_cycle === 'yearly' ? 'Anual' : 
+                       'N/A'}
                     </div>
                   </div>
                 </div>
@@ -304,37 +348,46 @@ export default function SubscriptionPage() {
                 )}
               </div>
 
-              <div className="lg:w-1/3 border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-700 pt-8 lg:pt-0 lg:pl-8">
-                <h3 className="text-sm font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-6 flex items-center gap-2">
-                  <Activity size={16} />
-                  Uso do Período
-                </h3>
-                <div className="space-y-6">
-                  <UsageBar 
-                    label="Mensagens" 
-                    current={usage.messages_per_month?.current || 0} 
-                    limit={usage.messages_per_month?.limit} 
-                  />
-                  <UsageBar 
-                    label="Contatos" 
-                    current={usage.contacts?.current || 0} 
-                    limit={usage.contacts?.limit} 
-                  />
-                  <UsageBar 
-                    label="Conexões" 
-                    current={usage.inboxes?.current || 0} 
-                    limit={usage.inboxes?.limit} 
-                  />
+              {subscription.status !== 'expired' && subscription.status !== 'canceled' && (
+                <div className="lg:w-1/3 border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-700 pt-8 lg:pt-0 lg:pl-8">
+                  <h3 className="text-sm font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-6 flex items-center gap-2">
+                    <Activity size={16} />
+                    Uso do Período
+                  </h3>
+                  <div className="space-y-6">
+                    <UsageBar 
+                      label="Mensagens" 
+                      current={usage.messages_per_month?.current || 0} 
+                      limit={usage.messages_per_month?.limit} 
+                    />
+                    <UsageBar 
+                      label="Contatos" 
+                      current={usage.contacts?.current || 0} 
+                      limit={usage.contacts?.limit} 
+                    />
+                    <UsageBar 
+                      label="Conexões" 
+                      current={usage.inboxes?.current || 0} 
+                      limit={usage.inboxes?.limit} 
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         )}
 
         {/* Plans Grid */}
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:gap-6">
           {plans.map((plan) => {
-            const isCurrentPlan = subscription?.plan_id === plan.id;
+            // Permitir assinar qualquer plano se o status for expired, canceled ou past_due
+            const isCurrentPlan = subscription?.plan_id === plan.id && 
+                                  subscription?.status === 'active';
+            const canSubscribe = !subscription || 
+                                 subscription.status === 'expired' || 
+                                 subscription.status === 'canceled' || 
+                                 subscription.status === 'past_due' ||
+                                 subscription.plan_id !== plan.id;
             const isPopular = plan.id === 'professional';
             
             return (
@@ -356,24 +409,24 @@ export default function SubscriptionPage() {
                   </div>
                 )}
 
-                <div className="p-8 flex-1">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-6 ${
+                <div className="p-5 flex-1">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-4 ${
                     isCurrentPlan ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400' :
                     isPopular ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' :
                     'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                   }`}>
-                    {PLAN_ICONS[plan.id] || <Globe className="w-6 h-6" />}
+                    {PLAN_ICONS[plan.id] || <Globe className="w-5 h-5" />}
                   </div>
 
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
                     {plan.display_name}
                   </h3>
-                  <p className="mt-2 text-sm text-gray-500 dark:text-gray-400 min-h-[40px]">
+                  <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400 min-h-[32px] line-clamp-2">
                     {PLAN_DESCRIPTIONS[plan.id] || "Plano flexível para sua empresa"}
                   </p>
                   
-                  <div className="mt-8 flex items-baseline">
-                    <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
+                  <div className="mt-4 flex items-baseline">
+                    <span className="text-3xl font-extrabold text-gray-900 dark:text-white">
                       R$ {plan.price_monthly}
                     </span>
                     <span className="ml-1 text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -381,13 +434,13 @@ export default function SubscriptionPage() {
                     </span>
                   </div>
 
-                  <div className="mt-8 space-y-4">
-                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <div className="mt-4 space-y-2">
+                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
                       Limites Inclusos
                     </h4>
-                    <ul className="space-y-3">
+                    <ul className="space-y-1.5">
                       {['users', 'inboxes', 'ai_agents', 'messages_per_month', 'contacts'].map(key => (
-                          <li key={key} className="flex items-center justify-between text-sm">
+                          <li key={key} className="flex items-center justify-between text-xs">
                               <span className="text-gray-500 dark:text-gray-400">{LIMIT_LABELS[key]}</span>
                               <span className="font-semibold text-gray-900 dark:text-white">
                                 {formatLimit(key, plan.limits ? plan.limits[key] : undefined)}
@@ -397,13 +450,13 @@ export default function SubscriptionPage() {
                     </ul>
                   </div>
 
-                  <div className="my-8 border-t border-gray-100 dark:border-gray-700"></div>
+                  <div className="my-4 border-t border-gray-100 dark:border-gray-700"></div>
 
-                  <div className="space-y-4">
-                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
                       Recursos
                     </h4>
-                    <ul className="space-y-3">
+                    <ul className="space-y-1.5">
                       {Object.entries(FEATURE_LABELS).map(([key, label]) => {
                           const hasFeature = plan.features ? plan.features[key] : false;
                           const isKeyDifferentiator = ['tasks_module', 'calendar_module', 'media_library', 'document_generation', 'api_access'].includes(key);
@@ -411,13 +464,13 @@ export default function SubscriptionPage() {
                           if (!hasFeature && !isKeyDifferentiator) return null;
 
                           return (
-                              <li key={key} className="flex items-start gap-3">
+                              <li key={key} className="flex items-start gap-2">
                                   {hasFeature ? (
-                                      <CheckCircle2 className="h-5 w-5 text-blue-500 shrink-0" />
+                                      <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                                   ) : (
-                                      <X className="h-5 w-5 text-gray-300 dark:text-gray-600 shrink-0" />
+                                      <X className="h-4 w-4 text-gray-300 dark:text-gray-600 shrink-0 mt-0.5" />
                                   )}
-                                  <span className={`text-sm ${hasFeature ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
+                                  <span className={`text-xs ${hasFeature ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 line-through'}`}>
                                       {label}
                                   </span>
                               </li>
@@ -427,12 +480,12 @@ export default function SubscriptionPage() {
                   </div>
                 </div>
 
-                <div className="p-8 pt-0">
+                <div className="p-5 pt-0">
                   <button
-                    onClick={() => !isCurrentPlan && handleUpgrade(plan.id)}
-                    disabled={isCurrentPlan || upgrading === plan.id}
-                    className={`w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold rounded-xl transition-all duration-200 ${
-                      isCurrentPlan
+                    onClick={() => canSubscribe && handleUpgrade(plan.id)}
+                    disabled={!canSubscribe || upgrading === plan.id}
+                    className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all duration-200 ${
+                      !canSubscribe && isCurrentPlan
                         ? 'bg-gray-100 text-gray-400 cursor-default dark:bg-gray-800 dark:text-gray-600 border border-gray-200 dark:border-gray-700'
                         : isPopular
                           ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-lg shadow-purple-500/20 hover:-translate-y-0.5'
@@ -441,11 +494,11 @@ export default function SubscriptionPage() {
                   >
                     {upgrading === plan.id ? (
                       <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : isCurrentPlan ? (
+                    ) : !canSubscribe && isCurrentPlan ? (
                       "Plano Atual"
                     ) : (
                       <>
-                        Assinar Agora
+                        {subscription?.status === 'active' && subscription?.plan_id !== plan.id ? 'Trocar Plano' : 'Assinar Agora'}
                         <ArrowRight size={16} />
                       </>
                     )}

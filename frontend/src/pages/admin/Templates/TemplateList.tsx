@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiPlus, FiSearch, FiEdit2, FiTrash2, FiPlay, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../../../lib/api';
+import { api } from '@/lib/api';
 import { showToast } from '../../../hooks/useToast';
 
 interface Template {

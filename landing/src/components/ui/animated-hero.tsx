@@ -46,7 +46,7 @@ function Hero() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.8, ease: "easeOut" }}
             >
-              <span className="text-foreground block">IA para suas</span>
+              <span className="text-foreground block">IA para</span>
               <span className="relative flex w-full justify-center overflow-hidden text-center py-2 md:pb-6 md:pt-4 text-primary min-h-[1.1em]">
                 {/* Ghost text with natural height to ensure container matches the largest word */}
                 <span className="invisible opacity-0 pointer-events-none whitespace-nowrap select-none">Escalabilidade</span>

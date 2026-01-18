@@ -2,13 +2,14 @@ import type { Application, Response, NextFunction } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { AuthRequest } from "../types/express.js";
+import { getSubscription, updateSubscriptionOverrides, updateSubscriptionStatus, extendSubscription } from "../services/subscriptions.service.js";
 
 // Middleware para verificar se é ADMIN
 const requireAdmin = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     // O role está em req.profile.role, não em req.user.role
     const role = String(req.profile?.role || "").toUpperCase();
-    if (role !== "ADMIN") {
+    if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
       return res.status(403).json({ error: "Acesso negado. Apenas administradores." });
     }
     next();
@@ -276,6 +277,78 @@ export function registerAdminRoutes(app: Application) {
       });
     } catch (error: any) {
       console.error("[ADMIN] Erro ao aplicar configurações:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /api/admin/companies/:companyId/subscription
+  app.get("/api/admin/companies/:companyId/subscription", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { companyId } = req.params;
+      const sub = await getSubscription(companyId);
+      
+      if (!sub) {
+        return res.status(404).json({ error: "Assinatura não encontrada para esta empresa" });
+      }
+
+      return res.json(sub);
+    } catch (error: any) {
+      console.error("[ADMIN] Erro ao buscar assinatura:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PATCH /api/admin/companies/:companyId/subscription/overrides
+  app.patch("/api/admin/companies/:companyId/subscription/overrides", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { companyId } = req.params;
+      const { custom_limits, custom_features, notes } = req.body;
+
+      await updateSubscriptionOverrides(companyId, {
+        custom_limits,
+        custom_features,
+        notes
+      });
+
+      return res.json({ success: true, message: "Sobrescritas atualizadas com sucesso" });
+    } catch (error: any) {
+      console.error("[ADMIN] Erro ao atualizar sobrescritas:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/admin/companies/:companyId/subscription/status
+  app.post("/api/admin/companies/:companyId/subscription/status", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { companyId } = req.params;
+      const { status } = req.body;
+
+      if (!['active', 'trial', 'past_due', 'canceled', 'expired'].includes(status)) {
+        return res.status(400).json({ error: "Status inválido" });
+      }
+
+      await updateSubscriptionStatus(companyId, status);
+      return res.json({ success: true, message: `Status alterado para ${status}` });
+    } catch (error: any) {
+      console.error("[ADMIN] Erro ao alterar status da assinatura:", error);
+      return res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST /api/admin/companies/:companyId/subscription/extend
+  app.post("/api/admin/companies/:companyId/subscription/extend", requireAuth, requireAdmin, async (req: AuthRequest, res: Response) => {
+    try {
+      const { companyId } = req.params;
+      const { days } = req.body;
+
+      if (!days || isNaN(days)) {
+        return res.status(400).json({ error: "Número de dias inválido" });
+      }
+
+      await extendSubscription(companyId, days);
+      return res.json({ success: true, message: `Assinatura estendida em ${days} dias` });
+    } catch (error: any) {
+      console.error("[ADMIN] Erro ao estender assinatura:", error);
       return res.status(500).json({ error: error.message });
     }
   });

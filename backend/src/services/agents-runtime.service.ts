@@ -665,8 +665,10 @@ export async function runAgentReply(opts: {
 
     let userFriendlyMessage = "Desculpe, ocorreu um erro interno ao processar sua solicitação.";
     
-    // Tratamento de erros comuns para feedback melhor
-    if (error.message) {
+    // No playground, mostramos o erro técnico para facilitar a correção
+    if (opts.isPlayground) {
+      userFriendlyMessage = `[ERRO AGENTE]: ${error.message || 'Desconhecido'}`;
+    } else if (error.message) {
       if (error.message.includes("OPENAI_API_KEY") || error.message.includes("API key")) {
         userFriendlyMessage = "Erro de configuração: Chave de API da IA não configurada ou inválida.";
       } else if (error.status === 401) {

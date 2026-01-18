@@ -14,7 +14,7 @@ export function AdminLayout() {
               <AdminBreadcrumbs />
             </header>
             <main className="flex-1 overflow-y-auto px-6 py-8">
-              <div className="mx-auto max-w-6xl space-y-8">
+              <div className="mx-auto max-w-7xl space-y-8">
                 <Outlet />
               </div>
             </main>

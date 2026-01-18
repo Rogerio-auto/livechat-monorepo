@@ -6,7 +6,8 @@ const NAV_ITEMS = [
   { label: 'Empresas', to: '/admin/companies', icon: FiLayers },
   { label: 'Templates de Agentes', to: '/admin/templates', icon: FiBox },
   { label: 'Templates de Projetos', to: '/admin/projects/templates', icon: FiLayers },
-  { label: 'Ferramentas', to: '/admin/tools', icon: FiActivity },
+  { label: 'Monitoramento', to: '/admin/tools', icon: FiActivity },
+  { label: 'Gerenciar Ferramentas', to: '/admin/tools/catalog', icon: FiBox },
   { label: 'Infraestrutura', to: '/admin/infrastructure', icon: FiCpu },
 ];
 

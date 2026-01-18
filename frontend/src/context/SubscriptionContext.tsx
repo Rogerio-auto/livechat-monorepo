@@ -15,8 +15,14 @@ interface Plan {
 }
 
 interface Subscription {
+  id: string;
+  company_id: string;
+  plan_id: string;
+  status: 'trial' | 'active' | 'past_due' | 'canceled' | 'expired' | 'unpaid';
+  billing_cycle: 'monthly' | 'yearly';
+  trial_ends_at?: string | null;
+  trial_days_remaining?: number;
   plan: Plan;
-  status: string;
 }
 
 interface SubscriptionContextType {

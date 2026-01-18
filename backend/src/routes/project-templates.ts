@@ -126,11 +126,20 @@ export function registerProjectTemplateRoutes(app: Application) {
 
   /**
    * GET /projects/templates
-   * Lista todos os templates da empresa
+   * Lista todos os templates da empresa (ou todos se for SUPER_ADMIN)
    */
-  app. get("/projects/templates", requireAuth, async (req:  any, res) => {
+  app.get("/projects/templates", requireAuth, async (req: any, res) => {
     try {
-      const companyId = getCompanyId(req);
+      const role = String(req.profile?.role || "").toUpperCase();
+      let companyId: string | null = null;
+      
+      // Se for SUPER_ADMIN e não estiver filtrando por empresa, traz todos
+      if (role === "SUPER_ADMIN") {
+        companyId = (req.query.companyId as string) || null;
+      } else {
+        companyId = getCompanyId(req);
+      }
+
       const templates = await listTemplates(companyId);
       return res.json(templates);
     } catch (error) {
@@ -139,13 +148,22 @@ export function registerProjectTemplateRoutes(app: Application) {
     }
   });
 
+
   /**
    * GET /projects/templates/:id
    * Busca template com estágios e campos
    */
   app.get("/projects/templates/:id", requireAuth, async (req: any, res) => {
     try {
-      const companyId = getCompanyId(req);
+      const role = String(req.profile?.role || "").toUpperCase();
+      let companyId: string | null = null;
+      
+      if (role !== "SUPER_ADMIN") {
+        companyId = getCompanyId(req);
+      } else {
+        companyId = (req.query.companyId as string) || null;
+      }
+
       const { id } = req.params;
 
       const template = await getTemplateWithDetails(companyId, id);
@@ -166,7 +184,16 @@ export function registerProjectTemplateRoutes(app: Application) {
    */
   app.post("/projects/templates", requireAuth, async (req: any, res) => {
     try {
-      const companyId = getCompanyId(req);
+      const role = String(req.profile?.role || "").toUpperCase();
+      let companyId: string | null = null;
+      
+      if (role !== "SUPER_ADMIN") {
+        companyId = getCompanyId(req);
+      } else {
+        // Se ADMIN, pode criar global (null) ou pra uma empresa específica
+        companyId = (req.body.companyId as string) || null;
+      }
+
       const userId = getUserId(req);
       
       const validated = CreateTemplateSchema.parse(req.body);
@@ -185,7 +212,14 @@ export function registerProjectTemplateRoutes(app: Application) {
    */
   app.put("/projects/templates/:id", requireAuth, async (req: any, res) => {
     try {
-      const companyId = getCompanyId(req);
+      const role = String(req.profile?.role || "").toUpperCase();
+      let companyId: string | null = null;
+      
+      if (role !== "SUPER_ADMIN") {
+        companyId = getCompanyId(req);
+      }
+      // Se ADMIN, companyId continua null para ignorar filtro de empresa no repo
+
       const { id } = req.params;
 
       const validated = UpdateTemplateSchema.parse(req.body);
@@ -204,7 +238,13 @@ export function registerProjectTemplateRoutes(app: Application) {
    */
   app.delete("/projects/templates/:id", requireAuth, async (req:  any, res) => {
     try {
-      const companyId = getCompanyId(req);
+      const role = String(req.profile?.role || "").toUpperCase();
+      let companyId: string | null = null;
+      
+      if (role !== "SUPER_ADMIN") {
+        companyId = getCompanyId(req);
+      }
+
       const { id } = req.params;
 
       await deleteTemplate(companyId, id);

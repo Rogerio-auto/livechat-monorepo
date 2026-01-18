@@ -59,7 +59,7 @@ export const VariableGuide = ({ side = 'right', categories }: { side?: 'right' |
   const filtered = AVAILABLE_VARIABLES.filter(group => !categories || categories.includes(group.group as any));
   
   return (
-    <div className={`absolute ${side === 'right' ? 'left-full ml-4' : 'right-full mr-4'} top-0 w-64 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur shadow-2xl border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 z-[100] animate-in fade-in slide-in-from-left-2 duration-200 opacity-0 group-hover/node:opacity-100 hover:!opacity-100 transition-opacity pointer-events-auto`}>
+    <div className={`absolute ${side === 'right' ? 'left-full ml-4' : 'right-full mr-4'} top-0 w-64 bg-white/95 dark:bg-[#0f172a]/95 backdrop-blur shadow-2xl border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 z-100 animate-in fade-in slide-in-from-left-2 duration-200 opacity-0 group-hover/node:opacity-100 hover:opacity-100! transition-opacity pointer-events-auto`}>
       <div className="flex items-center gap-2 mb-3">
         <div className="w-6 h-6 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-lg flex items-center justify-center">
           <FiHelpCircle size={14} />
@@ -494,7 +494,7 @@ export const TriggerNode = memo(({ data, selected }: NodeProps) => {
           )}
         </div>
       </NodeWrapper>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-yellow-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="source" position={Position.Bottom} className="w-3! h-3! bg-yellow-500! border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });
@@ -507,7 +507,7 @@ export const MessageNode = memo(({ data, selected }: NodeProps) => {
   
   return (
     <div className="relative group/node">
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-blue-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="target" position={Position.Top} className="w-3! h-3! bg-blue-500! border-2 border-gray-200 dark:border-[#0f172a]" />
       
       {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
 
@@ -623,7 +623,7 @@ export const MessageNode = memo(({ data, selected }: NodeProps) => {
           )}
         </div>
       </NodeWrapper>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-blue-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="source" position={Position.Bottom} className="w-3! h-3! bg-blue-500! border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });
@@ -649,7 +649,7 @@ export const InteractiveNode = memo(({ data, selected }: NodeProps) => {
 
   return (
     <div className="relative group/node">
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-indigo-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="target" position={Position.Top} className="w-3! h-3! bg-indigo-500! border-2 border-gray-200 dark:border-[#0f172a]" />
       
       {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
 
@@ -806,7 +806,7 @@ export const InteractiveNode = memo(({ data, selected }: NodeProps) => {
           </div>
         </div>
       </NodeWrapper>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-indigo-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="source" position={Position.Bottom} className="w-3! h-3! bg-indigo-500! border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });
@@ -839,7 +839,7 @@ export const MetaFlowNode = memo(({ data, selected }: NodeProps) => {
 
   return (
     <div className="relative group/node">
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-cyan-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="target" position={Position.Top} className="w-3! h-3! bg-cyan-500! border-2 border-gray-200 dark:border-[#0f172a]" />
       
       {showSettings && <VariableGuide categories={['Tarefa', 'Projeto', 'Contato', 'Sistema']} />}
 
@@ -921,7 +921,7 @@ export const MetaFlowNode = memo(({ data, selected }: NodeProps) => {
           )}
         </div>
       </NodeWrapper>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-cyan-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="source" position={Position.Bottom} className="w-3! h-3! bg-cyan-500! border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });
@@ -932,7 +932,7 @@ export const WaitNode = memo(({ data, selected }: NodeProps) => {
 
   return (
     <div className="relative">
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-orange-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="target" position={Position.Top} className="w-3! h-3! bg-orange-500! border-2 border-gray-200 dark:border-[#0f172a]" />
       <NodeWrapper 
         title="Aguardar" 
         icon={FiClock} 
@@ -959,7 +959,7 @@ export const WaitNode = memo(({ data, selected }: NodeProps) => {
           Pausa de {nodeData.delayMinutes || 1} minuto(s)
         </div>
       </NodeWrapper>
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-orange-500 border-2 border-gray-200 dark:border-[#0f172a]" />
+      <Handle type="source" position={Position.Bottom} className="w-3! h-3! bg-orange-500! border-2 border-gray-200 dark:border-[#0f172a]" />
     </div>
   );
 });

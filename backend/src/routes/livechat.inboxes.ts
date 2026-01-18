@@ -1,6 +1,7 @@
 import express, { Response } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkResourceLimit } from "../middlewares/checkSubscription.js";
 import { requireInboxAccess } from "../middlewares/requireInboxAccess.js";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { getIO } from "../lib/io.js";
@@ -175,7 +176,7 @@ export function registerLivechatInboxesRoutes(app: express.Application) {
   });
 
   // Create a new inbox in current company
-  app.post('/livechat/inboxes', requireAuth, async (req: AuthRequest, res: Response) => {
+  app.post('/livechat/inboxes', requireAuth, checkResourceLimit("inboxes"), async (req: AuthRequest, res: Response) => {
     try {
       const { data: urow, error: uerr } = await supabaseAdmin.from('users').select('company_id, role, id').eq('user_id', req.user.id).maybeSingle();
       if (uerr) return res.status(500).json({ error: uerr.message });

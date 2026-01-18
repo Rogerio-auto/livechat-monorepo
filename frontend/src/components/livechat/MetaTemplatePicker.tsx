@@ -300,7 +300,7 @@ export function MetaTemplatePicker({ inboxId, onSelect, onClose }: MetaTemplateP
                 </button>
                 <button
                   onClick={handleSend}
-                  className="flex-[2] py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                  className="flex-2 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-green-500/20 flex items-center justify-center gap-2 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <FiSend className="w-4 h-4" />
                   Enviar Template

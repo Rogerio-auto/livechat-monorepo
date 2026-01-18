@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { FiActivity, FiAlertTriangle, FiClock, FiCheckCircle, FiRefreshCw, FiSearch } from 'react-icons/fi';
-import { api } from '../../../lib/api';
+import { api } from '@/lib/api';
 import { showToast } from '../../../hooks/useToast';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -14,26 +14,50 @@ export default function ToolMonitoring() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const pageSize = 10;
 
   useEffect(() => {
-    fetchData();
+    fetchDashboard();
   }, []);
 
-  const fetchData = async () => {
+  useEffect(() => {
+    fetchLogs();
+  }, [page]);
+
+  const fetchDashboard = async () => {
     try {
       setRefreshing(true);
-      const [dashRes, logsRes] = await Promise.all([
-        api.get('/api/admin/tools/dashboard'),
-        api.get('/api/admin/tools/logs', { params: { limit: 10 } } as any)
-      ]);
-      setDashboard(dashRes.data);
-      setLogs(logsRes.data.logs);
+      const res = await api.get('/api/admin/tools/dashboard');
+      setDashboard(res.data);
     } catch (error) {
-      showToast('Erro ao carregar dados de monitoramento', 'error');
+      showToast('Erro ao carregar dashboard', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      const res = await api.get('/api/admin/tools/logs', { 
+        params: { 
+          limit: pageSize,
+          offset: (page - 1) * pageSize
+        } 
+      } as any);
+      setLogs(res.data.logs);
+      setTotalLogs(res.data.total);
+    } catch (error) {
+      showToast('Erro ao carregar logs', 'error');
+    }
+  };
+
+  const fetchData = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchDashboard(), fetchLogs()]);
+    setRefreshing(false);
   };
 
   const handleTestTool = async (toolId: string) => {
@@ -121,7 +145,7 @@ export default function ToolMonitoring() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={toolStats}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="tool_id" stroke="#64748b" fontSize={12} />
+                <XAxis dataKey="tool_name" stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
@@ -143,8 +167,8 @@ export default function ToolMonitoring() {
               criticalTools.map((tool: any) => (
                 <div key={tool.tool_id} className="flex items-center justify-between p-4 bg-rose-500/5 border border-rose-500/20 rounded-lg">
                   <div>
-                    <div className="font-medium text-white">{tool.tool_id}</div>
-                    <div className="text-xs text-rose-400">Taxa de erro: {((tool.error_count / tool.total_calls) * 100).toFixed(1)}%</div>
+                    <div className="font-medium text-white">{tool.tool_name || tool.tool_id}</div>
+                    <div className="text-xs text-rose-400">Taxa de erro: {Number(tool.error_rate || 0).toFixed(1)}% ({tool.error_count}/{tool.total_calls})</div>
                   </div>
                   <button
                     onClick={() => handleTestTool(tool.tool_id)}
@@ -181,7 +205,7 @@ export default function ToolMonitoring() {
                 <td className="px-6 py-4 text-sm text-slate-400">
                   {new Date(log.created_at).toLocaleString()}
                 </td>
-                <td className="px-6 py-4 text-sm font-medium text-white">{log.tool_id}</td>
+                <td className="px-6 py-4 text-sm font-medium text-white">{log.tool_name || log.tool_id}</td>
                 <td className="px-6 py-4">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                     log.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'
@@ -195,6 +219,29 @@ export default function ToolMonitoring() {
             ))}
           </tbody>
         </table>
+
+        {/* Paginação */}
+        <div className="p-4 border-t border-white/10 flex items-center justify-between">
+          <div className="text-sm text-slate-400">
+            Mostrando <span className="text-white font-medium">{(page - 1) * pageSize + 1}</span> a <span className="text-white font-medium">{Math.min(page * pageSize, totalLogs)}</span> de <span className="text-white font-medium">{totalLogs}</span> logs
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition"
+            >
+              Anterior
+            </button>
+            <button
+              onClick={() => setPage(p => p + 1)}
+              disabled={page * pageSize >= totalLogs}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm rounded-lg transition"
+            >
+              Próximo
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

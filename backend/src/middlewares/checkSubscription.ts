@@ -54,7 +54,7 @@ export async function requireActiveSubscription(req: any, res: Response, next: N
 }
 
 /**
- * Middleware para verificar se a empresa tem acesso a uma feature específica
+ * Middleware para verificar se a empresa tem acesso a uma feature especï¿½fica
  */
 export function requireFeature(feature: keyof PlanFeatures) {
   return async (req: any, res: Response, next: NextFunction) => {
@@ -83,7 +83,7 @@ export function requireFeature(feature: keyof PlanFeatures) {
 
 /**
  * Middleware para verificar limite de um recurso antes de criar
- * Se o limite for atingido, retorna 403 com informações do limite
+ * Se o limite for atingido, retorna 403 com informaï¿½ï¿½es do limite
  */
 export function requireLimit(resource: keyof PlanLimits) {
   return async (req: any, res: Response, next: NextFunction) => {
@@ -118,8 +118,8 @@ export function requireLimit(resource: keyof PlanLimits) {
 export const checkResourceLimit = requireLimit;
 
 /**
- * Middleware "soft limit" - apenas avisa se está próximo do limite, mas não bloqueia
- * Adiciona headers com informações de uso
+ * Middleware "soft limit" - apenas avisa se estï¿½ prï¿½ximo do limite, mas nï¿½o bloqueia
+ * Adiciona headers com informaï¿½ï¿½es de uso
  */
 export function warnOnLimit(resource: keyof PlanLimits, warningThreshold = 0.8) {
   return async (req: any, res: Response, next: NextFunction) => {
@@ -131,7 +131,7 @@ export function warnOnLimit(resource: keyof PlanLimits, warningThreshold = 0.8) 
 
   const limitCheck = await checkLimit(companyId, resource);
       
-      // Adicionar headers com informações de uso
+      // Adicionar headers com informaï¿½ï¿½es de uso
       res.setHeader("X-Resource-Limit", limitCheck.limit);
       res.setHeader("X-Resource-Current", limitCheck.current);
       res.setHeader("X-Resource-Remaining", limitCheck.remaining);
